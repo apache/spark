@@ -659,7 +659,7 @@ private[spark] class ExternalSorter[K, V, C](
       }
     } else {
       // Merge spilled and in-memory data
-      merge(spills.toSeq, destructiveIterator(
+      merge(spills, destructiveIterator(
         collection.partitionedDestructiveSortedIterator(comparator)))
     }
   }

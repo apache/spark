@@ -40,7 +40,6 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>Analyzer Rules.</li>
  * <li>Check Analysis Rules.</li>
  * <li>Optimizer Rules.</li>
- * <li>Pre CBO Rules.</li>
  * <li>Planning Strategies.</li>
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
@@ -107,7 +106,7 @@ class SparkSessionExtensions {
    * Build the override rules for columnar execution.
    */
   private[sql] def buildColumnarRules(session: SparkSession): Seq[ColumnarRule] = {
-    columnarRuleBuilders.map(_.apply(session)).toSeq
+    columnarRuleBuilders.map(_.apply(session))
   }
 
   /**
@@ -138,7 +137,7 @@ class SparkSessionExtensions {
    * Build the analyzer resolution `Rule`s using the given [[SparkSession]].
    */
   private[sql] def buildResolutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
-    resolutionRuleBuilders.map(_.apply(session)).toSeq
+    resolutionRuleBuilders.map(_.apply(session))
   }
 
   /**
@@ -155,7 +154,7 @@ class SparkSessionExtensions {
    * Build the analyzer post-hoc resolution `Rule`s using the given [[SparkSession]].
    */
   private[sql] def buildPostHocResolutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
-    postHocResolutionRuleBuilders.map(_.apply(session)).toSeq
+    postHocResolutionRuleBuilders.map(_.apply(session))
   }
 
   /**
@@ -172,7 +171,7 @@ class SparkSessionExtensions {
    * Build the check analysis `Rule`s using the given [[SparkSession]].
    */
   private[sql] def buildCheckRules(session: SparkSession): Seq[LogicalPlan => Unit] = {
-    checkRuleBuilders.map(_.apply(session)).toSeq
+    checkRuleBuilders.map(_.apply(session))
   }
 
   /**
@@ -187,7 +186,7 @@ class SparkSessionExtensions {
   private[this] val optimizerRules = mutable.Buffer.empty[RuleBuilder]
 
   private[sql] def buildOptimizerRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
-    optimizerRules.map(_.apply(session)).toSeq
+    optimizerRules.map(_.apply(session))
   }
 
   /**
@@ -200,25 +199,10 @@ class SparkSessionExtensions {
     optimizerRules += builder
   }
 
-  private[this] val preCBORules = mutable.Buffer.empty[RuleBuilder]
-
-  private[sql] def buildPreCBORules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
-    preCBORules.map(_.apply(session)).toSeq
-  }
-
-  /**
-   * Inject an optimizer `Rule` builder that rewrites logical plans into the [[SparkSession]].
-   * The injected rules will be executed once after the operator optimization batch and
-   * before any cost-based optimization rules that depend on stats.
-   */
-  def injectPreCBORule(builder: RuleBuilder): Unit = {
-    preCBORules += builder
-  }
-
   private[this] val plannerStrategyBuilders = mutable.Buffer.empty[StrategyBuilder]
 
   private[sql] def buildPlannerStrategies(session: SparkSession): Seq[Strategy] = {
-    plannerStrategyBuilders.map(_.apply(session)).toSeq
+    plannerStrategyBuilders.map(_.apply(session))
   }
 
   /**

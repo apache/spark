@@ -43,8 +43,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     // and a Word2VecMap give the same values.
     val word2VecMap = model.getVectors
     val newModel = new Word2VecModel(word2VecMap)
-    assert(newModel.getVectors.mapValues(_.toSeq).toMap ===
-      word2VecMap.mapValues(_.toSeq).toMap)
+    assert(newModel.getVectors.mapValues(_.toSeq) === word2VecMap.mapValues(_.toSeq))
   }
 
   test("Word2Vec throws exception when vocabulary is empty") {
@@ -103,8 +102,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     try {
       model.save(sc, path)
       val sameModel = Word2VecModel.load(sc, path)
-      assert(sameModel.getVectors.mapValues(_.toSeq).toMap ===
-        model.getVectors.mapValues(_.toSeq).toMap)
+      assert(sameModel.getVectors.mapValues(_.toSeq) === model.getVectors.mapValues(_.toSeq))
     } finally {
       Utils.deleteRecursively(tempDir)
     }
@@ -138,8 +136,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     try {
       model.save(sc, path)
       val sameModel = Word2VecModel.load(sc, path)
-      assert(sameModel.getVectors.mapValues(_.toSeq).toMap ===
-        model.getVectors.mapValues(_.toSeq).toMap)
+      assert(sameModel.getVectors.mapValues(_.toSeq) === model.getVectors.mapValues(_.toSeq))
     }
     catch {
       case t: Throwable => fail("exception thrown persisting a model " +

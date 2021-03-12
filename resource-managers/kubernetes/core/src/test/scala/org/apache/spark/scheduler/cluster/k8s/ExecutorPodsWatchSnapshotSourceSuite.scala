@@ -67,11 +67,9 @@ class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndA
   }
 
   test("Watch events should be pushed to the snapshots store as snapshot updates.") {
-    val exec1 = runningExecutor(1)
-    val exec2 = runningExecutor(2)
-    watch.getValue.eventReceived(Action.ADDED, exec1)
-    watch.getValue.eventReceived(Action.MODIFIED, exec2)
-    verify(eventQueue).updatePod(exec1)
-    verify(eventQueue).updatePod(exec2)
+    watch.getValue.eventReceived(Action.ADDED, runningExecutor(1))
+    watch.getValue.eventReceived(Action.MODIFIED, runningExecutor(2))
+    verify(eventQueue).updatePod(runningExecutor(1))
+    verify(eventQueue).updatePod(runningExecutor(2))
   }
 }

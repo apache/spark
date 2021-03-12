@@ -56,12 +56,11 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("DATE", DateType)
   checkDataType("timestamp", TimestampType)
   checkDataType("string", StringType)
-  checkDataType("ChaR(5)", CharType(5))
-  checkDataType("ChaRacter(5)", CharType(5))
-  checkDataType("varchAr(20)", VarcharType(20))
-  checkDataType("cHaR(27)", CharType(27))
+  checkDataType("ChaR(5)", StringType)
+  checkDataType("ChaRacter(5)", StringType)
+  checkDataType("varchAr(20)", StringType)
+  checkDataType("cHaR(27)", StringType)
   checkDataType("BINARY", BinaryType)
-  checkDataType("void", NullType)
   checkDataType("interval", CalendarIntervalType)
 
   checkDataType("array<doublE>", ArrayType(DoubleType, true))
@@ -103,9 +102,9 @@ class DataTypeParserSuite extends SparkFunSuite {
         StructType(
           StructField("deciMal", DecimalType.USER_DEFAULT, true) ::
           StructField("anotherDecimal", DecimalType(5, 2), true) :: Nil), true) ::
-      StructField("MAP", MapType(TimestampType, VarcharType(10)), true) ::
+      StructField("MAP", MapType(TimestampType, StringType), true) ::
       StructField("arrAy", ArrayType(DoubleType, true), true) ::
-      StructField("anotherArray", ArrayType(CharType(9), true), true) :: Nil)
+      StructField("anotherArray", ArrayType(StringType, true), true) :: Nil)
   )
   // Use backticks to quote column names having special characters.
   checkDataType(
@@ -113,7 +112,7 @@ class DataTypeParserSuite extends SparkFunSuite {
     StructType(
       StructField("x+y", IntegerType, true) ::
       StructField("!@#$%^&*()", StringType, true) ::
-      StructField("1_2.345<>:\"", VarcharType(20), true) :: Nil)
+      StructField("1_2.345<>:\"", StringType, true) :: Nil)
   )
   // Empty struct.
   checkDataType("strUCt<>", StructType(Nil))

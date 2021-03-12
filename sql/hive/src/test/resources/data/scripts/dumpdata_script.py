@@ -18,9 +18,12 @@
 #
 import sys
 
-for i in range(50):
-    for j in range(5):
-        for k in range(20022):
+if sys.version_info[0] >= 3:
+    xrange = range
+
+for i in xrange(50):
+    for j in xrange(5):
+        for k in xrange(20022):
             print(20000 * i + k)
 
 for line in sys.stdin:

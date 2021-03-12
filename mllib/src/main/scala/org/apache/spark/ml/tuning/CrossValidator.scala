@@ -30,13 +30,13 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasCollectSubModels, HasParallelism}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -55,18 +55,7 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
   /** @group getParam */
   def getNumFolds: Int = $(numFolds)
 
-  /**
-   * Param for the column name of user specified fold number. Once this is specified,
-   * `CrossValidator` won't do random k-fold split. Note that this column should be
-   * integer type with range [0, numFolds) and Spark will throw exception on out-of-range
-   * fold numbers.
-   */
-  val foldCol: Param[String] = new Param[String](this, "foldCol",
-    "the column name of user specified fold number")
-
-  def getFoldCol: String = $(foldCol)
-
-  setDefault(foldCol -> "", numFolds -> 3)
+  setDefault(numFolds -> 3)
 }
 
 /**
@@ -104,10 +93,6 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   /** @group setParam */
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
-
-  /** @group setParam */
-  @Since("3.1.0")
-  def setFoldCol(value: String): this.type = set(foldCol, value)
 
   /**
    * Set the maximum level of parallelism to evaluate models in parallel.
@@ -147,7 +132,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, numFolds, seed, parallelism, foldCol)
+    instr.logParams(this, numFolds, seed, parallelism)
     logTuningParams(instr)
 
     val collectSubModelsParam = $(collectSubModels)
@@ -157,15 +142,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     } else None
 
     // Compute metrics for each model over each split
-    val (splits, schemaWithoutFold) = if ($(foldCol) == "") {
-      (MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed)), schema)
-    } else {
-      val filteredSchema = StructType(schema.filter(_.name != $(foldCol)).toArray)
-      (MLUtils.kFold(dataset.toDF, $(numFolds), $(foldCol)), filteredSchema)
-    }
+    val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
-      val trainingDataset = sparkSession.createDataFrame(training, schemaWithoutFold).cache()
-      val validationDataset = sparkSession.createDataFrame(validation, schemaWithoutFold).cache()
+      val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
+      val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       instr.logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       // Fit models in a Future for training in parallel
@@ -203,14 +183,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   }
 
   @Since("1.4.0")
-  override def transformSchema(schema: StructType): StructType = {
-    if ($(foldCol) != "") {
-      val foldColDt = schema.apply($(foldCol)).dataType
-      require(foldColDt.isInstanceOf[IntegerType],
-        s"The specified `foldCol` column ${$(foldCol)} must be integer type, but got $foldColDt.")
-    }
-    transformSchemaImpl(schema)
-  }
+  override def transformSchema(schema: StructType): StructType = transformSchemaImpl(schema)
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidator = {

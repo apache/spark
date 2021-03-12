@@ -34,9 +34,8 @@ private[spark] class ResultStage(
     val partitions: Array[Int],
     parents: List[Stage],
     firstJobId: Int,
-    callSite: CallSite,
-    resourceProfileId: Int)
-  extends Stage(id, rdd, partitions.length, parents, firstJobId, callSite, resourceProfileId) {
+    callSite: CallSite)
+  extends Stage(id, rdd, partitions.length, parents, firstJobId, callSite) {
 
   /**
    * The active job for this result stage. Will be empty if the job has already finished

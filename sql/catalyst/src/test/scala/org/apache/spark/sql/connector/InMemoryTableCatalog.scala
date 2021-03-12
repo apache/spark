@@ -181,20 +181,8 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
 
   override def dropNamespace(namespace: Array[String]): Boolean = {
     listNamespaces(namespace).foreach(dropNamespace)
-    try {
-      listTables(namespace).foreach(dropTable)
-    } catch {
-      case _: NoSuchNamespaceException =>
-    }
+    listTables(namespace).foreach(dropTable)
     Option(namespaces.remove(namespace.toList)).isDefined
-  }
-
-  override def listTables(namespace: Array[String]): Array[Identifier] = {
-    if (namespace.isEmpty || namespaceExists(namespace)) {
-      super.listTables(namespace)
-    } else {
-      throw new NoSuchNamespaceException(namespace)
-    }
   }
 }
 

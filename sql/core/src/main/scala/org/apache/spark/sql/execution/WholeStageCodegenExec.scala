@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.util.Locale
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -29,11 +29,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -49,7 +50,6 @@ trait CodegenSupport extends SparkPlan {
   private def variablePrefix: String = this match {
     case _: HashAggregateExec => "agg"
     case _: BroadcastHashJoinExec => "bhj"
-    case _: ShuffledHashJoinExec => "shj"
     case _: SortMergeJoinExec => "smj"
     case _: RDDScanExec => "rdd"
     case _: DataSourceScanExec => "scan"
@@ -263,7 +263,7 @@ trait CodegenSupport extends SparkPlan {
 
       paramVars += ExprCode(paramIsNull, JavaCode.variable(paramName, attributes(i).dataType))
     }
-    (arguments.toSeq, parameters.toSeq, paramVars.toSeq)
+    (arguments, parameters, paramVars)
   }
 
   /**
@@ -538,8 +538,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean,
-      indent: Int = 0): Unit = {
+      printNodeId: Boolean): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
@@ -548,8 +547,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       prefix = "",
       addSuffix = false,
       maxFields,
-      printNodeId,
-      indent)
+      printNodeId)
   }
 
   override def needCopyResult: Boolean = false
@@ -569,26 +567,6 @@ object WholeStageCodegenExec {
   def isTooManyFields(conf: SQLConf, dataType: DataType): Boolean = {
     numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
   }
-
-  // The whole-stage codegen generates Java code on the driver side and sends it to the Executors
-  // for compilation and execution. The whole-stage codegen can bring significant performance
-  // improvements with large dataset in distributed environments. However, in the test environment,
-  // due to the small amount of data, the time to generate Java code takes up a major part of the
-  // entire runtime. So we summarize the total code generation time and output it to the execution
-  // log for easy analysis and view.
-  private val _codeGenTime = new AtomicLong
-
-  // Increase the total generation time of Java source code in nanoseconds.
-  // Visible for testing
-  def increaseCodeGenTime(time: Long): Unit = _codeGenTime.addAndGet(time)
-
-  // Returns the total generation time of Java source code in nanoseconds.
-  // Visible for testing
-  def codeGenTime: Long = _codeGenTime.get
-
-  // Reset generation time of Java source code.
-  // Visible for testing
-  def resetCodeGenTime(): Unit = _codeGenTime.set(0L)
 }
 
 /**
@@ -650,7 +628,6 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * @return the tuple of the codegen context and the actual generated source.
    */
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
-    val startTime = System.nanoTime()
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
 
@@ -670,7 +647,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       }
 
       ${ctx.registerComment(
-        s"""Codegened pipeline for stage (id=$codegenStageId)
+        s"""Codegend pipeline for stage (id=$codegenStageId)
            |${this.treeString.trim}""".stripMargin,
          "wsc_codegenPipeline")}
       ${ctx.registerComment(s"codegenStageId=$codegenStageId", "wsc_codegenStageId", true)}
@@ -700,9 +677,6 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     // try to compile, helpful for debug
     val cleanedSource = CodeFormatter.stripOverlappingComments(
       new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments()))
-
-    val duration = System.nanoTime() - startTime
-    WholeStageCodegenExec.increaseCodeGenTime(duration)
 
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     (ctx, cleanedSource)
@@ -809,8 +783,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean,
-      indent: Int = 0): Unit = {
+      printNodeId: Boolean): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
@@ -819,8 +792,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       if (printNodeId) "* " else s"*($codegenStageId) ",
       false,
       maxFields,
-      printNodeId,
-      indent)
+      printNodeId)
   }
 
   override def needStopCheck: Boolean = true
@@ -872,6 +844,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
  * failed to generate/compile code.
  */
 case class CollapseCodegenStages(
+    conf: SQLConf,
     codegenStageCounter: AtomicInteger = new AtomicInteger(0))
   extends Rule[SparkPlan] {
 
@@ -904,10 +877,6 @@ case class CollapseCodegenStages(
         InputAdapter(insertWholeStageCodegen(p))
       case j: SortMergeJoinExec =>
         // The children of SortMergeJoin should do codegen separately.
-        j.withNewChildren(j.children.map(
-          child => InputAdapter(insertWholeStageCodegen(child))))
-      case j: ShuffledHashJoinExec =>
-        // The children of ShuffledHashJoin should do codegen separately.
         j.withNewChildren(j.children.map(
           child => InputAdapter(insertWholeStageCodegen(child))))
       case p => p.withNewChildren(p.children.map(insertInputAdapter))

@@ -17,17 +17,13 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.common.{IsolationLevel, TopicPartition}
+import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaOffsetRangeLimit.{EARLIEST, LATEST}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -57,9 +53,9 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
   }
 
   private def createKafkaReader(topic: String, minPartitions: Option[Int]): KafkaOffsetReader = {
-    KafkaOffsetReader.build(
+    new KafkaOffsetReader(
       SubscribeStrategy(Seq(topic)),
-      KafkaSourceProvider.kafkaParamsForDriver(
+      org.apache.spark.sql.kafka010.KafkaSourceProvider.kafkaParamsForDriver(
         Map(
         "bootstrap.servers" ->
          testUtils.brokerAddress
@@ -70,39 +66,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     )
   }
 
-  test("isolationLevel must give back default isolation level when not set") {
-    testIsolationLevel(None,
-      IsolationLevel.valueOf(ConsumerConfig.DEFAULT_ISOLATION_LEVEL.toUpperCase(Locale.ROOT)))
-  }
-
-  test("isolationLevel must give back READ_UNCOMMITTED when set") {
-    testIsolationLevel(Some("read_uncommitted"), IsolationLevel.READ_UNCOMMITTED)
-  }
-
-  test("isolationLevel must give back READ_COMMITTED when set") {
-    testIsolationLevel(Some("read_committed"), IsolationLevel.READ_COMMITTED)
-  }
-
-  test("isolationLevel must throw exception when invalid isolation level set") {
-    intercept[IllegalArgumentException] {
-      testIsolationLevel(Some("intentionally_invalid"), IsolationLevel.READ_COMMITTED)
-    }
-  }
-
-  private def testIsolationLevel(kafkaParam: Option[String], isolationLevel: IsolationLevel) = {
-    var kafkaParams = Map(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress)
-    kafkaParam.foreach(p => kafkaParams ++= Map(ConsumerConfig.ISOLATION_LEVEL_CONFIG -> p))
-    val reader = new KafkaOffsetReaderAdmin(
-      SubscribeStrategy(Seq()),
-      KafkaSourceProvider.kafkaParamsForDriver(kafkaParams),
-      CaseInsensitiveMap(Map.empty),
-      ""
-    )
-    assert(reader.isolationLevel === isolationLevel)
-  }
-
-  testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - " +
-    "using specific offsets") {
+  test("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - using specific offsets") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 1)
     testUtils.sendMessages(topic, (0 until 10).map(_.toString).toArray, Some(0))
@@ -110,16 +74,14 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     val reader = createKafkaReader(topic, minPartitions = Some(3))
     val startingOffsets = SpecificOffsetRangeLimit(Map(tp -> 1))
     val endingOffsets = SpecificOffsetRangeLimit(Map(tp -> 4))
-    val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
-      endingOffsets)
-    assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
+    val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+    assert(offsetRanges === Seq(
       KafkaOffsetRange(tp, 1, 2, None),
       KafkaOffsetRange(tp, 2, 3, None),
-      KafkaOffsetRange(tp, 3, 4, None)).sortBy(_.topicPartition.toString))
+      KafkaOffsetRange(tp, 3, 4, None)))
   }
 
-  testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - " +
-    "using special offsets") {
+  test("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - using special offsets") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 1)
     testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(0))
@@ -127,16 +89,14 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     val reader = createKafkaReader(topic, minPartitions = Some(3))
     val startingOffsets = EarliestOffsetRangeLimit
     val endingOffsets = LatestOffsetRangeLimit
-    val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
-      endingOffsets)
-    assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
+    val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+    assert(offsetRanges === Seq(
       KafkaOffsetRange(tp, EARLIEST, 1, None),
       KafkaOffsetRange(tp, 1, 2, None),
-      KafkaOffsetRange(tp, 2, LATEST, None)).sortBy(_.topicPartition.toString))
+      KafkaOffsetRange(tp, 2, LATEST, None)))
   }
 
-  testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - " +
-    "multiple topic partitions") {
+  test("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - multiple topic partitions") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 2)
     testUtils.sendMessages(topic, (0 until 100).map(_.toString).toArray, Some(0))
@@ -147,16 +107,15 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
 
     val startingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> EARLIEST, tp2 -> EARLIEST))
     val endingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> LATEST, tp2 -> 3))
-    val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
-      endingOffsets)
-    assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
+    val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
+    assert(offsetRanges === Seq(
       KafkaOffsetRange(tp2, EARLIEST, 3, None),
       KafkaOffsetRange(tp1, EARLIEST, 33, None),
       KafkaOffsetRange(tp1, 33, 66, None),
-      KafkaOffsetRange(tp1, 66, LATEST, None)).sortBy(_.topicPartition.toString))
+      KafkaOffsetRange(tp1, 66, LATEST, None)))
   }
 
-  testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromResolvedOffsets") {
+  test("SPARK-30656: getOffsetRangesFromResolvedOffsets") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 2)
     testUtils.sendMessages(topic, (0 until 100).map(_.toString).toArray, Some(0))
@@ -171,28 +130,10 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
       fromPartitionOffsets,
       untilPartitionOffsets,
       _ => {})
-    assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
+    assert(offsetRanges === Seq(
       KafkaOffsetRange(tp1, 0, 33, None),
       KafkaOffsetRange(tp1, 33, 66, None),
       KafkaOffsetRange(tp1, 66, 100, None),
-      KafkaOffsetRange(tp2, 0, 3, None)).sortBy(_.topicPartition.toString))
-  }
-
-  private def testWithAllOffsetFetchingSQLConf(name: String)(func: => Any): Unit = {
-    Seq("true", "false").foreach { useDeprecatedOffsetFetching =>
-      val testName = s"$name with useDeprecatedOffsetFetching $useDeprecatedOffsetFetching"
-      executeFuncWithSQLConf(testName, useDeprecatedOffsetFetching, func)
-    }
-  }
-
-  private def executeFuncWithSQLConf(
-      name: String,
-      useDeprecatedOffsetFetching: String,
-      func: => Any): Unit = {
-    test(name) {
-      withSQLConf(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key -> useDeprecatedOffsetFetching) {
-        func
-      }
-    }
+      KafkaOffsetRange(tp2, 0, 3, None)))
   }
 }

@@ -25,8 +25,7 @@ import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, View}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
@@ -182,7 +181,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       new Column(
         name = c.name,
         description = c.getComment().orNull,
-        dataType = CharVarcharUtils.getRawType(c.metadata).getOrElse(c.dataType).catalogString,
+        dataType = c.dataType.catalogString,
         nullable = c.nullable,
         isPartition = partitionColumnNames.contains(c.name),
         isBucket = bucketColumnNames.contains(c.name))
@@ -316,22 +315,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * (Scala-specific)
-   * Creates a table based on the dataset in a data source and a set of options.
-   * Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 3.1.0
-   */
-  override def createTable(
-      tableName: String,
-      source: String,
-      description: String,
-      options: Map[String, String]): DataFrame = {
-    createTable(tableName, source, new StructType, description, options)
-  }
-
-  /**
-   * (Scala-specific)
    * Creates a table based on the dataset in a data source, a schema and a set of options.
    * Then, returns the corresponding DataFrame.
    *
@@ -342,29 +325,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableName: String,
       source: String,
       schema: StructType,
-      options: Map[String, String]): DataFrame = {
-    createTable(
-      tableName = tableName,
-      source = source,
-      schema = schema,
-      description = "",
-      options = options
-    )
-  }
-
-  /**
-   * (Scala-specific)
-   * Creates a table based on the dataset in a data source, a schema and a set of options.
-   * Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 3.1.0
-   */
-  override def createTable(
-      tableName: String,
-      source: String,
-      schema: StructType,
-      description: String,
       options: Map[String, String]): DataFrame = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val storage = DataSource.buildStorageFormatFromOptions(options)
@@ -378,8 +338,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableType = tableType,
       storage = storage,
       schema = schema,
-      provider = Some(source),
-      comment = { if (description.isEmpty) None else Some(description) }
+      provider = Some(source)
     )
     val plan = CreateTable(tableDesc, SaveMode.ErrorIfExists, None)
     sparkSession.sessionState.executePlan(plan).toRdd
@@ -396,7 +355,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
-      uncacheView(viewDef)
+      sparkSession.sharedState.cacheManager.uncacheQuery(
+        sparkSession, viewDef, cascade = false)
       sessionCatalog.dropTempView(viewName)
     }
   }
@@ -411,27 +371,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>
-      uncacheView(viewDef)
-      sessionCatalog.dropGlobalTempView(viewName)
-    }
-  }
-
-  private def uncacheView(viewDef: LogicalPlan): Unit = {
-    try {
-      // If view text is defined, it means we are not storing analyzed logical plan for the view
-      // and instead its behavior follows that of a permanent view (see SPARK-33142 for more
-      // details). Therefore, when uncaching the view we should also do in a cascade fashion, the
-      // same way as how a permanent view is handled. This also avoids a potential issue where a
-      // dependent view becomes invalid because of the above while its data is still cached.
-      val viewText = viewDef match {
-        case v: View => v.desc.viewText
-        case _ => None
-      }
-      val plan = sparkSession.sessionState.executePlan(viewDef)
       sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, plan.analyzed, cascade = viewText.isDefined)
-    } catch {
-      case NonFatal(_) => // ignore
+        sparkSession, viewDef, cascade = false)
+      sessionCatalog.dropGlobalTempView(viewName)
     }
   }
 
@@ -556,12 +498,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
 
-      // creates a new logical plan since the old table refers to old relation which
-      // should be refreshed
-      val newTable = sparkSession.table(tableIdent)
-
       // recache with the same name and cache level.
-      sparkSession.sharedState.cacheManager.cacheQuery(newTable, cacheName, cacheLevel)
+      sparkSession.sharedState.cacheManager.cacheQuery(table, cacheName, cacheLevel)
     }
   }
 

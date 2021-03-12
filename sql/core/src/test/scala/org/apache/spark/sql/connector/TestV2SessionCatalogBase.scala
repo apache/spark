@@ -19,12 +19,11 @@ package org.apache.spark.sql.connector
 
 import java.util
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table, V1Table}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
@@ -37,13 +36,6 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
 
   protected val tables: util.Map[Identifier, T] = new ConcurrentHashMap[Identifier, T]()
 
-  private val tableCreated: AtomicBoolean = new AtomicBoolean(false)
-
-  private def addTable(ident: Identifier, table: T): Unit = {
-    tableCreated.set(true)
-    tables.put(ident, table)
-  }
-
   protected def newTable(
       name: String,
       schema: StructType,
@@ -55,13 +47,10 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       tables.get(ident)
     } else {
       // Table was created through the built-in catalog
-      super.loadTable(ident) match {
-        case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW => v1Table
-        case t =>
-          val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
-          addTable(ident, table)
-          table
-      }
+      val t = super.loadTable(ident)
+      val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
+      tables.put(ident, table)
+      table
     }
   }
 
@@ -72,7 +61,7 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       properties: util.Map[String, String]): Table = {
     val created = super.createTable(ident, schema, partitions, properties)
     val t = newTable(created.name(), schema, partitions, properties)
-    addTable(ident, t)
+    tables.put(ident, t)
     t
   }
 
@@ -82,11 +71,8 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
   }
 
   def clearTables(): Unit = {
-    assert(
-      tableCreated.get,
-      "Tables are not created, maybe didn't use the session catalog code path?")
+    assert(!tables.isEmpty, "Tables were empty, maybe didn't use the session catalog code path?")
     tables.keySet().asScala.foreach(super.dropTable)
     tables.clear()
-    tableCreated.set(false)
   }
 }

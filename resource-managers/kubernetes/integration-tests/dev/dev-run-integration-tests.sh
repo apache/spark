@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-set -exo errexit
+set -xo errexit
 TEST_ROOT_DIR=$(git rev-parse --show-toplevel)
 
 DEPLOY_MODE="minikube"
@@ -35,16 +35,13 @@ CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
 JAVA_VERSION="8"
-HADOOP_PROFILE="hadoop-3.2"
+HADOOP_PROFILE="hadoop-2.7"
 MVN="$TEST_ROOT_DIR/build/mvn"
 
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-
-export SCALA_VERSION
-echo $SCALA_VERSION
 
 # Parse arguments
 while (( "$#" )); do
@@ -118,8 +115,7 @@ while (( "$#" )); do
       shift
       ;;
     *)
-      echo "Unexpected command line flag $2 $1."
-      exit 1
+      break
       ;;
   esac
   shift
@@ -173,7 +169,6 @@ properties+=(
   -Dspark.kubernetes.test.jvmImage=$JVM_IMAGE_NAME
   -Dspark.kubernetes.test.pythonImage=$PYTHON_IMAGE_NAME
   -Dspark.kubernetes.test.rImage=$R_IMAGE_NAME
-  -Dlog4j.logger.org.apache.spark=DEBUG
 )
 
 $TEST_ROOT_DIR/build/mvn integration-test -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests -am -Pscala-$SCALA_VERSION -P$HADOOP_PROFILE -Pkubernetes -Pkubernetes-integration-tests ${properties[@]}

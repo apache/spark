@@ -23,7 +23,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
@@ -235,45 +235,6 @@ case class ShowFunctionsCommand(
       functionNames.sorted.map(Row(_))
     }
 
-  }
-}
-
-
-/**
- * A command for users to refresh the persistent function.
- * The syntax of using this command in SQL is:
- * {{{
- *    REFRESH FUNCTION functionName
- * }}}
- */
-case class RefreshFunctionCommand(
-    databaseName: Option[String],
-    functionName: String)
-  extends RunnableCommand {
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-    if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName, databaseName))) {
-      throw new AnalysisException(s"Cannot refresh built-in function $functionName")
-    }
-    if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
-      throw new AnalysisException(s"Cannot refresh temporary function $functionName")
-    }
-
-    val identifier = FunctionIdentifier(
-      functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
-    // we only refresh the permanent function.
-    if (catalog.isPersistentFunction(identifier)) {
-      // register overwrite function.
-      val func = catalog.getFunctionMetadata(identifier)
-      catalog.registerFunction(func, true)
-    } else {
-      // clear cached function and throw exception
-      catalog.unregisterFunction(identifier)
-      throw new NoSuchFunctionException(identifier.database.get, identifier.funcName)
-    }
-
-    Seq.empty[Row]
   }
 }
 

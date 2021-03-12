@@ -19,19 +19,12 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-abstract class ParquetFileFormatSuite
-  extends QueryTest
-  with ParquetTest
-  with SharedSparkSession
-  with CommonFileDataSourceSuite {
-
-  override protected def dataSourceFormat = "parquet"
+class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSparkSession {
 
   test("read parquet footers in parallel") {
     def testReadFooters(ignoreCorruptFiles: Boolean): Unit = {
@@ -63,18 +56,4 @@ abstract class ParquetFileFormatSuite
     }.getCause
     assert(exception.getMessage().contains("Could not read footer for file"))
   }
-}
-
-class ParquetFileFormatV1Suite extends ParquetFileFormatSuite {
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
-}
-
-class ParquetFileFormatV2Suite extends ParquetFileFormatSuite {
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

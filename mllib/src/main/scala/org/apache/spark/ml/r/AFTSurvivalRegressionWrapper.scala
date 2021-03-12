@@ -88,9 +88,9 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
       aggregationDepth: Int,
       stringIndexerOrderType: String): AFTSurvivalRegressionWrapper = {
 
-    val (rewrittenFormula, censorCol) = formulaRewrite(formula)
+    val (rewritedFormula, censorCol) = formulaRewrite(formula)
 
-    val rFormula = new RFormula().setFormula(rewrittenFormula)
+    val rFormula = new RFormula().setFormula(rewritedFormula)
       .setStringIndexerOrderType(stringIndexerOrderType)
     RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)

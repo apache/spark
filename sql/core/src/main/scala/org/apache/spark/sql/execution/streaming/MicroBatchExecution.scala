@@ -23,7 +23,6 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl}
@@ -32,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relat
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.Clock
 
 class MicroBatchExecution(
     sparkSession: SparkSession,
@@ -76,7 +75,7 @@ class MicroBatchExecution(
     // transformation is responsible for replacing attributes with their final values.
 
     val disabledSources =
-      Utils.stringToSeq(sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders)
+      sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders.split(",")
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
@@ -90,15 +89,14 @@ class MicroBatchExecution(
           StreamingExecutionRelation(source, output)(sparkSession)
         })
 
-      case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output, _, _, v1) =>
-        val dsStr = if (src.nonEmpty) s"[${src.get}]" else ""
-        val v2Disabled = disabledSources.contains(src.getOrElse(None).getClass.getCanonicalName)
+      case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output, v1) =>
+        val v2Disabled = disabledSources.contains(src.getClass.getCanonicalName)
         if (!v2Disabled && table.supports(TableCapability.MICRO_BATCH_READ)) {
           v2ToRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
             val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
             nextSourceId += 1
-            logInfo(s"Reading table [$table] from DataSourceV2 named '$srcName' $dsStr")
+            logInfo(s"Reading table [$table] from DataSourceV2 named '$srcName' [$src]")
             // TODO: operator pushdown.
             val scan = table.newScanBuilder(options).build()
             val stream = scan.toMicroBatchStream(metadataPath)
@@ -111,10 +109,9 @@ class MicroBatchExecution(
           v2ToExecutionRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
             val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-            val source =
-              v1.get.asInstanceOf[StreamingRelation].dataSource.createSource(metadataPath)
+            val source = v1.get.dataSource.createSource(metadataPath)
             nextSourceId += 1
-            logInfo(s"Using Source [$source] from DataSourceV2 named '$srcName' $dsStr")
+            logInfo(s"Using Source [$source] from DataSourceV2 named '$srcName' [$src]")
             StreamingExecutionRelation(source, output)(sparkSession)
           })
         }
@@ -598,9 +595,7 @@ class MicroBatchExecution(
     withProgressLocked {
       sinkCommitProgress = batchSinkProgress
       watermarkTracker.updateWatermark(lastExecution.executedPlan)
-      assert(commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark)),
-        "Concurrent update to the commit log. Multiple streaming jobs detected for " +
-          s"$currentBatchId")
+      commitLog.add(currentBatchId, CommitMetadata(watermarkTracker.currentWatermark))
       committedOffsets ++= availableOffsets
     }
     logDebug(s"Completed batch ${currentBatchId}")

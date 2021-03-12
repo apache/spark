@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql.execution.window
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
 /**
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
@@ -52,9 +58,7 @@ import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPl
  *     4. 1 PRECEDING AND 1 FOLLOWING
  *     5. 1 FOLLOWING AND 2 FOLLOWING
  * - Offset frame: The frame consist of one row, which is an offset number of rows away from the
- *   current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame. There are
- *   three implements of offset frame: [[FrameLessOffsetWindowFunctionFrame]],
- *   [[UnboundedOffsetWindowFunctionFrame]] and [[UnboundedPrecedingOffsetWindowFunctionFrame]].
+ *   current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame.
  *
  * Different frame boundaries can be used in Growing, Shrinking and Moving frames. A frame
  * boundary can be either Row or Range based:
@@ -89,7 +93,7 @@ case class WindowExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends WindowExecBase {
+  extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)

@@ -144,7 +144,7 @@ object TimeWindow {
 case class PreciseTimestampConversion(
     child: Expression,
     fromType: DataType,
-    toType: DataType) extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+    toType: DataType) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(fromType)
   override def dataType: DataType = toType
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

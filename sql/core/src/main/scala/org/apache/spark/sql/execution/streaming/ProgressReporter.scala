@@ -127,8 +127,8 @@ trait ProgressReporter extends Logging {
    * `committedOffsets` in `StreamExecution` to make sure that the correct range is recorded.
    */
   protected def recordTriggerOffsets(from: StreamProgress, to: StreamProgress): Unit = {
-    currentTriggerStartOffsets = from.mapValues(_.json).toMap
-    currentTriggerEndOffsets = to.mapValues(_.json).toMap
+    currentTriggerStartOffsets = from.mapValues(_.json)
+    currentTriggerEndOffsets = to.mapValues(_.json)
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -161,7 +161,7 @@ trait ProgressReporter extends Logging {
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
       (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
     } else {
-      Double.PositiveInfinity
+      Double.NaN
     }
     logDebug(s"Execution stats: $executionStats")
 
@@ -192,8 +192,7 @@ trait ProgressReporter extends Logging {
       timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
       batchDuration = processingTimeMills,
-      durationMs =
-        new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).toMap.asJava),
+      durationMs = new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
@@ -223,11 +222,7 @@ trait ProgressReporter extends Logging {
     lastExecution.executedPlan.collect {
       case p if p.isInstanceOf[StateStoreWriter] =>
         val progress = p.asInstanceOf[StateStoreWriter].getProgress()
-        if (hasExecuted) {
-          progress
-        } else {
-          progress.copy(newNumRowsUpdated = 0, newNumRowsDroppedByWatermark = 0)
-        }
+        if (hasExecuted) progress else progress.copy(newNumRowsUpdated = 0)
     }
   }
 
@@ -256,14 +251,14 @@ trait ProgressReporter extends Logging {
           "avg" -> stats.avg.toLong).mapValues(formatTimestamp)
     }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
-    ExecutionStats(numInputRows, stateOperators, eventTimeStats.toMap)
+    ExecutionStats(numInputRows, stateOperators, eventTimeStats)
   }
 
   /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
 
     def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
-      tuples.groupBy(_._1).mapValues(_.map(_._2).sum).toMap // sum up rows for each source
+      tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
     }
 
     val onlyDataSourceV2Sources = {

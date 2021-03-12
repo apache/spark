@@ -18,9 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.net.URI
-import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -105,7 +103,7 @@ private[spark] class EventLoggingListener(
 
   // Events that do not trigger a flush
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
-    logEvent(event.copy(properties = redactProperties(event.properties)))
+    logEvent(event)
     if (shouldLogStageExecutorMetrics) {
       // record the peak metrics for the new stage
       liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
@@ -130,7 +128,7 @@ private[spark] class EventLoggingListener(
   }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
-    logEvent(redactEvent(sparkConf, event))
+    logEvent(redactEvent(event))
   }
 
   // Events that trigger a flush
@@ -158,9 +156,7 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   }
 
-  override def onJobStart(event: SparkListenerJobStart): Unit = {
-    logEvent(event.copy(properties = redactProperties(event.properties)), flushLogger = true)
-  }
+  override def onJobStart(event: SparkListenerJobStart): Unit = logEvent(event, flushLogger = true)
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = logEvent(event, flushLogger = true)
 
@@ -195,17 +191,8 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   }
 
-  override def onExecutorExcluded(event: SparkListenerExecutorExcluded): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
   override def onExecutorBlacklistedForStage(
       event: SparkListenerExecutorBlacklistedForStage): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onExecutorExcludedForStage(
-      event: SparkListenerExecutorExcludedForStage): Unit = {
     logEvent(event, flushLogger = true)
   }
 
@@ -213,32 +200,15 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   }
 
-  override def onNodeExcludedForStage(event: SparkListenerNodeExcludedForStage): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
   override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
     logEvent(event, flushLogger = true)
   }
-
-  override def onExecutorUnexcluded(event: SparkListenerExecutorUnexcluded): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
 
   override def onNodeBlacklisted(event: SparkListenerNodeBlacklisted): Unit = {
     logEvent(event, flushLogger = true)
   }
 
-  override def onNodeExcluded(event: SparkListenerNodeExcluded): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
   override def onNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onNodeUnexcluded(event: SparkListenerNodeUnexcluded): Unit = {
     logEvent(event, flushLogger = true)
   }
 
@@ -265,10 +235,6 @@ private[spark] class EventLoggingListener(
     }
   }
 
-  override def onResourceProfileAdded(event: SparkListenerResourceProfileAdded): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
       logEvent(event, flushLogger = true)
@@ -280,30 +246,7 @@ private[spark] class EventLoggingListener(
     logWriter.stop()
   }
 
-  private def redactProperties(properties: Properties): Properties = {
-    if (properties == null) {
-      return properties
-    }
-    val redactedProperties = new Properties
-    // properties may contain some custom local properties such as stage/job description
-    // only properties in sparkConf need to be redacted.
-    val (globalProperties, localProperties) = properties.asScala.toSeq.partition {
-      case (key, _) => sparkConf.contains(key)
-    }
-    (Utils.redact(sparkConf, globalProperties) ++ localProperties).foreach {
-      case (key, value) => redactedProperties.setProperty(key, value)
-    }
-    redactedProperties
-  }
-}
-
-private[spark] object EventLoggingListener extends Logging {
-  val DEFAULT_LOG_DIR = "/tmp/spark-events"
-  // Dummy stage key used by driver in executor metrics updates
-  val DRIVER_STAGE_KEY = (-1, -1)
-
   private[spark] def redactEvent(
-      sparkConf: SparkConf,
       event: SparkListenerEnvironmentUpdate): SparkListenerEnvironmentUpdate = {
     // environmentDetails maps a string descriptor to a set of properties
     // Similar to:
@@ -319,4 +262,11 @@ private[spark] object EventLoggingListener extends Logging {
     }
     SparkListenerEnvironmentUpdate(redactedProps)
   }
+
+}
+
+private[spark] object EventLoggingListener extends Logging {
+  val DEFAULT_LOG_DIR = "/tmp/spark-events"
+  // Dummy stage key used by driver in executor metrics updates
+  val DRIVER_STAGE_KEY = (-1, -1)
 }

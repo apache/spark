@@ -36,20 +36,12 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-abstract class CSVSuite
-  extends QueryTest
-  with SharedSparkSession
-  with TestCsvData
-  with CommonFileDataSourceSuite {
-
+abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   import testImplicits._
-
-  override protected def dataSourceFormat = "csv"
 
   private val carsFile = "test-data/cars.csv"
   private val carsMalformedFile = "test-data/cars-malformed.csv"
@@ -2363,18 +2355,6 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-32025: infer the schema from mixed-type values") {
-    withTempPath { path =>
-      Seq("col_mixed_types", "2012", "1997", "True").toDS.write.text(path.getCanonicalPath)
-      val df = spark.read.format("csv")
-        .option("header", "true")
-        .option("inferSchema", "true")
-        .load(path.getCanonicalPath)
-
-      assert(df.schema.last == StructField("col_mixed_types", StringType, true))
-    }
-  }
-
   test("SPARK-32614: don't treat rows starting with null char as comment") {
     withTempPath { path =>
       Seq("\u0000foo", "bar", "baz").toDS.write.text(path.getCanonicalPath)
@@ -2383,36 +2363,6 @@ abstract class CSVSuite
         .option("inferSchema", "true")
         .load(path.getCanonicalPath)
       assert(df.count() == 3)
-    }
-  }
-
-  test("case sensitivity of filters references") {
-    Seq(true, false).foreach { filterPushdown =>
-      withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
-        withTempPath { path =>
-          Seq(
-            """aaa,BBB""",
-            """0,1""",
-            """2,3""").toDF().repartition(1).write.text(path.getCanonicalPath)
-          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-            val readback = spark.read.schema("aaa integer, BBB integer")
-              .option("header", true)
-              .csv(path.getCanonicalPath)
-            checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
-            checkAnswer(readback.filter($"AAA" === 2 && $"bbb" === 3), Seq(Row(2, 3)))
-          }
-          withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-            val readback = spark.read.schema("aaa integer, BBB integer")
-              .option("header", true)
-              .csv(path.getCanonicalPath)
-            checkAnswer(readback, Seq(Row(2, 3), Row(0, 1)))
-            val errorMsg = intercept[AnalysisException] {
-              readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
-            }.getMessage
-            assert(errorMsg.contains("cannot resolve '`AAA`'"))
-          }
-        }
-      }
     }
   }
 
@@ -2426,30 +2376,6 @@ abstract class CSVSuite
       val readback = spark.read
         .csv(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(csvTableName, """\\$1""")}")
       assert(readback.collect sameElements Array(Row("0"), Row("1"), Row("2")))
-    }
-  }
-
-  test("SPARK-33566: configure UnescapedQuoteHandling to parse " +
-    "unescaped quotes and unescaped delimiter data correctly") {
-    withTempPath { path =>
-      val dataPath = path.getCanonicalPath
-      val row1 = Row("""a,""b,c""", "xyz")
-      val row2 = Row("""a,b,c""", """x""yz""")
-      // Generate the test data, use `,` as delimiter and `"` as quotes, but they didn't escape.
-      Seq(
-        """c1,c2""",
-        s""""${row1.getString(0)}","${row1.getString(1)}"""",
-        s""""${row2.getString(0)}","${row2.getString(1)}"""")
-        .toDF().repartition(1).write.text(dataPath)
-      // Without configure UnescapedQuoteHandling to STOP_AT_CLOSING_QUOTE,
-      // the result will be Row(""""a,""b""", """c""""), Row("""a,b,c""", """"x""yz"""")
-      val result = spark.read
-        .option("inferSchema", "true")
-        .option("header", "true")
-        .option("unescapedQuoteHandling", "STOP_AT_CLOSING_QUOTE")
-        .csv(dataPath).collect()
-      val exceptResults = Array(row1, row2)
-      assert(result.sameElements(exceptResults))
     }
   }
 }

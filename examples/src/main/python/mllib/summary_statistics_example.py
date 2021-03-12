@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 from pyspark import SparkContext
 # $example on$
 import numpy as np

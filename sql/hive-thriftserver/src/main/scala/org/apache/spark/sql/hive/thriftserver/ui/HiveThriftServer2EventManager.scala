@@ -57,10 +57,6 @@ private[thriftserver] class HiveThriftServer2EventManager(sc: SparkContext) {
     postLiveListenerBus(SparkListenerThriftServerOperationCanceled(id, System.currentTimeMillis()))
   }
 
-  def onStatementTimeout(id: String): Unit = {
-    postLiveListenerBus(SparkListenerThriftServerOperationTimeout(id, System.currentTimeMillis()))
-  }
-
   def onStatementError(id: String, errorMsg: String, errorTrace: String): Unit = {
     postLiveListenerBus(SparkListenerThriftServerOperationError(id, errorMsg, errorTrace,
       System.currentTimeMillis()))
@@ -98,9 +94,6 @@ private[thriftserver] case class SparkListenerThriftServerOperationParsed(
     executionPlan: String) extends SparkListenerEvent
 
 private[thriftserver] case class SparkListenerThriftServerOperationCanceled(
-    id: String, finishTime: Long) extends SparkListenerEvent
-
-private[thriftserver] case class SparkListenerThriftServerOperationTimeout(
     id: String, finishTime: Long) extends SparkListenerEvent
 
 private[thriftserver] case class SparkListenerThriftServerOperationError(

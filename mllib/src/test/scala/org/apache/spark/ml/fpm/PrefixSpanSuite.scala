@@ -17,6 +17,7 @@
 package org.apache.spark.ml.fpm
 
 import org.apache.spark.ml.util.MLTest
+import org.apache.spark.sql.DataFrame
 
 class PrefixSpanSuite extends MLTest {
 

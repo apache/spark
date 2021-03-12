@@ -27,13 +27,13 @@ from pyspark import SparkContext, SparkConf
 have_scipy = False
 have_numpy = False
 try:
-    import scipy.sparse  # noqa: F401
+    import scipy.sparse
     have_scipy = True
 except:
     # No SciPy, but that's okay, we'll skip those tests
     pass
 try:
-    import numpy as np  # noqa: F401
+    import numpy as np
     have_numpy = True
 except:
     # No NumPy, but that's okay, we'll skip those tests
@@ -56,22 +56,18 @@ def eventually(condition, timeout=30.0, catch_assertions=False):
     Wait a given amount of time for a condition to pass, else fail with an error.
     This is a helper utility for PySpark tests.
 
-    Parameters
-    ----------
-    condition : function
-        Function that checks for termination conditions. condition() can return:
-            - True: Conditions met. Return without error.
-            - other value: Conditions not met yet. Continue. Upon timeout,
-              include last such value in error message.
-              Note that this method may be called at any time during
-              streaming execution (e.g., even before any results
-              have been created).
-    timeout : int
-        Number of seconds to wait.  Default 30 seconds.
-    catch_assertions : bool
-        If False (default), do not catch AssertionErrors.
-        If True, catch AssertionErrors; continue, but save
-        error to throw upon timeout.
+    :param condition: Function that checks for termination conditions.
+                      condition() can return:
+                       - True: Conditions met. Return without error.
+                       - other value: Conditions not met yet. Continue. Upon timeout,
+                                      include last such value in error message.
+                      Note that this method may be called at any time during
+                      streaming execution (e.g., even before any results
+                      have been created).
+    :param timeout: Number of seconds to wait.  Default 30 seconds.
+    :param catch_assertions: If False (default), do not catch AssertionErrors.
+                             If True, catch AssertionErrors; continue, but save
+                             error to throw upon timeout.
     """
     start_time = time()
     lastValue = None

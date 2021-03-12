@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
 
-import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -37,7 +35,7 @@ import org.apache.spark.util.SerializableConfiguration
  * These were first introduced in https://github.com/apache/spark/pull/18159 (SPARK-20703).
  */
 case class BasicWriteTaskStats(
-    partitions: Seq[InternalRow],
+    numPartitions: Int,
     numFiles: Int,
     numBytes: Long,
     numRows: Long)
@@ -50,7 +48,7 @@ case class BasicWriteTaskStats(
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   extends WriteTaskStatsTracker with Logging {
 
-  private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
+  private[this] var numPartitions: Int = 0
   private[this] var numFiles: Int = 0
   private[this] var submittedFiles: Int = 0
   private[this] var numBytes: Long = 0L
@@ -78,7 +76,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
 
 
   override def newPartition(partitionValues: InternalRow): Unit = {
-    partitions.append(partitionValues)
+    numPartitions += 1
   }
 
   override def newBucket(bucketId: Int): Unit = {
@@ -119,7 +117,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
         "This could be due to the output format not writing empty files, " +
         "or files being not immediately visible in the filesystem.")
     }
-    BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows)
+    BasicWriteTaskStats(numPartitions, numFiles, numBytes, numRows)
   }
 }
 
@@ -141,7 +139,7 @@ class BasicWriteJobStatsTracker(
 
   override def processStats(stats: Seq[WriteTaskStats]): Unit = {
     val sparkContext = SparkContext.getActive.get
-    var partitionsSet: mutable.Set[InternalRow] = mutable.HashSet.empty
+    var numPartitions: Long = 0L
     var numFiles: Long = 0L
     var totalNumBytes: Long = 0L
     var totalNumOutput: Long = 0L
@@ -149,7 +147,7 @@ class BasicWriteJobStatsTracker(
     val basicStats = stats.map(_.asInstanceOf[BasicWriteTaskStats])
 
     basicStats.foreach { summary =>
-      partitionsSet ++= summary.partitions
+      numPartitions += summary.numPartitions
       numFiles += summary.numFiles
       totalNumBytes += summary.numBytes
       totalNumOutput += summary.numRows
@@ -158,7 +156,7 @@ class BasicWriteJobStatsTracker(
     metrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
-    metrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).add(partitionsSet.size)
+    metrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).add(numPartitions)
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)

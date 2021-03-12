@@ -69,7 +69,7 @@ object SplitInfo {
     for (host <- mapredSplit.getLocations) {
       retval += new SplitInfo(inputFormatClazz, host, path, length, mapredSplit)
     }
-    retval.toSeq
+    retval
   }
 
   def toSplitInfo(inputFormatClazz: Class[_], path: String,
@@ -79,6 +79,6 @@ object SplitInfo {
     for (host <- mapreduceSplit.getLocations) {
       retval += new SplitInfo(inputFormatClazz, host, path, length, mapreduceSplit)
     }
-    retval.toSeq
+    retval
   }
 }

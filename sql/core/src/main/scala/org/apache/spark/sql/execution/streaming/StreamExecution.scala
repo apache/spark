@@ -40,10 +40,11 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdate
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
@@ -629,9 +630,9 @@ abstract class StreamExecution(
         writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
 
       case Update =>
-        require(writeBuilder.isInstanceOf[SupportsStreamingUpdateAsAppend],
+        require(writeBuilder.isInstanceOf[SupportsStreamingUpdate],
           table.name + " does not support Update mode.")
-        writeBuilder.asInstanceOf[SupportsStreamingUpdateAsAppend].buildForStreaming()
+        writeBuilder.asInstanceOf[SupportsStreamingUpdate].update().buildForStreaming()
     }
   }
 
@@ -685,6 +686,6 @@ object StreamExecution {
 
 /**
  * A special thread to run the stream query. Some codes require to run in the QueryExecutionThread
- * and will use `classOf[QueryExecutionThread]` to check.
+ * and will use `classOf[QueryxecutionThread]` to check.
  */
 abstract class QueryExecutionThread(name: String) extends UninterruptibleThread(name)

@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -53,7 +54,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
@@ -62,7 +63,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -226,13 +227,12 @@ class Dataset[T] private[sql](
     val plan = queryExecution.analyzed match {
       case c: Command =>
         LocalRelation(c.output, withAction("command", queryExecution)(_.executeCollect()))
-      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
+      case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
         LocalRelation(u.output, withAction("command", queryExecution)(_.executeCollect()))
       case _ =>
         queryExecution.analyzed
     }
-    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) &&
-        plan.getTagValue(Dataset.DATASET_ID_TAG).isEmpty) {
+    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
       plan.setTagValue(Dataset.DATASET_ID_TAG, id)
     }
     plan
@@ -260,16 +260,15 @@ class Dataset[T] private[sql](
   private[sql] def resolve(colName: String): NamedExpression = {
     val resolver = sparkSession.sessionState.analyzer.resolver
     queryExecution.analyzed.resolveQuoted(colName, resolver)
-      .getOrElse(throw resolveException(colName, schema.fieldNames))
-  }
-
-  private def resolveException(colName: String, fields: Array[String]): AnalysisException = {
-    val extraMsg = if (fields.exists(sparkSession.sessionState.analyzer.resolver(_, colName))) {
-      s"; did you mean to quote the `$colName` column?"
-    } else ""
-    val fieldsStr = fields.mkString(", ")
-    val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
-    new AnalysisException(errorMsg)
+      .getOrElse {
+        val fields = schema.fieldNames
+        val extraMsg = if (fields.exists(resolver(_, colName))) {
+          s"; did you mean to quote the `$colName` column?"
+        } else ""
+        val fieldsStr = fields.mkString(", ")
+        val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
+        throw new AnalysisException(errorMsg)
+      }
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
@@ -1085,8 +1084,8 @@ class Dataset[T] private[sql](
     }
 
     // If left/right have no output set intersection, return the plan.
-    val lanalyzed = this.queryExecution.analyzed
-    val ranalyzed = right.queryExecution.analyzed
+    val lanalyzed = withPlan(this.logicalPlan).queryExecution.analyzed
+    val ranalyzed = withPlan(right.logicalPlan).queryExecution.analyzed
     if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
       return withPlan(plan)
     }
@@ -1094,22 +1093,17 @@ class Dataset[T] private[sql](
     // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
-    val resolver = sparkSession.sessionState.analyzer.resolver
     val cond = plan.condition.map { _.transform {
       case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
           if a.sameRef(b) =>
         catalyst.expressions.EqualTo(
-          plan.left.resolveQuoted(a.name, resolver)
-            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
-          plan.right.resolveQuoted(b.name, resolver)
-            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
+          withPlan(plan.left).resolve(a.name),
+          withPlan(plan.right).resolve(b.name))
       case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
         if a.sameRef(b) =>
         catalyst.expressions.EqualNullSafe(
-          plan.left.resolveQuoted(a.name, resolver)
-            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
-          plan.right.resolveQuoted(b.name, resolver)
-            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
+          withPlan(plan.left).resolve(a.name),
+          withPlan(plan.right).resolve(b.name))
     }}
 
     withPlan {
@@ -1363,7 +1357,7 @@ class Dataset[T] private[sql](
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
   // This must be called before we return a `Column` that contains `AttributeReference`.
-  // Note that, the metadata added here are only available in the analyzer, as the analyzer rule
+  // Note that, the metadata added here are only avaiable in the analyzer, as the analyzer rule
   // `DetectAmbiguousSelfJoin` will remove it.
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
@@ -1665,10 +1659,10 @@ class Dataset[T] private[sql](
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * {{{
-   *   // Compute the average for all numeric columns rolled up by department and group.
+   *   // Compute the average for all numeric columns rolluped by department and group.
    *   ds.rollup($"department", $"group").avg()
    *
-   *   // Compute the max age and average salary, rolled up by department and gender.
+   *   // Compute the max age and average salary, rolluped by department and gender.
    *   ds.rollup($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
@@ -1794,10 +1788,10 @@ class Dataset[T] private[sql](
    * (i.e. cannot construct expressions).
    *
    * {{{
-   *   // Compute the average for all numeric columns rolled up by department and group.
+   *   // Compute the average for all numeric columns rolluped by department and group.
    *   ds.rollup("department", "group").avg()
    *
-   *   // Compute the max age and average salary, rolled up by department and gender.
+   *   // Compute the max age and average salary, rolluped by department and gender.
    *   ds.rollup($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
@@ -2036,56 +2030,37 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.3.0
    */
-  def unionByName(other: Dataset[T]): Dataset[T] = unionByName(other, false)
+  def unionByName(other: Dataset[T]): Dataset[T] = withSetOperator {
+    // Check column name duplication
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val leftOutputAttrs = logicalPlan.output
+    val rightOutputAttrs = other.logicalPlan.output
 
-  /**
-   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   *
-   * The difference between this function and [[union]] is that this function
-   * resolves columns by name (not by position).
-   *
-   * When the parameter `allowMissingColumns` is `true`, the set of column names
-   * in this and other `Dataset` can differ; missing columns will be filled with null.
-   * Further, the missing columns of this `Dataset` will be added at the end
-   * in the schema of the union result:
-   *
-   * {{{
-   *   val df1 = Seq((1, 2, 3)).toDF("col0", "col1", "col2")
-   *   val df2 = Seq((4, 5, 6)).toDF("col1", "col0", "col3")
-   *   df1.unionByName(df2, true).show
-   *
-   *   // output: "col3" is missing at left df1 and added at the end of schema.
-   *   // +----+----+----+----+
-   *   // |col0|col1|col2|col3|
-   *   // +----+----+----+----+
-   *   // |   1|   2|   3|null|
-   *   // |   5|   4|null|   6|
-   *   // +----+----+----+----+
-   *
-   *   df2.unionByName(df1, true).show
-   *
-   *   // output: "col2" is missing at left df2 and added at the end of schema.
-   *   // +----+----+----+----+
-   *   // |col1|col0|col3|col2|
-   *   // +----+----+----+----+
-   *   // |   4|   5|   6|null|
-   *   // |   2|   1|null|   3|
-   *   // +----+----+----+----+
-   * }}}
-   *
-   * Note that `allowMissingColumns` supports nested column in struct types. Missing nested columns
-   * of struct columns with same name will also be filled with null values. This currently does not
-   * support nested columns in array and map types. Note that if there is any missing nested columns
-   * to be filled, in order to make consistent schema between two sides of union, the nested fields
-   * of structs will be sorted after merging schema.
-   *
-   * @group typedrel
-   * @since 3.1.0
-   */
-  def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = withSetOperator {
+    SchemaUtils.checkColumnNameDuplication(
+      leftOutputAttrs.map(_.name),
+      "in the left attributes",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    SchemaUtils.checkColumnNameDuplication(
+      rightOutputAttrs.map(_.name),
+      "in the right attributes",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
+    // Builds a project list for `other` based on `logicalPlan` output names
+    val rightProjectList = leftOutputAttrs.map { lattr =>
+      rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }.getOrElse {
+        throw new AnalysisException(
+          s"""Cannot resolve column name "${lattr.name}" among """ +
+            s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
+      }
+    }
+
+    // Delegates failure checks to `CheckAnalysis`
+    val notFoundAttrs = rightOutputAttrs.diff(rightProjectList)
+    val rightChild = Project(rightProjectList ++ notFoundAttrs, other.logicalPlan)
+
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan :: other.logicalPlan :: Nil, true, allowMissingColumns))
+    CombineUnions(Union(logicalPlan, rightChild))
   }
 
   /**
@@ -3016,9 +2991,17 @@ class Dataset[T] private[sql](
     Repartition(numPartitions, shuffle = true, logicalPlan)
   }
 
-  private def repartitionByExpression(
-      numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T] = {
+  /**
+   * Returns a new Dataset partitioned by the given partitioning expressions into
+   * `numPartitions`. The resulting Dataset is hash partitioned.
+   *
+   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
     // The underlying `LogicalPlan` operator special-cases all-`SortOrder` arguments.
     // However, we don't want to complicate the semantics of this API method.
     // Instead, let's give users a friendly error message, pointing them to the new method.
@@ -3033,20 +3016,6 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset partitioned by the given partitioning expressions into
-   * `numPartitions`. The resulting Dataset is hash partitioned.
-   *
-   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  @scala.annotation.varargs
-  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
-    repartitionByExpression(Some(numPartitions), partitionExprs)
-  }
-
-  /**
    * Returns a new Dataset partitioned by the given partitioning expressions, using
    * `spark.sql.shuffle.partitions` as number of partitions.
    * The resulting Dataset is hash partitioned.
@@ -3058,20 +3027,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(partitionExprs: Column*): Dataset[T] = {
-    repartitionByExpression(None, partitionExprs)
-  }
-
-  private def repartitionByRange(
-      numPartitions: Option[Int],
-      partitionExprs: Seq[Column]): Dataset[T] = {
-    require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
-    val sortOrder: Seq[SortOrder] = partitionExprs.map(_.expr match {
-      case expr: SortOrder => expr
-      case expr: Expression => SortOrder(expr, Ascending)
-    })
-    withTypedPlan {
-      RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
-    }
+    repartition(sparkSession.sessionState.conf.numShufflePartitions, partitionExprs: _*)
   }
 
   /**
@@ -3093,7 +3049,14 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartitionByRange(numPartitions: Int, partitionExprs: Column*): Dataset[T] = {
-    repartitionByRange(Some(numPartitions), partitionExprs)
+    require(partitionExprs.nonEmpty, "At least one partition-by expression must be specified.")
+    val sortOrder: Seq[SortOrder] = partitionExprs.map(_.expr match {
+      case expr: SortOrder => expr
+      case expr: Expression => SortOrder(expr, Ascending)
+    })
+    withTypedPlan {
+      RepartitionByExpression(sortOrder, logicalPlan, numPartitions)
+    }
   }
 
   /**
@@ -3115,7 +3078,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartitionByRange(partitionExprs: Column*): Dataset[T] = {
-    repartitionByRange(None, partitionExprs)
+    repartitionByRange(sparkSession.sessionState.conf.numShufflePartitions, partitionExprs: _*)
   }
 
   /**
@@ -3142,10 +3105,6 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `dropDuplicates`.
-   *
-   * Note that for a streaming [[Dataset]], this method returns distinct rows only once
-   * regardless of the output mode, which the behavior may not be same with `DISTINCT` in SQL
-   * against streaming [[Dataset]].
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
@@ -3464,38 +3423,10 @@ class Dataset[T] private[sql](
         fr.inputFiles
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
-      case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _), _, _) =>
+      case DataSourceV2ScanRelation(table: FileTable, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray
-  }
-
-  /**
-   * Returns `true` when the logical query plans inside both [[Dataset]]s are equal and
-   * therefore return same results.
-   *
-   * @note The equality comparison here is simplified by tolerating the cosmetic differences
-   *       such as attribute names.
-   * @note This API can compare both [[Dataset]]s very fast but can still return `false` on
-   *       the [[Dataset]] that return the same results, for instance, from different plans. Such
-   *       false negative semantic can be useful when caching as an example.
-   * @since 3.1.0
-   */
-  @DeveloperApi
-  def sameSemantics(other: Dataset[T]): Boolean = {
-    queryExecution.analyzed.sameResult(other.queryExecution.analyzed)
-  }
-
-  /**
-   * Returns a `hashCode` of the logical query plan against this [[Dataset]].
-   *
-   * @note Unlike the standard `hashCode`, the hash is calculated against the query plan
-   *       simplified by tolerating the cosmetic differences such as attribute names.
-   * @since 3.1.0
-   */
-  @DeveloperApi
-  def semanticHash(): Int = {
-    queryExecution.analyzed.semanticHash()
   }
 
   ////////////////////////////////////////////////////////////////////////////

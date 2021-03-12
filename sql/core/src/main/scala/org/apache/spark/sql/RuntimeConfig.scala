@@ -18,8 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{DeprecatedConfig, RemovedConfig}
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.

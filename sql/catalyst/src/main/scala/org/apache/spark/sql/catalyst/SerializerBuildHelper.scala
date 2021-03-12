@@ -187,12 +187,8 @@ object SerializerBuildHelper {
     val nonNullOutput = CreateNamedStruct(fields.flatMap { case(fieldName, fieldExpr) =>
       argumentsForFieldSerializer(fieldName, fieldExpr)
     })
-    if (inputObject.nullable) {
-      val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
-      expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
-    } else {
-      nonNullOutput
-    }
+    val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
+    expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
   }
 
   def createSerializerForUserDefinedType(

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.io._
-import java.net.{URI, URL}
+import java.net.URL
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
@@ -31,23 +31,17 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
-import org.apache.avro.mapred.FsInput
 import org.apache.commons.io.FileUtils
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
-import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
-import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
-import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.{DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -55,16 +49,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
-abstract class AvroSuite
-  extends QueryTest
-  with SharedSparkSession
-  with CommonFileDataSourceSuite
-  with NestedDataSourceSuiteBase {
-
+abstract class AvroSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  override protected def dataSourceFormat = "avro"
-  override val nestedDataSources = Seq("avro")
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
 
@@ -554,8 +541,7 @@ abstract class AvroSuite
 
     val array_of_boolean =
       spark.read.format("avro").load(testAvro).select("array_of_boolean").collect()
-    assert(array_of_boolean.map(_(0).asInstanceOf[scala.collection.Seq[Boolean]].size).toSet ==
-      Set(3, 1, 0))
+    assert(array_of_boolean.map(_(0).asInstanceOf[Seq[Boolean]].size).toSet == Set(3, 1, 0))
 
     val bytes = spark.read.format("avro").load(testAvro).select("bytes").collect()
     assert(bytes.map(_(0).asInstanceOf[Array[Byte]].length).toSet == Set(3, 1, 0))
@@ -1028,63 +1014,6 @@ abstract class AvroSuite
     }
   }
 
-  test("support user provided nullable avro schema " +
-    "for non-nullable catalyst schema without any null record") {
-    val catalystSchema =
-      StructType(Seq(
-        StructField("Age", IntegerType, nullable = false),
-        StructField("Name", StringType, nullable = false)))
-
-    val avroSchema = """
-      |{
-      |  "type" : "record",
-      |  "name" : "test_schema",
-      |  "fields" : [
-      |    {"name": "Age", "type": ["null", "int"]},
-      |    {"name": "Name", "type": ["null", "string"]}
-      |  ]
-      |}
-    """.stripMargin
-
-    val df = spark.createDataFrame(
-      spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
-
-    withTempPath { tempDir =>
-      df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
-      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempDir.getPath))
-    }
-  }
-
-  test("unsupported nullable avro type") {
-    val catalystSchema =
-      StructType(Seq(
-        StructField("Age", IntegerType, nullable = false),
-        StructField("Name", StringType, nullable = false)))
-
-    for (unsupportedAvroType <- Seq("""["null", "int", "long"]""", """["int", "long"]""")) {
-      val avroSchema = s"""
-        |{
-        |  "type" : "record",
-        |  "name" : "test_schema",
-        |  "fields" : [
-        |    {"name": "Age", "type": $unsupportedAvroType},
-        |    {"name": "Name", "type": ["null", "string"]}
-        |  ]
-        |}
-      """.stripMargin
-
-      val df = spark.createDataFrame(
-        spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
-
-      withTempPath { tempDir =>
-        val message = intercept[SparkException] {
-          df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
-        }.getCause.getMessage
-        assert(message.contains("Only UNION of a null type and a non-null type is supported"))
-      }
-    }
-  }
-
   test("error handling for unsupported Interval data types") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
@@ -1267,94 +1196,6 @@ abstract class AvroSuite
         val newDf = spark.read.format("avro").load(tempSaveDir)
         assert(newDf.count() == 8)
       }
-    }
-  }
-
-  test("SPARK-34133: Reading user provided schema respects case sensitivity for field matching") {
-    val wrongCaseSchema = new StructType()
-        .add("STRING", StringType, nullable = false)
-        .add("UNION_STRING_NULL", StringType, nullable = true)
-    val withSchema = spark.read
-        .schema(wrongCaseSchema)
-        .format("avro").load(testAvro).collect()
-
-    val withOutSchema = spark.read.format("avro").load(testAvro)
-        .select("STRING", "UNION_STRING_NULL")
-        .collect()
-    assert(withSchema.sameElements(withOutSchema))
-
-    withSQLConf((SQLConf.CASE_SENSITIVE.key, "true")) {
-      val  out = spark.read.format("avro").schema(wrongCaseSchema).load(testAvro).collect()
-      assert(out.forall(_.isNullAt(0)))
-      assert(out.forall(_.isNullAt(1)))
-    }
-  }
-
-  test("SPARK-34133: Writing user provided schema respects case sensitivity for field matching") {
-    withTempDir { tempDir =>
-      val avroSchema =
-        """
-          |{
-          |  "type" : "record",
-          |  "name" : "test_schema",
-          |  "fields" : [
-          |    {"name": "foo", "type": "int"},
-          |    {"name": "BAR", "type": "int"}
-          |  ]
-          |}
-      """.stripMargin
-      val df = Seq((1, 3), (2, 4)).toDF("FOO", "bar")
-
-      val savePath = s"$tempDir/save"
-      df.write.option("avroSchema", avroSchema).format("avro").save(savePath)
-
-      val loaded = spark.read.format("avro").load(savePath)
-      assert(loaded.schema === new StructType().add("foo", IntegerType).add("BAR", IntegerType))
-      assert(loaded.collect().map(_.getInt(0)).toSet === Set(1, 2))
-      assert(loaded.collect().map(_.getInt(1)).toSet === Set(3, 4))
-
-      withSQLConf((SQLConf.CASE_SENSITIVE.key, "true")) {
-        val e = intercept[SparkException] {
-          df.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save2")
-        }
-        assertExceptionMsg(e, "Cannot find FOO in Avro schema")
-      }
-    }
-  }
-
-  test("SPARK-34133: Writing user provided schema with multiple matching Avro fields fails") {
-    withTempDir { tempDir =>
-      val avroSchema =
-        """
-          |{
-          |  "type" : "record",
-          |  "name" : "test_schema",
-          |  "fields" : [
-          |    {"name": "foo", "type": "int"},
-          |    {"name": "FOO", "type": "string"}
-          |  ]
-          |}
-      """.stripMargin
-
-      val errorMsg = "Searching for 'foo' in Avro schema gave 2 matches. Candidates: [foo, FOO]"
-      assertExceptionMsg(intercept[SparkException] {
-        val fooBarDf = Seq((1, "3"), (2, "4")).toDF("foo", "bar")
-        fooBarDf.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save-fail")
-      }, errorMsg)
-
-      val savePath = s"$tempDir/save"
-      withSQLConf((SQLConf.CASE_SENSITIVE.key, "true")) {
-        val fooFooDf = Seq((1, "3"), (2, "4")).toDF("foo", "FOO")
-        fooFooDf.write.option("avroSchema", avroSchema).format("avro").save(savePath)
-
-        val loadedDf = spark.read.format("avro").schema(fooFooDf.schema).load(savePath)
-        assert(loadedDf.collect().toSet === fooFooDf.collect().toSet)
-      }
-
-      assertExceptionMsg(intercept[SparkException] {
-        val fooSchema = new StructType().add("foo", IntegerType)
-        spark.read.format("avro").schema(fooSchema).load(savePath).collect()
-      }, errorMsg)
     }
   }
 
@@ -1971,6 +1812,16 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-33089: should propagate Hadoop config from DS options to underlying file system") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      val conf = Map("ds_option" -> "value")
+      val path = "file:" + testAvro.stripPrefix("file:")
+      spark.read.format("avro").options(conf).load(path)
+    }
+  }
+
   test("SPARK-33163: write the metadata key 'org.apache.spark.legacyDateTime'") {
     def saveTs(dir: java.io.File): Unit = {
       Seq(Timestamp.valueOf("2020-10-15 01:02:03")).toDF()
@@ -1994,24 +1845,6 @@ abstract class AvroSuite
       }
     }
   }
-
-  test("SPARK-33314: RowReader doesn't over-consume when hasNextRow called twice") {
-    withTempPath { dir =>
-      Seq((1), (2), (3))
-        .toDF("index")
-        .write
-        .format("avro")
-        .save(dir.getCanonicalPath)
-      val df = spark
-        .read
-        .format("avro")
-        .load(dir.getCanonicalPath)
-        .orderBy("index")
-
-      checkAnswer(df,
-        Seq(Row(1), Row(2), Row(3)))
-    }
-  }
 }
 
 class AvroV1Suite extends AvroSuite {
@@ -2021,7 +1854,7 @@ class AvroV1Suite extends AvroSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 }
 
-class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
+class AvroV2Suite extends AvroSuite {
   import testImplicits._
 
   override protected def sparkConf: SparkConf =
@@ -2118,124 +1951,6 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       val scan1 = getBatchScanExec(plan1)
       val scan2 = getBatchScanExec(plan2)
       assert(scan1.sameResult(scan2))
-    }
-  }
-
-  test("explain formatted on an avro data source v2") {
-    withTempDir { dir =>
-      val basePath = dir.getCanonicalPath + "/avro"
-      val expected_plan_fragment =
-        s"""
-           |\\(1\\) BatchScan
-           |Output \\[2\\]: \\[value#xL, id#x\\]
-           |DataFilters: \\[isnotnull\\(value#xL\\), \\(value#xL > 2\\)\\]
-           |Format: avro
-           |Location: InMemoryFileIndex\\[.*\\]
-           |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
-           |PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
-           |ReadSchema: struct\\<value:bigint\\>
-           |""".stripMargin.trim
-      spark.range(10)
-        .select(col("id"), col("id").as("value"))
-        .write.option("header", true)
-        .partitionBy("id")
-        .format("avro")
-        .save(basePath)
-      val df = spark
-        .read
-        .format("avro")
-        .load(basePath).where($"id" > 1 && $"value" > 2)
-      val normalizedOutput = getNormalizedExplain(df, FormattedMode)
-      assert(expected_plan_fragment.r.findAllMatchIn(normalizedOutput).length == 1,
-        normalizedOutput)
-    }
-  }
-
-  test("SPARK-32346: filters pushdown to Avro datasource v2") {
-    Seq(true, false).foreach { filtersPushdown =>
-      withSQLConf(SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> filtersPushdown.toString) {
-        withTempPath { dir =>
-          Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
-            .toDF("value", "p1", "p2")
-            .write
-            .format("avro")
-            .save(dir.getCanonicalPath)
-          val df = spark
-            .read
-            .format("avro")
-            .load(dir.getCanonicalPath)
-            .where("value = 'a'")
-
-          val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: AvroScan) => f
-          }
-          assert(fileScan.nonEmpty)
-          if (filtersPushdown) {
-            assert(fileScan.get.pushedFilters.nonEmpty)
-          } else {
-            assert(fileScan.get.pushedFilters.isEmpty)
-          }
-          checkAnswer(df, Row("a", 1, 2))
-        }
-      }
-    }
-  }
-}
-
-class AvroRowReaderSuite
-  extends QueryTest
-  with SharedSparkSession {
-
-  import testImplicits._
-
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "") // need this for BatchScanExec
-
-  test("SPARK-33314: hasNextRow and nextRow properly handle consecutive calls") {
-    withTempPath { dir =>
-      Seq((1), (2), (3))
-        .toDF("value")
-        .coalesce(1)
-        .write
-        .format("avro")
-        .save(dir.getCanonicalPath)
-
-      val df = spark.read.format("avro").load(dir.getCanonicalPath)
-      val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan) => f
-      }
-      val filePath = fileScan.get.fileIndex.inputFiles(0)
-      val fileSize = new File(new URI(filePath)).length
-      val in = new FsInput(new Path(new URI(filePath)), new Configuration())
-      val reader = DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]())
-
-      val it = new Iterator[InternalRow] with AvroUtils.RowReader {
-        override val fileReader = reader
-        override val deserializer = new AvroDeserializer(
-          reader.getSchema,
-          StructType(new StructField("value", IntegerType, true) :: Nil),
-          CORRECTED,
-          new NoopFilters)
-        override val stopPosition = fileSize
-
-        override def hasNext: Boolean = hasNextRow
-
-        override def next: InternalRow = nextRow
-      }
-      assert(it.hasNext == true)
-      assert(it.next.getInt(0) == 1)
-      // test no intervening next
-      assert(it.hasNext == true)
-      assert(it.hasNext == true)
-      // test no intervening hasNext
-      assert(it.next.getInt(0) == 2)
-      assert(it.next.getInt(0) == 3)
-      assert(it.hasNext == false)
-      assertThrows[NoSuchElementException] {
-        it.next
-      }
     }
   }
 }

@@ -40,6 +40,7 @@ import org.apache.spark.mllib.optimization.{Gradient, GradientDescent, SquaredL2
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -47,7 +48,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[ml] trait FactorizationMachinesParams extends PredictorParams
   with HasMaxIter with HasStepSize with HasTol with HasSolver with HasSeed
-  with HasFitIntercept with HasRegParam with HasWeightCol {
+  with HasFitIntercept with HasRegParam {
 
   /**
    * Param for dimensionality of the factors (&gt;= 0)
@@ -134,7 +135,7 @@ private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
       data: RDD[(Double, OldVector)],
       numFeatures: Int,
       loss: String
-    ): (Vector, Array[Double]) = {
+    ): Vector = {
 
     // initialize coefficients
     val initialCoefficients = initCoefficients(numFeatures)
@@ -151,8 +152,8 @@ private[ml] trait FactorizationMachines extends FactorizationMachinesParams {
       .setRegParam($(regParam))
       .setMiniBatchFraction($(miniBatchFraction))
       .setConvergenceTol($(tol))
-    val (coefficients, lossHistory) = optimizer.optimizeWithLossReturned(data, initialCoefficients)
-    (coefficients.asML, lossHistory)
+    val coefficients = optimizer.optimize(data, initialCoefficients)
+    coefficients.asML
   }
 }
 
@@ -421,7 +422,7 @@ class FMRegressor @Since("3.0.0") (
 
     if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val (coefficients, _) = trainImpl(data, numFeatures, SquaredError)
+    val coefficients = trainImpl(data, numFeatures, SquaredError)
 
     val (intercept, linear, factors) = splitCoefficients(
       coefficients, numFeatures, $(factorSize), $(fitIntercept), $(fitLinear))
@@ -555,7 +556,7 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
  *   \hat{y} = p\left( y_{fm} \right)
  * }}}
  * p is the prediction function, for binary classification task is sigmoid.
- * The loss function gradient formula:
+ * The loss funcation gradient formula:
  * {{{
  *   \frac{\partial}{\partial\theta} l\left( \hat{y},y \right) =
  *   \frac{\partial}{\partial\theta} l\left( p\left( y_{fm} \right),y \right) =

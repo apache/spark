@@ -28,6 +28,7 @@ import java.util.Collections
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.io.Source
+import scala.language.implicitConversions
 
 import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.{any, anyString}
@@ -113,9 +114,10 @@ class ExecutorClassLoaderSuite
     val classLoader = new ExecutorClassLoader(
       new SparkConf(), null, url1, parentLoader, true)
 
-    // scalastyle:off classforname
-    // load 'scala.Option', using Class.forName to do the exact same behavior as
+    // load 'scala.Option', using ClassforName to do the exact same behavior as
     // what JavaDeserializationStream does
+
+    // scalastyle:off classforname
     val optionClass = Class.forName("scala.Option", false, classLoader)
     // scalastyle:on classforname
 

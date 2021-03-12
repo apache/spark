@@ -21,7 +21,9 @@ import java.io.File
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.time.{ZoneId, ZoneOffset}
-import java.util.{Calendar, Locale}
+import java.util.{Calendar, Locale, TimeZone}
+
+import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -33,7 +35,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
@@ -87,7 +88,7 @@ abstract class ParquetPartitionDiscoverySuite
     check("1990-02-24 12:00:30",
       Literal.create(Timestamp.valueOf("1990-02-24 12:00:30"), TimestampType))
 
-    val c = Calendar.getInstance(TimeZoneUTC)
+    val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
     c.set(1990, 1, 24, 12, 0, 30)
     c.set(Calendar.MILLISECOND, 0)
     check("1990-02-24 12:00:30",
@@ -1157,7 +1158,7 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   test("SPARK-21463: MetadataLogFileIndex should respect userSpecifiedSchema for partition cols") {
     withTempDir { tempDir =>
       val output = new File(tempDir, "output").toString
-      val checkpoint = new File(tempDir, "checkpoint").toString
+      val checkpoint = new File(tempDir, "chkpoint").toString
       try {
         val stream = MemoryStream[(String, Int)]
         val df = stream.toDS().toDF("time", "value")
@@ -1303,7 +1304,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   test("SPARK-21463: MetadataLogFileIndex should respect userSpecifiedSchema for partition cols") {
     withTempDir { tempDir =>
       val output = new File(tempDir, "output").toString
-      val checkpoint = new File(tempDir, "checkpoint").toString
+      val checkpoint = new File(tempDir, "chkpoint").toString
       try {
         val stream = MemoryStream[(String, Int)]
         val df = stream.toDS().toDF("time", "value")

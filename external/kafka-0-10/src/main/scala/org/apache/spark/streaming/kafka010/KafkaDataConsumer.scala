@@ -18,7 +18,6 @@
 package org.apache.spark.streaming.kafka010
 
 import java.{util => ju}
-import java.time.Duration
 
 import scala.collection.JavaConverters._
 
@@ -204,7 +203,7 @@ private[kafka010] class InternalKafkaConsumer[K, V](
   }
 
   private def poll(timeout: Long): Unit = {
-    val p = consumer.poll(Duration.ofMillis(timeout))
+    val p = consumer.poll(timeout)
     val r = p.records(topicPartition)
     logDebug(s"Polled ${p.partitions()}  ${r.size}")
     buffer = r.listIterator

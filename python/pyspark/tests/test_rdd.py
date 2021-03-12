@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 import hashlib
 import os
 import random
+import sys
 import tempfile
 import time
 from glob import glob
@@ -25,11 +26,12 @@ from glob import glob
 from py4j.protocol import Py4JJavaError
 
 from pyspark import shuffle, RDD
-from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder,\
-    TaskResourceRequests
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
+
+if sys.version_info[0] >= 3:
+    xrange = range
 
 
 global_func = lambda: "Hi"
@@ -189,13 +191,15 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_sampling_default_seed(self):
         # Test for SPARK-3995 (default seed setting)
-        data = self.sc.parallelize(range(1000), 1)
+        data = self.sc.parallelize(xrange(1000), 1)
         subset = data.takeSample(False, 10)
         self.assertEqual(len(subset), 10)
 
     def test_aggregate_mutable_zero_value(self):
         # Test for SPARK-9021; uses aggregate and treeAggregate to build dict
         # representing a counter of ints
+        # NOTE: dict is used instead of collections.Counter for Python 2.6
+        # compatibility
         from collections import defaultdict
 
         # Show that single or multiple partitions work
@@ -256,6 +260,8 @@ class RDDTests(ReusedPySparkTestCase):
     def test_fold_mutable_zero_value(self):
         # Test for SPARK-9021; uses fold to merge an RDD of dict counters into
         # a single dict
+        # NOTE: dict is used instead of collections.Counter for Python 2.6
+        # compatibility
         from collections import defaultdict
 
         counts1 = defaultdict(int, dict((i, 1) for i in range(10)))
@@ -431,7 +437,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_large_closure(self):
         N = 200000
-        data = [float(i) for i in range(N)]
+        data = [float(i) for i in xrange(N)]
         rdd = self.sc.parallelize(range(1), 1).map(lambda x: len(data))
         self.assertEqual(N, rdd.first())
         # regression test for SPARK-6886
@@ -456,8 +462,8 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_zip_with_different_object_sizes(self):
         # regress test for SPARK-5973
-        a = self.sc.parallelize(range(10000)).map(lambda i: '*' * i)
-        b = self.sc.parallelize(range(10000, 20000)).map(lambda i: '*' * i)
+        a = self.sc.parallelize(xrange(10000)).map(lambda i: '*' * i)
+        b = self.sc.parallelize(xrange(10000, 20000)).map(lambda i: '*' * i)
         self.assertEqual(10000, a.zip(b).count())
 
     def test_zip_with_different_number_of_items(self):
@@ -479,7 +485,7 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertRaises(Exception, lambda: a.zip(b).count())
 
     def test_count_approx_distinct(self):
-        rdd = self.sc.parallelize(range(1000))
+        rdd = self.sc.parallelize(xrange(1000))
         self.assertTrue(950 < rdd.countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(float).countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(str).countApproxDistinct(0.03) < 1050)
@@ -633,7 +639,7 @@ class RDDTests(ReusedPySparkTestCase):
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")
         N = 2000001
-        kv = self.sc.parallelize(range(N)).map(lambda x: (x % 3, x))
+        kv = self.sc.parallelize(xrange(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
         filtered = gkv.filter(lambda kv: kv[0] == 1)
@@ -690,7 +696,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     # Regression test for SPARK-6294
     def test_take_on_jrdd(self):
-        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
+        rdd = self.sc.parallelize(xrange(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
     def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
@@ -733,25 +739,25 @@ class RDDTests(ReusedPySparkTestCase):
         keyed_rdd = self.sc.parallelize((x % 2, x) for x in range(10))
         msg = "Caught StopIteration thrown from user's code; failing the task"
 
-        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.map(stopit).collect)
-        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.filter(stopit).collect)
-        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.foreach, stopit)
-        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.reduce, stopit)
-        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.fold, 0, stopit)
-        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.foreach, stopit)
-        self.assertRaisesRegex(Py4JJavaError, msg,
-                               seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.map(stopit).collect)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.filter(stopit).collect)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.reduce, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.fold, 0, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegexp(Py4JJavaError, msg,
+                                seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
 
         # these methods call the user function both in the driver and in the executor
         # the exception raised is different according to where the StopIteration happens
         # RuntimeError is raised if in the driver
         # Py4JJavaError is raised if in the executor (wraps the RuntimeError raised in the worker)
-        self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
-                               keyed_rdd.reduceByKeyLocally, stopit)
-        self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
-                               seq_rdd.aggregate, 0, stopit, lambda *x: 1)
-        self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
-                               seq_rdd.aggregate, 0, lambda *x: 1, stopit)
+        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
+                                keyed_rdd.reduceByKeyLocally, stopit)
+        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
+                                seq_rdd.aggregate, 0, stopit, lambda *x: 1)
+        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
+                                seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
     def test_overwritten_global_func(self):
         # Regression test for SPARK-27000
@@ -768,7 +774,7 @@ class RDDTests(ReusedPySparkTestCase):
 
         rdd = self.sc.range(10).map(fail)
 
-        with self.assertRaisesRegex(Exception, "local iterator error"):
+        with self.assertRaisesRegexp(Exception, "local iterator error"):
             for _ in rdd.toLocalIterator():
                 pass
 
@@ -787,35 +793,6 @@ class RDDTests(ReusedPySparkTestCase):
         # partition which would trigger the error
         for i in range(4):
             self.assertEqual(i, next(it))
-
-    def test_resourceprofile(self):
-        rp_builder = ResourceProfileBuilder()
-        ereqs = ExecutorResourceRequests().cores(2).memory("6g").memoryOverhead("1g")
-        ereqs.pysparkMemory("2g").resource("gpu", 2, "testGpus", "nvidia.com")
-        treqs = TaskResourceRequests().cpus(2).resource("gpu", 2)
-
-        def assert_request_contents(exec_reqs, task_reqs):
-            self.assertEqual(len(exec_reqs), 5)
-            self.assertEqual(exec_reqs["cores"].amount, 2)
-            self.assertEqual(exec_reqs["memory"].amount, 6144)
-            self.assertEqual(exec_reqs["memoryOverhead"].amount, 1024)
-            self.assertEqual(exec_reqs["pyspark.memory"].amount, 2048)
-            self.assertEqual(exec_reqs["gpu"].amount, 2)
-            self.assertEqual(exec_reqs["gpu"].discoveryScript, "testGpus")
-            self.assertEqual(exec_reqs["gpu"].resourceName, "gpu")
-            self.assertEqual(exec_reqs["gpu"].vendor, "nvidia.com")
-            self.assertEqual(len(task_reqs), 2)
-            self.assertEqual(task_reqs["cpus"].amount, 2.0)
-            self.assertEqual(task_reqs["gpu"].amount, 2.0)
-
-        assert_request_contents(ereqs.requests, treqs.requests)
-        rp = rp_builder.require(ereqs).require(treqs).build
-        assert_request_contents(rp.executorResources, rp.taskResources)
-        rdd = self.sc.parallelize(range(10)).withResources(rp)
-        return_rp = rdd.getResourceProfile()
-        assert_request_contents(return_rp.executorResources, return_rp.taskResources)
-        rddWithoutRp = self.sc.parallelize(range(10))
-        self.assertEqual(rddWithoutRp.getResourceProfile(), None)
 
     def test_multiple_group_jobs(self):
         import threading
@@ -881,10 +858,10 @@ class RDDTests(ReusedPySparkTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_rdd import *  # noqa: F401
+    from pyspark.tests.test_rdd import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

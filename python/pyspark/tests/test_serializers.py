@@ -19,10 +19,10 @@ import sys
 import unittest
 
 from pyspark import serializers
+from pyspark.serializers import *
 from pyspark.serializers import CloudPickleSerializer, CompressedSerializer, \
     AutoBatchedSerializer, BatchedSerializer, AutoSerializer, NoOpSerializer, PairDeserializer, \
-    FlattenedValuesSerializer, CartesianDeserializer, PickleSerializer, UTF8Deserializer, \
-    MarshalSerializer
+    FlattenedValuesSerializer, CartesianDeserializer
 from pyspark.testing.utils import PySparkTestCase, read_int, write_int, ByteArrayOutput, \
     have_numpy, have_scipy
 
@@ -87,7 +87,7 @@ class SerializationTestCase(unittest.TestCase):
     def test_pickling_file_handles(self):
         # to be corrected with SPARK-11160
         try:
-            import xmlrunner  # type: ignore[import]  # noqa: F401
+            import xmlrunner
         except ImportError:
             ser = CloudPickleSerializer()
             out1 = sys.stderr
@@ -114,7 +114,10 @@ class SerializationTestCase(unittest.TestCase):
 
     def test_compressed_serializer(self):
         ser = CompressedSerializer(PickleSerializer())
-        from io import BytesIO as StringIO
+        try:
+            from StringIO import StringIO
+        except ImportError:
+            from io import BytesIO as StringIO
         io = StringIO()
         ser.dump_stream(["abc", u"123", range(5)], io)
         io.seek(0)
@@ -224,10 +227,10 @@ class SerializersTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_serializers import *  # noqa: F401
+    from pyspark.tests.test_serializers import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

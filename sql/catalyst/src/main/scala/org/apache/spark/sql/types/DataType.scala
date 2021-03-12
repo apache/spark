@@ -28,7 +28,6 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -124,51 +123,18 @@ abstract class DataType extends AbstractDataType {
 object DataType {
 
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
-  private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
-  private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
 
   def fromDDL(ddl: String): DataType = {
-    parseTypeWithFallback(
-      ddl,
-      CatalystSqlParser.parseDataType,
-      "Cannot parse the data type: ",
-      fallbackParser = str => CatalystSqlParser.parseTableSchema(str))
-  }
-
-  /**
-   * Parses data type from a string with schema. It calls `parser` for `schema`.
-   * If it fails, calls `fallbackParser`. If the fallback function fails too, combines error message
-   * from `parser` and `fallbackParser`.
-   *
-   * @param schema The schema string to parse by `parser` or `fallbackParser`.
-   * @param parser The function that should be invoke firstly.
-   * @param errorMsg The error message for `parser`.
-   * @param fallbackParser The function that is called when `parser` fails.
-   * @return The data type parsed from the `schema` schema.
-   */
-  def parseTypeWithFallback(
-      schema: String,
-      parser: String => DataType,
-      errorMsg: String,
-      fallbackParser: String => DataType): DataType = {
     try {
-      parser(schema)
+      CatalystSqlParser.parseDataType(ddl)
     } catch {
-      case NonFatal(e1) =>
-        try {
-          fallbackParser(schema)
-        } catch {
-          case NonFatal(e2) =>
-            throw new AnalysisException(
-              message = s"$errorMsg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
-              cause = Some(e1.getCause))
-        }
+      case NonFatal(_) => CatalystSqlParser.parseTableSchema(ddl)
     }
   }
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
-  private val otherTypes = {
+  private val nonDecimalNameToType = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
       .map(t => t.typeName -> t).toMap
@@ -179,9 +145,7 @@ object DataType {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case CHAR_TYPE(length) => CharType(length.toInt)
-      case VARCHAR_TYPE(length) => VarcharType(length.toInt)
-      case other => otherTypes.getOrElse(
+      case other => nonDecimalNameToType.getOrElse(
         other,
         throw new IllegalArgumentException(
           s"Failed to convert the JSON string '$name' to a data type."))
@@ -307,49 +271,21 @@ object DataType {
    *   of `fromField.nullable` and `toField.nullable` are false.
    */
   private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
-    equalsIgnoreCompatibleNullability(from, to, ignoreName = false)
-  }
-
-  /**
-   * Compares two types, ignoring compatible nullability of ArrayType, MapType, StructType, and
-   * also the field name. It compares based on the position.
-   *
-   * Compatible nullability is defined as follows:
-   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
-   *   if and only if `to.containsNull` is true, or both of `from.containsNull` and
-   *   `to.containsNull` are false.
-   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to`
-   *   if and only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
-   *   `to.valueContainsNull` are false.
-   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to`
-   *   if and only if for all every pair of fields, `to.nullable` is true, or both
-   *   of `fromField.nullable` and `toField.nullable` are false.
-   */
-  private[sql] def equalsIgnoreNameAndCompatibleNullability(
-      from: DataType,
-      to: DataType): Boolean = {
-    equalsIgnoreCompatibleNullability(from, to, ignoreName = true)
-  }
-
-  private def equalsIgnoreCompatibleNullability(
-      from: DataType,
-      to: DataType,
-      ignoreName: Boolean = false): Boolean = {
     (from, to) match {
       case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
-        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement, ignoreName)
+        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
 
       case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
         (tn || !fn) &&
-          equalsIgnoreCompatibleNullability(fromKey, toKey, ignoreName) &&
-          equalsIgnoreCompatibleNullability(fromValue, toValue, ignoreName)
+          equalsIgnoreCompatibleNullability(fromKey, toKey) &&
+          equalsIgnoreCompatibleNullability(fromValue, toValue)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields).forall { case (fromField, toField) =>
-            (ignoreName || fromField.name == toField.name) &&
+            fromField.name == toField.name &&
               (toField.nullable || !fromField.nullable) &&
-              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType, ignoreName)
+              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType

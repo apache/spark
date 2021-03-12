@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.UUID
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTableTypesOperation
@@ -27,6 +28,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own GetTableTypesOperation
@@ -67,8 +69,22 @@ private[hive] class SparkGetTableTypesOperation(
         rowSet.addRow(Array[AnyRef](tableType))
       }
       setState(OperationState.FINISHED)
-    } catch onError()
-
+    } catch {
+      case e: Throwable =>
+        logError(s"Error executing get table types operation with $statementId", e)
+        setState(OperationState.ERROR)
+        e match {
+          case hiveException: HiveSQLException =>
+            HiveThriftServer2.eventManager.onStatementError(
+              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
+            throw hiveException
+          case _ =>
+            val root = ExceptionUtils.getRootCause(e)
+            HiveThriftServer2.eventManager.onStatementError(
+              statementId, root.getMessage, SparkUtils.exceptionString(root))
+            throw new HiveSQLException("Error getting table types: " + root.toString, root)
+        }
+    }
     HiveThriftServer2.eventManager.onStatementFinish(statementId)
   }
 }

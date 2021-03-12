@@ -136,8 +136,7 @@ object ArrayBasedMapData {
     keys.zip(values).toMap
   }
 
-  def toScalaMap(keys: scala.collection.Seq[Any],
-      values: scala.collection.Seq[Any]): Map[Any, Any] = {
+  def toScalaMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
     keys.zip(values).toMap
   }
 

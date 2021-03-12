@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.lang.{Boolean => JBoolean}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Here we cannot extends `ImplicitTypeCasts` to compatible with UDF input data type, the reason is:
@@ -227,7 +229,7 @@ private[hive] case class HiveGenericUDTF(
   override lazy val elementSchema = StructType(outputInspector.getAllStructFieldRefs.asScala.map {
     field => StructField(field.getFieldName, inspectorToDataType(field.getFieldObjectInspector),
       nullable = true)
-  }.toSeq)
+  })
 
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
@@ -260,7 +262,7 @@ private[hive] case class HiveGenericUDTF(
     def collectRows(): Seq[InternalRow] = {
       val toCollect = collected
       collected = new ArrayBuffer[InternalRow]
-      toCollect.toSeq
+      toCollect
     }
   }
 
@@ -347,8 +349,20 @@ private[hive] case class HiveUDAFFunction(
       funcWrapper.createFunction[AbstractGenericUDAFResolver]()
     }
 
-    val parameterInfo = new SimpleGenericUDAFParameterInfo(inputInspectors, false, false, false)
-    resolver.getEvaluator(parameterInfo)
+    val clazz = Utils.classForName(classOf[SimpleGenericUDAFParameterInfo].getName)
+    if (HiveUtils.isHive23) {
+      val ctor = clazz.getDeclaredConstructor(
+        classOf[Array[ObjectInspector]], JBoolean.TYPE, JBoolean.TYPE, JBoolean.TYPE)
+      val args = Array[AnyRef](inputInspectors, JBoolean.FALSE, JBoolean.FALSE, JBoolean.FALSE)
+      val parameterInfo = ctor.newInstance(args: _*).asInstanceOf[SimpleGenericUDAFParameterInfo]
+      resolver.getEvaluator(parameterInfo)
+    } else {
+      val ctor = clazz.getDeclaredConstructor(
+        classOf[Array[ObjectInspector]], JBoolean.TYPE, JBoolean.TYPE)
+      val args = Array[AnyRef](inputInspectors, JBoolean.FALSE, JBoolean.FALSE)
+      val parameterInfo = ctor.newInstance(args: _*).asInstanceOf[SimpleGenericUDAFParameterInfo]
+      resolver.getEvaluator(parameterInfo)
+    }
   }
 
   private case class HiveEvaluator(

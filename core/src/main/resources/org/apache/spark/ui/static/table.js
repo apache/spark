@@ -48,13 +48,13 @@ function toggleThreadStackTrace(threadId, forceAdd) {
 function expandAllThreadStackTrace(toggleButton) {
     $('.accordion-heading').each(function() {
         //get thread ID
-        if (!$(this).hasClass("d-none")) {
+        if (!$(this).hasClass("hidden")) {
             var trId = $(this).attr('id').match(/thread_([0-9]+)_tr/m)[1]
             toggleThreadStackTrace(trId, true)
         }
     })
     if (toggleButton) {
-        $('.expandbutton').toggleClass('d-none')
+        $('.expandbutton').toggleClass('hidden')
     }
 }
 
@@ -63,7 +63,7 @@ function collapseAllThreadStackTrace(toggleButton) {
         $(this).remove()
     })
     if (toggleButton) {
-        $('.expandbutton').toggleClass('d-none');
+        $('.expandbutton').toggleClass('hidden');
     }
 }
 
@@ -82,7 +82,7 @@ function onSearchStringChange() {
     collapseAllThreadStackTrace(false)
     if (searchString.length == 0) {
         $('tr').each(function() {
-            $(this).removeClass('d-none')
+            $(this).removeClass('hidden')
         })
     } else {
         $('tr').each(function(){
@@ -95,9 +95,9 @@ function onSearchStringChange() {
                     }
                 }
                 if (found) {
-                    $(this).removeClass('d-none')
+                    $(this).removeClass('hidden')
                 } else {
-                    $(this).addClass('d-none')
+                    $(this).addClass('hidden')
                 }
             }
         });

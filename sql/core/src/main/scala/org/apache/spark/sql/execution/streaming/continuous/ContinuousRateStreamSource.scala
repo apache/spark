@@ -146,7 +146,7 @@ class RateStreamContinuousPartitionReader(
     }
 
     currentRow = InternalRow(
-      DateTimeUtils.millisToMicros(nextReadTime),
+      DateTimeUtils.fromMillis(nextReadTime),
       currentValue)
 
     true

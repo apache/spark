@@ -26,7 +26,6 @@ import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
@@ -68,7 +67,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         .getOrElse(System.currentTimeMillis())
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
-      // extra layers of escaping in order to embed this in a JavaScript string literal.
+      // extra layers of escaping in order to embed this in a Javascript string literal.
       val escapedName = Utility.escape(name)
       val jsEscapedNameForTooltip = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedName))
       val jsEscapedNameForLabel = StringEscapeUtils.escapeEcmaScript(escapedName)
@@ -127,8 +126,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
                       e.removeReason.map { reason =>
-                        s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
-                          reason.replace("\n", " "))}"""
+                        s"""<br>Reason: ${reason.replace("\n", " ")}"""
                       }.getOrElse("")
                    }"' +
              |    'data-html="true">Executor ${e.id} removed</div>'
@@ -255,9 +253,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           accumulatorUpdates = Nil,
           tasks = None,
           executorSummary = None,
-          killedTasksSummary = Map(),
-          ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID,
-          peakExecutorMetrics = None)
+          killedTasksSummary = Map())
       }
     }
 
@@ -290,20 +286,20 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       }
 
     val activeStagesTable =
-      new StageTableBase(store, request, activeStages.toSeq, "active", "activeStage",
-        parent.basePath, basePath, parent.isFairScheduler,
+      new StageTableBase(store, request, activeStages, "active", "activeStage", parent.basePath,
+        basePath, parent.isFairScheduler,
         killEnabled = parent.killEnabled, isFailedStage = false)
     val pendingOrSkippedStagesTable =
-      new StageTableBase(store, request, pendingOrSkippedStages.toSeq, pendingOrSkippedTableId,
+      new StageTableBase(store, request, pendingOrSkippedStages, pendingOrSkippedTableId,
         "pendingStage", parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = false, isFailedStage = false)
     val completedStagesTable =
-      new StageTableBase(store, request, completedStages.toSeq, "completed", "completedStage",
+      new StageTableBase(store, request, completedStages, "completed", "completedStage",
         parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = false, isFailedStage = false)
     val failedStagesTable =
-      new StageTableBase(store, request, failedStages.toSeq, "failed", "failedStage",
-        parent.basePath, basePath, parent.isFairScheduler,
+      new StageTableBase(store, request, failedStages, "failed", "failedStage", parent.basePath,
+        basePath, parent.isFairScheduler,
         killEnabled = false, isFailedStage = true)
 
     val shouldShowActiveStages = activeStages.nonEmpty
@@ -314,18 +310,10 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     val summary: NodeSeq =
       <div>
-        <ul class="list-unstyled">
+        <ul class="unstyled">
           <li>
             <Strong>Status:</Strong>
             {jobData.status}
-          </li>
-          <li>
-            <Strong>Submitted:</Strong>
-            {JobDataUtil.getFormattedSubmissionTime(jobData)}
-          </li>
-          <li>
-            <Strong>Duration:</Strong>
-            {JobDataUtil.getFormattedDuration(jobData)}
           </li>
           {
             if (sqlExecutionId.isDefined) {
@@ -393,7 +381,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     var content = summary
     val appStartTime = store.applicationInfo().attempts.head.startTime.getTime()
 
-    content ++= makeTimeline((activeStages ++ completedStages ++ failedStages).toSeq,
+    content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
       store.executorList(false), appStartTime)
 
     val operationGraphContent = store.asOption(store.operationGraphForJob(jobId)) match {

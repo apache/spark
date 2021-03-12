@@ -31,30 +31,31 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             self.spark.sql("select `中文字段`")
         except AnalysisException as e:
-            self.assertRegex(str(e), "cannot resolve '`中文字段`'")
+            self.assertRegexpMatches(str(e), "cannot resolve '`中文字段`'")
 
     def test_capture_parse_exception(self):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))
 
     def test_capture_illegalargument_exception(self):
-        self.assertRaisesRegex(IllegalArgumentException, "Setting negative mapred.reduce.tasks",
-                               lambda: self.spark.sql("SET mapred.reduce.tasks=-1"))
+        self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapred.reduce.tasks",
+                                lambda: self.spark.sql("SET mapred.reduce.tasks=-1"))
         df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
-        self.assertRaisesRegex(IllegalArgumentException, "1024 is not in the permitted values",
-                               lambda: df.select(sha2(df.a, 1024)).collect())
+        self.assertRaisesRegexp(IllegalArgumentException, "1024 is not in the permitted values",
+                                lambda: df.select(sha2(df.a, 1024)).collect())
         try:
             df.select(sha2(df.a, 1024)).collect()
         except IllegalArgumentException as e:
-            self.assertRegex(e.desc, "1024 is not in the permitted values")
-            self.assertRegex(e.stackTrace, "org.apache.spark.sql.functions")
+            self.assertRegexpMatches(e.desc, "1024 is not in the permitted values")
+            self.assertRegexpMatches(e.stackTrace,
+                                     "org.apache.spark.sql.functions")
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_utils import *  # noqa: F401
+    from pyspark.sql.tests.test_utils import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

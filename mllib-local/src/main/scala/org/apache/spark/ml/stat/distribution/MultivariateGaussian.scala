@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.stat.distribution
 
-import breeze.linalg.{diag, eigSym, max, DenseMatrix => BDM, DenseVector => BDV}
+import breeze.linalg.{diag, eigSym, max, DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.impl.Utils
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
 
 
 /**
@@ -48,27 +48,21 @@ class MultivariateGaussian @Since("2.0.0") (
     this(Vectors.fromBreeze(mean), Matrices.fromBreeze(cov))
   }
 
+  @transient private lazy val breezeMu = mean.asBreeze.toDenseVector
+
   /**
    * Compute distribution dependent constants:
    *    rootSigmaInv = D^(-1/2)^ * U.t, where sigma = U * D * U.t
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    */
-  @transient private lazy val tuple = {
-    val (rootSigmaInv, u) = calculateCovarianceConstants
-    val rootSigmaInvMat = Matrices.fromBreeze(rootSigmaInv)
-    val rootSigmaInvMulMu = rootSigmaInvMat.multiply(mean)
-    (rootSigmaInvMat, u, rootSigmaInvMulMu)
-  }
-  @transient private lazy val rootSigmaInvMat = tuple._1
-  @transient private lazy val u = tuple._2
-  @transient private lazy val rootSigmaInvMulMu = tuple._3
+  @transient private lazy val (rootSigmaInv: BDM[Double], u: Double) = calculateCovarianceConstants
 
   /**
    * Returns density of this multivariate Gaussian at given point, x
    */
   @Since("2.0.0")
   def pdf(x: Vector): Double = {
-    math.exp(logpdf(x))
+    pdf(x.asBreeze)
   }
 
   /**
@@ -76,9 +70,19 @@ class MultivariateGaussian @Since("2.0.0") (
    */
   @Since("2.0.0")
   def logpdf(x: Vector): Double = {
-    val v = rootSigmaInvMulMu.copy
-    BLAS.gemv(-1.0, rootSigmaInvMat, x, 1.0, v)
-    u - 0.5 * BLAS.dot(v, v)
+    logpdf(x.asBreeze)
+  }
+
+  /** Returns density of this multivariate Gaussian at given point, x */
+  private[ml] def pdf(x: BV[Double]): Double = {
+    math.exp(logpdf(x))
+  }
+
+  /** Returns the log-density of this multivariate Gaussian at given point, x */
+  private[ml] def logpdf(x: BV[Double]): Double = {
+    val delta = x - breezeMu
+    val v = rootSigmaInv * delta
+    u + v.t * v * -0.5
   }
 
   /**

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession

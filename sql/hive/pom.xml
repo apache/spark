@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.1.1</version>
+    <version>3.0.2</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -35,6 +35,11 @@
   </properties>
 
   <dependencies>
+    <!-- Added for Hive Parquet SerDe -->
+    <dependency>
+      <groupId>${hive.parquet.group}</groupId>
+      <artifactId>parquet-hadoop-bundle</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>

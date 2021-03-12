@@ -44,10 +44,10 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
   }
 
   @transient protected lazy val seed: Long = child match {
-    case e if child.foldable && e.dataType == IntegerType => e.eval().asInstanceOf[Int]
-    case e if child.foldable && e.dataType == LongType => e.eval().asInstanceOf[Long]
+    case Literal(s, IntegerType) => s.asInstanceOf[Int]
+    case Literal(s, LongType) => s.asInstanceOf[Long]
     case _ => throw new AnalysisException(
-      s"Input argument to $prettyName must be an integer, long, or null constant.")
+      s"Input argument to $prettyName must be an integer, long or null literal.")
   }
 
   override def nullable: Boolean = false
@@ -83,12 +83,9 @@ trait ExpressionWithRandomSeed {
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Rand(child: Expression, hideSeed: Boolean = false)
-  extends RDG with ExpressionWithRandomSeed {
+case class Rand(child: Expression) extends RDG with ExpressionWithRandomSeed {
 
-  def this() = this(Literal(Utils.random.nextLong(), LongType), true)
-
-  def this(child: Expression) = this(child, false)
+  def this() = this(Literal(Utils.random.nextLong(), LongType))
 
   override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType))
 
@@ -104,12 +101,7 @@ case class Rand(child: Expression, hideSeed: Boolean = false)
       isNull = FalseLiteral)
   }
 
-  override def freshCopy(): Rand = Rand(child, hideSeed)
-
-  override def flatArguments: Iterator[Any] = Iterator(child)
-  override def sql: String = {
-    s"rand(${if (hideSeed) "" else child.sql})"
-  }
+  override def freshCopy(): Rand = Rand(child)
 }
 
 object Rand {
@@ -134,12 +126,9 @@ object Rand {
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Randn(child: Expression, hideSeed: Boolean = false)
-  extends RDG with ExpressionWithRandomSeed {
+case class Randn(child: Expression) extends RDG with ExpressionWithRandomSeed {
 
-  def this() = this(Literal(Utils.random.nextLong(), LongType), true)
-
-  def this(child: Expression) = this(child, false)
+  def this() = this(Literal(Utils.random.nextLong(), LongType))
 
   override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType))
 
@@ -155,12 +144,7 @@ case class Randn(child: Expression, hideSeed: Boolean = false)
       isNull = FalseLiteral)
   }
 
-  override def freshCopy(): Randn = Randn(child, hideSeed)
-
-  override def flatArguments: Iterator[Any] = Iterator(child)
-  override def sql: String = {
-    s"randn(${if (hideSeed) "" else child.sql})"
-  }
+  override def freshCopy(): Randn = Randn(child)
 }
 
 object Randn {

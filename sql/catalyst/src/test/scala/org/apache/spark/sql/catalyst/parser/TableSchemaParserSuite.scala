@@ -57,6 +57,11 @@ class TableSchemaParserSuite extends SparkFunSuite {
         |anotherArray:Array<char(9)>>
       """.stripMargin.replace("\n", "")
 
+    val builder = new MetadataBuilder
+    builder.putString(HIVE_TYPE_STRING,
+      "struct<struct:struct<deciMal:decimal(10,0),anotherDecimal:decimal(5,2)>," +
+        "MAP:map<timestamp,varchar(10)>,arrAy:array<double>,anotherArray:array<char(9)>>")
+
     val expectedDataType =
       StructType(
         StructField("complexStructCol", StructType(
@@ -64,9 +69,11 @@ class TableSchemaParserSuite extends SparkFunSuite {
             StructType(
               StructField("deciMal", DecimalType.USER_DEFAULT) ::
                 StructField("anotherDecimal", DecimalType(5, 2)) :: Nil)) ::
-            StructField("MAP", MapType(TimestampType, VarcharType(10))) ::
+            StructField("MAP", MapType(TimestampType, StringType)) ::
             StructField("arrAy", ArrayType(DoubleType)) ::
-            StructField("anotherArray", ArrayType(CharType(9))) :: Nil)) :: Nil)
+            StructField("anotherArray", ArrayType(StringType)) :: Nil),
+          nullable = true,
+          builder.build()) :: Nil)
 
     assert(parse(tableSchemaString) === expectedDataType)
   }

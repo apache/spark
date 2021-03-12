@@ -19,13 +19,11 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.api.model.Pod
 import scala.collection.mutable
 
-import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
 import org.apache.spark.util.ManualClock
 
 class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore {
 
   ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
-  ExecutorPodsSnapshot.setSparkContainerName(DEFAULT_EXECUTOR_CONTAINER_NAME)
 
   val clock = new ManualClock()
 
@@ -43,7 +41,7 @@ class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore
   override def stop(): Unit = {}
 
   override def notifySubscribers(): Unit = {
-    subscribers.foreach(_(snapshotsBuffer.toSeq))
+    subscribers.foreach(_(snapshotsBuffer))
     snapshotsBuffer.clear()
   }
 

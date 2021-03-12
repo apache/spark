@@ -66,18 +66,6 @@ private[deploy] class Worker(
   Utils.checkHost(host)
   assert (port > 0)
 
-  // If worker decommissioning is enabled register a handler on PWR to shutdown.
-  if (conf.get(config.DECOMMISSION_ENABLED)) {
-    logInfo("Registering SIGPWR handler to trigger decommissioning.")
-    SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
-      "disabling worker decommission feature.") {
-       self.send(WorkerSigPWRReceived)
-       true
-    }
-  } else {
-    logInfo("Worker decommissioning not enabled, SIGPWR will result in exiting.")
-  }
-
   // A scheduled executor used to send messages at the specified time.
   private val forwardMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
@@ -139,9 +127,7 @@ private[deploy] class Worker(
   private val workerUri = RpcEndpointAddress(rpcEnv.address, endpointName).toString
   private var registered = false
   private var connected = false
-  private var decommissioned = false
-  // expose for test
-  private[spark] val workerId = generateWorkerId()
+  private val workerId = generateWorkerId()
   private val sparkHome =
     if (sys.props.contains(IS_TESTING.key)) {
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
@@ -276,14 +262,7 @@ private[deploy] class Worker(
     master = Some(masterRef)
     connected = true
     if (reverseProxy) {
-      logInfo("WorkerWebUI is available at %s/proxy/%s".format(
-        activeMasterWebUiUrl.stripSuffix("/"), workerId))
-      // if reverseProxyUrl is not set, then we continue to generate relative URLs
-      // starting with "/" throughout the UI and do not use activeMasterWebUiUrl
-      val proxyUrl = conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/")
-      // In the method `UIUtils.makeHref`, the URL segment "/proxy/$worker_id" will be appended
-      // after `proxyUrl`, so no need to set the worker ID in the `spark.ui.proxyBase` here.
-      System.setProperty("spark.ui.proxyBase", proxyUrl)
+      logInfo(s"WorkerWebUI is available at $activeMasterWebUiUrl/proxy/$workerId")
     }
     // Cancel any outstanding re-registration attempts because we found a new master
     cancelLastRegistrationRetry()
@@ -553,8 +532,6 @@ private[deploy] class Worker(
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, resources_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
-      } else if (decommissioned) {
-        logWarning("Asked to launch an executor while decommissioned. Not launching executor.")
       } else {
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
@@ -679,15 +656,6 @@ private[deploy] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
-
-    case DecommissionWorker =>
-      decommissionSelf()
-
-    case WorkerSigPWRReceived =>
-      decommissionSelf()
-      // Tell the Master that we are starting decommissioning
-      // so it stops trying to launch executor/driver on us
-      sendToMaster(WorkerDecommissioning(workerId, self))
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -783,17 +751,6 @@ private[deploy] class Worker(
       finishedDrivers.take(math.max(finishedDrivers.size / 10, 1)).foreach {
         case (driverId, _) => finishedDrivers.remove(driverId)
       }
-    }
-  }
-
-  private[deploy] def decommissionSelf(): Unit = {
-    if (conf.get(config.DECOMMISSION_ENABLED) && !decommissioned) {
-      decommissioned = true
-      logInfo(s"Decommission worker $workerId.")
-    } else if (decommissioned) {
-      logWarning(s"Worker $workerId already started decommissioning.")
-    } else {
-      logWarning(s"Receive decommission request, but decommission feature is disabled.")
     }
   }
 

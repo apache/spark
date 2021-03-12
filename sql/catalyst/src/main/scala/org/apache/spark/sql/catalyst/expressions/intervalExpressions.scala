@@ -31,7 +31,7 @@ abstract class ExtractIntervalPart(
     val dataType: DataType,
     func: CalendarInterval => Any,
     funcName: String)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant with Serializable {
+  extends UnaryExpression with ExpectsInputTypes with Serializable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
 
@@ -82,7 +82,7 @@ object ExtractIntervalPart {
 abstract class IntervalNumOperation(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -109,25 +109,25 @@ abstract class IntervalNumOperation(
 case class MultiplyInterval(
     interval: Expression,
     num: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
   extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
-    if (failOnError) multiplyExact else multiply
+    if (checkOverflow) multiplyExact else multiply
 
-  override protected def operationName: String = if (failOnError) "multiplyExact" else "multiply"
+  override protected def operationName: String = if (checkOverflow) "multiplyExact" else "multiply"
 }
 
 case class DivideInterval(
     interval: Expression,
     num: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
   extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
-    if (failOnError) divideExact else divide
+    if (checkOverflow) divideExact else divide
 
-  override protected def operationName: String = if (failOnError) "divideExact" else "divide"
+  override protected def operationName: String = if (checkOverflow) "divideExact" else "divide"
 }
 
 // scalastyle:off line.size.limit
@@ -161,9 +161,8 @@ case class MakeInterval(
     days: Expression,
     hours: Expression,
     mins: Expression,
-    secs: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends SeptenaryExpression with ImplicitCastInputTypes with NullIntolerant {
+    secs: Expression)
+  extends SeptenaryExpression with ImplicitCastInputTypes {
 
   def this(
       years: Expression,
@@ -171,19 +170,8 @@ case class MakeInterval(
       weeks: Expression,
       days: Expression,
       hours: Expression,
-      mins: Expression,
-      sec: Expression) = {
-    this(years, months, weeks, days, hours, mins, sec, SQLConf.get.ansiEnabled)
-  }
-  def this(
-      years: Expression,
-      months: Expression,
-      weeks: Expression,
-      days: Expression,
-      hours: Expression,
       mins: Expression) = {
-    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)),
-      SQLConf.get.ansiEnabled)
+    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
   }
   def this(
       years: Expression,
@@ -207,7 +195,7 @@ case class MakeInterval(
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType,
     IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
   override def dataType: DataType = CalendarIntervalType
-  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
+  override def nullable: Boolean = true
 
   override def nullSafeEval(
       year: Any,
@@ -227,7 +215,7 @@ case class MakeInterval(
         min.asInstanceOf[Int],
         sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
     } catch {
-      case _: ArithmeticException if !failOnError => null
+      case _: ArithmeticException => null
     }
   }
 
@@ -235,12 +223,11 @@ case class MakeInterval(
     nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
       val secFrac = sec.getOrElse("0")
-      val faileOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
       s"""
         try {
           ${ev.value} = $iu.makeInterval($year, $month, $week, $day, $hour, $min, $secFrac);
         } catch (java.lang.ArithmeticException e) {
-          $faileOnErrorBranch
+          ${ev.isNull} = true;
         }
       """
     })

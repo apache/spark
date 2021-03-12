@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -29,7 +28,7 @@ import org.apache.spark.sql.types._
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
-abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZero: Boolean)
+abstract class PearsonCorrelation(x: Expression, y: Expression)
   extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(x, y)
@@ -43,13 +42,6 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
   protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
   protected val xMk = AttributeReference("xMk", DoubleType, nullable = false)()
   protected val yMk = AttributeReference("yMk", DoubleType, nullable = false)()
-
-  protected def divideByZeroEvalResult: Expression = {
-    if (nullOnDivideByZero) Literal.create(null, DoubleType) else Double.NaN
-  }
-
-  override def stringArgs: Iterator[Any] =
-    super.stringArgs.filter(_.isInstanceOf[Expression])
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck, xMk, yMk)
 
@@ -110,18 +102,12 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
   group = "agg_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
-case class Corr(
-    x: Expression,
-    y: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends PearsonCorrelation(x, y, nullOnDivideByZero) {
-
-  def this(x: Expression, y: Expression) =
-    this(x, y, !SQLConf.get.legacyStatisticalAggregate)
+case class Corr(x: Expression, y: Expression)
+  extends PearsonCorrelation(x, y) {
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, divideByZeroEvalResult, ck / sqrt(xMk * yMk)))
+      If(n === 1.0, Double.NaN, ck / sqrt(xMk * yMk)))
   }
 
   override def prettyName: String = "corr"

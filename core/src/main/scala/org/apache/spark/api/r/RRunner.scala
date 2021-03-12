@@ -19,6 +19,7 @@ package org.apache.spark.api.r
 
 import java.io._
 
+import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 
 /**

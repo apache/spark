@@ -391,7 +391,7 @@ abstract class DynamicPartitionPruningSuiteBase
        """.stripMargin)
 
       val found = df.queryExecution.executedPlan.find {
-        case BroadcastHashJoinExec(_, _, p: ExistenceJoin, _, _, _, _, _) => true
+        case BroadcastHashJoinExec(_, _, p: ExistenceJoin, _, _, _, _) => true
         case _ => false
       }
 
@@ -450,19 +450,6 @@ abstract class DynamicPartitionPruningSuiteBase
           """
             |SELECT * FROM fact_sk f
             |LEFT SEMI JOIN dim_store s
-            |ON f.store_id = s.store_id AND s.country = 'NL'
-          """.stripMargin)
-
-        checkPartitionPruningPredicate(df, true, false)
-      }
-
-      Given("left-semi join with partition column on the right side")
-      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
-        val df = sql(
-          """
-            |SELECT * FROM dim_store s
-            |LEFT SEMI JOIN fact_sk f
             |ON f.store_id = s.store_id AND s.country = 'NL'
           """.stripMargin)
 
@@ -1342,23 +1329,6 @@ abstract class DynamicPartitionPruningSuiteBase
           }
         }
       }
-    }
-  }
-
-  test("SPARK-32817: DPP throws error when the broadcast side is empty") {
-    withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
-      val df = sql(
-        """
-          |SELECT * FROM fact_sk f
-          |JOIN dim_store s
-          |ON f.store_id = s.store_id WHERE s.country = 'XYZ'
-        """.stripMargin)
-
-      checkPartitionPruningPredicate(df, false, true)
-
-      checkAnswer(df, Nil)
     }
   }
 }

@@ -25,13 +25,14 @@
 """
 
 import sys
+import warnings
 
 import numpy as np
 from distutils.version import LooseVersion
 
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession
 
 __all__ = ["ImageSchema"]
 
@@ -55,11 +56,8 @@ class _ImageSchema(object):
         """
         Returns the image schema.
 
-        Returns
-        -------
-        :class:`StructType`
-            with a single column of images named "image" (nullable)
-            and having the same type returned by :meth:`columnSchema`.
+        :return: a :class:`StructType` with a single column of images
+               named "image" (nullable) and having the same type returned by :meth:`columnSchema`.
 
         .. versionadded:: 2.3.0
         """
@@ -75,10 +73,7 @@ class _ImageSchema(object):
         """
         Returns the OpenCV type mapping supported.
 
-        Returns
-        -------
-        dict
-            a dictionary containing the OpenCV type mapping supported.
+        :return: a dictionary containing the OpenCV type mapping supported.
 
         .. versionadded:: 2.3.0
         """
@@ -93,10 +88,7 @@ class _ImageSchema(object):
         """
         Returns the schema for the image column.
 
-        Returns
-        -------
-        :class:`StructType`
-            a schema for image column,
+        :return: a :class:`StructType` for image column,
             ``struct<origin:string, height:int, width:int, nChannels:int, mode:int, data:binary>``.
 
         .. versionadded:: 2.4.0
@@ -113,10 +105,7 @@ class _ImageSchema(object):
         """
         Returns field names of image columns.
 
-        Returns
-        -------
-        list
-            a list of field names.
+        :return: a list of field names.
 
         .. versionadded:: 2.3.0
         """
@@ -144,16 +133,9 @@ class _ImageSchema(object):
         """
         Converts an image to an array with metadata.
 
-        Parameters
-        ----------
-        image : :class:`Row`
-            image: A row that contains the image to be converted. It should
+        :param `Row` image: A row that contains the image to be converted. It should
             have the attributes specified in `ImageSchema.imageSchema`.
-
-        Returns
-        -------
-        :class:`numpy.ndarray`
-            that is an image.
+        :return: a `numpy.ndarray` that is an image.
 
         .. versionadded:: 2.3.0
         """
@@ -181,17 +163,9 @@ class _ImageSchema(object):
         """
         Converts an array with metadata to a two-dimensional image.
 
-        Parameters
-        ----------
-        array : :class:`numpy.ndarray`
-            The array to convert to image.
-        origin : str
-            Path to the image, optional.
-
-        Returns
-        -------
-        :class:`Row`
-            that is a two dimensional image.
+        :param `numpy.ndarray` array: The array to convert to image.
+        :param str origin: Path to the image, optional.
+        :return: a :class:`Row` that is a two dimensional image.
 
         .. versionadded:: 2.3.0
         """

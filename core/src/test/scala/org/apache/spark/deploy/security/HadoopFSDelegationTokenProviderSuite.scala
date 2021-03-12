@@ -19,8 +19,7 @@ package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.{STAGING_DIR, SUBMIT_DEPLOY_MODE}

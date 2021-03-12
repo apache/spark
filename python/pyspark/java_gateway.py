@@ -17,6 +17,7 @@
 
 import atexit
 import os
+import sys
 import signal
 import shlex
 import shutil
@@ -26,29 +27,25 @@ import tempfile
 import time
 from subprocess import Popen, PIPE
 
+if sys.version >= '3':
+    xrange = range
+
 from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
 from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
+from pyspark.util import _exception_message
 
 
 def launch_gateway(conf=None, popen_kwargs=None):
     """
     launch jvm gateway
-
-    Parameters
-    ----------
-    conf : :py:class:`pyspark.SparkConf`
-        spark configuration passed to spark-submit
-    popen_kwargs : dict
-        Dictionary of kwargs to pass to Popen when spawning
+    :param conf: spark configuration passed to spark-submit
+    :param popen_kwargs: Dictionary of kwargs to pass to Popen when spawning
         the py4j JVM. This is a developer feature intended for use in
         customizing how pyspark interacts with the py4j JVM (e.g., capturing
         stdout/stderr).
-
-    Returns
-    -------
-    ClientServer or JavaGateway
+    :return:
     """
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
@@ -155,7 +152,6 @@ def launch_gateway(conf=None, popen_kwargs=None):
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.ml.python.*")
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
-    java_import(gateway.jvm, "org.apache.spark.resource.*")
     # TODO(davies): move into sql
     java_import(gateway.jvm, "org.apache.spark.sql.*")
     java_import(gateway.jvm, "org.apache.spark.sql.api.python.*")
@@ -182,16 +178,9 @@ def local_connect_and_auth(port, auth_secret):
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
     Handles IPV4 & IPV6, does some error handling.
-
-    Parameters
-    ----------
-    port : str or int or None
-    auth_secret : str
-
-    Returns
-    -------
-    tuple
-        with (sockfile, sock)
+    :param port
+    :param auth_secret
+    :return: a tuple with (sockfile, sock)
     """
     sock = None
     errors = []
@@ -201,14 +190,14 @@ def local_connect_and_auth(port, auth_secret):
         af, socktype, proto, _, sa = res
         try:
             sock = socket.socket(af, socktype, proto)
-            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
+            sock.settimeout(15)
             sock.connect(sa)
             sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:
-            emsg = str(e)
-            errors.append("tried to connect to %s, but an error occurred: %s" % (sa, emsg))
+            emsg = _exception_message(e)
+            errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
             sock.close()
             sock = None
     raise Exception("could not open socket: %s" % errors)

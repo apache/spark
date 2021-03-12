@@ -25,14 +25,11 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
-import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterSchedulerBackend(
@@ -58,23 +55,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
-  private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
-
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     if (isExecutorActive(executorId)) {
       removeExecutor(executorId, reason)
     }
-  }
-
-  private def setUpExecutorConfigMap(): Unit = {
-    val configMapName = KubernetesClientUtils.configMapNameExecutor
-    val confFilesMap = KubernetesClientUtils
-      .buildSparkConfDirFilesMap(configMapName, conf, Map.empty)
-    val labels =
-      Map(SPARK_APP_ID_LABEL -> applicationId(), SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
-    val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap, labels)
-    kubernetesClient.configMaps().create(configMap)
   }
 
   /**
@@ -90,13 +75,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def start(): Unit = {
     super.start()
-    val initExecs = Map(defaultProfile -> initialExecutors)
-    podAllocator.setTotalExpectedExecutors(initExecs)
+    podAllocator.setTotalExpectedExecutors(initialExecutors)
     lifecycleEventHandler.start(this)
     podAllocator.start(applicationId())
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
-    setUpExecutorConfigMap()
   }
 
   override def stop(): Unit = {
@@ -126,13 +109,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
           .delete()
       }
-      Utils.tryLogNonFatalError {
-        kubernetesClient
-          .configMaps()
-          .withLabel(SPARK_APP_ID_LABEL, applicationId())
-          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-          .delete()
-      }
     }
 
     Utils.tryLogNonFatalError {
@@ -144,9 +120,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
   }
 
-  override def doRequestTotalExecutors(
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
-    podAllocator.setTotalExpectedExecutors(resourceProfileToTotalExecs)
+  override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+    podAllocator.setTotalExpectedExecutors(requestedTotal)
     Future.successful(true)
   }
 
@@ -210,17 +185,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
-  override protected def isExecutorExcluded(executorId: String, hostname: String): Boolean = {
+  override protected def isBlacklisted(executorId: String, hostname: String): Boolean = {
     podAllocator.isDeleted(executorId)
   }
 
   private class KubernetesDriverEndpoint extends DriverEndpoint {
-    private def ignoreRegisterExecutorAtStoppedContext: PartialFunction[Any, Unit] = {
-      case _: RegisterExecutor if sc.isStopped => // No-op
-    }
-
-    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] =
-      ignoreRegisterExecutorAtStoppedContext.orElse(super.receiveAndReply(context))
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       // Don't do anything besides disabling the executor - allow the Kubernetes API events to

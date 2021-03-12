@@ -81,15 +81,15 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
       .withDMax(dmax)
       .build(ganglia)
 
-  override def start(): Unit = {
+  override def start() {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop(): Unit = {
+  override def stop() {
     reporter.stop()
   }
 
-  override def report(): Unit = {
+  override def report() {
     reporter.report()
   }
 }

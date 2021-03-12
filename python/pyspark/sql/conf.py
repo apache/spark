@@ -18,6 +18,10 @@
 import sys
 
 from pyspark import since, _NoValue
+from pyspark.rdd import ignore_unicode_prefix
+
+if sys.version_info[0] >= 3:
+    basestring = str
 
 
 class RuntimeConfig(object):
@@ -30,11 +34,13 @@ class RuntimeConfig(object):
         """Create a new RuntimeConfig that wraps the underlying JVM object."""
         self._jconf = jconf
 
+    @ignore_unicode_prefix
     @since(2.0)
     def set(self, key, value):
         """Sets the given Spark runtime configuration property."""
         self._jconf.set(key, value)
 
+    @ignore_unicode_prefix
     @since(2.0)
     def get(self, key, default=_NoValue):
         """Returns the value of Spark runtime configuration property for the given key,
@@ -48,6 +54,7 @@ class RuntimeConfig(object):
                 self._checkType(default, "default")
             return self._jconf.get(key, default)
 
+    @ignore_unicode_prefix
     @since(2.0)
     def unset(self, key):
         """Resets the configuration property for the given key."""
@@ -55,10 +62,11 @@ class RuntimeConfig(object):
 
     def _checkType(self, obj, identifier):
         """Assert that an object is of type str."""
-        if not isinstance(obj, str):
+        if not isinstance(obj, basestring):
             raise TypeError("expected %s '%s' to be a string (was '%s')" %
                             (identifier, obj, type(obj).__name__))
 
+    @ignore_unicode_prefix
     @since(2.4)
     def isModifiable(self, key):
         """Indicates whether the configuration property with the given key

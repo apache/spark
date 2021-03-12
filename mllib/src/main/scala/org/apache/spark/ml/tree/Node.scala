@@ -174,32 +174,22 @@ class InternalNode private[ml] (
   }
 
   override private[ml] def predictImpl(features: Vector): LeafNode = {
-    var node: Node = this
-    while (node.isInstanceOf[InternalNode]) {
-      val n = node.asInstanceOf[InternalNode]
-      if (n.split.shouldGoLeft(features)) {
-        node = n.leftChild
-      } else {
-        node = n.rightChild
-      }
+    if (split.shouldGoLeft(features)) {
+      leftChild.predictImpl(features)
+    } else {
+      rightChild.predictImpl(features)
     }
-    node.asInstanceOf[LeafNode]
   }
 
   override private[ml] def predictBinned(
       binned: Array[Int],
       splits: Array[Array[Split]]): LeafNode = {
-    var node: Node = this
-    while (node.isInstanceOf[InternalNode]) {
-      val n = node.asInstanceOf[InternalNode]
-      val i = n.split.featureIndex
-      if (n.split.shouldGoLeft(binned(i), splits(i))) {
-        node = n.leftChild
-      } else {
-        node = n.rightChild
-      }
+    val i = split.featureIndex
+    if (split.shouldGoLeft(binned(i), splits(i))) {
+      leftChild.predictBinned(binned, splits)
+    } else {
+      rightChild.predictBinned(binned, splits)
     }
-    node.asInstanceOf[LeafNode]
   }
 
   override private[tree] def numDescendants: Int = {
@@ -336,27 +326,27 @@ private[tree] class LearningNode(
    *         [[org.apache.spark.ml.tree.impl.RandomForest.findBestSplits()]].
    */
   def predictImpl(binnedFeatures: Array[Int], splits: Array[Array[Split]]): Int = {
-    var node = this
-    while (!node.isLeaf && node.split.nonEmpty) {
-      val split = node.split.get
+    if (this.isLeaf || this.split.isEmpty) {
+      this.id
+    } else {
+      val split = this.split.get
       val featureIndex = split.featureIndex
       val splitLeft = split.shouldGoLeft(binnedFeatures(featureIndex), splits(featureIndex))
-      if (node.leftChild.isEmpty) {
+      if (this.leftChild.isEmpty) {
         // Not yet split. Return next layer of nodes to train
         if (splitLeft) {
-          return LearningNode.leftChildIndex(node.id)
+          LearningNode.leftChildIndex(this.id)
         } else {
-          return LearningNode.rightChildIndex(node.id)
+          LearningNode.rightChildIndex(this.id)
         }
       } else {
         if (splitLeft) {
-          node = node.leftChild.get
+          this.leftChild.get.predictImpl(binnedFeatures, splits)
         } else {
-          node = node.rightChild.get
+          this.rightChild.get.predictImpl(binnedFeatures, splits)
         }
       }
     }
-    node.id
   }
 
 }

@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext,
   OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat,
-  RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttemptContext}
+  RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
 import org.apache.hadoop.util.Progressable
 import org.scalatest.Assertions
 
@@ -892,7 +892,7 @@ class FakeOutputFormat() extends OutputFormat[Integer, Integer]() {
  */
 class NewFakeWriter extends NewRecordWriter[Integer, Integer] {
 
-  def close(p1: NewTaskAttemptContext): Unit = ()
+  def close(p1: NewTaskAttempContext): Unit = ()
 
   def write(p1: Integer, p2: Integer): Unit = ()
 
@@ -901,24 +901,24 @@ class NewFakeWriter extends NewRecordWriter[Integer, Integer] {
 class NewFakeCommitter extends NewOutputCommitter {
   def setupJob(p1: NewJobContext): Unit = ()
 
-  def needsTaskCommit(p1: NewTaskAttemptContext): Boolean = false
+  def needsTaskCommit(p1: NewTaskAttempContext): Boolean = false
 
-  def setupTask(p1: NewTaskAttemptContext): Unit = ()
+  def setupTask(p1: NewTaskAttempContext): Unit = ()
 
-  def commitTask(p1: NewTaskAttemptContext): Unit = ()
+  def commitTask(p1: NewTaskAttempContext): Unit = ()
 
-  def abortTask(p1: NewTaskAttemptContext): Unit = ()
+  def abortTask(p1: NewTaskAttempContext): Unit = ()
 }
 
 class NewFakeFormat() extends NewOutputFormat[Integer, Integer]() {
 
   def checkOutputSpecs(p1: NewJobContext): Unit = ()
 
-  def getRecordWriter(p1: NewTaskAttemptContext): NewRecordWriter[Integer, Integer] = {
+  def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     new NewFakeWriter()
   }
 
-  def getOutputCommitter(p1: NewTaskAttemptContext): NewOutputCommitter = {
+  def getOutputCommitter(p1: NewTaskAttempContext): NewOutputCommitter = {
     new NewFakeCommitter()
   }
 }
@@ -958,7 +958,7 @@ class FakeFormatWithCallback() extends FakeOutputFormat {
 }
 
 class NewFakeWriterWithCallback extends NewFakeWriter {
-  override def close(p1: NewTaskAttemptContext): Unit = {
+  override def close(p1: NewTaskAttempContext): Unit = {
     FakeWriterWithCallback.calledBy += "close"
   }
 
@@ -972,7 +972,7 @@ class NewFakeWriterWithCallback extends NewFakeWriter {
 }
 
 class NewFakeFormatWithCallback() extends NewFakeFormat {
-  override def getRecordWriter(p1: NewTaskAttemptContext): NewRecordWriter[Integer, Integer] = {
+  override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     new NewFakeWriterWithCallback()
   }
 }
@@ -982,27 +982,27 @@ class YetAnotherFakeCommitter extends NewOutputCommitter with Assertions {
     JobID.jobid = j.getJobID().getId
   }
 
-  def needsTaskCommit(t: NewTaskAttemptContext): Boolean = false
+  def needsTaskCommit(t: NewTaskAttempContext): Boolean = false
 
-  def setupTask(t: NewTaskAttemptContext): Unit = {
+  def setupTask(t: NewTaskAttempContext): Unit = {
     val jobId = t.getTaskAttemptID().getJobID().getId
     assert(jobId === JobID.jobid)
   }
 
-  def commitTask(t: NewTaskAttemptContext): Unit = {}
+  def commitTask(t: NewTaskAttempContext): Unit = {}
 
-  def abortTask(t: NewTaskAttemptContext): Unit = {}
+  def abortTask(t: NewTaskAttempContext): Unit = {}
 }
 
 class YetAnotherFakeFormat() extends NewOutputFormat[Integer, Integer]() {
 
   def checkOutputSpecs(j: NewJobContext): Unit = {}
 
-  def getRecordWriter(t: NewTaskAttemptContext): NewRecordWriter[Integer, Integer] = {
+  def getRecordWriter(t: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     new NewFakeWriter()
   }
 
-  def getOutputCommitter(t: NewTaskAttemptContext): NewOutputCommitter = {
+  def getOutputCommitter(t: NewTaskAttempContext): NewOutputCommitter = {
     new YetAnotherFakeCommitter()
   }
 }
@@ -1021,7 +1021,7 @@ class ConfigTestFormat() extends NewFakeFormat() with Configurable {
 
   def getConf: Configuration = null
 
-  override def getRecordWriter(p1: NewTaskAttemptContext): NewRecordWriter[Integer, Integer] = {
+  override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     assert(setConfCalled, "setConf was never called")
     super.getRecordWriter(p1)
   }

@@ -71,10 +71,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     offerResources(offers)
     verifyTaskLaunched(driver, "o1")
 
-    val totalExecs = Map(ResourceProfile.getOrCreateDefaultProfile(sparkConf) -> 0)
     // kills executors
-    val defaultResourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    assert(backend.doRequestTotalExecutors(Map(defaultResourceProfile -> 0)).futureValue)
+    assert(backend.doRequestTotalExecutors(0).futureValue)
     assert(backend.doKillExecutors(Seq("0")).futureValue)
     val taskID0 = createTaskId("0")
     verify(driver, times(1)).killTask(taskID0)
@@ -84,7 +82,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyDeclinedOffer(driver, createOfferId("o2"))
 
     // Launches a new task when requested executors is positive
-    backend.doRequestTotalExecutors(Map(defaultResourceProfile -> 2))
+    backend.doRequestTotalExecutors(2)
     offerResources(offers, 2)
     verifyTaskLaunched(driver, "o2")
   }
@@ -105,7 +103,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.statusUpdate(driver, status)
     verify(driver, times(1)).reviveOffers()
 
-    // Launches a new task on a valid offer from the same agent
+    // Launches a new task on a valid offer from the same slave
     offerResources(List(offer2))
     verifyTaskLaunched(driver, "o2")
   }
@@ -250,7 +248,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyTaskLaunched(driver, "o2")
   }
 
-  test("mesos creates multiple executors on a single agent") {
+  test("mesos creates multiple executors on a single slave") {
     val executorCores = 4
     setBackend(Map(EXECUTOR_CORES.key -> executorCores.toString))
 
@@ -637,12 +635,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     assert(backend.getExecutorIds().isEmpty)
 
-    val defaultProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    val defaultProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    backend.requestTotalExecutors(
-      Map(defaultProfileId -> 2),
-      Map(defaultProfileId -> 2),
-      Map(defaultProfileId -> Map("hosts10" -> 1, "hosts11" -> 1)))
+    backend.requestTotalExecutors(2, 2, Map("hosts10" -> 1, "hosts11" -> 1))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(1, false)
@@ -658,11 +651,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     offerResourcesAndVerify(1, true)
 
     // Update total executors
-    backend.requestTotalExecutors(
-      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 3),
-      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
-      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
-        Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1)))
+    backend.requestTotalExecutors(3, 3, Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
@@ -671,11 +660,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     Thread.sleep(2000)
 
     // Update total executors
-    backend.requestTotalExecutors(
-      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
-      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
-      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
-            Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1, "hosts13" -> 1)))
+    backend.requestTotalExecutors(4, 4, Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1,
+      "hosts13" -> 1))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
@@ -727,10 +713,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   private case class Resources(mem: Int, cpus: Int, gpus: Int = 0)
 
-  private def registerMockExecutor(executorId: String, agentId: String, cores: Integer) = {
+  private def registerMockExecutor(executorId: String, slaveId: String, cores: Integer) = {
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
-    val message = RegisterExecutor(executorId, mockEndpointRef, agentId, cores, Map.empty,
+    val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty,
       Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     backend.driverEndpoint.askSync[Boolean](message)
@@ -766,10 +752,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     }
   }
 
-  private def createTaskStatus(taskId: String, agentId: String, state: TaskState): TaskStatus = {
+  private def createTaskStatus(taskId: String, slaveId: String, state: TaskState): TaskStatus = {
     TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(taskId).build())
-      .setSlaveId(SlaveID.newBuilder().setValue(agentId).build())
+      .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
       .setState(state)
       .build
   }
@@ -833,7 +819,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
 
     taskScheduler = mock[TaskSchedulerImpl]
-    when(taskScheduler.excludedNodes).thenReturn(Set[String]())
+    when(taskScheduler.nodeBlacklist).thenReturn(Set[String]())
     when(taskScheduler.sc).thenReturn(sc)
 
     externalShuffleClient = mock[MesosExternalBlockStoreClient]

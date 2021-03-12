@@ -1210,7 +1210,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   testQuietly("interval is unsupported for arrow") {
     val e = intercept[SparkException] {
-      calendarIntervalData.toDF().toArrowBatchRdd.collect()
+      calenderIntervalData.toDF().toArrowBatchRdd.collect()
     }
 
     assert(e.getCause.isInstanceOf[UnsupportedOperationException])

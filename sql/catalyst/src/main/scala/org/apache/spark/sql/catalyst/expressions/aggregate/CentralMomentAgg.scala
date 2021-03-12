@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -44,7 +43,7 @@ import org.apache.spark.sql.types._
  *
  * @param child to compute central moments of.
  */
-abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
+abstract class CentralMomentAgg(child: Expression)
   extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   /**
@@ -62,13 +61,6 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
   protected val m2 = AttributeReference("m2", DoubleType, nullable = false)()
   protected val m3 = AttributeReference("m3", DoubleType, nullable = false)()
   protected val m4 = AttributeReference("m4", DoubleType, nullable = false)()
-
-  protected def divideByZeroEvalResult: Expression = {
-    if (nullOnDivideByZero) Literal.create(null, DoubleType) else Double.NaN
-  }
-
-  override def stringArgs: Iterator[Any] =
-    super.stringArgs.filter(_.isInstanceOf[Expression])
 
   private def trimHigherOrder[T](expressions: Seq[T]) = expressions.take(momentOrder + 1)
 
@@ -153,12 +145,7 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
   group = "agg_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
-case class StddevPop(
-    child: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends CentralMomentAgg(child, nullOnDivideByZero) {
-
-  def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
+case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
 
@@ -181,18 +168,13 @@ case class StddevPop(
   group = "agg_funcs",
   since = "1.6.0")
 // scalastyle:on line.size.limit
-case class StddevSamp(
-    child: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends CentralMomentAgg(child, nullOnDivideByZero) {
-
-  def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
+case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, divideByZeroEvalResult, sqrt(m2 / (n - 1.0))))
+      If(n === 1.0, Double.NaN, sqrt(m2 / (n - 1.0))))
   }
 
   override def prettyName: String =
@@ -209,12 +191,7 @@ case class StddevSamp(
   """,
   group = "agg_funcs",
   since = "1.6.0")
-case class VariancePop(
-    child: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends CentralMomentAgg(child, nullOnDivideByZero) {
-
-  def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
+case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
 
@@ -235,18 +212,13 @@ case class VariancePop(
   """,
   group = "agg_funcs",
   since = "1.6.0")
-case class VarianceSamp(
-    child: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends CentralMomentAgg(child, nullOnDivideByZero) {
-
-  def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
+case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, divideByZeroEvalResult, m2 / (n - 1.0)))
+      If(n === 1.0, Double.NaN, m2 / (n - 1.0)))
   }
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("var_samp")
@@ -263,12 +235,7 @@ case class VarianceSamp(
   """,
   group = "agg_funcs",
   since = "1.6.0")
-case class Skewness(
-    child: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends CentralMomentAgg(child, nullOnDivideByZero) {
-
-  def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
+case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 
   override def prettyName: String = "skewness"
 
@@ -276,7 +243,7 @@ case class Skewness(
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(m2 === 0.0, divideByZeroEvalResult, sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
+      If(m2 === 0.0, Double.NaN, sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
   }
 }
 
@@ -291,18 +258,13 @@ case class Skewness(
   """,
   group = "agg_funcs",
   since = "1.6.0")
-case class Kurtosis(
-    child: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends CentralMomentAgg(child, nullOnDivideByZero) {
-
-  def this(child: Expression) = this(child, !SQLConf.get.legacyStatisticalAggregate)
+case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 4
 
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(m2 === 0.0, divideByZeroEvalResult, n * m4 / (m2 * m2) - 3.0))
+      If(m2 === 0.0, Double.NaN, n * m4 / (m2 * m2) - 3.0))
   }
 
   override def prettyName: String = "kurtosis"

@@ -22,6 +22,7 @@ Python package for random data generation.
 import sys
 from functools import wraps
 
+from pyspark import since
 from pyspark.mllib.common import callMLlibFunc
 
 
@@ -45,6 +46,7 @@ class RandomRDDs(object):
     """
 
     @staticmethod
+    @since("1.1.0")
     def uniformRDD(sc, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the
@@ -54,26 +56,12 @@ class RandomRDDs(object):
         to U(a, b), use
         ``RandomRDDs.uniformRDD(sc, n, p, seed).map(lambda v: a + (b - a) * v)``
 
-        .. versionadded:: 1.1.0
+        :param sc: SparkContext used to create the RDD.
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ `U(0.0, 1.0)`.
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            used to create the RDD.
-        size : int
-            Size of the RDD.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`).
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of float comprised of i.i.d. samples ~ `U(0.0, 1.0)`.
-
-        Examples
-        --------
         >>> x = RandomRDDs.uniformRDD(sc, 100).collect()
         >>> len(x)
         100
@@ -88,6 +76,7 @@ class RandomRDDs(object):
         return callMLlibFunc("uniformRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
+    @since("1.1.0")
     def normalRDD(sc, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the standard normal
@@ -97,26 +86,12 @@ class RandomRDDs(object):
         to some other normal N(mean, sigma^2), use
         ``RandomRDDs.normal(sc, n, p, seed).map(lambda v: mean + sigma * v)``
 
-        .. versionadded:: 1.1.0
+        :param sc: SparkContext used to create the RDD.
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ N(0.0, 1.0).
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            used to create the RDD.
-        size : int
-            Size of the RDD.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`).
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of float comprised of i.i.d. samples ~ N(0.0, 1.0).
-
-        Examples
-        --------
         >>> x = RandomRDDs.normalRDD(sc, 1000, seed=1)
         >>> stats = x.stats()
         >>> stats.count()
@@ -129,34 +104,20 @@ class RandomRDDs(object):
         return callMLlibFunc("normalRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
+    @since("1.3.0")
     def logNormalRDD(sc, mean, std, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the log normal
         distribution with the input mean and standard distribution.
 
-        .. versionadded:: 1.3.0
+        :param sc: SparkContext used to create the RDD.
+        :param mean: mean for the log Normal distribution
+        :param std: std for the log Normal distribution
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ log N(mean, std).
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            used to create the RDD.
-        mean : float
-            mean for the log Normal distribution
-        std : float
-            std for the log Normal distribution
-        size : int
-            Size of the RDD.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`).
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        RDD of float comprised of i.i.d. samples ~ log N(mean, std).
-
-        Examples
-        --------
         >>> from math import sqrt, exp
         >>> mean = 0.0
         >>> std = 1.0
@@ -176,33 +137,19 @@ class RandomRDDs(object):
                              size, numPartitions, seed)
 
     @staticmethod
+    @since("1.1.0")
     def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the Poisson
         distribution with the input mean.
 
-        .. versionadded:: 1.1.0
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean, or lambda, for the Poisson distribution.
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ Pois(mean).
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            SparkContext used to create the RDD.
-        mean : float
-            Mean, or lambda, for the Poisson distribution.
-        size : int
-            Size of the RDD.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`).
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of float comprised of i.i.d. samples ~ Pois(mean).
-
-        Examples
-        --------
         >>> mean = 100.0
         >>> x = RandomRDDs.poissonRDD(sc, mean, 1000, seed=2)
         >>> stats = x.stats()
@@ -217,33 +164,19 @@ class RandomRDDs(object):
         return callMLlibFunc("poissonRDD", sc._jsc, float(mean), size, numPartitions, seed)
 
     @staticmethod
+    @since("1.3.0")
     def exponentialRDD(sc, mean, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the Exponential
         distribution with the input mean.
 
-        .. versionadded:: 1.3.0
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean, or 1 / lambda, for the Exponential distribution.
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ Exp(mean).
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            SparkContext used to create the RDD.
-        mean : float
-            Mean, or 1 / lambda, for the Exponential distribution.
-        size : int
-            Size of the RDD.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`).
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of float comprised of i.i.d. samples ~ Exp(mean).
-
-        Examples
-        --------
         >>> mean = 2.0
         >>> x = RandomRDDs.exponentialRDD(sc, mean, 1000, seed=2)
         >>> stats = x.stats()
@@ -258,35 +191,20 @@ class RandomRDDs(object):
         return callMLlibFunc("exponentialRDD", sc._jsc, float(mean), size, numPartitions, seed)
 
     @staticmethod
+    @since("1.3.0")
     def gammaRDD(sc, shape, scale, size, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of i.i.d. samples from the Gamma
         distribution with the input shape and scale.
 
-        .. versionadded:: 1.3.0
+        :param sc: SparkContext used to create the RDD.
+        :param shape: shape (> 0) parameter for the Gamma distribution
+        :param scale: scale (> 0) parameter for the Gamma distribution
+        :param size: Size of the RDD.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of float comprised of i.i.d. samples ~ Gamma(shape, scale).
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            SparkContext used to create the RDD.
-        shape : float
-            shape (> 0) parameter for the Gamma distribution
-        scale : float
-            scale (> 0) parameter for the Gamma distribution
-        size : int
-            Size of the RDD.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`).
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of float comprised of i.i.d. samples ~ Gamma(shape, scale).
-
-        Examples
-        --------
         >>> from math import sqrt
         >>> shape = 1.0
         >>> scale = 2.0
@@ -306,33 +224,19 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.1.0")
     def uniformVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the uniform distribution U(0.0, 1.0).
 
-        .. versionadded:: 1.1.0
+        :param sc: SparkContext used to create the RDD.
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD.
+        :param seed: Seed for the RNG that generates the seed for the generator in each partition.
+        :return: RDD of Vector with vectors containing i.i.d samples ~ `U(0.0, 1.0)`.
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            SparkContext used to create the RDD.
-        numRows : int
-            Number of Vectors in the RDD.
-        numCols : int
-            Number of elements in each Vector.
-        numPartitions : int, optional
-            Number of partitions in the RDD.
-        seed : int, optional
-            Seed for the RNG that generates the seed for the generator in each partition.
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of Vector with vectors containing i.i.d samples ~ `U(0.0, 1.0)`.
-
-        Examples
-        --------
         >>> import numpy as np
         >>> mat = np.matrix(RandomRDDs.uniformVectorRDD(sc, 10, 10).collect())
         >>> mat.shape
@@ -346,33 +250,19 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.1.0")
     def normalVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the standard normal distribution.
 
-        .. versionadded:: 1.1.0
+        :param sc: SparkContext used to create the RDD.
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ `N(0.0, 1.0)`.
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            SparkContext used to create the RDD.
-        numRows : int
-            Number of Vectors in the RDD.
-        numCols : int
-            Number of elements in each Vector.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`).
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of Vector with vectors containing i.i.d. samples ~ `N(0.0, 1.0)`.
-
-        Examples
-        --------
         >>> import numpy as np
         >>> mat = np.matrix(RandomRDDs.normalVectorRDD(sc, 100, 100, seed=1).collect())
         >>> mat.shape
@@ -386,37 +276,21 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.3.0")
     def logNormalVectorRDD(sc, mean, std, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the log normal distribution.
 
-        .. versionadded:: 1.3.0
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean of the log normal distribution
+        :param std: Standard Deviation of the log normal distribution
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ log `N(mean, std)`.
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            SparkContext used to create the RDD.
-        mean : float
-            Mean of the log normal distribution
-        std : float
-            Standard Deviation of the log normal distribution
-        numRows : int
-            Number of Vectors in the RDD.
-        numCols : int
-            Number of elements in each Vector.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`).
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of Vector with vectors containing i.i.d. samples ~ log `N(mean, std)`.
-
-        Examples
-        --------
         >>> import numpy as np
         >>> from math import sqrt, exp
         >>> mean = 0.0
@@ -437,35 +311,20 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.1.0")
     def poissonVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Poisson distribution with the input mean.
 
-        .. versionadded:: 1.1.0
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean, or lambda, for the Poisson distribution.
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`)
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ Pois(mean).
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            SparkContext used to create the RDD.
-        mean : float
-            Mean, or lambda, for the Poisson distribution.
-        numRows : float
-            Number of Vectors in the RDD.
-        numCols : int
-            Number of elements in each Vector.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`)
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of Vector with vectors containing i.i.d. samples ~ Pois(mean).
-
-        Examples
-        --------
         >>> import numpy as np
         >>> mean = 100.0
         >>> rdd = RandomRDDs.poissonVectorRDD(sc, mean, 100, 100, seed=1)
@@ -483,35 +342,20 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.3.0")
     def exponentialVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Exponential distribution with the input mean.
 
-        .. versionadded:: 1.3.0
+        :param sc: SparkContext used to create the RDD.
+        :param mean: Mean, or 1 / lambda, for the Exponential distribution.
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`)
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ Exp(mean).
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            SparkContext used to create the RDD.
-        mean : float
-            Mean, or 1 / lambda, for the Exponential distribution.
-        numRows : int
-            Number of Vectors in the RDD.
-        numCols : int
-            Number of elements in each Vector.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`)
-        seed : int, optional
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of Vector with vectors containing i.i.d. samples ~ Exp(mean).
-
-        Examples
-        --------
         >>> import numpy as np
         >>> mean = 0.5
         >>> rdd = RandomRDDs.exponentialVectorRDD(sc, mean, 100, 100, seed=1)
@@ -529,37 +373,21 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
+    @since("1.3.0")
     def gammaVectorRDD(sc, shape, scale, numRows, numCols, numPartitions=None, seed=None):
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Gamma distribution.
 
-        .. versionadded:: 1.3.0
+        :param sc: SparkContext used to create the RDD.
+        :param shape: Shape (> 0) of the Gamma distribution
+        :param scale: Scale (> 0) of the Gamma distribution
+        :param numRows: Number of Vectors in the RDD.
+        :param numCols: Number of elements in each Vector.
+        :param numPartitions: Number of partitions in the RDD (default: `sc.defaultParallelism`).
+        :param seed: Random seed (default: a random long integer).
+        :return: RDD of Vector with vectors containing i.i.d. samples ~ Gamma(shape, scale).
 
-        Parameters
-        ----------
-        sc : :py:class:`pyspark.SparkContext`
-            SparkContext used to create the RDD.
-        shape : float
-            Shape (> 0) of the Gamma distribution
-        scale : float
-            Scale (> 0) of the Gamma distribution
-        numRows : int
-            Number of Vectors in the RDD.
-        numCols : int
-            Number of elements in each Vector.
-        numPartitions : int, optional
-            Number of partitions in the RDD (default: `sc.defaultParallelism`).
-        seed : int, optional,
-            Random seed (default: a random long integer).
-
-        Returns
-        -------
-        :py:class:`pyspark.RDD`
-            RDD of Vector with vectors containing i.i.d. samples ~ Gamma(shape, scale).
-
-        Examples
-        --------
         >>> import numpy as np
         >>> from math import sqrt
         >>> shape = 1.0

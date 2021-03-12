@@ -67,6 +67,8 @@ class ProfilerCollector(object):
 
 class Profiler(object):
     """
+    .. note:: DeveloperApi
+
     PySpark supports custom profilers, this is to allow for different profilers to
     be used as well as outputting to different formats than what is provided in the
     BasicProfiler.
@@ -79,8 +81,6 @@ class Profiler(object):
 
     The profiler class is chosen when creating a SparkContext
 
-    Examples
-    --------
     >>> from pyspark import SparkConf, SparkContext
     >>> from pyspark import BasicProfiler
     >>> class MyCustomProfiler(BasicProfiler):
@@ -97,10 +97,6 @@ class Profiler(object):
     My custom profiles for RDD:1
     My custom profiles for RDD:3
     >>> sc.stop()
-
-    Notes
-    -----
-    This API is a developer API.
     """
 
     def __init__(self, ctx):

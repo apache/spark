@@ -26,7 +26,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.resource.ResourceProfile
 
 class LocalityPlacementStrategySuite extends SparkFunSuite {
 
@@ -70,8 +69,9 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
     // goal is to create enough requests for localized containers (so there should be many
     // tasks on several hosts that have no allocated containers).
 
+    val resource = Resource.newInstance(8 * 1024, 4)
     val strategy = new LocalityPreferredContainerPlacementStrategy(new SparkConf(),
-      yarnConf, new MockResolver())
+      yarnConf, resource, new MockResolver())
 
     val totalTasks = 32 * 1024
     val totalContainers = totalTasks / 16
@@ -88,10 +88,9 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
       containers.drop(count * i).take(i).foreach { c => hostContainers += c }
       hostToContainerMap(host) = hostContainers
     }
-    val rp = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
     strategy.localityOfRequestedContainers(containers.size * 2, totalTasks, hosts,
-      hostToContainerMap, Nil, rp)
+      hostToContainerMap, Nil)
   }
 
 }

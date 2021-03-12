@@ -26,7 +26,6 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util.Utils
 
 /**
@@ -56,9 +55,6 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
       }
   }
 
-  def workerDecommissioning: Boolean =
-    sparkConf.get(org.apache.spark.internal.config.DECOMMISSION_ENABLED)
-
   def nodeSelector: Map[String, String] =
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX)
 
@@ -78,8 +74,7 @@ private[spark] class KubernetesDriverConf(
     val appId: String,
     val mainAppResource: MainAppResource,
     val mainClass: String,
-    val appArgs: Array[String],
-    val proxyUser: Option[String])
+    val appArgs: Array[String])
   extends KubernetesConf(sparkConf) {
 
   override val resourceNamePrefix: String = {
@@ -133,8 +128,7 @@ private[spark] class KubernetesExecutorConf(
     sparkConf: SparkConf,
     val appId: String,
     val executorId: String,
-    val driverPod: Option[Pod],
-    val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
+    val driverPod: Option[Pod])
   extends KubernetesConf(sparkConf) with Logging {
 
   override val resourceNamePrefix: String = {
@@ -146,8 +140,7 @@ private[spark] class KubernetesExecutorConf(
     val presetLabels = Map(
       SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> appId,
-      SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
-      SPARK_RESOURCE_PROFILE_ID_LABEL -> resourceProfileId.toString)
+      SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
 
     val executorCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
@@ -202,27 +195,19 @@ private[spark] object KubernetesConf {
       appId: String,
       mainAppResource: MainAppResource,
       mainClass: String,
-      appArgs: Array[String],
-      proxyUser: Option[String]): KubernetesDriverConf = {
+      appArgs: Array[String]): KubernetesDriverConf = {
     // Parse executor volumes in order to verify configuration before the driver pod is created.
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
 
-    new KubernetesDriverConf(
-      sparkConf.clone(),
-      appId,
-      mainAppResource,
-      mainClass,
-      appArgs,
-      proxyUser)
+    new KubernetesDriverConf(sparkConf.clone(), appId, mainAppResource, mainClass, appArgs)
   }
 
   def createExecutorConf(
       sparkConf: SparkConf,
       executorId: String,
       appId: String,
-      driverPod: Option[Pod],
-      resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID): KubernetesExecutorConf = {
-    new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod, resourceProfileId)
+      driverPod: Option[Pod]): KubernetesExecutorConf = {
+    new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod)
   }
 
   def getResourceNamePrefix(appName: String): String = {

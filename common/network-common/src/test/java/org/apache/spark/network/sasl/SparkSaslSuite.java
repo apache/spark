@@ -191,28 +191,28 @@ public class SparkSaslSuite {
 
       SaslEncryption.EncryptedMessage emsg =
         new SaslEncryption.EncryptedMessage(backend, msg, 1024);
-      long count = emsg.transferTo(channel, emsg.transferred());
+      long count = emsg.transferTo(channel, emsg.transfered());
       assertTrue(count < data.length);
       assertTrue(count > 0);
 
       // Here, the output buffer is full so nothing should be transferred.
-      assertEquals(0, emsg.transferTo(channel, emsg.transferred()));
+      assertEquals(0, emsg.transferTo(channel, emsg.transfered()));
 
       // Now there's room in the buffer, but not enough to transfer all the remaining data,
       // so the dummy count should be returned.
       channel.reset();
-      assertEquals(1, emsg.transferTo(channel, emsg.transferred()));
+      assertEquals(1, emsg.transferTo(channel, emsg.transfered()));
 
       // Eventually, the whole message should be transferred.
       for (int i = 0; i < data.length / 32 - 2; i++) {
         channel.reset();
-        assertEquals(1, emsg.transferTo(channel, emsg.transferred()));
+        assertEquals(1, emsg.transferTo(channel, emsg.transfered()));
       }
 
       channel.reset();
-      count = emsg.transferTo(channel, emsg.transferred());
+      count = emsg.transferTo(channel, emsg.transfered());
       assertTrue("Unexpected count: " + count, count > 1 && count < data.length);
-      assertEquals(data.length, emsg.transferred());
+      assertEquals(data.length, emsg.transfered());
     } finally {
       msg.release();
     }
@@ -237,9 +237,9 @@ public class SparkSaslSuite {
         new SaslEncryption.EncryptedMessage(backend, msg.convertToNetty(), data.length / 8);
 
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(data.length);
-      while (emsg.transferred() < emsg.count()) {
+      while (emsg.transfered() < emsg.count()) {
         channel.reset();
-        emsg.transferTo(channel, emsg.transferred());
+        emsg.transferTo(channel, emsg.transfered());
       }
 
       verify(backend, times(8)).wrap(any(byte[].class), anyInt(), anyInt());

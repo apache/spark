@@ -17,9 +17,8 @@
 
 package org.apache.spark.ui
 
-import java.net.{URLDecoder, URLEncoder}
+import java.net.URLDecoder
 import java.nio.charset.StandardCharsets.UTF_8
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
 import scala.xml.{Node, Unparsed}
@@ -190,9 +189,9 @@ private[spark] trait PagedTable[T] {
     val pageTags = (startPage to endPage).map { p =>
       if (p == page) {
         // The current page should be disabled so that it cannot be clicked.
-        <li class="page-item disabled"><a href="#" class="page-link">{p}</a></li>
+        <li class="disabled"><a href="#">{p}</a></li>
       } else {
-        <li class="page-item"><a href={Unparsed(pageLink(p))} class="page-link">{p}</a></li>
+        <li><a href={Unparsed(pageLink(p))}>{p}</a></li>
       }
     }
 
@@ -223,34 +222,31 @@ private[spark] trait PagedTable[T] {
         <form id={s"form-$navigationId-page"}
               method="get"
               action={Unparsed(goButtonFormPath)}
-              class="form-inline float-right justify-content-end"
+              class="form-inline pull-right"
               style="margin-bottom: 0px;">
           {hiddenFormFields}
           <label>{totalPages} Pages. Jump to</label>
           <input type="text"
                  name={pageNumberFormField}
                  id={s"form-$navigationId-page-no"}
-                 value={page.toString}
-                 class="col-1 form-control" />
-
+                 value={page.toString} class="span1" />
           <label>. Show </label>
           <input type="text"
                  id={s"form-$navigationId-page-size"}
                  name={pageSizeFormField}
                  value={pageSize.toString}
-                 class="col-1 form-control" />
+                 class="span1" />
           <label>items in a page.</label>
 
-          <button type="submit" class="btn btn-spark">Go</button>
+          <button type="submit" class="btn">Go</button>
         </form>
       </div>
-      <div>
+      <div class="pagination" style="margin-bottom: 0px;">
         <span style="float: left; padding-top: 4px; padding-right: 4px;">Page: </span>
-        <ul class="pagination">
+        <ul>
           {if (currentGroup > firstGroup) {
-          <li class="page-item">
-            <a href={Unparsed(pageLink(startPage - groupSize))} class="page-link"
-               aria-label="Previous Group">
+          <li>
+            <a href={Unparsed(pageLink(startPage - groupSize))} aria-label="Previous Group">
               <span aria-hidden="true">
                 &lt;&lt;
               </span>
@@ -258,8 +254,8 @@ private[spark] trait PagedTable[T] {
           </li>
           }}
           {if (page > 1) {
-          <li class="page-item">
-          <a href={Unparsed(pageLink(page - 1))} class="page-link" aria-label="Previous">
+          <li>
+          <a href={Unparsed(pageLink(page - 1))} aria-label="Previous">
             <span aria-hidden="true">
               &lt;
             </span>
@@ -268,16 +264,15 @@ private[spark] trait PagedTable[T] {
           }}
           {pageTags}
           {if (page < totalPages) {
-          <li class="page-item">
-            <a href={Unparsed(pageLink(page + 1))} class="page-link" aria-label="Next">
+          <li>
+            <a href={Unparsed(pageLink(page + 1))} aria-label="Next">
               <span aria-hidden="true">&gt;</span>
             </a>
           </li>
           }}
           {if (currentGroup < lastGroup) {
-          <li class="page-item">
-            <a href={Unparsed(pageLink(startPage + groupSize))} class="page-link"
-               aria-label="Next Group">
+          <li>
+            <a href={Unparsed(pageLink(startPage + groupSize))} aria-label="Next Group">
               <span aria-hidden="true">
                 &gt;&gt;
               </span>
@@ -298,102 +293,4 @@ private[spark] trait PagedTable[T] {
    * Returns the submission path for the "go to page #" form.
    */
   def goButtonFormPath: String
-
-  /**
-   * Returns parameters of other tables in the page.
-   */
-  def getParameterOtherTable(request: HttpServletRequest, tableTag: String): String = {
-    request.getParameterMap.asScala
-      .filterNot(_._1.startsWith(tableTag))
-      .map(parameter => parameter._1 + "=" + parameter._2(0))
-      .mkString("&")
-  }
-
-  /**
-   * Returns parameter of this table.
-   */
-  def getTableParameters(
-      request: HttpServletRequest,
-      tableTag: String,
-      defaultSortColumn: String): (String, Boolean, Int) = {
-    val parameterSortColumn = request.getParameter(s"$tableTag.sort")
-    val parameterSortDesc = request.getParameter(s"$tableTag.desc")
-    val parameterPageSize = request.getParameter(s"$tableTag.pageSize")
-    val sortColumn = Option(parameterSortColumn).map { sortColumn =>
-      UIUtils.decodeURLParameter(sortColumn)
-    }.getOrElse(defaultSortColumn)
-    val desc = Option(parameterSortDesc).map(_.toBoolean).getOrElse(
-      sortColumn == defaultSortColumn
-    )
-    val pageSize = Option(parameterPageSize).map(_.toInt).getOrElse(100)
-
-    (sortColumn, desc, pageSize)
-  }
-
-  /**
-   * Check if given sort column is valid or not. If invalid then an exception is thrown.
-   */
-  def isSortColumnValid(
-      headerInfo: Seq[(String, Boolean, Option[String])],
-      sortColumn: String): Unit = {
-    if (!headerInfo.filter(_._2).map(_._1).contains(sortColumn)) {
-      throw new IllegalArgumentException(s"Unknown column: $sortColumn")
-    }
-  }
-
-  def headerRow(
-      headerInfo: Seq[(String, Boolean, Option[String])],
-      desc: Boolean,
-      pageSize: Int,
-      sortColumn: String,
-      parameterPath: String,
-      tableTag: String,
-      headerId: String): Seq[Node] = {
-    val row: Seq[Node] = {
-      headerInfo.map { case (header, sortable, tooltip) =>
-        if (header == sortColumn) {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$tableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-              s"&$tableTag.desc=${!desc}" +
-              s"&$tableTag.pageSize=$pageSize" +
-              s"#$headerId")
-          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-
-          <th>
-            <a href={headerLink}>
-              <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
-                {header}&nbsp;{Unparsed(arrow)}
-              </span>
-            </a>
-          </th>
-        } else {
-          if (sortable) {
-            val headerLink = Unparsed(
-              parameterPath +
-                s"&$tableTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
-                s"&$tableTag.pageSize=$pageSize" +
-                s"#$headerId")
-
-            <th>
-              <a href={headerLink}>
-                <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
-                  {header}
-                </span>
-              </a>
-            </th>
-          } else {
-            <th>
-              <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
-                {header}
-              </span>
-            </th>
-          }
-        }
-      }
-    }
-    <thead>
-      <tr>{row}</tr>
-    </thead>
-  }
 }

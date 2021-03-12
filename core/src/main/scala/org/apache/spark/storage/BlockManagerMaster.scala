@@ -43,18 +43,6 @@ class BlockManagerMaster(
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
-  /** Decommission block managers corresponding to given set of executors
-   * Non-blocking.
-   */
-  def decommissionBlockManagers(executorIds: Seq[String]): Unit = {
-    driverEndpoint.ask[Boolean](DecommissionBlockManagers(executorIds))
-  }
-
-  /** Get Replication Info for all the RDD blocks stored in given blockManagerId */
-  def getReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
-    driverEndpoint.askSync[Seq[ReplicateBlock]](GetReplicateInfoForRDDBlocks(blockManagerId))
-  }
-
   /** Request removal of a dead executor from the driver endpoint.
    *  This is only called on the driver side. Non-blocking
    */
@@ -73,10 +61,10 @@ class BlockManagerMaster(
       localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
-      storageEndpoint: RpcEndpointRef): BlockManagerId = {
+      slaveEndpoint: RpcEndpointRef): BlockManagerId = {
     logInfo(s"Registering BlockManager $id")
     val updatedId = driverEndpoint.askSync[BlockManagerId](
-      RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, storageEndpoint))
+      RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
     logInfo(s"Registered BlockManager $updatedId")
     updatedId
   }
@@ -125,32 +113,12 @@ class BlockManagerMaster(
     driverEndpoint.askSync[Seq[BlockManagerId]](GetPeers(blockManagerId))
   }
 
-  /**
-   * Get a list of unique shuffle service locations where an executor is successfully
-   * registered in the past for block push/merge with push based shuffle.
-   */
-  def getShufflePushMergerLocations(
-      numMergersNeeded: Int,
-      hostsToFilter: Set[String]): Seq[BlockManagerId] = {
-    driverEndpoint.askSync[Seq[BlockManagerId]](
-      GetShufflePushMergerLocations(numMergersNeeded, hostsToFilter))
-  }
-
-  /**
-   * Remove the host from the candidate list of shuffle push mergers. This can be
-   * triggered if there is a FetchFailedException on the host
-   * @param host
-   */
-  def removeShufflePushMergerLocation(host: String): Unit = {
-    driverEndpoint.askSync[Seq[BlockManagerId]](RemoveShufflePushMergerLocation(host))
-  }
-
   def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
     driverEndpoint.askSync[Option[RpcEndpointRef]](GetExecutorEndpointRef(executorId))
   }
 
   /**
-   * Remove a block from the storage endpoints that have it. This can only be used to remove
+   * Remove a block from the slaves that have it. This can only be used to remove
    * blocks that the driver knows about.
    */
   def removeBlock(blockId: BlockId): Unit = {
@@ -164,8 +132,7 @@ class BlockManagerMaster(
       logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
-      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      timeout.awaitResult(future)
     }
   }
 
@@ -176,8 +143,7 @@ class BlockManagerMaster(
       logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
-      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      timeout.awaitResult(future)
     }
   }
 
@@ -190,8 +156,7 @@ class BlockManagerMaster(
         s" with removeFromMaster = $removeFromMaster - ${e.getMessage}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
-      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      timeout.awaitResult(future)
     }
   }
 
@@ -215,14 +180,14 @@ class BlockManagerMaster(
    * Return the block's status on all block managers, if any. NOTE: This is a
    * potentially expensive operation and should only be used for testing.
    *
-   * If askStorageEndpoints is true, this invokes the master to query each block manager for the
-   * most updated block statuses. This is useful when the master is not informed of the given block
+   * If askSlaves is true, this invokes the master to query each block manager for the most
+   * updated block statuses. This is useful when the master is not informed of the given block
    * by all block managers.
    */
   def getBlockStatus(
       blockId: BlockId,
-      askStorageEndpoints: Boolean = true): Map[BlockManagerId, BlockStatus] = {
-    val msg = GetBlockStatus(blockId, askStorageEndpoints)
+      askSlaves: Boolean = true): Map[BlockManagerId, BlockStatus] = {
+    val msg = GetBlockStatus(blockId, askSlaves)
     /*
      * To avoid potential deadlocks, the use of Futures is necessary, because the master endpoint
      * should not block on waiting for a block manager, which can in turn be waiting for the
@@ -251,14 +216,14 @@ class BlockManagerMaster(
    * Return a list of ids of existing blocks such that the ids match the given filter. NOTE: This
    * is a potentially expensive operation and should only be used for testing.
    *
-   * If askStorageEndpoints is true, this invokes the master to query each block manager for the
-   * most updated block statuses. This is useful when the master is not informed of the given block
+   * If askSlaves is true, this invokes the master to query each block manager for the most
+   * updated block statuses. This is useful when the master is not informed of the given block
    * by all block managers.
    */
   def getMatchingBlockIds(
       filter: BlockId => Boolean,
-      askStorageEndpoints: Boolean): Seq[BlockId] = {
-    val msg = GetMatchingBlockIds(filter, askStorageEndpoints)
+      askSlaves: Boolean): Seq[BlockId] = {
+    val msg = GetMatchingBlockIds(filter, askSlaves)
     val future = driverEndpoint.askSync[Future[Seq[BlockId]]](msg)
     timeout.awaitResult(future)
   }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
@@ -30,7 +32,6 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StructType}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.VersionUtils.majorMinorVersion
-import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Maps a sequence of terms to their term frequencies using the hashing trick.
@@ -90,13 +91,20 @@ class HashingTF @Since("3.0.0") private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val n = $(numFeatures)
-    val updateFunc = if ($(binary)) (v: Double) => 1.0 else (v: Double) => v + 1.0
+    val localNumFeatures = $(numFeatures)
+    val localBinary = $(binary)
 
     val hashUDF = udf { terms: Seq[_] =>
-      val map = new OpenHashMap[Int, Double]()
-      terms.foreach { term => map.changeValue(indexOf(term), 1.0, updateFunc) }
-      Vectors.sparse(n, map.toSeq)
+      val termFrequencies = mutable.HashMap.empty[Int, Double].withDefaultValue(0.0)
+      terms.foreach { term =>
+        val i = indexOf(term)
+        if (localBinary) {
+          termFrequencies(i) = 1.0
+        } else {
+          termFrequencies(i) += 1.0
+        }
+      }
+      Vectors.sparse(localNumFeatures, termFrequencies.toSeq)
     }
 
     dataset.withColumn($(outputCol), hashUDF(col($(inputCol))),

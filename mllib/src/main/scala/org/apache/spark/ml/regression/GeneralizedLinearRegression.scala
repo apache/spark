@@ -29,7 +29,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim._
 import org.apache.spark.ml.param._
@@ -397,7 +396,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       "GeneralizedLinearRegression was given data with 0 features, and with Param fitIntercept " +
         "set to false. To fit a model with 0 features, fitIntercept must be set to true." )
 
-    val w = if (!hasWeightCol) lit(1.0) else checkNonNegativeWeight(col($(weightCol)))
+    val w = if (!hasWeightCol) lit(1.0) else col($(weightCol))
     val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
 
     val model = if (familyAndLink.family == Gaussian && familyAndLink.link == Identity) {
@@ -1217,41 +1216,10 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   private[regression] lazy val link: Link = familyLink.link
 
-  /**
-   * summary row containing:
-   *  numInstances, weightSum, deviance, rss, weighted average of label - offset.
-   */
-  private lazy val glrSummary = {
-    val devUDF = udf { (label: Double, pred: Double, weight: Double) =>
-      family.deviance(label, pred, weight)
-    }
-    val devCol = sum(devUDF(label, prediction, weight))
-
-    val rssCol = if (model.getFamily.toLowerCase(Locale.ROOT) != Binomial.name &&
-      model.getFamily.toLowerCase(Locale.ROOT) != Poisson.name) {
-      val rssUDF = udf { (label: Double, pred: Double, weight: Double) =>
-        (label - pred) * (label - pred) * weight / family.variance(pred)
-      }
-      sum(rssUDF(label, prediction, weight))
-    } else {
-      lit(Double.NaN)
-    }
-
-    val avgCol = if (model.getFitIntercept &&
-      (!model.hasOffsetCol || (model.hasOffsetCol && family == Gaussian && link == Identity))) {
-      sum((label - offset) * weight) / sum(weight)
-    } else {
-      lit(Double.NaN)
-    }
-
-    predictions
-      .select(count(label), sum(weight), devCol, rssCol, avgCol)
-      .head()
-  }
-
   /** Number of instances in DataFrame predictions. */
   @Since("2.2.0")
-  lazy val numInstances: Long = glrSummary.getLong(0)
+  lazy val numInstances: Long = predictions.count()
+
 
   /**
    * Name of features. If the name cannot be retrieved from attributes,
@@ -1363,7 +1331,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
        */
       if (!model.hasOffsetCol ||
         (model.hasOffsetCol && family == Gaussian && link == Identity)) {
-        link.link(glrSummary.getDouble(4))
+        val agg = predictions.agg(sum(weight.multiply(
+          label.minus(offset))), sum(weight)).first()
+        link.link(agg.getDouble(0) / agg.getDouble(1))
       } else {
         // Create empty feature column and fit intercept only model using param setting from model
         val featureNull = "feature_" + java.util.UUID.randomUUID.toString
@@ -1388,7 +1358,12 @@ class GeneralizedLinearRegressionSummary private[regression] (
    * The deviance for the fitted model.
    */
   @Since("2.0.0")
-  lazy val deviance: Double = glrSummary.getDouble(2)
+  lazy val deviance: Double = {
+    predictions.select(label, prediction, weight).rdd.map {
+      case Row(label: Double, pred: Double, weight: Double) =>
+        family.deviance(label, pred, weight)
+    }.sum()
+  }
 
   /**
    * The dispersion of the fitted model.
@@ -1402,14 +1377,14 @@ class GeneralizedLinearRegressionSummary private[regression] (
       model.getFamily.toLowerCase(Locale.ROOT) == Poisson.name) {
     1.0
   } else {
-    val rss = glrSummary.getDouble(3)
+    val rss = pearsonResiduals.agg(sum(pow(col("pearsonResiduals"), 2.0))).first().getDouble(0)
     rss / degreesOfFreedom
   }
 
   /** Akaike Information Criterion (AIC) for the fitted model. */
   @Since("2.0.0")
   lazy val aic: Double = {
-    val weightSum = glrSummary.getDouble(1)
+    val weightSum = predictions.select(weight).agg(sum(weight)).first().getDouble(0)
     val t = predictions.select(
       label, prediction, weight).rdd.map {
         case Row(label: Double, pred: Double, weight: Double) =>

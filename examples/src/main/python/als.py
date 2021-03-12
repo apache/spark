@@ -21,6 +21,8 @@ pyspark.ml.recommendation.ALS for more conventional use.
 
 This example requires numpy (http://www.numpy.org/)
 """
+from __future__ import print_function
+
 import sys
 
 import numpy as np

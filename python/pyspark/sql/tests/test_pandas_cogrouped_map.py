@@ -16,8 +16,9 @@
 #
 
 import unittest
+import sys
 
-from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf
+from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -25,15 +26,20 @@ from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
-    from pandas.testing import assert_frame_equal
+    from pandas.util.testing import assert_frame_equal, assert_series_equal
 
 if have_pyarrow:
-    import pyarrow as pa  # noqa: F401
+    import pyarrow as pa
+
+
+# Tests below use pd.DataFrame.assign that will infer mixed types (unicode/str) for column names
+# From kwargs w/ Python 2, so need to set check_column_type=False and avoid this check
+_check_column_type = sys.version >= '3'
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
+    pandas_requirement_message or pyarrow_requirement_message)
 class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
     @property
@@ -103,7 +109,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             'v2': [90, 100, 110]
         })
 
-        assert_frame_equal(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_empty_group_by(self):
         left = self.data1
@@ -124,7 +130,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .merge(left, right, on=['id', 'k']) \
             .sort_values(by=['id', 'k'])
 
-        assert_frame_equal(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF('v1')
@@ -135,8 +141,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .applyInPandas(lambda x, y: pd.DataFrame([(x.sum().sum(), y.sum().sum())]),
                            'sum1 int, sum2 int').collect()
 
-        self.assertEqual(result[0]['sum1'], 165)
-        self.assertEqual(result[0]['sum2'], 165)
+        self.assertEquals(result[0]['sum1'], 165)
+        self.assertEquals(result[0]['sum2'], 165)
 
     def test_with_key_left(self):
         self._test_with_key(self.data1, self.data1, isLeft=True)
@@ -167,23 +173,23 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         expected = self.data1.toPandas()
         expected = expected.assign(key=expected.id % 2 == 0)
 
-        assert_frame_equal(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     def test_wrong_return_type(self):
         # Test that we get a sensible exception invalid values passed to apply
         left = self.data1
         right = self.data2
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(
+            with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid return type.*ArrayType.*TimestampType'):
+                    'Invalid return type.*MapType'):
                 left.groupby('id').cogroup(right.groupby('id')).applyInPandas(
-                    lambda l, r: l, 'id long, v array<timestamp>')
+                    lambda l, r: l, 'id long, v map<int, int>')
 
     def test_wrong_args(self):
         left = self.data1
         right = self.data2
-        with self.assertRaisesRegex(ValueError, 'Invalid function'):
+        with self.assertRaisesRegexp(ValueError, 'Invalid function'):
             left.groupby('id').cogroup(right.groupby('id')) \
                 .applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
 
@@ -194,14 +200,14 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         row = df1.groupby("ColUmn").cogroup(
             df1.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
-        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
+        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
 
         df2 = self.spark.createDataFrame([(1, 1)], ("column", "value"))
 
         row = df1.groupby("ColUmn").cogroup(
             df2.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
-        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
+        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
 
     def test_self_join(self):
         # SPARK-34319: self-join with FlatMapCoGroupsInPandas
@@ -230,7 +236,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         expected = left.toPandas() if isLeft else right.toPandas()
         expected = expected.assign(key=expected.id)
 
-        assert_frame_equal(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
     @staticmethod
     def _test_merge(left, right, output_schema='id long, k int, v int, v2 int'):
@@ -252,14 +258,14 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .merge(left, right, on=['id', 'k']) \
             .sort_values(by=['id', 'k'])
 
-        assert_frame_equal(expected, result)
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_cogrouped_map import *  # noqa: F401
+    from pyspark.sql.tests.test_pandas_cogrouped_map import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

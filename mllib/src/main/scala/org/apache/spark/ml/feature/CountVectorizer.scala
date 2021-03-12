@@ -241,10 +241,7 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }
     wordCounts.unpersist()
 
-    if (vocab.isEmpty) {
-      this.logWarning("The vocabulary size is empty. " +
-        "If this was unexpected, you may wish to lower minDF (or) increase maxDF.")
-    }
+    require(vocab.length > 0, "The vocabulary size should be > 0. Lower minDF as necessary.")
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
   }
 

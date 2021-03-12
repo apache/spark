@@ -54,4 +54,3 @@ REFRESH "hdfs://path/to/table";
 * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
 * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
 * [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
-* [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)

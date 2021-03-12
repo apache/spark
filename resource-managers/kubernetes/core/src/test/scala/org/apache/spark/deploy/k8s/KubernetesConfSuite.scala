@@ -23,7 +23,6 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
-import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
 class KubernetesConfSuite extends SparkFunSuite {
 
@@ -76,8 +75,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       KubernetesTestConf.APP_ID,
       JavaMainAppResource(None),
       KubernetesTestConf.MAIN_CLASS,
-      APP_ARGS,
-      None)
+      APP_ARGS)
     assert(conf.labels === Map(
       SPARK_APP_ID_LABEL -> KubernetesTestConf.APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++
@@ -97,17 +95,6 @@ class KubernetesConfSuite extends SparkFunSuite {
       Some(DRIVER_POD))
     assert(conf.executorId === EXECUTOR_ID)
     assert(conf.driverPod.get === DRIVER_POD)
-    assert(conf.resourceProfileId === DEFAULT_RESOURCE_PROFILE_ID)
-  }
-
-  test("resource profile not default.") {
-    val conf = KubernetesConf.createExecutorConf(
-      new SparkConf(false),
-      EXECUTOR_ID,
-      KubernetesTestConf.APP_ID,
-      Some(DRIVER_POD),
-      10)
-    assert(conf.resourceProfileId === 10)
   }
 
   test("Image pull secrets.") {
@@ -146,8 +133,7 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.labels === Map(
       SPARK_EXECUTOR_ID_LABEL -> EXECUTOR_ID,
       SPARK_APP_ID_LABEL -> KubernetesTestConf.APP_ID,
-      SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
-      SPARK_RESOURCE_PROFILE_ID_LABEL -> DEFAULT_RESOURCE_PROFILE_ID.toString) ++ CUSTOM_LABELS)
+      SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++ CUSTOM_LABELS)
     assert(conf.annotations === CUSTOM_ANNOTATIONS)
     assert(conf.secretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
     assert(conf.secretEnvNamesToKeyRefs === SECRET_ENV_VARS)

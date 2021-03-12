@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
@@ -45,7 +44,7 @@ abstract class V2CommandExec extends SparkPlan {
    */
   override def executeCollect(): Array[InternalRow] = result.toArray
 
-  override def executeToIterator(): Iterator[InternalRow] = result.toIterator
+  override def executeToIterator: Iterator[InternalRow] = result.toIterator
 
   override def executeTake(limit: Int): Array[InternalRow] = result.take(limit).toArray
 
@@ -56,7 +55,4 @@ abstract class V2CommandExec extends SparkPlan {
   }
 
   override def children: Seq[SparkPlan] = Nil
-
-  override def producedAttributes: AttributeSet = outputSet
-
 }

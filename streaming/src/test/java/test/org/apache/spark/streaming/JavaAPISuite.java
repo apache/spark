@@ -1595,7 +1595,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   /* TEST DISABLED: Pending a discussion about checkpoint() semantics with TD
   @SuppressWarnings("unchecked")
   @Test
-  public void testCheckpointOfIndividualStream() throws InterruptedException {
+  public void testCheckpointofIndividualStream() throws InterruptedException {
     List<List<String>> inputData = Arrays.asList(
         Arrays.asList("this", "is"),
         Arrays.asList("a", "test"),

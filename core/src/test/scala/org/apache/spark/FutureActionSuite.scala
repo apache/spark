@@ -19,9 +19,7 @@ package org.apache.spark
 
 import scala.concurrent.duration.Duration
 
-import org.scalatest.BeforeAndAfter
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.util.ThreadUtils
 

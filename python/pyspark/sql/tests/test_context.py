@@ -19,13 +19,17 @@ import shutil
 import sys
 import tempfile
 import unittest
-from importlib import reload
+try:
+    from importlib import reload  # Python 3.4+ only.
+except ImportError:
+    # Otherwise, we will stick to Python 2's built-in reload.
+    pass
 
 import py4j
 
 from pyspark import SparkContext, SQLContext
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.types import StructType, StringType, StructField
+from pyspark.sql.types import *
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
@@ -165,6 +169,7 @@ class SQLContextTests(unittest.TestCase):
             sql_context = SQLContext.getOrCreate(sc)
             assert(isinstance(sql_context, SQLContext))
         finally:
+            SQLContext._instantiatedContext = None
             if sql_context is not None:
                 sql_context.sparkSession.stop()
             if sc is not None:
@@ -172,10 +177,10 @@ class SQLContextTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_context import *  # noqa: F401
+    from pyspark.sql.tests.test_context import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

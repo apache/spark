@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDateTime, ZoneId}
+import java.time.{Instant, LocalDateTime}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
@@ -37,11 +37,11 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("function current_date") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
-    val d0 = DateTimeUtils.currentDate(ZoneId.systemDefault())
+    val d0 = DateTimeUtils.millisToDays(System.currentTimeMillis())
     val d1 = DateTimeUtils.fromJavaDate(df1.select(current_date()).collect().head.getDate(0))
     val d2 = DateTimeUtils.fromJavaDate(
       sql("""SELECT CURRENT_DATE()""").collect().head.getDate(0))
-    val d3 = DateTimeUtils.currentDate(ZoneId.systemDefault())
+    val d3 = DateTimeUtils.millisToDays(System.currentTimeMillis())
     assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
   }
 
@@ -454,7 +454,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e.getCause.isInstanceOf[IllegalArgumentException])
     assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
-    // February
+    // february
     val x1 = "2016-02-29"
     val x2 = "2017-02-29"
     val df1 = Seq(x1, x2).toDF("x")
@@ -629,7 +629,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
             e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
         }
 
-        // February
+        // february
         val y1 = "2016-02-29"
         val y2 = "2017-02-29"
         val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
@@ -639,7 +639,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
         val now = sql("select unix_timestamp()").collect().head.getLong(0)
         checkAnswer(
-          sql(s"select timestamp_seconds($now)"),
+          sql(s"select cast ($now as timestamp)"),
           Row(new java.util.Date(TimeUnit.SECONDS.toMillis(now))))
       }
     }
@@ -680,7 +680,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd mm:HH:ss')"), Seq(
           Row(secs(ts4.getTime)), Row(null), Row(secs(ts3.getTime)), Row(null)))
 
-        // February
+        // february
         val y1 = "2016-02-29"
         val y2 = "2017-02-29"
         val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
@@ -689,9 +689,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(secs(ts5.getTime)), Row(null)))
 
         // invalid format
-        val invalid = df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')")
-        val e = intercept[IllegalArgumentException](invalid.collect())
-        assert(e.getMessage.contains('b'))
+        checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')"), Seq(
+          Row(null), Row(null), Row(null), Row(null)))
       }
     }
   }
@@ -716,7 +715,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
 
         checkAnswer(df.select(to_timestamp(col("ss"))),
-          df.select(timestamp_seconds(unix_timestamp(col("ss")))))
+          df.select(unix_timestamp(col("ss")).cast("timestamp")))
         checkAnswer(df.select(to_timestamp(col("ss"))), Seq(
           Row(ts1), Row(ts2)))
         if (legacyParserPolicy == "legacy") {

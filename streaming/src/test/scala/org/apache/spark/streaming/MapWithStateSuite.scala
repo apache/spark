@@ -541,12 +541,12 @@ class MapWithStateSuite extends SparkFunSuite with LocalStreamingContext
     // Setup the stream computation
     val ssc = new StreamingContext(sc, Seconds(1))
     val inputStream = new TestInputStream(ssc, input, numPartitions = 2)
-    val trackedStateStream = inputStream.map(x => (x, 1)).mapWithState(mapWithStateSpec)
+    val trackeStateStream = inputStream.map(x => (x, 1)).mapWithState(mapWithStateSpec)
     val collectedOutputs = new ConcurrentLinkedQueue[Seq[T]]
-    val outputStream = new TestOutputStream(trackedStateStream, collectedOutputs)
+    val outputStream = new TestOutputStream(trackeStateStream, collectedOutputs)
     val collectedStateSnapshots = new ConcurrentLinkedQueue[Seq[(K, S)]]
     val stateSnapshotStream = new TestOutputStream(
-      trackedStateStream.stateSnapshots(), collectedStateSnapshots)
+      trackeStateStream.stateSnapshots(), collectedStateSnapshots)
     outputStream.register()
     stateSnapshotStream.register()
 

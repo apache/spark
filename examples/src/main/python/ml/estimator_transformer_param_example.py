@@ -18,6 +18,8 @@
 """
 Estimator Transformer Param Example.
 """
+from __future__ import print_function
+
 # $example on$
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
@@ -56,14 +58,12 @@ if __name__ == "__main__":
     # We may alternatively specify parameters using a Python dictionary as a paramMap
     paramMap = {lr.maxIter: 20}
     paramMap[lr.maxIter] = 30  # Specify 1 Param, overwriting the original maxIter.
-    # Specify multiple Params.
-    paramMap.update({lr.regParam: 0.1, lr.threshold: 0.55})  # type: ignore
+    paramMap.update({lr.regParam: 0.1, lr.threshold: 0.55})  # Specify multiple Params.
 
     # You can combine paramMaps, which are python dictionaries.
-    # Change output column name
-    paramMap2 = {lr.probabilityCol: "myProbability"}  # type: ignore
+    paramMap2 = {lr.probabilityCol: "myProbability"}  # Change output column name
     paramMapCombined = paramMap.copy()
-    paramMapCombined.update(paramMap2)  # type: ignore
+    paramMapCombined.update(paramMap2)
 
     # Now learn a new model using the paramMapCombined parameters.
     # paramMapCombined overrides all parameters set earlier via lr.set* methods.

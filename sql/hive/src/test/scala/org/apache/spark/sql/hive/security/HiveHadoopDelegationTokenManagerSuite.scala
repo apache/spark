@@ -52,8 +52,8 @@ class HiveHadoopDelegationTokenManagerSuite extends SparkFunSuite {
           throw new ClassNotFoundException(name)
         }
 
-        val prefixExcludeList = Seq("java", "scala", "com.sun.", "sun.")
-        if (prefixExcludeList.exists(name.startsWith(_))) {
+        val prefixBlacklist = Seq("java", "scala", "com.sun.", "sun.")
+        if (prefixBlacklist.exists(name.startsWith(_))) {
           return currentLoader.loadClass(name)
         }
 

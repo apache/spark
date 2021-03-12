@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
-import org.scalatest.matchers.must.Matchers.the
+import org.scalatest.Matchers.the
 
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -456,51 +457,25 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("zero moments") {
-    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
-      val input = Seq((1, 2)).toDF("a", "b")
-      checkAnswer(
-        input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
-          var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
-        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
-          Double.NaN, Double.NaN))
+    val input = Seq((1, 2)).toDF("a", "b")
+    checkAnswer(
+      input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
+        var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
+      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+        Double.NaN, Double.NaN))
 
-      checkAnswer(
-        input.agg(
-          expr("stddev(a)"),
-          expr("stddev_samp(a)"),
-          expr("stddev_pop(a)"),
-          expr("variance(a)"),
-          expr("var_samp(a)"),
-          expr("var_pop(a)"),
-          expr("skewness(a)"),
-          expr("kurtosis(a)")),
-        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
-          Double.NaN, Double.NaN))
-    }
-  }
-
-  test("SPARK-13860: zero moments LEGACY_STATISTICAL_AGGREGATE off") {
-    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
-      val input = Seq((1, 2)).toDF("a", "b")
-      checkAnswer(
-        input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
-          var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
-        Row(null, null, 0.0, null, null, 0.0,
-          null, null))
-
-      checkAnswer(
-        input.agg(
-          expr("stddev(a)"),
-          expr("stddev_samp(a)"),
-          expr("stddev_pop(a)"),
-          expr("variance(a)"),
-          expr("var_samp(a)"),
-          expr("var_pop(a)"),
-          expr("skewness(a)"),
-          expr("kurtosis(a)")),
-        Row(null, null, 0.0, null, null, 0.0,
-          null, null))
-    }
+    checkAnswer(
+      input.agg(
+        expr("stddev(a)"),
+        expr("stddev_samp(a)"),
+        expr("stddev_pop(a)"),
+        expr("variance(a)"),
+        expr("var_samp(a)"),
+        expr("var_pop(a)"),
+        expr("skewness(a)"),
+        expr("kurtosis(a)")),
+      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+        Double.NaN, Double.NaN))
   }
 
   test("null moments") {
@@ -1001,8 +976,7 @@ class DataFrameAggregateSuite extends QueryTest
 
   Seq(true, false).foreach { value =>
     test(s"SPARK-31620: agg with subquery (whole-stage-codegen = $value)") {
-      withSQLConf(
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
         withTempView("t1", "t2") {
           sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
           sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")
@@ -1025,13 +999,14 @@ class DataFrameAggregateSuite extends QueryTest
 
           // test SortAggregateExec
           var df = sql("select max(if(c > (select a from t1), 'str1', 'str2')) as csum from t2")
-          assert(find(df.queryExecution.executedPlan)(_.isInstanceOf[SortAggregateExec]).isDefined)
+          assert(df.queryExecution.executedPlan
+            .find { case _: SortAggregateExec => true }.isDefined)
           checkAnswer(df, Row("str1") :: Nil)
 
           // test ObjectHashAggregateExec
           df = sql("select collect_list(d), sum(if(c > (select a from t1), d, 0)) as csum from t2")
-          assert(
-            find(df.queryExecution.executedPlan)(_.isInstanceOf[ObjectHashAggregateExec]).isDefined)
+          assert(df.queryExecution.executedPlan
+            .find { case _: ObjectHashAggregateExec => true }.isDefined)
           checkAnswer(df, Row(Array(4), 4) :: Nil)
         }
       }

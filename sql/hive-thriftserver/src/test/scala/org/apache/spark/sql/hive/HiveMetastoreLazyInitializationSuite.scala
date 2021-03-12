@@ -31,7 +31,6 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
       .config("spark.hadoop.hive.metastore.uris", "thrift://127.0.0.1:11111")
       .getOrCreate()
     val originalLevel = org.apache.log4j.Logger.getRootLogger().getLevel
-    val originalClassLoader = Thread.currentThread().getContextClassLoader
     try {
       // Avoid outputting a lot of expected warning logs
       spark.sparkContext.setLogLevel("error")
@@ -65,7 +64,6 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
         exceptionString.contains(msg)
       }
     } finally {
-      Thread.currentThread().setContextClassLoader(originalClassLoader)
       spark.sparkContext.setLogLevel(originalLevel.toString)
       spark.stop()
     }

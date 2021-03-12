@@ -57,8 +57,6 @@ private[ml] object JsonVectorConverter {
       case DenseVector(values) =>
         val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
         compact(render(jValue))
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
     }
   }
 }

@@ -99,14 +99,11 @@ public class RetryingBlockFetcher {
    */
   private RetryingBlockFetchListener currentListener;
 
-  private final ErrorHandler errorHandler;
-
   public RetryingBlockFetcher(
       TransportConf conf,
       RetryingBlockFetcher.BlockFetchStarter fetchStarter,
       String[] blockIds,
-      BlockFetchingListener listener,
-      ErrorHandler errorHandler) {
+      BlockFetchingListener listener) {
     this.fetchStarter = fetchStarter;
     this.listener = listener;
     this.maxRetries = conf.maxIORetries();
@@ -114,15 +111,6 @@ public class RetryingBlockFetcher {
     this.outstandingBlocksIds = Sets.newLinkedHashSet();
     Collections.addAll(outstandingBlocksIds, blockIds);
     this.currentListener = new RetryingBlockFetchListener();
-    this.errorHandler = errorHandler;
-  }
-
-  public RetryingBlockFetcher(
-      TransportConf conf,
-      BlockFetchStarter fetchStarter,
-      String[] blockIds,
-      BlockFetchingListener listener) {
-    this(conf, fetchStarter, blockIds, listener, ErrorHandler.NOOP_ERROR_HANDLER);
   }
 
   /**
@@ -190,7 +178,7 @@ public class RetryingBlockFetcher {
     boolean isIOException = e instanceof IOException
       || (e.getCause() != null && e.getCause() instanceof IOException);
     boolean hasRemainingRetries = retryCount < maxRetries;
-    return isIOException && hasRemainingRetries && errorHandler.shouldRetryError(e);
+    return isIOException && hasRemainingRetries;
   }
 
   /**
@@ -227,15 +215,8 @@ public class RetryingBlockFetcher {
           if (shouldRetry(exception)) {
             initiateRetry();
           } else {
-            if (errorHandler.shouldLogError(exception)) {
-              logger.error(
-                String.format("Failed to fetch block %s, and will not retry (%s retries)",
-                  blockId, retryCount), exception);
-            } else {
-              logger.debug(
-                String.format("Failed to fetch block %s, and will not retry (%s retries)",
-                  blockId, retryCount), exception);
-            }
+            logger.error(String.format("Failed to fetch block %s, and will not retry (%s retries)",
+              blockId, retryCount), exception);
             outstandingBlocksIds.remove(blockId);
             shouldForwardFailure = true;
           }

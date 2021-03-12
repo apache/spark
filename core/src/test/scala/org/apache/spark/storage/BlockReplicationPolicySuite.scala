@@ -21,8 +21,7 @@ import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfter
-import org.scalatest.matchers.must.Matchers
+import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.{LocalSparkContext, SparkFunSuite}
 

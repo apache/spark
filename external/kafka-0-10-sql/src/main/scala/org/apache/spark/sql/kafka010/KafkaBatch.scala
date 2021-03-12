@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.kafka010
 
+import org.apache.kafka.common.TopicPartition
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
@@ -48,7 +50,7 @@ private[kafka010] class KafkaBatch(
     // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = KafkaSourceProvider.batchUniqueGroupId(sourceOptions)
 
-    val kafkaOffsetReader = KafkaOffsetReader.build(
+    val kafkaOffsetReader = new KafkaOffsetReader(
       strategy,
       KafkaSourceProvider.kafkaParamsForDriver(specifiedKafkaParams),
       sourceOptions,

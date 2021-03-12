@@ -21,11 +21,11 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.yarn.api.records.ContainerId
+import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
 import org.apache.spark.SparkConf
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.internal.config._
 
 private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], racks: Array[String])
 
@@ -82,6 +82,7 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
 private[yarn] class LocalityPreferredContainerPlacementStrategy(
     val sparkConf: SparkConf,
     val yarnConf: Configuration,
+    val resource: Resource,
     resolver: SparkRackResolver) {
 
   /**
@@ -95,7 +96,6 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
    *                                     containers
    * @param localityMatchedPendingAllocations A sequence of pending container request which
    *                                          matches the localities of current required tasks.
-   * @param rp The ResourceProfile associated with this container.
    * @return node localities and rack localities, each locality is an array of string,
    *         the length of localities is the same as number of containers
    */
@@ -104,12 +104,11 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       numLocalityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
       allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
-      localityMatchedPendingAllocations: Seq[ContainerRequest],
-      rp: ResourceProfile
+      localityMatchedPendingAllocations: Seq[ContainerRequest]
     ): Array[ContainerLocalityPreferences] = {
     val updatedHostToContainerCount = expectedHostToContainerCount(
       numLocalityAwareTasks, hostToLocalTaskCount, allocatedHostToContainersMap,
-        localityMatchedPendingAllocations, rp)
+        localityMatchedPendingAllocations)
     val updatedLocalityAwareContainerNum = updatedHostToContainerCount.values.sum
 
     // The number of containers to allocate, divided into two groups, one with preferred locality,
@@ -153,14 +152,11 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
   }
 
   /**
-   * Calculate the number of executors needed to satisfy the given number of pending tasks for
-   * the ResourceProfile.
+   * Calculate the number of executors need to satisfy the given number of pending tasks.
    */
-  private def numExecutorsPending(
-      numTasksPending: Int,
-      rp: ResourceProfile): Int = {
-    val tasksPerExec = rp.maxTasksPerExecutor(sparkConf)
-    math.ceil(numTasksPending / tasksPerExec.toDouble).toInt
+  private def numExecutorsPending(numTasksPending: Int): Int = {
+    val coresPerExecutor = resource.getVirtualCores
+    (numTasksPending * sparkConf.get(CPUS_PER_TASK) + coresPerExecutor - 1) / coresPerExecutor
   }
 
   /**
@@ -179,15 +175,14 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
       allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
-      localityMatchedPendingAllocations: Seq[ContainerRequest],
-      rp: ResourceProfile
+      localityMatchedPendingAllocations: Seq[ContainerRequest]
     ): Map[String, Int] = {
     val totalLocalTaskNum = hostToLocalTaskCount.values.sum
     val pendingHostToContainersMap = pendingHostToContainerCount(localityMatchedPendingAllocations)
 
     hostToLocalTaskCount.map { case (host, count) =>
       val expectedCount =
-        count.toDouble * numExecutorsPending(localityAwareTasks, rp) / totalLocalTaskNum
+        count.toDouble * numExecutorsPending(localityAwareTasks) / totalLocalTaskNum
       // Take the locality of pending containers into consideration
       val existedCount = allocatedHostToContainersMap.get(host).map(_.size).getOrElse(0) +
         pendingHostToContainersMap.getOrElse(host, 0.0)

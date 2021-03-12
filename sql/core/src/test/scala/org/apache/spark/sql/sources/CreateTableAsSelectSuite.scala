@@ -166,13 +166,13 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
         )
       }.getMessage
       assert(error.contains("Operation not allowed") &&
-        error.contains("CREATE TEMPORARY TABLE"))
+        error.contains("CREATE TEMPORARY TABLE ... USING ... AS query"))
     }
   }
 
   test("disallows CREATE EXTERNAL TABLE ... USING ... AS query") {
     withTable("t") {
-      val error = intercept[AnalysisException] {
+      val error = intercept[ParseException] {
         sql(
           s"""
              |CREATE EXTERNAL TABLE t USING PARQUET
@@ -237,7 +237,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("create table using as select - with overridden max number of buckets") {
+  test("create table using as select - with overriden max number of buckets") {
     def createTableSql(numBuckets: Int): String =
       s"""
          |CREATE TABLE t USING PARQUET

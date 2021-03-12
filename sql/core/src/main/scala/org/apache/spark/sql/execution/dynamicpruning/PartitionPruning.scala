@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * The basic mechanism for DPP inserts a duplicated subquery with the filter from the other side,
  * when the following conditions are met:
  *    (1) the table to prune is partitioned by the JOIN key
- *    (2) the join operation is one of the following types: INNER, LEFT SEMI,
+ *    (2) the join operation is one of the following types: INNER, LEFT SEMI (partitioned on left),
  *    LEFT OUTER (partitioned on right), or RIGHT OUTER (partitioned on left)
  *
  * In order to enable partition pruning directly in broadcasts, we use a custom DynamicPruning
@@ -192,7 +192,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def canPruneRight(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | LeftOuter => true
+    case Inner | LeftOuter => true
     case _ => false
   }
 

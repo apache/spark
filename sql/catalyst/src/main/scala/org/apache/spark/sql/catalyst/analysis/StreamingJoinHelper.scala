@@ -189,7 +189,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           if attributesWithEventWatermark.contains(a) && metadata.contains(delayKey) =>
           Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
-    }.reduceLeft(Add(_, _))
+    }.reduceLeft(Add)
 
     // Calculate the constraint value
     logInfo(s"Final expression to evaluate constraint:\t$exprWithWatermarkSubstituted")
@@ -226,14 +226,15 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
      */
     def collect(expr: Expression, negate: Boolean): Seq[Expression] = {
       expr match {
-        case Add(left, right, _) =>
+        case Add(left, right) =>
           collect(left, negate) ++ collect(right, negate)
-        case Subtract(left, right, _) =>
+        case Subtract(left, right) =>
           collect(left, negate) ++ collect(right, !negate)
         case TimeAdd(left, right, _) =>
           collect(left, negate) ++ collect(right, negate)
-        case DatetimeSub(_, _, child) => collect(child, negate)
-        case UnaryMinus(child, _) =>
+        case TimeSub(left, right, _) =>
+          collect(left, negate) ++ collect(right, !negate)
+        case UnaryMinus(child) =>
           collect(child, !negate)
         case CheckOverflow(child, _, _) =>
           collect(child, negate)

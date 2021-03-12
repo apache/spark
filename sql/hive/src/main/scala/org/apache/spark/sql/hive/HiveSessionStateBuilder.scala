@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlanner
+import org.apache.spark.sql.execution.{SparkOptimizer, SparkPlanner}
 import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
@@ -35,11 +37,9 @@ import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLo
 /**
  * Builder that produces a Hive-aware `SessionState`.
  */
-class HiveSessionStateBuilder(
-    session: SparkSession,
-    parentState: Option[SessionState],
-    options: Map[String, String])
-  extends BaseSessionStateBuilder(session, parentState, options) {
+@Unstable
+class HiveSessionStateBuilder(session: SparkSession, parentState: Option[SessionState] = None)
+  extends BaseSessionStateBuilder(session, parentState) {
 
   private def externalCatalog: ExternalCatalogWithListener = session.sharedState.externalCatalog
 
@@ -60,6 +60,7 @@ class HiveSessionStateBuilder(
       () => session.sharedState.globalTempViewManager,
       new HiveMetastoreCatalog(session),
       functionRegistry,
+      conf,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader)
@@ -70,7 +71,7 @@ class HiveSessionStateBuilder(
   /**
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
-  override protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+  override protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
@@ -78,16 +79,16 @@ class HiveSessionStateBuilder(
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
-          catalogManager, catalog.isTempView, catalog.isTempFunction) +:
+          catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      DetectAmbiguousSelfJoin +:
+      new DetectAmbiguousSelfJoin(conf) +:
         new DetermineTableStats(session) +:
-        RelationConversions(catalog) +:
+        RelationConversions(conf, catalog) +:
         PreprocessTableCreation(session) +:
-        PreprocessTableInsertion +:
-        DataSourceAnalysis +:
+        PreprocessTableInsertion(conf) +:
+        DataSourceAnalysis(conf) +:
         HiveAnalysis +:
         customPostHocResolutionRules
 
@@ -95,7 +96,7 @@ class HiveSessionStateBuilder(
       PreWriteCheck +:
         PreReadCheck +:
         TableCapabilityCheck +:
-        CommandCheck +:
+        CommandCheck(conf) +:
         customCheckRules
   }
 
@@ -106,16 +107,15 @@ class HiveSessionStateBuilder(
    * Planner that takes into account Hive-specific strategies.
    */
   override protected def planner: SparkPlanner = {
-    new SparkPlanner(session, experimentalMethods) with HiveStrategies {
+    new SparkPlanner(session, conf, experimentalMethods) with HiveStrategies {
       override val sparkSession: SparkSession = session
 
       override def extraPlanningStrategies: Seq[Strategy] =
-        super.extraPlanningStrategies ++ customPlanningStrategies ++
-          Seq(HiveTableScans, HiveScripts)
+        super.extraPlanningStrategies ++ customPlanningStrategies ++ Seq(HiveTableScans, Scripts)
     }
   }
 
-  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _, Map.empty)
+  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _)
 }
 
 class HiveSessionResourceLoader(

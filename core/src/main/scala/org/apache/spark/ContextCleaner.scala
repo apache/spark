@@ -222,15 +222,11 @@ private[spark] class ContextCleaner(
   /** Perform shuffle cleanup. */
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
-      if (mapOutputTrackerMaster.containsShuffle(shuffleId)) {
-        logDebug("Cleaning shuffle " + shuffleId)
-        mapOutputTrackerMaster.unregisterShuffle(shuffleId)
-        shuffleDriverComponents.removeShuffle(shuffleId, blocking)
-        listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
-        logDebug("Cleaned shuffle " + shuffleId)
-      } else {
-        logDebug("Asked to cleanup non-existent shuffle (maybe it was already removed)")
-      }
+      logDebug("Cleaning shuffle " + shuffleId)
+      mapOutputTrackerMaster.unregisterShuffle(shuffleId)
+      shuffleDriverComponents.removeShuffle(shuffleId, blocking)
+      listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
+      logDebug("Cleaned shuffle " + shuffleId)
     } catch {
       case e: Exception => logError("Error cleaning shuffle " + shuffleId, e)
     }

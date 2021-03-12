@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml
 
+import org.apache.spark.ml.feature.{HashingTF, IDF, IDFModel, VectorAssembler}
+
 /**
  * == Feature transformers ==
  *

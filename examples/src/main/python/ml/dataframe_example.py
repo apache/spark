@@ -19,6 +19,8 @@
 An example of how to use DataFrame for ML. Run with::
     bin/spark-submit examples/src/main/python/ml/dataframe_example.py <input_path>
 """
+from __future__ import print_function
+
 import os
 import sys
 import tempfile

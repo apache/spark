@@ -376,7 +376,6 @@ varargsToStrEnv <- function(...) {
 
 getStorageLevel <- function(newLevel = c("DISK_ONLY",
                                          "DISK_ONLY_2",
-                                         "DISK_ONLY_3",
                                          "MEMORY_AND_DISK",
                                          "MEMORY_AND_DISK_2",
                                          "MEMORY_AND_DISK_SER",
@@ -391,7 +390,6 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
   storageLevel <- switch(newLevel,
                          "DISK_ONLY" = callJStatic(storageLevelClass, "DISK_ONLY"),
                          "DISK_ONLY_2" = callJStatic(storageLevelClass, "DISK_ONLY_2"),
-                         "DISK_ONLY_3" = callJStatic(storageLevelClass, "DISK_ONLY_3"),
                          "MEMORY_AND_DISK" = callJStatic(storageLevelClass, "MEMORY_AND_DISK"),
                          "MEMORY_AND_DISK_2" = callJStatic(storageLevelClass, "MEMORY_AND_DISK_2"),
                          "MEMORY_AND_DISK_SER" = callJStatic(storageLevelClass,
@@ -417,8 +415,6 @@ storageLevelToString <- function(levelObj) {
     "DISK_ONLY"
   } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 2) {
     "DISK_ONLY_2"
-  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 3) {
-    "DISK_ONLY_3"
   } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
     "MEMORY_ONLY"
   } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
@@ -930,7 +926,7 @@ getOne <- function(x, envir, inherits = TRUE, ifnotfound = NULL) {
 }
 
 # Returns a vector of parent directories, traversing up count times, starting with a full path
-# e.g. traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1) should return
+# eg. traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1) should return
 # this "/Users/user/Library/Caches/spark/spark2.2"
 # and  "/Users/user/Library/Caches/spark"
 traverseParentDirs <- function(x, count) {

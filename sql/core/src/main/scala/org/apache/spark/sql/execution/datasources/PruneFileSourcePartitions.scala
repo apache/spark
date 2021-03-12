@@ -39,8 +39,7 @@ import org.apache.spark.sql.types.StructType
  * its underlying [[FileScan]]. And the partition filters will be removed in the filters of
  * returned logical plan.
  */
-private[sql] object PruneFileSourcePartitions
-  extends Rule[LogicalPlan] with PredicateHelper {
+private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
 
   private def getPartitionKeyFiltersAndDataFilters(
       sparkSession: SparkSession,
@@ -56,10 +55,8 @@ private[sql] object PruneFileSourcePartitions
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
       f.references.subsetOf(partitionSet)
     )
-    val extraPartitionFilter =
-      dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
 
-    (ExpressionSet(partitionFilters ++ extraPartitionFilter), dataFilters)
+    (ExpressionSet(partitionFilters), dataFilters)
   }
 
   private def rebuildPhysicalOperation(
@@ -91,9 +88,7 @@ private[sql] object PruneFileSourcePartitions
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
       val (partitionKeyFilters, _) = getPartitionKeyFiltersAndDataFilters(
-        fsRelation.sparkSession, logicalRelation, partitionSchema, filters,
-        logicalRelation.output)
-
+        fsRelation.sparkSession, logicalRelation, partitionSchema, filters, logicalRelation.output)
       if (partitionKeyFilters.nonEmpty) {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =

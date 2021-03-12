@@ -50,10 +50,10 @@ object ResolveHints {
    *
    * This rule must happen before common table expressions.
    */
-  object ResolveJoinStrategyHints extends Rule[LogicalPlan] {
+  class ResolveJoinStrategyHints(conf: SQLConf) extends Rule[LogicalPlan] {
     private val STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
 
-    private def hintErrorHandler = conf.hintErrorHandler
+    private val hintErrorHandler = conf.hintErrorHandler
 
     def resolver: Resolver = conf.resolver
 
@@ -105,7 +105,7 @@ object ResolveHints {
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case ResolvedHint(u @ UnresolvedRelation(ident, _, _), hint)
+          case ResolvedHint(u @ UnresolvedRelation(ident), hint)
               if matchedIdentifierInHint(ident) =>
             ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
@@ -113,7 +113,7 @@ object ResolveHints {
               if matchedIdentifierInHint(extractIdentifier(r)) =>
             ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
-          case UnresolvedRelation(ident, _, _) if matchedIdentifierInHint(ident) =>
+          case UnresolvedRelation(ident) if matchedIdentifierInHint(ident) =>
             ResolvedHint(plan, createHintInfo(hintName))
 
           case r: SubqueryAlias if matchedIdentifierInHint(extractIdentifier(r)) =>
@@ -171,9 +171,7 @@ object ResolveHints {
   /**
    * COALESCE Hint accepts names "COALESCE", "REPARTITION", and "REPARTITION_BY_RANGE".
    */
-  object ResolveCoalesceHints extends Rule[LogicalPlan] {
-
-    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
+  class ResolveCoalesceHints(conf: SQLConf) extends Rule[LogicalPlan] {
 
     /**
      * This function handles hints for "COALESCE" and "REPARTITION".
@@ -185,7 +183,7 @@ object ResolveHints {
       val hintName = hint.name.toUpperCase(Locale.ROOT)
 
       def createRepartitionByExpression(
-          numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
+          numPartitions: Int, partitionExprs: Seq[Any]): RepartitionByExpression = {
         val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
         if (sortOrders.nonEmpty) throw new IllegalArgumentException(
           s"""Invalid partitionExprs specified: $sortOrders
@@ -210,11 +208,11 @@ object ResolveHints {
           throw new AnalysisException(s"$hintName Hint expects a partition number as a parameter")
 
         case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
+          createRepartitionByExpression(numPartitions, param.tail)
         case param @ Seq(numPartitions: Int, _*) if shuffle =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
+          createRepartitionByExpression(numPartitions, param.tail)
         case param @ Seq(_*) if shuffle =>
-          createRepartitionByExpression(None, param)
+          createRepartitionByExpression(conf.numShufflePartitions, param)
       }
     }
 
@@ -226,7 +224,7 @@ object ResolveHints {
       val hintName = hint.name.toUpperCase(Locale.ROOT)
 
       def createRepartitionByExpression(
-          numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
+          numPartitions: Int, partitionExprs: Seq[Any]): RepartitionByExpression = {
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
           throw new AnalysisException(s"$hintName Hint parameter should include columns, but " +
@@ -241,11 +239,11 @@ object ResolveHints {
 
       hint.parameters match {
         case param @ Seq(IntegerLiteral(numPartitions), _*) =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
+          createRepartitionByExpression(numPartitions, param.tail)
         case param @ Seq(numPartitions: Int, _*) =>
-          createRepartitionByExpression(Some(numPartitions), param.tail)
+          createRepartitionByExpression(numPartitions, param.tail)
         case param @ Seq(_*) =>
-          createRepartitionByExpression(None, param)
+          createRepartitionByExpression(conf.numShufflePartitions, param)
       }
     }
 
@@ -262,29 +260,22 @@ object ResolveHints {
     }
   }
 
+  object ResolveCoalesceHints {
+    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
+  }
+
   /**
    * Removes all the hints, used to remove invalid hints provided by the user.
    * This must be executed after all the other hint rules are executed.
    */
-  class RemoveAllHints extends Rule[LogicalPlan] {
+  class RemoveAllHints(conf: SQLConf) extends Rule[LogicalPlan] {
 
-    private def hintErrorHandler = conf.hintErrorHandler
+    private val hintErrorHandler = conf.hintErrorHandler
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case h: UnresolvedHint =>
         hintErrorHandler.hintNotRecognized(h.name, h.parameters)
         h.child
-    }
-  }
-
-  /**
-   * Removes all the hints when `spark.sql.optimizer.disableHints` is set.
-   * This is executed at the very beginning of the Analyzer to disable
-   * the hint functionality.
-   */
-  class DisableHints extends RemoveAllHints {
-    override def apply(plan: LogicalPlan): LogicalPlan = {
-      if (conf.getConf(SQLConf.DISABLE_HINTS)) super.apply(plan) else plan
     }
   }
 }

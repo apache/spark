@@ -91,8 +91,8 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
   /**
    * Numeric columns to treat as categorical features. By default only string and boolean
    * columns are treated as categorical, so this param can be used to explicitly specify the
-   * numerical columns to treat as categorical. Note, the relevant columns should also be set in
-   * `inputCols`, categorical columns not set in `inputCols` will be listed in a warning.
+   * numerical columns to treat as categorical. Note, the relevant columns must also be set in
+   * `inputCols`.
    * @group param
    */
   @Since("2.3.0")
@@ -125,24 +125,19 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
   @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val outputSchema = transformSchema(dataset.schema)
     val hashFunc: Any => Int = FeatureHasher.murmur3Hash
-
     val n = $(numFeatures)
     val localInputCols = $(inputCols)
-
-    var catCols = dataset.schema(localInputCols.toSet)
-      .filterNot(_.dataType.isInstanceOf[NumericType]).map(_.name).toArray
-    if (isSet(categoricalCols)) {
-      // categoricalCols may contain columns not set in inputCols
-      catCols = (catCols ++ $(categoricalCols).intersect(localInputCols)).distinct
+    val catCols = if (isSet(categoricalCols)) {
+      $(categoricalCols).toSet
+    } else {
+      Set[String]()
     }
-    val catIndices = catCols.map(c => localInputCols.indexOf(c))
 
-    val realCols = (localInputCols.toSet -- catCols).toArray
-    val realIndices = realCols.map(c => localInputCols.indexOf(c))
-    // pre-compute output indices of real columns
-    val realOutputIndices = realCols.map(c => Utils.nonNegativeMod(hashFunc(c), n))
+    val outputSchema = transformSchema(dataset.schema)
+    val realFields = outputSchema.fields.filter { f =>
+      f.dataType.isInstanceOf[NumericType] && !catCols.contains(f.name)
+    }.map(_.name).toSet
 
     def getDouble(x: Any): Double = {
       x match {
@@ -156,38 +151,33 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
     val hashFeatures = udf { row: Row =>
       val map = new OpenHashMap[Int, Double]()
-
-      var i = 0
-      while (i < realIndices.length) {
-        val realIdx = realIndices(i)
-        if (!row.isNullAt(realIdx)) {
-          // numeric values are kept as is, with vector index based on hash of "column_name"
-          val value = getDouble(row.get(realIdx))
-          val idx = realOutputIndices(i)
+      localInputCols.foreach { colName =>
+        val fieldIndex = row.fieldIndex(colName)
+        if (!row.isNullAt(fieldIndex)) {
+          val (rawIdx, value) = if (realFields(colName)) {
+            // numeric values are kept as is, with vector index based on hash of "column_name"
+            val value = getDouble(row.get(fieldIndex))
+            val hash = hashFunc(colName)
+            (hash, value)
+          } else {
+            // string, boolean and numeric values that are in catCols are treated as categorical,
+            // with an indicator value of 1.0 and vector index based on hash of "column_name=value"
+            val value = row.get(fieldIndex).toString
+            val fieldName = s"$colName=$value"
+            val hash = hashFunc(fieldName)
+            (hash, 1.0)
+          }
+          val idx = Utils.nonNegativeMod(rawIdx, n)
           map.changeValue(idx, value, v => v + value)
         }
-        i += 1
       }
-
-      i = 0
-      while (i < catIndices.length) {
-        val catIdx = catIndices(i)
-        if (!row.isNullAt(catIdx)) {
-          // string, boolean and numeric values that are in catCols are treated as categorical,
-          // with an indicator value of 1.0 and vector index based on hash of "column_name=value"
-          val string = row.get(catIdx).toString
-          val rawIdx = hashFunc(s"${catCols(i)}=$string")
-          val idx = Utils.nonNegativeMod(rawIdx, n)
-          map.changeValue(idx, 1.0, v => v + 1.0)
-        }
-        i += 1
-      }
-
       Vectors.sparse(n, map.toSeq)
     }
 
     val metadata = outputSchema($(outputCol)).metadata
-    dataset.withColumn($(outputCol), hashFeatures(struct($(inputCols).map(col): _*)), metadata)
+    dataset.select(
+      col("*"),
+      hashFeatures(struct($(inputCols).map(col): _*)).as($(outputCol), metadata))
   }
 
   @Since("2.3.0")
@@ -195,14 +185,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
   @Since("2.3.0")
   override def transformSchema(schema: StructType): StructType = {
-    val localInputCols = $(inputCols).toSet
-    if (isSet(categoricalCols)) {
-      val set = $(categoricalCols).filterNot(c => localInputCols.contains(c))
-      if (set.nonEmpty) {
-        log.warn(s"categoricalCols ${set.mkString("[", ",", "]")} do not exist in inputCols")
-      }
-    }
-    val fields = schema(localInputCols)
+    val fields = schema($(inputCols).toSet)
     fields.foreach { fieldSchema =>
       val dataType = fieldSchema.dataType
       val fieldName = fieldSchema.name

@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -78,7 +78,7 @@ object CommandUtils extends Logging {
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       val paths = partitions.map(_.storage.locationUri)
-      calculateMultipleLocationSizes(spark, catalogTable.identifier, paths).sum
+      calculateTotalLocationSize(spark, catalogTable.identifier, paths)
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
@@ -137,14 +137,14 @@ object CommandUtils extends Logging {
     size
   }
 
-  def calculateMultipleLocationSizes(
+  def calculateTotalLocationSize(
       sparkSession: SparkSession,
       tid: TableIdentifier,
-      paths: Seq[Option[URI]]): Seq[Long] = {
+      paths: Seq[Option[URI]]): Long = {
     if (sparkSession.sessionState.conf.parallelFileListingInStatsComputation) {
-      calculateMultipleLocationSizesInParallel(sparkSession, paths.map(_.map(new Path(_))))
+      calculateLocationSizeParallel(sparkSession, paths.map(_.map(new Path(_))))
     } else {
-      paths.map(p => calculateSingleLocationSize(sparkSession.sessionState, tid, p))
+      paths.map(p => calculateSingleLocationSize(sparkSession.sessionState, tid, p)).sum
     }
   }
 
@@ -153,21 +153,20 @@ object CommandUtils extends Logging {
    * for each path.
    * @param sparkSession the [[SparkSession]]
    * @param paths the Seq of [[Option[Path]]]s
-   * @return a Seq of same size as `paths` where i-th element is total size of `paths(i)` or 0
-   *         if `paths(i)` is None
+   * @return total size of all partitions
    */
-  def calculateMultipleLocationSizesInParallel(
+  def calculateLocationSizeParallel(
       sparkSession: SparkSession,
-      paths: Seq[Option[Path]]): Seq[Long] = {
+      paths: Seq[Option[Path]]): Long = {
     val stagingDir = sparkSession.sessionState.conf
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
     val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
-      sparkSession.sessionState.newHadoopConf(), filter, sparkSession).map {
+      sparkSession.sessionState.newHadoopConf(), filter, sparkSession, areRootPaths = true).map {
       case (_, files) => files.map(_.getLen).sum
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
-    paths.zipWithIndex.map { case (p, idx) => p.map(_ => sizes(idx)).getOrElse(0L) }
+    paths.zipWithIndex.filter(_._1.isDefined).map(i => sizes(i._2)).sum
   }
 
   def compareAndGetNewStats(

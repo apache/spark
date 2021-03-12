@@ -23,21 +23,22 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper, NormalizeFloatingNumbers}
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.exchange.{REPARTITION, REPARTITION_WITH_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -116,9 +117,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *
    * - Shuffle hash join:
    *     Only supported for equi-joins, while the join keys do not need to be sortable.
-   *     Supported for all join types.
-   *     Building hash map from table is a memory-intensive operation and it could cause OOM
-   *     when the build side is big.
+   *     Supported for all join types except full outer joins.
    *
    * - Shuffle sort merge join (SMJ):
    *     Only supported for equi-joins and the join keys have to be sortable.
@@ -136,9 +135,93 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     Supports both equi-joins and non-equi-joins.
    *     Supports only inner like joins.
    */
-  object JoinSelection extends Strategy
-    with PredicateHelper
-    with JoinSelectionHelper {
+  object JoinSelection extends Strategy with PredicateHelper {
+
+    /**
+     * Matches a plan whose output should be small enough to be used in broadcast join.
+     */
+    private def canBroadcast(plan: LogicalPlan): Boolean = {
+      plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= conf.autoBroadcastJoinThreshold
+    }
+
+    /**
+     * Matches a plan whose single partition should be small enough to build a hash table.
+     *
+     * Note: this assume that the number of partition is fixed, requires additional work if it's
+     * dynamic.
+     */
+    private def canBuildLocalHashMap(plan: LogicalPlan): Boolean = {
+      plan.stats.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
+    }
+
+    /**
+     * Returns whether plan a is much smaller (3X) than plan b.
+     *
+     * The cost to build hash map is higher than sorting, we should only build hash map on a table
+     * that is much smaller than other one. Since we does not have the statistic for number of rows,
+     * use the size of bytes here as estimation.
+     */
+    private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
+      a.stats.sizeInBytes * 3 <= b.stats.sizeInBytes
+    }
+
+    private def canBuildRight(joinType: JoinType): Boolean = joinType match {
+      case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin => true
+      case _ => false
+    }
+
+    private def canBuildLeft(joinType: JoinType): Boolean = joinType match {
+      case _: InnerLike | RightOuter => true
+      case _ => false
+    }
+
+    private def getBuildSide(
+        wantToBuildLeft: Boolean,
+        wantToBuildRight: Boolean,
+        left: LogicalPlan,
+        right: LogicalPlan): Option[BuildSide] = {
+      if (wantToBuildLeft && wantToBuildRight) {
+        // returns the smaller side base on its estimated physical size, if we want to build the
+        // both sides.
+        Some(getSmallerSide(left, right))
+      } else if (wantToBuildLeft) {
+        Some(BuildLeft)
+      } else if (wantToBuildRight) {
+        Some(BuildRight)
+      } else {
+        None
+      }
+    }
+
+    private def getSmallerSide(left: LogicalPlan, right: LogicalPlan) = {
+      if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
+    }
+
+    private def hintToBroadcastLeft(hint: JoinHint): Boolean = {
+      hint.leftHint.exists(_.strategy.contains(BROADCAST))
+    }
+
+    private def hintToBroadcastRight(hint: JoinHint): Boolean = {
+      hint.rightHint.exists(_.strategy.contains(BROADCAST))
+    }
+
+    private def hintToShuffleHashLeft(hint: JoinHint): Boolean = {
+      hint.leftHint.exists(_.strategy.contains(SHUFFLE_HASH))
+    }
+
+    private def hintToShuffleHashRight(hint: JoinHint): Boolean = {
+      hint.rightHint.exists(_.strategy.contains(SHUFFLE_HASH))
+    }
+
+    private def hintToSortMergeJoin(hint: JoinHint): Boolean = {
+      hint.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE)) ||
+        hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))
+    }
+
+    private def hintToShuffleReplicateNL(hint: JoinHint): Boolean = {
+      hint.leftHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL)) ||
+        hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))
+    }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
@@ -162,31 +245,33 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //   5. Pick broadcast nested loop join as the final solution. It may OOM but we don't have
       //      other choice.
       case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond, left, right, hint) =>
-        def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
-          getBroadcastBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf).map {
-            buildSide =>
-              Seq(joins.BroadcastHashJoinExec(
-                leftKeys,
-                rightKeys,
-                joinType,
-                buildSide,
-                nonEquiCond,
-                planLater(left),
-                planLater(right)))
+        def createBroadcastHashJoin(buildLeft: Boolean, buildRight: Boolean) = {
+          val wantToBuildLeft = canBuildLeft(joinType) && buildLeft
+          val wantToBuildRight = canBuildRight(joinType) && buildRight
+          getBuildSide(wantToBuildLeft, wantToBuildRight, left, right).map { buildSide =>
+            Seq(joins.BroadcastHashJoinExec(
+              leftKeys,
+              rightKeys,
+              joinType,
+              buildSide,
+              nonEquiCond,
+              planLater(left),
+              planLater(right)))
           }
         }
 
-        def createShuffleHashJoin(onlyLookingAtHint: Boolean) = {
-          getShuffleHashJoinBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf).map {
-            buildSide =>
-              Seq(joins.ShuffledHashJoinExec(
-                leftKeys,
-                rightKeys,
-                joinType,
-                buildSide,
-                nonEquiCond,
-                planLater(left),
-                planLater(right)))
+        def createShuffleHashJoin(buildLeft: Boolean, buildRight: Boolean) = {
+          val wantToBuildLeft = canBuildLeft(joinType) && buildLeft
+          val wantToBuildRight = canBuildRight(joinType) && buildRight
+          getBuildSide(wantToBuildLeft, wantToBuildRight, left, right).map { buildSide =>
+            Seq(joins.ShuffledHashJoinExec(
+              leftKeys,
+              rightKeys,
+              joinType,
+              buildSide,
+              nonEquiCond,
+              planLater(left),
+              planLater(right)))
           }
         }
 
@@ -210,10 +295,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastHashJoin(false)
+          createBroadcastHashJoin(
+            canBroadcast(left) && !hint.leftHint.exists(_.strategy.contains(NO_BROADCAST_HASH)),
+            canBroadcast(right) && !hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH)))
             .orElse {
               if (!conf.preferSortMergeJoin) {
-                createShuffleHashJoin(false)
+                createShuffleHashJoin(
+                  canBuildLocalHashMap(left) && muchSmaller(left, right),
+                  canBuildLocalHashMap(right) && muchSmaller(right, left))
               } else {
                 None
               }
@@ -228,15 +317,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastHashJoin(true)
+        createBroadcastHashJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
           .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
-          .orElse(createShuffleHashJoin(true))
+          .orElse(createShuffleHashJoin(hintToShuffleHashLeft(hint), hintToShuffleHashRight(hint)))
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
           .getOrElse(createJoinWithoutHint())
-
-      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
-        Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
-          None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
       // If it is not an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast nested loop join. If both sides have the broadcast
@@ -262,7 +347,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           // it's a right join, and broadcast right side if it's a left join.
           // TODO: revisit it. If left side is much smaller than the right side, it may be better
           // to broadcast the left side even if it's a left join.
-          if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
+          if (canBuildLeft(joinType)) BuildLeft else BuildRight
         }
 
         def createBroadcastNLJoin(buildLeft: Boolean, buildRight: Boolean) = {
@@ -291,7 +376,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastNLJoin(canBroadcastBySize(left, conf), canBroadcastBySize(right, conf))
+          createBroadcastNLJoin(canBroadcast(left), canBroadcast(right))
             .orElse(createCartesianProduct())
             .getOrElse {
               // This join could be very slow or OOM
@@ -312,9 +397,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   /**
    * Used to plan streaming aggregation queries that are computed incrementally as part of a
-   * [[org.apache.spark.sql.streaming.StreamingQuery]]. Currently this rule is injected into the
-   * planner on-demand, only when planning in a
-   * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
+   * [[StreamingQuery]]. Currently this rule is injected into the planner
+   * on-demand, only when planning in a [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -670,7 +754,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
-            planLater(child), REPARTITION_WITH_NUM) :: Nil
+            planLater(child), noUserSpecifiedNumPartition = false) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -692,8 +776,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
-      case union: logical.Union =>
-        execution.UnionExec(union.children.map(planLater)) :: Nil
+      case logical.Union(unionChildren) =>
+        execution.UnionExec(unionChildren.map(planLater)) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(
           generator, g.requiredChildOutput, outer,
@@ -703,12 +787,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val shuffleOrigin = if (r.optNumPartitions.isEmpty) {
-          REPARTITION
-        } else {
-          REPARTITION_WITH_NUM
-        }
-        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
+        exchange.ShuffleExchangeExec(
+          r.partitioning, planLater(r.child), noUserSpecifiedNumPartition = false) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

@@ -30,7 +30,7 @@ import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProces
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Divide, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -57,9 +57,9 @@ trait ShuffleExchangeLike extends Exchange {
   def numPartitions: Int
 
   /**
-   * The origin of this shuffle operator.
+   * Returns whether the shuffle partition number can be changed.
    */
-  def shuffleOrigin: ShuffleOrigin
+  def canChangeNumPartitions: Boolean
 
   /**
    * The asynchronous job that materializes the shuffle.
@@ -77,30 +77,18 @@ trait ShuffleExchangeLike extends Exchange {
   def runtimeStatistics: Statistics
 }
 
-// Describes where the shuffle operator comes from.
-sealed trait ShuffleOrigin
-
-// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule. It
-// means that the shuffle operator is used to ensure internal data partitioning requirements and
-// Spark is free to optimize it as long as the requirements are still ensured.
-case object ENSURE_REQUIREMENTS extends ShuffleOrigin
-
-// Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
-// can still optimize it via changing shuffle partition number, as data partitioning won't change.
-case object REPARTITION extends ShuffleOrigin
-
-// Indicates that the shuffle operator was added by the user-specified repartition operator with
-// a certain partition number. Spark can't optimize it.
-case object REPARTITION_WITH_NUM extends ShuffleOrigin
-
 /**
  * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
-  extends ShuffleExchangeLike {
+    noUserSpecifiedNumPartition: Boolean = true) extends ShuffleExchangeLike {
+
+  // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
+  // For `SinglePartition`, it requires exactly one partition and we can't change it either.
+  def canChangeNumPartitions: Boolean =
+    noUserSpecifiedNumPartition && outputPartitioning != SinglePartition
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)

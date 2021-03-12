@@ -19,8 +19,7 @@ package org.apache.spark.streaming.ui
 
 import java.util.Properties
 
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.Matchers
 
 import org.apache.spark.scheduler.SparkListenerJobStart
 import org.apache.spark.streaming.{LocalStreamingContext, _}

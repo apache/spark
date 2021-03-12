@@ -21,6 +21,7 @@ import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.UserGroupInformation
+import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 
 import org.apache.spark.util.Utils
 

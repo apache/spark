@@ -25,6 +25,8 @@
 
  Then create a text file in `localdir` and the words in the file will get counted.
 """
+from __future__ import print_function
+
 import sys
 
 from pyspark import SparkContext

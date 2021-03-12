@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
@@ -64,7 +63,7 @@ object PushDownUtils extends PredicateHelper {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
+        (r.pushedFilters(), untranslatableExprs ++ postScanFilters)
 
       case _ => (Nil, filters)
     }
@@ -97,11 +96,13 @@ object PushDownUtils extends PredicateHelper {
         val exprs = projects ++ filters
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
-        r.pruneColumns(neededOutput.toStructType)
-        val scan = r.build()
-        // always project, in case the relation's output has been updated and doesn't match
-        // the underlying table schema
-        scan -> toOutputAttrs(scan.readSchema(), relation)
+        if (neededOutput != relation.output) {
+          r.pruneColumns(neededOutput.toStructType)
+          val scan = r.build()
+          scan -> toOutputAttrs(scan.readSchema(), relation)
+        } else {
+          r.build() -> relation.output
+        }
 
       case _ => scanBuilder.build() -> relation.output
     }
@@ -111,8 +112,7 @@ object PushDownUtils extends PredicateHelper {
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-    val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    cleaned.toAttributes.map {
+    schema.toAttributes.map {
       // we have to keep the attribute id during transformation
       a => a.withExprId(nameToAttr(a.name).exprId)
     }

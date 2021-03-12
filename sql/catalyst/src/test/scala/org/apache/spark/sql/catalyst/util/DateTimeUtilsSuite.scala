@@ -23,15 +23,13 @@ import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
@@ -39,12 +37,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   private def defaultZoneId = ZoneId.systemDefault()
 
   test("nanoseconds truncation") {
-    val tf = TimestampFormatter.getFractionFormatter(ZoneId.systemDefault())
+    val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String): Unit = {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultZoneId)
       assert(parsedTimestampOp.isDefined, "timestamp with nanoseconds was not parsed correctly")
-      assert(tf.format(parsedTimestampOp.get) === expectedParsedTime)
+      assert(DateTimeUtils.timestampToString(tf, parsedTimestampOp.get) === expectedParsedTime)
     }
 
     checkStringToTimestamp("2015-01-02 00:00:00.123456789", "2015-01-02 00:00:00.123456")
@@ -71,17 +69,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("us and julian day") {
-    val (d, ns) = toJulianDay(RebaseDateTime.rebaseGregorianToJulianMicros(0))
+    val (d, ns) = toJulianDay(0)
     assert(d === JULIAN_DAY_OF_EPOCH)
     assert(ns === 0)
-    assert(rebaseJulianToGregorianMicros(fromJulianDay(d, ns)) == 0L)
+    assert(fromJulianDay(d, ns) == 0L)
 
     Seq(Timestamp.valueOf("2015-06-11 10:10:10.100"),
       Timestamp.valueOf("2015-06-11 20:10:10.100"),
       Timestamp.valueOf("1900-06-11 20:10:10.100")).foreach { t =>
-      val (d, ns) = toJulianDay(RebaseDateTime.rebaseGregorianToJulianMicros(fromJavaTimestamp(t)))
+      val (d, ns) = toJulianDay(fromJavaTimestamp(t))
       assert(ns > 0)
-      val t1 = toJavaTimestamp(rebaseJulianToGregorianMicros(fromJulianDay(d, ns)))
+      val t1 = toJavaTimestamp(fromJulianDay(d, ns))
       assert(t.equals(t1))
     }
   }
@@ -123,7 +121,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String, zoneId: ZoneId = UTC): Option[Int] = {
+  private def toDate(s: String, zoneId: ZoneId = UTC): Option[SQLDate] = {
     stringToDate(UTF8String.fromString(s), zoneId)
   }
 
@@ -151,7 +149,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999 08").isEmpty)
   }
 
-  private def toTimestamp(str: String, zoneId: ZoneId): Option[Long] = {
+  private def toTimestamp(str: String, zoneId: ZoneId): Option[SQLTimestamp] = {
     stringToTimestamp(UTF8String.fromString(str), zoneId)
   }
 
@@ -605,17 +603,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
-  test("daysToMicros and microsToDays") {
-    val input = date(2015, 12, 31, 16, zid = LA)
-    assert(microsToDays(input, LA) === 16800)
-    assert(microsToDays(input, UTC) === 16801)
-    assert(microsToDays(-1 * MILLIS_PER_DAY + 1, UTC) == -1)
+  test("daysToMillis and millisToDays") {
+    val input = toMillis(date(2015, 12, 31, 16, zid = LA))
+    assert(millisToDays(input, LA) === 16800)
+    assert(millisToDays(input, UTC) === 16801)
+    assert(millisToDays(-1 * MILLIS_PER_DAY + 1, UTC) == -1)
 
-    var expected = date(2015, 12, 31, zid = LA)
-    assert(daysToMicros(16800, LA) === expected)
+    var expected = toMillis(date(2015, 12, 31, zid = LA))
+    assert(daysToMillis(16800, LA) === expected)
 
-    expected = date(2015, 12, 31, zid = UTC)
-    assert(daysToMicros(16800, UTC) === expected)
+    expected = toMillis(date(2015, 12, 31, zid = UTC))
+    assert(daysToMillis(16800, UTC) === expected)
 
     // There are some days are skipped entirely in some timezone, skip them here.
     val skipped_days = Map[String, Set[Int]](
@@ -632,16 +630,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         (1 to 1000).map(_ => (math.random() * 40000 - 20000).toInt)
       testingData.foreach { d =>
         if (!skipped.contains(d)) {
-          assert(microsToDays(daysToMicros(d, zid), zid) === d,
+          assert(millisToDays(daysToMillis(d, zid), zid) === d,
             s"Round trip of $d did not work in tz ${zid.getId}")
         }
       }
     }
   }
 
-  test("microsToMillis") {
-    assert(DateTimeUtils.microsToMillis(-9223372036844776001L) === -9223372036844777L)
-    assert(DateTimeUtils.microsToMillis(-157700927876544L) === -157700927877L)
+  test("toMillis") {
+    assert(DateTimeUtils.toMillis(-9223372036844776001L) === -9223372036844777L)
+    assert(DateTimeUtils.toMillis(-157700927876544L) === -157700927877L)
   }
 
   test("special timestamp values") {

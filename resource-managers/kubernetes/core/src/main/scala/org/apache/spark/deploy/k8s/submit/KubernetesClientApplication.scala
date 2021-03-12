@@ -16,23 +16,22 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.util.UUID
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-import scala.util.control.Breaks._
-import scala.util.control.NonFatal
+import java.io.StringWriter
+import java.util.{Collections, UUID}
+import java.util.Properties
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.Watcher.Action
+import scala.collection.mutable
+import scala.util.control.Breaks._
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -46,8 +45,7 @@ import org.apache.spark.util.Utils
 private[spark] case class ClientArguments(
     mainAppResource: MainAppResource,
     mainClass: String,
-    driverArgs: Array[String],
-    proxyUser: Option[String])
+    driverArgs: Array[String])
 
 private[spark] object ClientArguments {
 
@@ -55,7 +53,6 @@ private[spark] object ClientArguments {
     var mainAppResource: MainAppResource = JavaMainAppResource(None)
     var mainClass: Option[String] = None
     val driverArgs = mutable.ArrayBuffer.empty[String]
-    var proxyUser: Option[String] = None
 
     args.sliding(2, 2).toList.foreach {
       case Array("--primary-java-resource", primaryJavaResource: String) =>
@@ -68,8 +65,6 @@ private[spark] object ClientArguments {
         mainClass = Some(clazz)
       case Array("--arg", arg: String) =>
         driverArgs += arg
-      case Array("--proxy-user", user: String) =>
-        proxyUser = Some(user)
       case other =>
         val invalid = other.mkString(" ")
         throw new RuntimeException(s"Unknown arguments: $invalid")
@@ -80,8 +75,7 @@ private[spark] object ClientArguments {
     ClientArguments(
       mainAppResource,
       mainClass.get,
-      driverArgs.toArray,
-      proxyUser)
+      driverArgs.toArray)
   }
 }
 
@@ -104,11 +98,8 @@ private[spark] class Client(
 
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
-    val configMapName = KubernetesClientUtils.configMapNameDriver
-    val confFilesMap = KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName,
-      conf.sparkConf, resolvedDriverSpec.systemProperties)
-    val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap)
-
+    val configMapName = s"${conf.resourceNamePrefix}-driver-conf-map"
+    val configMap = buildConfigMap(configMapName, resolvedDriverSpec.systemProperties)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
     val resolvedDriverContainer = new ContainerBuilder(resolvedDriverSpec.pod.container)
@@ -117,7 +108,7 @@ private[spark] class Client(
         .withValue(SPARK_CONF_DIR_INTERNAL)
         .endEnv()
       .addNewVolumeMount()
-        .withName(SPARK_CONF_VOLUME_DRIVER)
+        .withName(SPARK_CONF_VOLUME)
         .withMountPath(SPARK_CONF_DIR_INTERNAL)
         .endVolumeMount()
       .build()
@@ -125,9 +116,8 @@ private[spark] class Client(
       .editSpec()
         .addToContainers(resolvedDriverContainer)
         .addNewVolume()
-          .withName(SPARK_CONF_VOLUME_DRIVER)
+          .withName(SPARK_CONF_VOLUME)
           .withNewConfigMap()
-            .withItems(KubernetesClientUtils.buildKeyToPathObjects(confFilesMap).asJava)
             .withName(configMapName)
             .endConfigMap()
           .endVolume()
@@ -139,7 +129,7 @@ private[spark] class Client(
     val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
     try {
       val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
-      addOwnerReference(createdDriverPod, otherKubernetesResources)
+      addDriverOwnerReference(createdDriverPod, otherKubernetesResources)
       kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
     } catch {
       case NonFatal(e) =>
@@ -167,6 +157,39 @@ private[spark] class Client(
       }
     }
   }
+
+  // Add a OwnerReference to the given resources making the driver pod an owner of them so when
+  // the driver pod is deleted, the resources are garbage collected.
+  private def addDriverOwnerReference(driverPod: Pod, resources: Seq[HasMetadata]): Unit = {
+    val driverPodOwnerReference = new OwnerReferenceBuilder()
+      .withName(driverPod.getMetadata.getName)
+      .withApiVersion(driverPod.getApiVersion)
+      .withUid(driverPod.getMetadata.getUid)
+      .withKind(driverPod.getKind)
+      .withController(true)
+      .build()
+    resources.foreach { resource =>
+      val originalMetadata = resource.getMetadata
+      originalMetadata.setOwnerReferences(Collections.singletonList(driverPodOwnerReference))
+    }
+  }
+
+  // Build a Config Map that will house spark conf properties in a single file for spark-submit
+  private def buildConfigMap(configMapName: String, conf: Map[String, String]): ConfigMap = {
+    val properties = new Properties()
+    conf.foreach { case (k, v) =>
+      properties.setProperty(k, v)
+    }
+    val propertiesWriter = new StringWriter()
+    properties.store(propertiesWriter,
+      s"Java properties built from Kubernetes config map with name: $configMapName")
+    new ConfigMapBuilder()
+      .withNewMetadata()
+        .withName(configMapName)
+        .endMetadata()
+      .addToData(SPARK_CONF_FILE_NAME, propertiesWriter.toString)
+      .build()
+  }
 }
 
 /**
@@ -190,8 +213,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       kubernetesAppId,
       clientArguments.mainAppResource,
       clientArguments.mainClass,
-      clientArguments.driverArgs,
-      clientArguments.proxyUser)
+      clientArguments.driverArgs)
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
     val master = KubernetesUtils.parseMasterUrl(sparkConf.get("spark.master"))

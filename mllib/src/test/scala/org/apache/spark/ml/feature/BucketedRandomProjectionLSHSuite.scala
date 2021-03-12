@@ -115,7 +115,7 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
     val brpModel = brp.fit(dataset)
 
     testTransformer[Tuple1[Vector]](dataset.toDF(), brpModel, "values") {
-      case Row(values: scala.collection.Seq[_]) =>
+      case Row(values: Seq[_]) =>
         assert(values.length === brp.getNumHashTables)
     }
   }

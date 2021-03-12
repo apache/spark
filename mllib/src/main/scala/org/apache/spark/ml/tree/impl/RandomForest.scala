@@ -825,7 +825,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     }
 
     val validFeatureSplits =
-      Iterator.range(0, binAggregates.metadata.numFeaturesPerNode).map { featureIndexIdx =>
+      Range(0, binAggregates.metadata.numFeaturesPerNode).view.map { featureIndexIdx =>
         featuresForNode.map(features => (featureIndexIdx, features(featureIndexIdx)))
           .getOrElse((featureIndexIdx, featureIndexIdx))
       }.withFilter { case (_, featureIndex) =>

@@ -43,6 +43,8 @@ $ ./bin/spark-submit --driver-class-path /path/to/example/jar \
 {u'favorite_color': None, u'name': u'Alyssa'}
 {u'favorite_color': u'red', u'name': u'Ben'}
 """
+from __future__ import print_function
+
 import sys
 
 from functools import reduce

@@ -20,6 +20,8 @@ A K-means clustering program using MLlib.
 
 This example requires NumPy (http://www.numpy.org/).
 """
+from __future__ import print_function
+
 import sys
 
 import numpy as np

@@ -32,8 +32,8 @@ import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
-import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
+import org.apache.spark.sql.{FakeFileSystemRequiringDSOption, Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
@@ -41,10 +41,8 @@ import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDataSourceSuite {
+abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
   import testImplicits._
-
-  override protected def dataSourceFormat = "orc"
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -122,7 +120,8 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
     }
   }
 
-  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHiveOrc: Boolean): Unit = {
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean,
+      isHive23: Boolean = false): Unit = {
     val tableName = "orcTable"
 
     withTempDir { dir =>
@@ -175,7 +174,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
           // Hive 0.11 and RLE v2 is introduced in Hive 0.12 ORC with more improvements.
           // For more details, see https://orc.apache.org/specification/
           assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
-          if (isSelective || isHiveOrc) {
+          if (isSelective || isHive23) {
             assert(stripe.getColumns(2).getKind === DIRECT_V2)
           } else {
             assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
@@ -539,6 +538,21 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
       }
     }
   }
+
+  test("SPARK-33094: should propagate Hadoop config from DS options to underlying file system") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      Seq(false, true).foreach { mergeSchema =>
+        withTempPath { dir =>
+          val path = dir.getAbsolutePath
+          val conf = Map("ds_option" -> "value", "mergeSchema" -> mergeSchema.toString)
+          spark.range(1).write.options(conf).orc(path)
+          checkAnswer(spark.read.options(conf).orc(path), Row(0))
+        }
+      }
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSparkSession {
@@ -582,7 +596,7 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
   }
 
   test("Enforce direct encoding column-wise selectively") {
-    testSelectiveDictionaryEncoding(isSelective = true, isHiveOrc = false)
+    testSelectiveDictionaryEncoding(isSelective = true)
   }
 
   test("SPARK-11412 read and merge orc schemas in parallel") {

@@ -8,7 +8,6 @@
 *.swp
 *~
 .DS_Store
-.bsp/
 .cache
 .classpath
 .ensime
@@ -65,11 +64,9 @@ python/lib/pyspark.zip
 python/.eggs/
 python/deps
 python/docs/_site/
-python/docs/source/reference/api/
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
-.mypy_cache/
 reports/
 scalastyle-on-compile.generated.xml
 scalastyle-output.xml

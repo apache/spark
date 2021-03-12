@@ -50,4 +50,3 @@ UNCACHE TABLE t1;
 * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
 * [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
 * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
-* [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)

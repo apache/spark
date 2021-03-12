@@ -21,15 +21,14 @@ import org.apache.commons.text.similarity.LevenshteinDistance
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 // scalastyle:off
-import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.matchers.must.Matchers
+import org.scalatest.{FunSuite, Matchers}
 
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 /**
  * This TestSuite utilize ScalaCheck to generate randomized inputs for UTF8String testing.
  */
-class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenPropertyChecks with Matchers {
+class UTF8StringPropertyCheckSuite extends FunSuite with ScalaCheckDrivenPropertyChecks with Matchers {
 // scalastyle:on
 
   test("toString") {
@@ -192,7 +191,7 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
     }
   }
 
-  val nullableSeq = Gen.listOf(Gen.oneOf[String](null: String, randomString))
+  val nullalbeSeq = Gen.listOf(Gen.oneOf[String](null: String, randomString))
 
   test("concat") {
     def concat(origin: Seq[String]): String =
@@ -201,7 +200,7 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
     forAll { (inputs: Seq[String]) =>
       assert(UTF8String.concat(inputs.map(toUTF8): _*) === toUTF8(inputs.mkString))
     }
-    forAll (nullableSeq) { (inputs: Seq[String]) =>
+    forAll (nullalbeSeq) { (inputs: Seq[String]) =>
       assert(UTF8String.concat(inputs.map(toUTF8): _*) === toUTF8(concat(inputs)))
     }
   }
@@ -216,7 +215,7 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
       assert(UTF8String.concatWs(toUTF8(sep), inputs.map(toUTF8): _*) ===
         toUTF8(inputs.mkString(sep)))
     }
-    forAll(randomString, nullableSeq) {(sep: String, inputs: Seq[String]) =>
+    forAll(randomString, nullalbeSeq) {(sep: String, inputs: Seq[String]) =>
       assert(UTF8String.concatWs(toUTF8(sep), inputs.map(toUTF8): _*) ===
         toUTF8(concatWs(sep, inputs)))
     }

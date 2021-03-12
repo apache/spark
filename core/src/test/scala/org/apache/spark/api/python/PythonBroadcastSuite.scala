@@ -21,8 +21,7 @@ import java.io.{File, PrintWriter}
 
 import scala.io.Source
 
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.Matchers
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Kryo._

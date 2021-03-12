@@ -69,9 +69,8 @@ class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecutionSui
     }
 
     val output = captured.toString()
-    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
     assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
-      s"""== BroadcastExchange $hashedModeString, [id=#x] ==
+      """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])), [id=#x] ==
         |Tuples output: 0
         | id LongType: {}
         |== WholeStageCodegen (1) ==

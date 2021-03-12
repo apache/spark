@@ -77,13 +77,11 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
-  // We can't directly use `/` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
-      DecimalPrecision.decimalAndDecimal(
-        Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
+      DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
     case _ =>
-      Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
+      sum.cast(resultType) / count.cast(resultType)
   }
 
   override lazy val updateExpressions: Seq[Expression] = Seq(

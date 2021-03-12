@@ -135,12 +135,11 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     }
     // MAP<primitive_type, data_type>
     withTable("hive_serde") {
-      hiveClient.runSqlHive(
-        s"CREATE TABLE hive_serde (c1 MAP <STRING, STRING>) STORED AS $fileFormat")
-      hiveClient.runSqlHive("INSERT INTO TABLE hive_serde SELECT MAP('1', 'a') FROM (SELECT 1) t")
-      checkAnswer(spark.table("hive_serde"), Row(Map("1" -> "a")))
-      spark.sql("INSERT INTO TABLE hive_serde SELECT MAP('2', 'b')")
-      checkAnswer(spark.table("hive_serde"), Seq(Row(Map("1" -> "a")), Row(Map("2" -> "b"))))
+      hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 MAP <INT, STRING>) STORED AS $fileFormat")
+      hiveClient.runSqlHive("INSERT INTO TABLE hive_serde SELECT MAP(1, 'a') FROM (SELECT 1) t")
+      checkAnswer(spark.table("hive_serde"), Row(Map(1 -> "a")))
+      spark.sql("INSERT INTO TABLE hive_serde SELECT MAP(2, 'b')")
+      checkAnswer(spark.table("hive_serde"), Seq(Row(Map(1 -> "a")), Row(Map(2 -> "b"))))
     }
 
     // STRUCT<col_name : data_type [COMMENT col_comment], ...>
@@ -155,7 +154,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     }
   }
 
-  Seq("SEQUENCEFILE", "TEXTFILE", "RCFILE", "ORC", "PARQUET", "AVRO").foreach { fileFormat =>
+  Seq("PARQUET", "ORC", "TEXTFILE").foreach { fileFormat =>
     test(s"Read/Write Hive $fileFormat serde table") {
       // Numeric Types
       checkNumericTypes(fileFormat, "TINYINT", 2)

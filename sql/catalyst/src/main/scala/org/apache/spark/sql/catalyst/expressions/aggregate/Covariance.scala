@@ -19,14 +19,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * Compute the covariance between two expressions.
  * When applied on empty data (i.e., count is zero), it returns NULL.
  */
-abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Boolean)
+abstract class Covariance(x: Expression, y: Expression)
   extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(x, y)
@@ -38,13 +37,6 @@ abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Bool
   protected val xAvg = AttributeReference("xAvg", DoubleType, nullable = false)()
   protected val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
   protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
-
-  protected def divideByZeroEvalResult: Expression = {
-    if (nullOnDivideByZero) Literal.create(null, DoubleType) else Double.NaN
-  }
-
-  override def stringArgs: Iterator[Any] =
-    super.stringArgs.filter(_.isInstanceOf[Expression])
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck)
 
@@ -96,15 +88,7 @@ abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Bool
   """,
   group = "agg_funcs",
   since = "2.0.0")
-case class CovPopulation(
-    left: Expression,
-    right: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends Covariance(left, right, nullOnDivideByZero) {
-
-  def this(left: Expression, right: Expression) =
-    this(left, right, !SQLConf.get.legacyStatisticalAggregate)
-
+case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType), ck / n)
   }
@@ -121,18 +105,10 @@ case class CovPopulation(
   """,
   group = "agg_funcs",
   since = "2.0.0")
-case class CovSample(
-    left: Expression,
-    right: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends Covariance(left, right, nullOnDivideByZero) {
-
-  def this(left: Expression, right: Expression) =
-    this(left, right, !SQLConf.get.legacyStatisticalAggregate)
-
+case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, divideByZeroEvalResult, ck / (n - 1.0)))
+      If(n === 1.0, Double.NaN, ck / (n - 1.0)))
   }
   override def prettyName: String = "covar_samp"
 }

@@ -20,12 +20,16 @@ import os
 import sys
 from tempfile import NamedTemporaryFile
 import threading
-import pickle
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import ChunkedStream, pickle_protocol
-from pyspark.util import print_exec
+from pyspark.util import _exception_message, print_exec
 
+if sys.version < '3':
+    import cPickle as pickle
+else:
+    import pickle
+    unicode = str
 
 __all__ = ['Broadcast']
 
@@ -47,8 +51,8 @@ class Broadcast(object):
     A broadcast variable created with :meth:`SparkContext.broadcast`.
     Access its value through :attr:`value`.
 
-    Examples
-    --------
+    Examples:
+
     >>> from pyspark.context import SparkContext
     >>> sc = SparkContext('local', 'test')
     >>> b = sc.broadcast([1, 2, 3, 4, 5])
@@ -109,7 +113,7 @@ class Broadcast(object):
             raise
         except Exception as e:
             msg = "Could not serialize broadcast: %s: %s" \
-                  % (e.__class__.__name__, str(e))
+                  % (e.__class__.__name__, _exception_message(e))
             print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
         f.close()
@@ -148,10 +152,7 @@ class Broadcast(object):
         broadcast is used after this is called, it will need to be
         re-sent to each executor.
 
-        Parameters
-        ----------
-        blocking : bool, optional
-            Whether to block until unpersisting has completed
+        :param blocking: Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
             raise Exception("Broadcast can only be unpersisted in driver")
@@ -166,11 +167,6 @@ class Broadcast(object):
         .. versionchanged:: 3.0.0
            Added optional argument `blocking` to specify whether to block until all
            blocks are deleted.
-
-        Parameters
-        ----------
-        blocking : bool, optional
-            Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
             raise Exception("Broadcast can only be destroyed in driver")

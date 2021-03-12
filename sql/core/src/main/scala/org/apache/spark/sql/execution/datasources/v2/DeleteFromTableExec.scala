@@ -24,12 +24,10 @@ import org.apache.spark.sql.sources.Filter
 
 case class DeleteFromTableExec(
     table: SupportsDelete,
-    condition: Array[Filter],
-    refreshCache: () => Unit) extends V2CommandExec {
+    condition: Array[Filter]) extends V2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     table.deleteWhere(condition)
-    refreshCache()
     Seq.empty
   }
 

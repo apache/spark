@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, GenericRowWithSchema}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog}
 
 /**
  * Physical plan node for showing table properties.
@@ -29,6 +29,8 @@ case class ShowTablePropertiesExec(
     output: Seq[Attribute],
     catalogTable: Table,
     propertyKey: Option[String]) extends V2CommandExec {
+
+  override def producedAttributes: AttributeSet = AttributeSet(output)
 
   override protected def run(): Seq[InternalRow] = {
     import scala.collection.JavaConverters._

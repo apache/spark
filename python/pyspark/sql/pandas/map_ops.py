@@ -16,6 +16,7 @@
 #
 import sys
 
+from pyspark import since
 from pyspark.rdd import PythonEvalType
 
 
@@ -25,6 +26,7 @@ class PandasMapOpsMixin(object):
     can use this class.
     """
 
+    @since(3.0)
     def mapInPandas(self, func, schema):
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -38,19 +40,11 @@ class PandasMapOpsMixin(object):
         Each `pandas.DataFrame` size can be controlled by
         `spark.sql.execution.arrow.maxRecordsPerBatch`.
 
-        .. versionadded:: 3.0.0
-
-        Parameters
-        ----------
-        func : function
-            a Python native function that takes an iterator of `pandas.DataFrame`\\s, and
+        :param func: a Python native function that takes an iterator of `pandas.DataFrame`\\s, and
             outputs an iterator of `pandas.DataFrame`\\s.
-        schema : :class:`pyspark.sql.types.DataType` or str
-            the return type of the `func` in PySpark. The value can be either a
+        :param schema: the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
-        Examples
-        --------
         >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
         >>> def filter_func(iterator):
@@ -63,13 +57,9 @@ class PandasMapOpsMixin(object):
         |  1| 21|
         +---+---+
 
-        Notes
-        -----
-        This API is experimental
+        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
-        See Also
-        --------
-        pyspark.sql.functions.pandas_udf
+        .. note:: Experimental
         """
         from pyspark.sql import DataFrame
         from pyspark.sql.pandas.functions import pandas_udf

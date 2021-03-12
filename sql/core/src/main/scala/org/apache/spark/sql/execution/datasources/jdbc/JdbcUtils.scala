@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
+import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.time.{Instant, LocalDate}
 import java.util.Locale
 
+import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -35,8 +36,6 @@ import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
-import org.apache.spark.sql.connector.catalog.TableChange
-import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
@@ -58,10 +57,17 @@ object JdbcUtils extends Logging {
     val driverClass: String = options.driverClass
     () => {
       DriverRegistry.register(driverClass)
-      val driver: Driver = DriverRegistry.get(driverClass)
-      val connection = ConnectionProvider.create(driver, options.parameters)
+      val driver: Driver = DriverManager.getDrivers.asScala.collectFirst {
+        case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
+        case d if d.getClass.getCanonicalName == driverClass => d
+      }.getOrElse {
+        throw new IllegalStateException(
+          s"Did not find registered driver with class $driverClass")
+      }
+      val connection: Connection = driver.connect(options.url, options.asConnectionProperties)
       require(connection != null,
         s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+
       connection
     }
   }
@@ -90,7 +96,13 @@ object JdbcUtils extends Logging {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
-    executeStatement(conn, options, s"DROP TABLE $table")
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      statement.executeUpdate(s"DROP TABLE $table")
+    } finally {
+      statement.close()
+    }
   }
 
   /**
@@ -174,7 +186,7 @@ object JdbcUtils extends Logging {
     }
   }
 
-  def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
@@ -746,16 +758,15 @@ object JdbcUtils extends Logging {
    * Compute the schema string for this RDD.
    */
   def schemaString(
-      schema: StructType,
-      caseSensitive: Boolean,
+      df: DataFrame,
       url: String,
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     val userSpecifiedColTypesMap = createTableColumnTypes
-      .map(parseUserSpecifiedCreateTableColumnTypes(schema, caseSensitive, _))
+      .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
       .getOrElse(Map.empty[String, String])
-    schema.fields.foreach { field =>
+    df.schema.fields.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
@@ -771,15 +782,20 @@ object JdbcUtils extends Logging {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
-      schema: StructType,
-      caseSensitive: Boolean,
+      df: DataFrame,
       createTableColumnTypes: String): Map[String, String] = {
-    val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
-    val nameEquality = if (caseSensitive) {
-      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-    } else {
-      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    def typeName(f: StructField): String = {
+      // char/varchar gets translated to string type. Real data type specified by the user
+      // is available in the field metadata as HIVE_TYPE_STRING
+      if (f.metadata.contains(HIVE_TYPE_STRING)) {
+        f.metadata.getString(HIVE_TYPE_STRING)
+      } else {
+        f.dataType.catalogString
+      }
     }
+
+    val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
+    val nameEquality = df.sparkSession.sessionState.conf.resolver
 
     // checks duplicate columns in the user specified column types.
     SchemaUtils.checkColumnNameDuplication(
@@ -787,15 +803,16 @@ object JdbcUtils extends Logging {
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
-      schema.find(f => nameEquality(f.name, col)).getOrElse {
+      df.schema.find(f => nameEquality(f.name, col)).getOrElse {
         throw new AnalysisException(
           s"createTableColumnTypes option column $col not found in schema " +
-            schema.catalogString)
+            df.schema.catalogString)
       }
     }
 
-    val userSchemaMap = userSchema.fields.map(f => f.name -> f.dataType.catalogString).toMap
-    if (caseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
+    val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
+    val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
   /**
@@ -809,10 +826,8 @@ object JdbcUtils extends Logging {
     if (null != customSchema && customSchema.nonEmpty) {
       val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
-      SchemaUtils.checkSchemaColumnNameDuplication(
-        userSchema,
-        "in the customSchema option value",
-        nameEquality)
+      SchemaUtils.checkColumnNameDuplication(
+        userSchema.map(_.name), "in the customSchema option value", nameEquality)
 
       // This is resolved by names, use the custom filed dataType to replace the default dataType.
       val newSchema = tableSchema.map { col =>
@@ -862,131 +877,17 @@ object JdbcUtils extends Logging {
    */
   def createTable(
       conn: Connection,
-      tableName: String,
-      schema: StructType,
-      caseSensitive: Boolean,
+      df: DataFrame,
       options: JdbcOptionsInWrite): Unit = {
-    val dialect = JdbcDialects.get(options.url)
     val strSchema = schemaString(
-      schema, caseSensitive, options.url, options.createTableColumnTypes)
+      df, options.url, options.createTableColumnTypes)
+    val table = options.table
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-    val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
-    executeStatement(conn, options, sql)
-    if (options.tableComment.nonEmpty) {
-      try {
-        executeStatement(
-          conn, options, dialect.getTableCommentQuery(tableName, options.tableComment))
-      } catch {
-        case e: Exception =>
-          logWarning("Cannot create JDBC table comment. The table comment will be ignored.")
-      }
-    }
-  }
-
-  /**
-   * Rename a table from the JDBC database.
-   */
-  def renameTable(
-      conn: Connection,
-      oldTable: String,
-      newTable: String,
-      options: JDBCOptions): Unit = {
-    val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, dialect.renameTable(oldTable, newTable))
-  }
-
-  /**
-   * Update a table from the JDBC database.
-   */
-  def alterTable(
-      conn: Connection,
-      tableName: String,
-      changes: Seq[TableChange],
-      options: JDBCOptions): Unit = {
-    val dialect = JdbcDialects.get(options.url)
-    val metaData = conn.getMetaData
-    if (changes.length == 1) {
-      executeStatement(conn, options, dialect.alterTable(tableName, changes,
-        metaData.getDatabaseMajorVersion)(0))
-    } else {
-      if (!metaData.supportsTransactions) {
-        throw new SQLFeatureNotSupportedException("The target JDBC server does not support " +
-          "transaction and can only support ALTER TABLE with a single action.")
-      } else {
-        conn.setAutoCommit(false)
-        val statement = conn.createStatement
-        try {
-          statement.setQueryTimeout(options.queryTimeout)
-          for (sql <- dialect.alterTable(tableName, changes, metaData.getDatabaseMajorVersion)) {
-            statement.executeUpdate(sql)
-          }
-          conn.commit()
-        } catch {
-          case e: Exception =>
-            if (conn != null) conn.rollback()
-            throw e
-        } finally {
-          statement.close()
-          conn.setAutoCommit(true)
-        }
-      }
-    }
-  }
-
-  /**
-   * Creates a namespace.
-   */
-  def createNamespace(
-      conn: Connection,
-      options: JDBCOptions,
-      namespace: String,
-      comment: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
-    if (!comment.isEmpty) createNamespaceComment(conn, options, namespace, comment)
-  }
-
-  def createNamespaceComment(
-      conn: Connection,
-      options: JDBCOptions,
-      namespace: String,
-      comment: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
-    try {
-      executeStatement(
-        conn, options, dialect.getSchemaCommentQuery(namespace, comment))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot create JDBC catalog comment. The catalog comment will be ignored.")
-    }
-  }
-
-  def removeNamespaceComment(
-      conn: Connection,
-      options: JDBCOptions,
-      namespace: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
-    try {
-      executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot drop JDBC catalog comment.")
-    }
-  }
-
-  /**
-   * Drops a namespace from the JDBC database.
-   */
-  def dropNamespace(conn: Connection, options: JDBCOptions, namespace: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}")
-  }
-
-  private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
+    val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)

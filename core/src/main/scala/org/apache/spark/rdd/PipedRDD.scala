@@ -238,7 +238,7 @@ private object PipedRDD {
     while(tok.hasMoreElements) {
       buf += tok.nextToken()
     }
-    buf.toSeq
+    buf
   }
 
   val STDIN_WRITER_THREAD_PREFIX = "stdin writer for"

@@ -22,7 +22,6 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
@@ -59,10 +58,9 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
-      val tableSchema = CharVarcharUtils.getRawSchema(outputColumns.toStructType)
       assert(tableDesc.schema.isEmpty)
       catalog.createTable(
-        tableDesc.copy(schema = tableSchema), ignoreIfExists = false)
+        tableDesc.copy(schema = outputColumns.toStructType), ignoreIfExists = false)
 
       try {
         // Read back the metadata of the table which was created just now.

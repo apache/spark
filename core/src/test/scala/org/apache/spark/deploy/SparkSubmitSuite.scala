@@ -29,10 +29,8 @@ import com.google.common.io.ByteStreams
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
-import org.scalatest.BeforeAndAfterEach
+import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
@@ -335,43 +333,6 @@ class SparkSubmitSuite
     sys.props("SPARK_SUBMIT") should be ("true")
   }
 
-  test("SPARK-33530: handles standalone mode with archives") {
-    val clArgs = Seq(
-      "--master", "spark://localhost:1234",
-      "--executor-memory", "5g",
-      "--executor-cores", "5",
-      "--class", "org.SomeClass",
-      "--jars", "one.jar,two.jar,three.jar",
-      "--driver-memory", "4g",
-      "--files", "file1.txt,file2.txt",
-      "--archives", "archive1.zip,archive2.jar",
-      "--num-executors", "6",
-      "--name", "beauty",
-      "--conf", "spark.ui.enabled=false",
-      "thejar.jar",
-      "arg1", "arg2")
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
-    val childArgsStr = childArgs.mkString(" ")
-    childArgsStr should include ("arg1 arg2")
-    mainClass should be ("org.SomeClass")
-
-    classpath(0) should endWith ("thejar.jar")
-    classpath(1) should endWith ("one.jar")
-    classpath(2) should endWith ("two.jar")
-    classpath(3) should endWith ("three.jar")
-
-    conf.get("spark.executor.memory") should be ("5g")
-    conf.get("spark.driver.memory") should be ("4g")
-    conf.get("spark.executor.cores") should be ("5")
-    conf.get("spark.jars") should include regex (".*one.jar,.*two.jar,.*three.jar")
-    conf.get("spark.files") should include regex (".*file1.txt,.*file2.txt")
-    conf.get("spark.archives") should include regex (".*archive1.zip,.*archive2.jar")
-    conf.get("spark.app.name") should be ("beauty")
-    conf.get(UI_ENABLED) should be (false)
-    sys.props("SPARK_SUBMIT") should be ("true")
-  }
-
   test("handles standalone cluster mode") {
     testStandaloneCluster(useRest = true)
   }
@@ -469,7 +430,6 @@ class SparkSubmitSuite
   test("handles k8s cluster mode") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",
-      "--proxy-user", "test.user",
       "--master", "k8s://host:port",
       "--executor-memory", "5g",
       "--class", "org.SomeClass",
@@ -485,7 +445,6 @@ class SparkSubmitSuite
     childArgsMap.get("--primary-java-resource") should be (Some("file:/home/thejar.jar"))
     childArgsMap.get("--main-class") should be (Some("org.SomeClass"))
     childArgsMap.get("--arg") should be (Some("arg1"))
-    childArgsMap.get("--proxy-user") should be (Some("test.user"))
     mainClass should be (KUBERNETES_CLUSTER_SUBMIT_CLASS)
     classpath should have length (0)
     conf.get("spark.master") should be ("k8s://https://host:port")
@@ -1250,12 +1209,12 @@ class SparkSubmitSuite
     testRemoteResources(enableHttpFs = true)
   }
 
-  test("force download from forced schemes") {
-    testRemoteResources(enableHttpFs = true, forceDownloadSchemes = Seq("http"))
+  test("force download from blacklisted schemes") {
+    testRemoteResources(enableHttpFs = true, blacklistSchemes = Seq("http"))
   }
 
   test("force download for all the schemes") {
-    testRemoteResources(enableHttpFs = true, forceDownloadSchemes = Seq("*"))
+    testRemoteResources(enableHttpFs = true, blacklistSchemes = Seq("*"))
   }
 
   test("SPARK-32119: Jars and files should be loaded when Executors launch for plugins") {
@@ -1340,7 +1299,7 @@ class SparkSubmitSuite
 
   private def testRemoteResources(
       enableHttpFs: Boolean,
-      forceDownloadSchemes: Seq[String] = Nil): Unit = {
+      blacklistSchemes: Seq[String] = Nil): Unit = {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     if (enableHttpFs) {
@@ -1357,8 +1316,8 @@ class SparkSubmitSuite
     val tmpHttpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
     val tmpHttpJarPath = s"http://${new File(tmpHttpJar.toURI).getAbsolutePath}"
 
-    val forceDownloadArgs = if (forceDownloadSchemes.nonEmpty) {
-      Seq("--conf", s"spark.yarn.dist.forceDownloadSchemes=${forceDownloadSchemes.mkString(",")}")
+    val forceDownloadArgs = if (blacklistSchemes.nonEmpty) {
+      Seq("--conf", s"spark.yarn.dist.forceDownloadSchemes=${blacklistSchemes.mkString(",")}")
     } else {
       Nil
     }
@@ -1376,19 +1335,19 @@ class SparkSubmitSuite
 
     val jars = conf.get("spark.yarn.dist.jars").split(",").toSet
 
-    def isSchemeForcedDownload(scheme: String) = {
-      forceDownloadSchemes.contains("*") || forceDownloadSchemes.contains(scheme)
+    def isSchemeBlacklisted(scheme: String) = {
+      blacklistSchemes.contains("*") || blacklistSchemes.contains(scheme)
     }
 
-    if (!isSchemeForcedDownload("s3")) {
+    if (!isSchemeBlacklisted("s3")) {
       assert(jars.contains(tmpS3JarPath))
     }
 
-    if (enableHttpFs && forceDownloadSchemes.isEmpty) {
+    if (enableHttpFs && blacklistSchemes.isEmpty) {
       // If Http FS is supported by yarn service, the URI of remote http resource should
       // still be remote.
       assert(jars.contains(tmpHttpJarPath))
-    } else if (!enableHttpFs || isSchemeForcedDownload("http")) {
+    } else if (!enableHttpFs || isSchemeBlacklisted("http")) {
       // If Http FS is not supported by yarn service, or http scheme is configured to be force
       // downloading, the URI of remote http resource should be changed to a local one.
       val jarName = new File(tmpHttpJar.toURI).getName

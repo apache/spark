@@ -332,7 +332,8 @@ class DirectKafkaStreamSuite
   }
 
   // Test to verify the offset ranges can be recovered from the checkpoints
-  test("offset recovery") {
+  // TODO (SPARK-31722): re-enable it
+  ignore("offset recovery") {
     val topic = "recovery"
     kafkaTestUtils.createTopic(topic)
     testDir = Utils.createTempDir()
@@ -419,7 +420,8 @@ class DirectKafkaStreamSuite
   }
 
   // Test to verify the offsets can be recovered from Kafka
-  test("offset recovery from kafka") {
+  // TODO (SPARK-31722): re-enable it
+  ignore("offset recovery from kafka") {
     val topic = "recoveryfromkafka"
     kafkaTestUtils.createTopic(topic)
 

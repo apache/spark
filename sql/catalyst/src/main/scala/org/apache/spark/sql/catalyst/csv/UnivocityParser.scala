@@ -25,11 +25,10 @@ import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -99,11 +98,7 @@ class UnivocityParser(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
-  private val csvFilters = if (SQLConf.get.csvFilterPushDown) {
-    new OrderedFilters(filters, requiredSchema)
-  } else {
-    new NoopFilters
-  }
+  private val csvFilters = new CSVFilters(filters, requiredSchema)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -191,7 +186,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
-            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
             DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
         }
       }
@@ -204,7 +199,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
-            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
             DateTimeUtils.stringToDate(str, options.zoneId).getOrElse(throw e)
         }
       }

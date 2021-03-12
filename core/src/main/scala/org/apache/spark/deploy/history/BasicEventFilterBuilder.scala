@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkContext
 import org.apache.spark.deploy.history.EventFilter.FilterStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
@@ -159,8 +160,6 @@ private[spark] class BasicEventFilter(
     case e: SparkListenerExecutorRemoved => liveExecutors.contains(e.executorId)
     case e: SparkListenerExecutorBlacklisted => liveExecutors.contains(e.executorId)
     case e: SparkListenerExecutorUnblacklisted => liveExecutors.contains(e.executorId)
-    case e: SparkListenerExecutorExcluded => liveExecutors.contains(e.executorId)
-    case e: SparkListenerExecutorUnexcluded => liveExecutors.contains(e.executorId)
     case e: SparkListenerStageExecutorMetrics => liveExecutors.contains(e.execId)
     case e: SparkListenerBlockManagerAdded => acceptBlockManagerEvent(e.blockManagerId)
     case e: SparkListenerBlockManagerRemoved => acceptBlockManagerEvent(e.blockManagerId)

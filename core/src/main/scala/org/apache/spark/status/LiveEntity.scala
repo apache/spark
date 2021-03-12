@@ -28,12 +28,12 @@ import com.google.common.collect.Interners
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AccumulatorContext, Utils}
+import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -245,21 +245,6 @@ private class LiveTask(
 
 }
 
-private class LiveResourceProfile(
-    val resourceProfileId: Int,
-    val executorResources: Map[String, ExecutorResourceRequest],
-    val taskResources: Map[String, TaskResourceRequest],
-    val maxTasksPerExecutor: Option[Int]) extends LiveEntity {
-
-  def toApi(): v1.ResourceProfileInfo = {
-    new v1.ResourceProfileInfo(resourceProfileId, executorResources, taskResources)
-  }
-
-  override protected def doUpdate(): Any = {
-    new ResourceProfileWrapper(toApi())
-  }
-}
-
 private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extends LiveEntity {
 
   var hostPort: String = null
@@ -286,8 +271,8 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
   var totalInputBytes = 0L
   var totalShuffleRead = 0L
   var totalShuffleWrite = 0L
-  var isExcluded = false
-  var excludedInStages: Set[Int] = TreeSet()
+  var isBlacklisted = false
+  var blacklistedInStages: Set[Int] = TreeSet()
 
   var executorLogs = Map[String, String]()
   var attributes = Map[String, String]()
@@ -300,14 +285,12 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
   var usedOnHeap = 0L
   var usedOffHeap = 0L
 
-  var resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-
   def hasMemoryInfo: Boolean = totalOnHeap >= 0L
 
   // peak values for executor level metrics
   val peakExecutorMetrics = new ExecutorMetrics()
 
-  def hostname: String = if (host != null) host else Utils.parseHostPort(hostPort)._1
+  def hostname: String = if (host != null) host else hostPort.split(":")(0)
 
   override protected def doUpdate(): Any = {
     val memoryMetrics = if (totalOnHeap >= 0) {
@@ -334,20 +317,17 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
-      isExcluded,
+      isBlacklisted,
       maxMemory,
       addTime,
       Option(removeTime),
       Option(removeReason),
       executorLogs,
       memoryMetrics,
-      excludedInStages,
+      blacklistedInStages,
       Some(peakExecutorMetrics).filter(_.isSet),
       attributes,
-      resources,
-      resourceProfileId,
-      isExcluded,
-      excludedInStages)
+      resources)
     new ExecutorSummaryWrapper(info)
   }
 }
@@ -363,11 +343,9 @@ private class LiveExecutorStageSummary(
   var succeededTasks = 0
   var failedTasks = 0
   var killedTasks = 0
-  var isExcluded = false
+  var isBlacklisted = false
 
   var metrics = createMetrics(default = 0L)
-
-  val peakExecutorMetrics = new ExecutorMetrics()
 
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(
@@ -385,9 +363,7 @@ private class LiveExecutorStageSummary(
       metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
-      isExcluded,
-      Some(peakExecutorMetrics).filter(_.isSet),
-      isExcluded)
+      isBlacklisted)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
 
@@ -424,9 +400,7 @@ private class LiveStage extends LiveEntity {
 
   val activeTasksPerExecutor = new HashMap[String, Int]().withDefaultValue(0)
 
-  var excludedExecutors = new HashSet[String]()
-
-  val peakExecutorMetrics = new ExecutorMetrics()
+  var blackListedExecutors = new HashSet[String]()
 
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false
@@ -491,9 +465,7 @@ private class LiveStage extends LiveEntity {
       accumulatorUpdates = newAccumulatorInfos(info.accumulables.values),
       tasks = None,
       executorSummary = None,
-      killedTasksSummary = killedSummary,
-      resourceProfileId = info.resourceProfileId,
-      Some(peakExecutorMetrics).filter(_.isSet))
+      killedTasksSummary = killedSummary)
   }
 
   override protected def doUpdate(): Any = {

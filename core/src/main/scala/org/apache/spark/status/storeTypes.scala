@@ -26,7 +26,6 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.KVIndex
 
 private[spark] case class AppStatusStoreMetadata(version: Long)
@@ -58,7 +57,7 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
   private def active: Boolean = info.isActive
 
   @JsonIgnore @KVIndex("host")
-  val host: String = Utils.parseHostPort(info.hostPort)._1
+  val host: String = info.hostPort.split(":")(0)
 
 }
 
@@ -372,13 +371,6 @@ private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
 
   @JsonIgnore @KVIndex("cached")
   def cached: Boolean = info.numCachedPartitions > 0
-
-}
-
-private[spark] class ResourceProfileWrapper(val rpInfo: ResourceProfileInfo) {
-
-  @JsonIgnore @KVIndex
-  def id: Int = rpInfo.id
 
 }
 

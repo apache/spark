@@ -24,17 +24,19 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, 
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 
 class LookupFunctionsSuite extends PlanTest {
 
   test("SPARK-23486: the functionExists for the Persistent function check") {
     val externalCatalog = new CustomInMemoryCatalog
-    val catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin)
+    val conf = new SQLConf()
+    val catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin, conf)
     val analyzer = {
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI("loc"), Map.empty),
         ignoreIfExists = false)
-      new Analyzer(catalog)
+      new Analyzer(catalog, conf)
     }
 
     def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
@@ -54,13 +56,14 @@ class LookupFunctionsSuite extends PlanTest {
 
   test("SPARK-23486: the functionExists for the Registered function check") {
     val externalCatalog = new InMemoryCatalog
+    val conf = new SQLConf()
     val customerFunctionReg = new CustomerFunctionRegistry
-    val catalog = new SessionCatalog(externalCatalog, customerFunctionReg)
+    val catalog = new SessionCatalog(externalCatalog, customerFunctionReg, conf)
     val analyzer = {
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI("loc"), Map.empty),
         ignoreIfExists = false)
-      new Analyzer(catalog)
+      new Analyzer(catalog, conf)
     }
 
     def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))

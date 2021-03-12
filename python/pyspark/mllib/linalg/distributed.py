@@ -21,6 +21,9 @@ Package for distributed linear algebra.
 
 import sys
 
+if sys.version >= '3':
+    long = int
+
 from py4j.java_gateway import JavaObject
 
 from pyspark import RDD, since
@@ -55,22 +58,16 @@ class RowMatrix(DistributedMatrix):
     Represents a row-oriented distributed Matrix with no meaningful
     row indices.
 
-
-    Parameters
-    ----------
-    rows : :py:class:`pyspark.RDD` or :py:class:`pyspark.sql.DataFrame`
-        An RDD or DataFrame of vectors. If a DataFrame is provided, it must have a single
-        vector typed column.
-    numRows : int, optional
-        Number of rows in the matrix. A non-positive
-        value means unknown, at which point the number
-        of rows will be determined by the number of
-        records in the `rows` RDD.
-    numCols : int, optional
-        Number of columns in the matrix. A non-positive
-        value means unknown, at which point the number
-        of columns will be determined by the size of
-        the first row.
+    :param rows: An RDD or DataFrame of vectors. If a DataFrame is provided, it must have a single
+                 vector typed column.
+    :param numRows: Number of rows in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of rows will be determined by the number of
+                    records in the `rows` RDD.
+    :param numCols: Number of columns in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of columns will be determined by the size of
+                    the first row.
     """
     def __init__(self, rows, numRows=0, numCols=0):
         """
@@ -83,8 +80,6 @@ class RowMatrix(DistributedMatrix):
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6]])
         >>> mat = RowMatrix(rows)
 
@@ -100,9 +95,9 @@ class RowMatrix(DistributedMatrix):
         """
         if isinstance(rows, RDD):
             rows = rows.map(_convert_to_vector)
-            java_matrix = callMLlibFunc("createRowMatrix", rows, int(numRows), int(numCols))
+            java_matrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
         elif isinstance(rows, DataFrame):
-            java_matrix = callMLlibFunc("createRowMatrix", rows, int(numRows), int(numCols))
+            java_matrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
         elif (isinstance(rows, JavaObject)
               and rows.getClass().getSimpleName() == "RowMatrix"):
             java_matrix = rows
@@ -116,8 +111,6 @@ class RowMatrix(DistributedMatrix):
         """
         Rows of the RowMatrix stored as an RDD of vectors.
 
-        Examples
-        --------
         >>> mat = RowMatrix(sc.parallelize([[1, 2, 3], [4, 5, 6]]))
         >>> rows = mat.rows
         >>> rows.first()
@@ -129,8 +122,6 @@ class RowMatrix(DistributedMatrix):
         """
         Get or compute the number of rows.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6],
         ...                        [7, 8, 9], [10, 11, 12]])
 
@@ -148,8 +139,6 @@ class RowMatrix(DistributedMatrix):
         """
         Get or compute the number of cols.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6],
         ...                        [7, 8, 9], [10, 11, 12]])
 
@@ -163,19 +152,14 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
+    @since('2.0.0')
     def computeColumnSummaryStatistics(self):
         """
         Computes column-wise summary statistics.
 
-        .. versionadded:: 2.0.0
+        :return: :class:`MultivariateStatisticalSummary` object
+                 containing column-wise summary statistics.
 
-        Returns
-        -------
-        :py:class:`MultivariateStatisticalSummary`
-            object containing column-wise summary statistics.
-
-        Examples
-        --------
         >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6]])
         >>> mat = RowMatrix(rows)
 
@@ -186,19 +170,14 @@ class RowMatrix(DistributedMatrix):
         java_col_stats = self._java_matrix_wrapper.call("computeColumnSummaryStatistics")
         return MultivariateStatisticalSummary(java_col_stats)
 
+    @since('2.0.0')
     def computeCovariance(self):
         """
         Computes the covariance matrix, treating each row as an
         observation.
 
-        .. versionadded:: 2.0.0
+        .. note:: This cannot be computed on matrices with more than 65535 columns.
 
-        Notes
-        -----
-        This cannot be computed on matrices with more than 65535 columns.
-
-        Examples
-        --------
         >>> rows = sc.parallelize([[1, 2], [2, 1]])
         >>> mat = RowMatrix(rows)
 
@@ -207,18 +186,13 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computeCovariance")
 
+    @since('2.0.0')
     def computeGramianMatrix(self):
         """
         Computes the Gramian matrix `A^T A`.
 
-        .. versionadded:: 2.0.0
+        .. note:: This cannot be computed on matrices with more than 65535 columns.
 
-        Notes
-        -----
-        This cannot be computed on matrices with more than 65535 columns.
-
-        Examples
-        --------
         >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6]])
         >>> mat = RowMatrix(rows)
 
@@ -249,12 +223,11 @@ class RowMatrix(DistributedMatrix):
         similarity threshold.
 
         To describe the guarantee, we set some notation:
-
-        - Let A be the smallest in magnitude non-zero element of
-          this matrix.
-        - Let B be the largest in magnitude non-zero element of
-          this matrix.
-        - Let L be the maximum number of non-zeros per row.
+            * Let A be the smallest in magnitude non-zero element of
+              this matrix.
+            * Let B be the largest in magnitude non-zero element of
+              this matrix.
+            * Let L be the maximum number of non-zeros per row.
 
         For example, for {0,1} matrices: A=B=1.
         Another example, for the Netflix matrix: A=1, B=5
@@ -266,31 +239,20 @@ class RowMatrix(DistributedMatrix):
         The shuffle size is bounded by the *smaller* of the following
         two expressions:
 
-        - O(n log(n) L / (threshold * A))
-        - O(m L^2^)
+            * O(n log(n) L / (threshold * A))
+            * O(m L^2^)
 
         The latter is the cost of the brute-force approach, so for
         non-zero thresholds, the cost is always cheaper than the
         brute-force approach.
 
-        .. versionadded:: 2.0.0
+        :param: threshold: Set to 0 for deterministic guaranteed
+                           correctness. Similarities above this
+                           threshold are estimated with the cost vs
+                           estimate quality trade-off described above.
+        :return: An n x n sparse upper-triangular CoordinateMatrix of
+                 cosine similarities between columns of this matrix.
 
-        Parameters
-        ----------
-        threshold : float, optional
-            Set to 0 for deterministic guaranteed
-            correctness. Similarities above this
-            threshold are estimated with the cost vs
-            estimate quality trade-off described above.
-
-        Returns
-        -------
-        :py:class:`CoordinateMatrix`
-            An n x n sparse upper-triangular CoordinateMatrix of
-            cosine similarities between columns of this matrix.
-
-        Examples
-        --------
         >>> rows = sc.parallelize([[1, 2], [1, 5]])
         >>> mat = RowMatrix(rows)
 
@@ -301,32 +263,23 @@ class RowMatrix(DistributedMatrix):
         java_sims_mat = self._java_matrix_wrapper.call("columnSimilarities", float(threshold))
         return CoordinateMatrix(java_sims_mat)
 
+    @since('2.0.0')
     def tallSkinnyQR(self, computeQ=False):
         """
         Compute the QR decomposition of this RowMatrix.
 
         The implementation is designed to optimize the QR decomposition
-        (factorization) for the RowMatrix of a tall and skinny shape [1]_.
+        (factorization) for the RowMatrix of a tall and skinny shape.
 
-        .. [1] Paul G. Constantine, David F. Gleich. "Tall and skinny QR
-            factorizations in MapReduce architectures"
-            https://doi.org/10.1145/1996092.1996103
+        Reference:
+         Paul G. Constantine, David F. Gleich. "Tall and skinny QR
+         factorizations in MapReduce architectures"
+         ([[https://doi.org/10.1145/1996092.1996103]])
 
-        .. versionadded:: 2.0.0
+        :param: computeQ: whether to computeQ
+        :return: QRDecomposition(Q: RowMatrix, R: Matrix), where
+                 Q = None if computeQ = false.
 
-        Parameters
-        ----------
-        computeQ : bool, optional
-            whether to computeQ
-
-        Returns
-        -------
-        :py:class:`pyspark.mllib.linalg.QRDecomposition`
-            QRDecomposition(Q: RowMatrix, R: Matrix), where
-            Q = None if computeQ = false.
-
-        Examples
-        --------
         >>> rows = sc.parallelize([[3, -6], [4, -8], [0, 1]])
         >>> mat = RowMatrix(rows)
         >>> decomp = mat.tallSkinnyQR(True)
@@ -351,6 +304,7 @@ class RowMatrix(DistributedMatrix):
         R = decomp.call("R")
         return QRDecomposition(Q, R)
 
+    @since('2.2.0')
     def computeSVD(self, k, computeU=False, rCond=1e-9):
         """
         Computes the singular value decomposition of the RowMatrix.
@@ -358,39 +312,27 @@ class RowMatrix(DistributedMatrix):
         The given row matrix A of dimension (m X n) is decomposed into
         U * s * V'T where
 
-        - U: (m X k) (left singular vectors) is a RowMatrix whose
-          columns are the eigenvectors of (A X A')
-        - s: DenseVector consisting of square root of the eigenvalues
-          (singular values) in descending order.
-        - v: (n X k) (right singular vectors) is a Matrix whose columns
-          are the eigenvectors of (A' X A)
+        * U: (m X k) (left singular vectors) is a RowMatrix whose
+             columns are the eigenvectors of (A X A')
+        * s: DenseVector consisting of square root of the eigenvalues
+             (singular values) in descending order.
+        * v: (n X k) (right singular vectors) is a Matrix whose columns
+             are the eigenvectors of (A' X A)
 
         For more specific details on implementation, please refer
         the Scala documentation.
 
-        .. versionadded:: 2.2.0
+        :param k: Number of leading singular values to keep (`0 < k <= n`).
+                  It might return less than k if there are numerically zero singular values
+                  or there are not enough Ritz values converged before the maximum number of
+                  Arnoldi update iterations is reached (in case that matrix A is ill-conditioned).
+        :param computeU: Whether or not to compute U. If set to be
+                         True, then U is computed by A * V * s^-1
+        :param rCond: Reciprocal condition number. All singular values
+                      smaller than rCond * s[0] are treated as zero
+                      where s[0] is the largest singular value.
+        :returns: :py:class:`SingularValueDecomposition`
 
-        Parameters
-        ----------
-        k : int
-            Number of leading singular values to keep (`0 < k <= n`).
-            It might return less than k if there are numerically zero singular values
-            or there are not enough Ritz values converged before the maximum number of
-            Arnoldi update iterations is reached (in case that matrix A is ill-conditioned).
-        computeU : bool, optional
-            Whether or not to compute U. If set to be
-            True, then U is computed by A * V * s^-1
-        rCond : float, optional
-            Reciprocal condition number. All singular values
-            smaller than rCond * s[0] are treated as zero
-            where s[0] is the largest singular value.
-
-        Returns
-        -------
-        :py:class:`SingularValueDecomposition`
-
-        Examples
-        --------
         >>> rows = sc.parallelize([[3, 1, 1], [-1, 3, 1]])
         >>> rm = RowMatrix(rows)
 
@@ -406,27 +348,16 @@ class RowMatrix(DistributedMatrix):
             "computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
+    @since('2.2.0')
     def computePrincipalComponents(self, k):
         """
         Computes the k principal components of the given row matrix
 
-        .. versionadded:: 2.2.0
+        .. note:: This cannot be computed on matrices with more than 65535 columns.
 
-        Notes
-        -----
-        This cannot be computed on matrices with more than 65535 columns.
+        :param k: Number of principal components to keep.
+        :returns: :py:class:`pyspark.mllib.linalg.DenseMatrix`
 
-        Parameters
-        ----------
-        k : int
-            Number of principal components to keep.
-
-        Returns
-        -------
-        :py:class:`pyspark.mllib.linalg.DenseMatrix`
-
-        Examples
-        --------
         >>> rows = sc.parallelize([[1, 2, 3], [2, 4, 5], [3, 6, 1]])
         >>> rm = RowMatrix(rows)
 
@@ -442,24 +373,15 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computePrincipalComponents", k)
 
+    @since('2.2.0')
     def multiply(self, matrix):
         """
         Multiply this matrix by a local dense matrix on the right.
 
-        .. versionadded:: 2.2.0
+        :param matrix: a local dense matrix whose number of rows must match the number of columns
+                       of this matrix
+        :returns: :py:class:`RowMatrix`
 
-        Parameters
-        ----------
-        matrix : :py:class:`pyspark.mllib.linalg.Matrix`
-            a local dense matrix whose number of rows must match the number of columns
-            of this matrix
-
-        Returns
-        -------
-        :py:class:`RowMatrix`
-
-        Examples
-        --------
         >>> rm = RowMatrix(sc.parallelize([[0, 1], [2, 3]]))
         >>> rm.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
         [DenseVector([2.0, 3.0]), DenseVector([6.0, 11.0])]
@@ -517,17 +439,13 @@ class IndexedRow(object):
     """
     Represents a row of an IndexedRowMatrix.
 
-    Just a wrapper over a (int, vector) tuple.
+    Just a wrapper over a (long, vector) tuple.
 
-    Parameters
-    ----------
-    index : int
-        The index for the given row.
-    vector : :py:class:`pyspark.mllib.linalg.Vector` or convertible
-        The row in the matrix at the given index.
+    :param index: The index for the given row.
+    :param vector: The row in the matrix at the given index.
     """
     def __init__(self, index, vector):
-        self.index = int(index)
+        self.index = long(index)
         self.vector = _convert_to_vector(vector)
 
     def __repr__(self):
@@ -547,21 +465,16 @@ class IndexedRowMatrix(DistributedMatrix):
     """
     Represents a row-oriented distributed Matrix with indexed rows.
 
-    Parameters
-    ----------
-    rows : :py:class:`pyspark.RDD`
-        An RDD of IndexedRows or (int, vector) tuples or a DataFrame consisting of a
-        int typed column of indices and a vector typed column.
-    numRows : int, optional
-        Number of rows in the matrix. A non-positive
-        value means unknown, at which point the number
-        of rows will be determined by the max row
-        index plus one.
-    numCols : int, optional
-        Number of columns in the matrix. A non-positive
-        value means unknown, at which point the number
-        of columns will be determined by the size of
-        the first row.
+    :param rows: An RDD of IndexedRows or (long, vector) tuples or a DataFrame consisting of a
+                 long typed column of indices and a vector typed column.
+    :param numRows: Number of rows in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of rows will be determined by the max row
+                    index plus one.
+    :param numCols: Number of columns in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of columns will be determined by the size of
+                    the first row.
     """
     def __init__(self, rows, numRows=0, numCols=0):
         """
@@ -574,8 +487,6 @@ class IndexedRowMatrix(DistributedMatrix):
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(1, [4, 5, 6])])
         >>> mat = IndexedRowMatrix(rows)
@@ -599,14 +510,14 @@ class IndexedRowMatrix(DistributedMatrix):
             # both be easily serialized.  We will convert back to
             # IndexedRows on the Scala side.
             java_matrix = callMLlibFunc("createIndexedRowMatrix", rows.toDF(),
-                                        int(numRows), int(numCols))
+                                        long(numRows), int(numCols))
         elif isinstance(rows, DataFrame):
-            java_matrix = callMLlibFunc("createIndexedRowMatrix", rows, int(numRows), int(numCols))
+            java_matrix = callMLlibFunc("createIndexedRowMatrix", rows, long(numRows), int(numCols))
         elif (isinstance(rows, JavaObject)
               and rows.getClass().getSimpleName() == "IndexedRowMatrix"):
             java_matrix = rows
         else:
-            raise TypeError("rows should be an RDD of IndexedRows or (int, vector) tuples, "
+            raise TypeError("rows should be an RDD of IndexedRows or (long, vector) tuples, "
                             "got %s" % type(rows))
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
@@ -616,8 +527,6 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Rows of the IndexedRowMatrix stored as an RDD of IndexedRows.
 
-        Examples
-        --------
         >>> mat = IndexedRowMatrix(sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                                        IndexedRow(1, [4, 5, 6])]))
         >>> rows = mat.rows
@@ -636,8 +545,6 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Get or compute the number of rows.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(1, [4, 5, 6]),
         ...                        IndexedRow(2, [7, 8, 9]),
@@ -657,8 +564,6 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Get or compute the number of cols.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(1, [4, 5, 6]),
         ...                        IndexedRow(2, [7, 8, 9]),
@@ -678,8 +583,6 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Compute all cosine similarities between columns.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(6, [4, 5, 6])])
         >>> mat = IndexedRowMatrix(rows)
@@ -690,18 +593,13 @@ class IndexedRowMatrix(DistributedMatrix):
         java_coordinate_matrix = self._java_matrix_wrapper.call("columnSimilarities")
         return CoordinateMatrix(java_coordinate_matrix)
 
+    @since('2.0.0')
     def computeGramianMatrix(self):
         """
         Computes the Gramian matrix `A^T A`.
 
-        .. versionadded:: 2.0.0
+        .. note:: This cannot be computed on matrices with more than 65535 columns.
 
-        Notes
-        -----
-        This cannot be computed on matrices with more than 65535 columns.
-
-        Examples
-        --------
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(1, [4, 5, 6])])
         >>> mat = IndexedRowMatrix(rows)
@@ -715,8 +613,6 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Convert this matrix to a RowMatrix.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(6, [4, 5, 6])])
         >>> mat = IndexedRowMatrix(rows).toRowMatrix()
@@ -730,8 +626,6 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Convert this matrix to a CoordinateMatrix.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([IndexedRow(0, [1, 0]),
         ...                        IndexedRow(6, [0, 5])])
         >>> mat = IndexedRowMatrix(rows).toCoordinateMatrix()
@@ -745,19 +639,13 @@ class IndexedRowMatrix(DistributedMatrix):
         """
         Convert this matrix to a BlockMatrix.
 
-        Parameters
-        ----------
-        rowsPerBlock : int, optional
-            Number of rows that make up each block.
-            The blocks forming the final rows are not
-            required to have the given number of rows.
-        colsPerBlock : int, optional
-            Number of columns that make up each block.
-            The blocks forming the final columns are not
-            required to have the given number of columns.
+        :param rowsPerBlock: Number of rows that make up each block.
+                             The blocks forming the final rows are not
+                             required to have the given number of rows.
+        :param colsPerBlock: Number of columns that make up each block.
+                             The blocks forming the final columns are not
+                             required to have the given number of columns.
 
-        Examples
-        --------
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(6, [4, 5, 6])])
         >>> mat = IndexedRowMatrix(rows).toBlockMatrix()
@@ -776,6 +664,7 @@ class IndexedRowMatrix(DistributedMatrix):
                                                            colsPerBlock)
         return BlockMatrix(java_block_matrix, rowsPerBlock, colsPerBlock)
 
+    @since('2.2.0')
     def computeSVD(self, k, computeU=False, rCond=1e-9):
         """
         Computes the singular value decomposition of the IndexedRowMatrix.
@@ -793,29 +682,17 @@ class IndexedRowMatrix(DistributedMatrix):
         For more specific details on implementation, please refer
         the scala documentation.
 
-        .. versionadded:: 2.2.0
+        :param k: Number of leading singular values to keep (`0 < k <= n`).
+                  It might return less than k if there are numerically zero singular values
+                  or there are not enough Ritz values converged before the maximum number of
+                  Arnoldi update iterations is reached (in case that matrix A is ill-conditioned).
+        :param computeU: Whether or not to compute U. If set to be
+                         True, then U is computed by A * V * s^-1
+        :param rCond: Reciprocal condition number. All singular values
+                      smaller than rCond * s[0] are treated as zero
+                      where s[0] is the largest singular value.
+        :returns: SingularValueDecomposition object
 
-        Parameters
-        ----------
-        k : int
-            Number of leading singular values to keep (`0 < k <= n`).
-            It might return less than k if there are numerically zero singular values
-            or there are not enough Ritz values converged before the maximum number of
-            Arnoldi update iterations is reached (in case that matrix A is ill-conditioned).
-        computeU : bool, optional
-            Whether or not to compute U. If set to be
-            True, then U is computed by A * V * s^-1
-        rCond : float, optional
-            Reciprocal condition number. All singular values
-            smaller than rCond * s[0] are treated as zero
-            where s[0] is the largest singular value.
-
-        Returns
-        -------
-        :py:class:`SingularValueDecomposition`
-
-        Examples
-        --------
         >>> rows = [(0, (3, 1, 1)), (1, (-1, 3, 1))]
         >>> irm = IndexedRowMatrix(sc.parallelize(rows))
         >>> svd_model = irm.computeSVD(2, True)
@@ -831,24 +708,15 @@ class IndexedRowMatrix(DistributedMatrix):
             "computeSVD", int(k), bool(computeU), float(rCond))
         return SingularValueDecomposition(j_model)
 
+    @since('2.2.0')
     def multiply(self, matrix):
         """
         Multiply this matrix by a local dense matrix on the right.
 
-        .. versionadded:: 2.2.0
+        :param matrix: a local dense matrix whose number of rows must match the number of columns
+                       of this matrix
+        :returns: :py:class:`IndexedRowMatrix`
 
-        Parameters
-        ----------
-        matrix : :py:class:`pyspark.mllib.linalg.Matrix`
-            a local dense matrix whose number of rows must match the number of columns
-            of this matrix
-
-        Returns
-        -------
-        :py:class:`IndexedRowMatrix`
-
-        Examples
-        --------
         >>> mat = IndexedRowMatrix(sc.parallelize([(0, (0, 1)), (1, (2, 3))]))
         >>> mat.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
         [IndexedRow(0, [2.0,3.0]), IndexedRow(1, [6.0,11.0])]
@@ -863,20 +731,15 @@ class MatrixEntry(object):
     """
     Represents an entry of a CoordinateMatrix.
 
-    Just a wrapper over a (int, int, float) tuple.
+    Just a wrapper over a (long, long, float) tuple.
 
-    Parameters
-    ----------
-    i : int
-        The row index of the matrix.
-    j : int
-        The column index of the matrix.
-    value : float
-        The (i, j)th entry of the matrix, as a float.
+    :param i: The row index of the matrix.
+    :param j: The column index of the matrix.
+    :param value: The (i, j)th entry of the matrix, as a float.
     """
     def __init__(self, i, j, value):
-        self.i = int(i)
-        self.j = int(j)
+        self.i = long(i)
+        self.j = long(j)
         self.value = float(value)
 
     def __repr__(self):
@@ -896,21 +759,16 @@ class CoordinateMatrix(DistributedMatrix):
     """
     Represents a matrix in coordinate format.
 
-    Parameters
-    ----------
-    entries : :py:class:`pyspark.RDD`
-        An RDD of MatrixEntry inputs or
-        (int, int, float) tuples.
-    numRows : int, optional
-        Number of rows in the matrix. A non-positive
-        value means unknown, at which point the number
-        of rows will be determined by the max row
-        index plus one.
-    numCols : int, optional
-        Number of columns in the matrix. A non-positive
-        value means unknown, at which point the number
-        of columns will be determined by the max row
-        index plus one.
+    :param entries: An RDD of MatrixEntry inputs or
+                    (long, long, float) tuples.
+    :param numRows: Number of rows in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of rows will be determined by the max row
+                    index plus one.
+    :param numCols: Number of columns in the matrix. A non-positive
+                    value means unknown, at which point the number
+                    of columns will be determined by the max row
+                    index plus one.
     """
     def __init__(self, entries, numRows=0, numCols=0):
         """
@@ -923,8 +781,6 @@ class CoordinateMatrix(DistributedMatrix):
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
 
-        Examples
-        --------
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(6, 4, 2.1)])
         >>> mat = CoordinateMatrix(entries)
@@ -948,13 +804,13 @@ class CoordinateMatrix(DistributedMatrix):
             # each be easily serialized. We will convert back to
             # MatrixEntry inputs on the Scala side.
             java_matrix = callMLlibFunc("createCoordinateMatrix", entries.toDF(),
-                                        int(numRows), int(numCols))
+                                        long(numRows), long(numCols))
         elif (isinstance(entries, JavaObject)
               and entries.getClass().getSimpleName() == "CoordinateMatrix"):
             java_matrix = entries
         else:
             raise TypeError("entries should be an RDD of MatrixEntry entries or "
-                            "(int, int, float) tuples, got %s" % type(entries))
+                            "(long, long, float) tuples, got %s" % type(entries))
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
 
@@ -964,8 +820,6 @@ class CoordinateMatrix(DistributedMatrix):
         Entries of the CoordinateMatrix stored as an RDD of
         MatrixEntries.
 
-        Examples
-        --------
         >>> mat = CoordinateMatrix(sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                                        MatrixEntry(6, 4, 2.1)]))
         >>> entries = mat.entries
@@ -984,8 +838,6 @@ class CoordinateMatrix(DistributedMatrix):
         """
         Get or compute the number of rows.
 
-        Examples
-        --------
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(1, 0, 2),
         ...                           MatrixEntry(2, 1, 3.7)])
@@ -1004,8 +856,6 @@ class CoordinateMatrix(DistributedMatrix):
         """
         Get or compute the number of cols.
 
-        Examples
-        --------
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(1, 0, 2),
         ...                           MatrixEntry(2, 1, 3.7)])
@@ -1020,14 +870,11 @@ class CoordinateMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
+    @since('2.0.0')
     def transpose(self):
         """
         Transpose this CoordinateMatrix.
 
-        .. versionadded:: 2.0.0
-
-        Examples
-        --------
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(1, 0, 2),
         ...                           MatrixEntry(2, 1, 3.7)])
@@ -1047,8 +894,6 @@ class CoordinateMatrix(DistributedMatrix):
         """
         Convert this matrix to a RowMatrix.
 
-        Examples
-        --------
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(6, 4, 2.1)])
         >>> mat = CoordinateMatrix(entries).toRowMatrix()
@@ -1073,8 +918,6 @@ class CoordinateMatrix(DistributedMatrix):
         """
         Convert this matrix to an IndexedRowMatrix.
 
-        Examples
-        --------
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(6, 4, 2.1)])
         >>> mat = CoordinateMatrix(entries).toIndexedRowMatrix()
@@ -1098,19 +941,13 @@ class CoordinateMatrix(DistributedMatrix):
         """
         Convert this matrix to a BlockMatrix.
 
-        Parameters
-        ----------
-        rowsPerBlock : int, optional
-            Number of rows that make up each block.
-            The blocks forming the final rows are not
-            required to have the given number of rows.
-        colsPerBlock : int, optional
-            Number of columns that make up each block.
-            The blocks forming the final columns are not
-            required to have the given number of columns.
+        :param rowsPerBlock: Number of rows that make up each block.
+                             The blocks forming the final rows are not
+                             required to have the given number of rows.
+        :param colsPerBlock: Number of columns that make up each block.
+                             The blocks forming the final columns are not
+                             required to have the given number of columns.
 
-        Examples
-        --------
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(6, 4, 2.1)])
         >>> mat = CoordinateMatrix(entries).toBlockMatrix()
@@ -1149,33 +986,26 @@ class BlockMatrix(DistributedMatrix):
     """
     Represents a distributed matrix in blocks of local matrices.
 
-    Parameters
-    ----------
-    blocks : :py:class:`pyspark.RDD`
-        An RDD of sub-matrix blocks
-        ((blockRowIndex, blockColIndex), sub-matrix) that
-        form this distributed matrix. If multiple blocks
-        with the same index exist, the results for
-        operations like add and multiply will be
-        unpredictable.
-    rowsPerBlock : int
-        Number of rows that make up each block.
-        The blocks forming the final rows are not
-        required to have the given number of rows.
-    colsPerBlock : int
-        Number of columns that make up each block.
-        The blocks forming the final columns are not
-        required to have the given number of columns.
-    numRows : int, optional
-        Number of rows of this matrix. If the supplied
-        value is less than or equal to zero, the number
-        of rows will be calculated when `numRows` is
-        invoked.
-    numCols : int, optional
-        Number of columns of this matrix. If the supplied
-        value is less than or equal to zero, the number
-        of columns will be calculated when `numCols` is
-        invoked.
+    :param blocks: An RDD of sub-matrix blocks
+                   ((blockRowIndex, blockColIndex), sub-matrix) that
+                   form this distributed matrix. If multiple blocks
+                   with the same index exist, the results for
+                   operations like add and multiply will be
+                   unpredictable.
+    :param rowsPerBlock: Number of rows that make up each block.
+                         The blocks forming the final rows are not
+                         required to have the given number of rows.
+    :param colsPerBlock: Number of columns that make up each block.
+                         The blocks forming the final columns are not
+                         required to have the given number of columns.
+    :param numRows: Number of rows of this matrix. If the supplied
+                    value is less than or equal to zero, the number
+                    of rows will be calculated when `numRows` is
+                    invoked.
+    :param numCols: Number of columns of this matrix. If the supplied
+                    value is less than or equal to zero, the number
+                    of columns will be calculated when `numCols` is
+                    invoked.
     """
     def __init__(self, blocks, rowsPerBlock, colsPerBlock, numRows=0, numCols=0):
         """
@@ -1188,8 +1018,6 @@ class BlockMatrix(DistributedMatrix):
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
         >>> mat = BlockMatrix(blocks, 3, 2)
@@ -1216,7 +1044,7 @@ class BlockMatrix(DistributedMatrix):
             # the Scala side.
             java_matrix = callMLlibFunc("createBlockMatrix", blocks.toDF(),
                                         int(rowsPerBlock), int(colsPerBlock),
-                                        int(numRows), int(numCols))
+                                        long(numRows), long(numCols))
         elif (isinstance(blocks, JavaObject)
               and blocks.getClass().getSimpleName() == "BlockMatrix"):
             java_matrix = blocks
@@ -1233,8 +1061,6 @@ class BlockMatrix(DistributedMatrix):
         ((blockRowIndex, blockColIndex), sub-matrix) that form this
         distributed matrix.
 
-        Examples
-        --------
         >>> mat = BlockMatrix(
         ...     sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                     ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))]), 3, 2)
@@ -1256,8 +1082,6 @@ class BlockMatrix(DistributedMatrix):
         """
         Number of rows that make up each block.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
         >>> mat = BlockMatrix(blocks, 3, 2)
@@ -1271,8 +1095,6 @@ class BlockMatrix(DistributedMatrix):
         """
         Number of columns that make up each block.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
         >>> mat = BlockMatrix(blocks, 3, 2)
@@ -1286,8 +1108,6 @@ class BlockMatrix(DistributedMatrix):
         """
         Number of rows of blocks in the BlockMatrix.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
         >>> mat = BlockMatrix(blocks, 3, 2)
@@ -1301,8 +1121,6 @@ class BlockMatrix(DistributedMatrix):
         """
         Number of columns of blocks in the BlockMatrix.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
         >>> mat = BlockMatrix(blocks, 3, 2)
@@ -1315,8 +1133,6 @@ class BlockMatrix(DistributedMatrix):
         """
         Get or compute the number of rows.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
 
@@ -1334,8 +1150,6 @@ class BlockMatrix(DistributedMatrix):
         """
         Get or compute the number of cols.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
 
@@ -1386,8 +1200,6 @@ class BlockMatrix(DistributedMatrix):
         two dense sub matrix blocks are added, the output block will
         also be a DenseMatrix.
 
-        Examples
-        --------
         >>> dm1 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
         >>> dm2 = Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12])
         >>> sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 1, 2], [7, 11, 12])
@@ -1411,6 +1223,7 @@ class BlockMatrix(DistributedMatrix):
         java_block_matrix = self._java_matrix_wrapper.call("add", other_java_block_matrix)
         return BlockMatrix(java_block_matrix, self.rowsPerBlock, self.colsPerBlock)
 
+    @since('2.0.0')
     def subtract(self, other):
         """
         Subtracts the given block matrix `other` from this block matrix:
@@ -1422,10 +1235,6 @@ class BlockMatrix(DistributedMatrix):
         If two dense sub matrix blocks are subtracted, the output block
         will also be a DenseMatrix.
 
-        .. versionadded:: 2.0.0
-
-        Examples
-        --------
         >>> dm1 = Matrices.dense(3, 2, [3, 1, 5, 4, 6, 2])
         >>> dm2 = Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12])
         >>> sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 1, 2], [1, 2, 3])
@@ -1459,8 +1268,6 @@ class BlockMatrix(DistributedMatrix):
         This may cause some performance issues until support for
         multiplying two sparse matrices is added.
 
-        Examples
-        --------
         >>> dm1 = Matrices.dense(2, 3, [1, 2, 3, 4, 5, 6])
         >>> dm2 = Matrices.dense(2, 3, [7, 8, 9, 10, 11, 12])
         >>> dm3 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
@@ -1486,15 +1293,12 @@ class BlockMatrix(DistributedMatrix):
         java_block_matrix = self._java_matrix_wrapper.call("multiply", other_java_block_matrix)
         return BlockMatrix(java_block_matrix, self.rowsPerBlock, self.colsPerBlock)
 
+    @since('2.0.0')
     def transpose(self):
         """
         Transpose this BlockMatrix. Returns a new BlockMatrix
         instance sharing the same underlying data. Is a lazy operation.
 
-        .. versionadded:: 2.0.0
-
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
         >>> mat = BlockMatrix(blocks, 3, 2)
@@ -1510,8 +1314,6 @@ class BlockMatrix(DistributedMatrix):
         """
         Collect the distributed matrix on the driver as a DenseMatrix.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
         >>> mat = BlockMatrix(blocks, 3, 2).toLocalMatrix()
@@ -1534,8 +1336,6 @@ class BlockMatrix(DistributedMatrix):
         """
         Convert this matrix to an IndexedRowMatrix.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
         >>> mat = BlockMatrix(blocks, 3, 2).toIndexedRowMatrix()
@@ -1559,8 +1359,6 @@ class BlockMatrix(DistributedMatrix):
         """
         Convert this matrix to a CoordinateMatrix.
 
-        Examples
-        --------
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(1, 2, [1, 2])),
         ...                          ((1, 0), Matrices.dense(1, 2, [7, 8]))])
         >>> mat = BlockMatrix(blocks, 1, 2).toCoordinateMatrix()

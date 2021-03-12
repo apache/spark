@@ -344,7 +344,7 @@ object EstimationUtils {
         }
       }
     }
-    overlappedRanges.toSeq
+    overlappedRanges
   }
 
   /**

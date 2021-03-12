@@ -35,26 +35,17 @@ import org.apache.spark.sql.types.StructType
  * @param convertTz the optional time zone to convert to int96 data
  * @param datetimeRebaseMode the mode of rebasing date/timestamp from Julian to Proleptic Gregorian
  *                           calendar
- * @param int96RebaseMode the mode of rebasing INT96 timestamp from Julian to Proleptic Gregorian
- *                           calendar
  */
 private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,
     catalystSchema: StructType,
     schemaConverter: ParquetToSparkSchemaConverter,
     convertTz: Option[ZoneId],
-    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-    int96RebaseMode: LegacyBehaviorPolicy.Value)
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value)
   extends RecordMaterializer[InternalRow] {
 
   private val rootConverter = new ParquetRowConverter(
-    schemaConverter,
-    parquetSchema,
-    catalystSchema,
-    convertTz,
-    datetimeRebaseMode,
-    int96RebaseMode,
-    NoopUpdater)
+    schemaConverter, parquetSchema, catalystSchema, convertTz, datetimeRebaseMode, NoopUpdater)
 
   override def getCurrentRecord: InternalRow = rootConverter.currentRecord
 

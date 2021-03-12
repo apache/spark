@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 
@@ -26,7 +25,6 @@ import com.codahale.metrics.Timer;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
-import org.roaringbitmap.RoaringBitmap;
 
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,8 +39,6 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
-import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
-import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
@@ -54,7 +50,6 @@ public class ExternalBlockHandlerSuite {
   OneForOneStreamManager streamManager;
   ExternalShuffleBlockResolver blockResolver;
   RpcHandler handler;
-  MergedShuffleFileManager mergedShuffleManager;
   ManagedBuffer[] blockMarkers = {
     new NioManagedBuffer(ByteBuffer.wrap(new byte[3])),
     new NioManagedBuffer(ByteBuffer.wrap(new byte[7]))
@@ -64,20 +59,17 @@ public class ExternalBlockHandlerSuite {
   public void beforeEach() {
     streamManager = mock(OneForOneStreamManager.class);
     blockResolver = mock(ExternalShuffleBlockResolver.class);
-    mergedShuffleManager = mock(MergedShuffleFileManager.class);
-    handler = new ExternalBlockHandler(streamManager, blockResolver, mergedShuffleManager);
+    handler = new ExternalBlockHandler(streamManager, blockResolver);
   }
 
   @Test
   public void testRegisterExecutor() {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    String[] localDirs = new String[] {"/a", "/b"};
-    ExecutorShuffleInfo config = new ExecutorShuffleInfo(localDirs, 16, "sort");
+    ExecutorShuffleInfo config = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
     ByteBuffer registerMessage = new RegisterExecutor("app0", "exec1", config).toByteBuffer();
     handler.receive(client, registerMessage, callback);
     verify(blockResolver, times(1)).registerExecutor("app0", "exec1", config);
-    verify(mergedShuffleManager, times(1)).registerExecutor("app0", config);
 
     verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
@@ -229,33 +221,5 @@ public class ExternalBlockHandlerSuite {
 
     verify(callback, never()).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
-  }
-
-  @Test
-  public void testFinalizeShuffleMerge() throws IOException {
-    RpcResponseCallback callback = mock(RpcResponseCallback.class);
-
-    FinalizeShuffleMerge req = new FinalizeShuffleMerge("app0", 0);
-    RoaringBitmap bitmap = RoaringBitmap.bitmapOf(0, 1, 2);
-    MergeStatuses statuses = new MergeStatuses(0, new RoaringBitmap[]{bitmap},
-      new int[]{3}, new long[]{30});
-    when(mergedShuffleManager.finalizeShuffleMerge(req)).thenReturn(statuses);
-
-    ByteBuffer reqBuf = req.toByteBuffer();
-    handler.receive(client, reqBuf, callback);
-    verify(mergedShuffleManager, times(1)).finalizeShuffleMerge(req);
-    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
-    verify(callback, times(1)).onSuccess(response.capture());
-    verify(callback, never()).onFailure(any());
-
-    MergeStatuses mergeStatuses =
-      (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
-    assertEquals(mergeStatuses, statuses);
-
-    Timer finalizeShuffleMergeLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
-        .getAllMetrics()
-        .getMetrics()
-        .get("finalizeShuffleMergeLatencyMillis");
-    assertEquals(1, finalizeShuffleMergeLatencyMillis.getCount());
   }
 }

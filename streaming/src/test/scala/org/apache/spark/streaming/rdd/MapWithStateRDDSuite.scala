@@ -320,7 +320,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
       makeStateRDDWithLongLineageDataRDD, reliableCheckpoint = true, rddCollectFunc _)
 
     /** Generate MapWithStateRDD with parent state RDD having a long lineage */
-    def makeStateRDDWithLongLineageParentStateRDD(
+    def makeStateRDDWithLongLineageParenttateRDD(
         longLineageRDD: RDD[Int]): MapWithStateRDD[Int, Int, Int, Int] = {
 
       // Create a MapWithStateRDD that has a long lineage using the data RDD with a long lineage
@@ -337,9 +337,9 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
     }
 
     testRDD(
-      makeStateRDDWithLongLineageParentStateRDD, reliableCheckpoint = true, rddCollectFunc _)
+      makeStateRDDWithLongLineageParenttateRDD, reliableCheckpoint = true, rddCollectFunc _)
     testRDDPartitions(
-      makeStateRDDWithLongLineageParentStateRDD, reliableCheckpoint = true, rddCollectFunc _)
+      makeStateRDDWithLongLineageParenttateRDD, reliableCheckpoint = true, rddCollectFunc _)
   }
 
   test("checkpointing empty state RDD") {

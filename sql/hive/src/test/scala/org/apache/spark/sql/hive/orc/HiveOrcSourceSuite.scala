@@ -149,7 +149,12 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
   test("Check BloomFilter creation") {
     Seq(true, false).foreach { convertMetastore =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
-        testBloomFilterCreation(org.apache.orc.OrcProto.Stream.Kind.BLOOM_FILTER_UTF8)
+        if (HiveUtils.isHive23) {
+          testBloomFilterCreation(org.apache.orc.OrcProto.Stream.Kind.BLOOM_FILTER_UTF8)
+        } else {
+          // Before ORC-101
+          testBloomFilterCreation(org.apache.orc.OrcProto.Stream.Kind.BLOOM_FILTER)
+        }
       }
     }
   }
@@ -157,7 +162,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
   test("Enforce direct encoding column-wise selectively") {
     Seq(true, false).foreach { convertMetastore =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
-        testSelectiveDictionaryEncoding(isSelective = false, isHiveOrc = true)
+        testSelectiveDictionaryEncoding(isSelective = false, isHive23 = HiveUtils.isHive23)
       }
     }
   }
@@ -317,6 +322,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
   }
 
   test("SPARK-31580: Read a file written before ORC-569") {
+    assume(HiveUtils.isHive23) // Hive 1.2 doesn't use Apache ORC
     // Test ORC file came from ORC-621
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)

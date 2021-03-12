@@ -17,6 +17,8 @@
 
 package org.apache.spark.launcher
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ListBuffer
 import scala.util.Properties
 
 /**

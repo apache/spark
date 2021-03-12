@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
-from collections.abc import Iterable
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
 
 
 __all__ = ["ResultIterable"]

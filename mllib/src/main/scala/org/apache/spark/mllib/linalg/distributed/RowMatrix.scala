@@ -693,11 +693,11 @@ class RowMatrix @Since("1.0.0") (
     val pBV = sc.broadcast(colMagsCorrected.map(c => sg / c))
     val qBV = sc.broadcast(colMagsCorrected.map(c => math.min(sg, c)))
 
-    val sims = rows.mapPartitionsWithIndex { (index, iter) =>
+    val sims = rows.mapPartitionsWithIndex { (indx, iter) =>
       val p = pBV.value
       val q = qBV.value
 
-      val rand = new XORShiftRandom(index)
+      val rand = new XORShiftRandom(indx)
       val scaled = new Array[Double](p.size)
       iter.flatMap { row =>
         row match {
@@ -748,8 +748,6 @@ class RowMatrix @Since("1.0.0") (
               }
               buf
             }.flatten
-          case v =>
-            throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
         }
       }
     }.reduceByKey(_ + _).map { case ((i, j), sim) =>

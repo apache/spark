@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import java.io.{FileNotFoundException, IOException}
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -198,7 +199,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
 
     val finalOutputName = ReliableCheckpointRDD.checkpointFileName(ctx.partitionId())
     val finalOutputPath = new Path(outputDir, finalOutputName)
-    val tempOutputPath = new Path(outputDir, s".$finalOutputName-attempt-${ctx.taskAttemptId()}")
+    val tempOutputPath =
+      new Path(outputDir, s".$finalOutputName-attempt-${ctx.attemptNumber()}")
 
     val bufferSize = env.conf.get(BUFFER_SIZE)
 
@@ -216,16 +218,11 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     }
     val serializer = env.serializer.newInstance()
     val serializeStream = serializer.serializeStream(fileOutputStream)
-    Utils.tryWithSafeFinallyAndFailureCallbacks {
+    Utils.tryWithSafeFinally {
       serializeStream.writeAll(iterator)
-    } (catchBlock = {
-      val deleted = fs.delete(tempOutputPath, false)
-      if (!deleted) {
-        logInfo(s"Failed to delete tempOutputPath $tempOutputPath.")
-      }
-    }, finallyBlock = {
+    } {
       serializeStream.close()
-    })
+    }
 
     if (!fs.rename(tempOutputPath, finalOutputPath)) {
       if (!fs.exists(finalOutputPath)) {

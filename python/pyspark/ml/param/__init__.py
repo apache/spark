@@ -15,10 +15,16 @@
 # limitations under the License.
 #
 import array
+import sys
+if sys.version > '3':
+    basestring = str
+    xrange = range
+    unicode = str
+
 from abc import ABCMeta
 import copy
-
 import numpy as np
+
 from py4j.java_gateway import JavaObject
 
 from pyspark.ml.linalg import DenseVector, Vector, Matrix
@@ -87,12 +93,12 @@ class TypeConverters(object):
     @staticmethod
     def _can_convert_to_list(value):
         vtype = type(value)
-        return vtype in [list, np.ndarray, tuple, range, array.array] or isinstance(value, Vector)
+        return vtype in [list, np.ndarray, tuple, xrange, array.array] or isinstance(value, Vector)
 
     @staticmethod
     def _can_convert_to_string(value):
         vtype = type(value)
-        return isinstance(value, str) or vtype in [np.unicode_, np.string_, np.str_]
+        return isinstance(value, basestring) or vtype in [np.unicode_, np.string_, np.str_]
 
     @staticmethod
     def identity(value):
@@ -108,7 +114,7 @@ class TypeConverters(object):
         """
         if type(value) == list:
             return value
-        elif type(value) in [np.ndarray, tuple, range, array.array]:
+        elif type(value) in [np.ndarray, tuple, xrange, array.array]:
             return list(value)
         elif isinstance(value, Vector):
             return list(value.toArray())
@@ -205,10 +211,12 @@ class TypeConverters(object):
         """
         Convert a value to a string, if possible.
         """
-        if isinstance(value, str):
+        if isinstance(value, basestring):
             return value
-        elif type(value) in [np.string_, np.str_, np.unicode_]:
+        elif type(value) in [np.string_, np.str_]:
             return str(value)
+        elif type(value) == np.unicode_:
+            return unicode(value)
         else:
             raise TypeError("Could not convert %s to string type" % type(value))
 
@@ -223,13 +231,15 @@ class TypeConverters(object):
             raise TypeError("Boolean Param requires value of type bool. Found %s." % type(value))
 
 
-class Params(Identifiable, metaclass=ABCMeta):
+class Params(Identifiable):
     """
     Components that take parameters. This also provides an internal
     param map to store parameter values attached to the instance.
 
     .. versionadded:: 1.3.0
     """
+
+    __metaclass__ = ABCMeta
 
     def __init__(self):
         super(Params, self).__init__()
@@ -328,7 +338,7 @@ class Params(Identifiable, metaclass=ABCMeta):
         Tests whether this instance contains a param with a given
         (string) name.
         """
-        if isinstance(paramName, str):
+        if isinstance(paramName, basestring):
             p = getattr(self, paramName, None)
             return isinstance(p, Param)
         else:
@@ -353,15 +363,8 @@ class Params(Identifiable, metaclass=ABCMeta):
         conflicts, i.e., with ordering: default param values <
         user-supplied values < extra.
 
-        Parameters
-        ----------
-        extra : dict, optional
-            extra param values
-
-        Returns
-        -------
-        dict
-            merged param map
+        :param extra: extra param values
+        :return: merged param map
         """
         if extra is None:
             extra = dict()
@@ -379,15 +382,8 @@ class Params(Identifiable, metaclass=ABCMeta):
         Subclasses should override this method if the default approach
         is not sufficient.
 
-        Parameters
-        ----------
-        extra : dict, optional
-            Extra parameters to copy to the new instance
-
-        Returns
-        -------
-        :py:class:`Params`
-            Copy of this instance
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -418,21 +414,14 @@ class Params(Identifiable, metaclass=ABCMeta):
         """
         Resolves a param and validates the ownership.
 
-        Parameters
-        ----------
-        param : str or :py:class:`Param`
-            param name or the param instance, which must
-            belong to this Params instance
-
-        Returns
-        -------
-        :py:class:`Param`
-            resolved param instance
+        :param param: param name or the param instance, which must
+                      belong to this Params instance
+        :return: resolved param instance
         """
         if isinstance(param, Param):
             self._shouldOwn(param)
             return param
-        elif isinstance(param, str):
+        elif isinstance(param, basestring):
             return self.getParam(param)
         else:
             raise ValueError("Cannot resolve %r as a param." % param)
@@ -494,17 +483,9 @@ class Params(Identifiable, metaclass=ABCMeta):
         Copies param values from this instance to another instance for
         params shared by them.
 
-        Parameters
-        ----------
-        to : :py:class:`Params`
-            the target instance
-        extra : dict, optional
-            extra params to be copied
-
-        Returns
-        -------
-        :py:class:`Params`
-            the target instance with param values copied
+        :param to: the target instance
+        :param extra: extra params to be copied
+        :return: the target instance with param values copied
         """
         paramMap = self._paramMap.copy()
         if isinstance(extra, dict):
@@ -531,19 +512,11 @@ class Params(Identifiable, metaclass=ABCMeta):
         Changes the uid of this instance. This updates both
         the stored uid and the parent uid of params and param maps.
         This is used by persistence (loading).
-
-        Parameters
-        ----------
-        newUid
-            new uid to use, which is converted to unicode
-
-        Returns
-        -------
-        :py:class:`Params`
-            same instance, but with the uid and Param.parent values
-            updated, including within param maps
+        :param newUid: new uid to use, which is converted to unicode
+        :return: same instance, but with the uid and Param.parent values
+                 updated, including within param maps
         """
-        newUid = str(newUid)
+        newUid = unicode(newUid)
         self.uid = newUid
         newDefaultParamMap = dict()
         newParamMap = dict()

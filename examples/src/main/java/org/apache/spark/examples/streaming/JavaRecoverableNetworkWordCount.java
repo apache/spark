@@ -41,16 +41,16 @@ import org.apache.spark.util.LongAccumulator;
 /**
  * Use this singleton to get or register a Broadcast variable.
  */
-class JavaWordExcludeList {
+class JavaWordBlacklist {
 
   private static volatile Broadcast<List<String>> instance = null;
 
   public static Broadcast<List<String>> getInstance(JavaSparkContext jsc) {
     if (instance == null) {
-      synchronized (JavaWordExcludeList.class) {
+      synchronized (JavaWordBlacklist.class) {
         if (instance == null) {
-          List<String> wordExcludeList = Arrays.asList("a", "b", "c");
-          instance = jsc.broadcast(wordExcludeList);
+          List<String> wordBlacklist = Arrays.asList("a", "b", "c");
+          instance = jsc.broadcast(wordBlacklist);
         }
       }
     }
@@ -69,7 +69,7 @@ class JavaDroppedWordsCounter {
     if (instance == null) {
       synchronized (JavaDroppedWordsCounter.class) {
         if (instance == null) {
-          instance = jsc.sc().longAccumulator("DroppedWordsCounter");
+          instance = jsc.sc().longAccumulator("WordsInBlacklistCounter");
         }
       }
     }
@@ -133,15 +133,15 @@ public final class JavaRecoverableNetworkWordCount {
         .reduceByKey((i1, i2) -> i1 + i2);
 
     wordCounts.foreachRDD((rdd, time) -> {
-      // Get or register the excludeList Broadcast
-      Broadcast<List<String>> excludeList =
-          JavaWordExcludeList.getInstance(new JavaSparkContext(rdd.context()));
+      // Get or register the blacklist Broadcast
+      Broadcast<List<String>> blacklist =
+          JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
       // Get or register the droppedWordsCounter Accumulator
       LongAccumulator droppedWordsCounter =
           JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
-      // Use excludeList to drop words and use droppedWordsCounter to count them
+      // Use blacklist to drop words and use droppedWordsCounter to count them
       String counts = rdd.filter(wordCount -> {
-        if (excludeList.value().contains(wordCount._1())) {
+        if (blacklist.value().contains(wordCount._1())) {
           droppedWordsCounter.add(wordCount._2());
           return false;
         } else {

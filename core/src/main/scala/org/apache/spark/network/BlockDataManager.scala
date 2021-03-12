@@ -22,15 +22,10 @@ import scala.reflect.ClassTag
 import org.apache.spark.TaskContext
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
 
 private[spark]
 trait BlockDataManager {
-
-  /**
-   * Get the local directories that used by BlockManager to save the blocks to disk
-   */
-  def getLocalDiskDirs: Array[String]
 
   /**
    * Interface to get host-local shuffle block data. Throws an exception if the block cannot be

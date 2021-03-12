@@ -30,14 +30,11 @@ import org.apache.spark.util.Utils
 
 /**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
- * task has shuffle files stored on as well as the sizes of outputs for each reducer, for passing
- * on to the reduce tasks.
+ * task ran on as well as the sizes of outputs for each reducer, for passing on to the reduce tasks.
  */
 private[spark] sealed trait MapStatus {
-  /** Location where this task output is. */
+  /** Location where this task was run. */
   def location: BlockManagerId
-
-  def updateLocation(newLoc: BlockManagerId): Unit
 
   /**
    * Estimated size for the reduce block, in bytes.
@@ -123,15 +120,11 @@ private[spark] class CompressedMapStatus(
   // For deserialization only
   protected def this() = this(null, null.asInstanceOf[Array[Byte]], -1)
 
-  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long) = {
+  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long) {
     this(loc, uncompressedSizes.map(MapStatus.compressSize), mapTaskId)
   }
 
   override def location: BlockManagerId = loc
-
-  override def updateLocation(newLoc: BlockManagerId): Unit = {
-    loc = newLoc
-  }
 
   override def getSizeForBlock(reduceId: Int): Long = {
     MapStatus.decompressSize(compressedSizes(reduceId))
@@ -185,10 +178,6 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def location: BlockManagerId = loc
 
-  override def updateLocation(newLoc: BlockManagerId): Unit = {
-    loc = newLoc
-  }
-
   override def getSizeForBlock(reduceId: Int): Long = {
     assert(hugeBlockSizes != null)
     if (emptyBlocks.contains(reduceId)) {
@@ -205,7 +194,7 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
-    emptyBlocks.serialize(out)
+    emptyBlocks.writeExternal(out)
     out.writeLong(avgSize)
     out.writeInt(hugeBlockSizes.size)
     hugeBlockSizes.foreach { kv =>
@@ -219,7 +208,7 @@ private[spark] class HighlyCompressedMapStatus private (
     loc = BlockManagerId(in)
     numNonEmptyBlocks = -1 // SPARK-32436 Scala 2.13 doesn't initialize this during deserialization
     emptyBlocks = new RoaringBitmap()
-    emptyBlocks.deserialize(in)
+    emptyBlocks.readExternal(in)
     avgSize = in.readLong()
     val count = in.readInt()
     val hugeBlockSizesImpl = mutable.Map.empty[Int, Byte]

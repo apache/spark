@@ -160,17 +160,11 @@ object CheckpointFileManager extends Logging {
     override def cancel(): Unit = synchronized {
       try {
         if (terminated) return
-        try {
-          underlyingStream.close()
-        } catch {
-          case NonFatal(e) =>
-            logWarning(s"Error cancelling write to $finalPath, " +
-              s"continuing to delete temp path $tempPath", e)
-        }
+        underlyingStream.close()
         fm.delete(tempPath)
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Error deleting temp file $tempPath", e)
+          logWarning(s"Error cancelling write to $finalPath", e)
       } finally {
         terminated = true
       }

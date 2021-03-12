@@ -139,7 +139,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
         case RUN_EXAMPLE:
           isExample = true;
-          appResource = findExamplesAppJar();
+          appResource = SparkLauncher.NO_RESOURCE;
           submitArgs = args.subList(1, args.size());
       }
 
@@ -241,11 +241,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
 
     args.addAll(parsedArgs);
-
     if (appResource != null) {
       args.add(appResource);
     }
-
     args.addAll(appArgs);
 
     return args;
@@ -336,7 +334,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       conf.get(SparkLauncher.PYSPARK_PYTHON),
       System.getenv("PYSPARK_DRIVER_PYTHON"),
       System.getenv("PYSPARK_PYTHON"),
-      "python3"));
+      "python"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
     if (conf.containsKey(SparkLauncher.PYSPARK_PYTHON)) {
       // pass conf spark.pyspark.python to python by environment variable.
@@ -401,20 +399,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private boolean isThriftServer(String mainClass) {
     return (mainClass != null &&
       mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
-  }
-
-  private String findExamplesAppJar() {
-    boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
-    if (isTesting) {
-      return SparkLauncher.NO_RESOURCE;
-    } else {
-      for (String exampleJar : findExamplesJars()) {
-        if (new File(exampleJar).getName().startsWith("spark-examples")) {
-          return exampleJar;
-        }
-      }
-      throw new IllegalStateException("Failed to find examples' main app jar.");
-    }
   }
 
   private List<String> findExamplesJars() {
@@ -529,7 +513,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           className = EXAMPLE_CLASS_PREFIX + className;
         }
         mainClass = className;
-        appResource = findExamplesAppJar();
+        appResource = SparkLauncher.NO_RESOURCE;
         return false;
       } else if (errorOnUnknownArgs) {
         checkArgument(!opt.startsWith("-"), "Unrecognized option: %s", opt);

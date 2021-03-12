@@ -74,8 +74,6 @@ private[ml] object JsonMatrixConverter {
           ("values" -> values.toSeq) ~
           ("isTransposed" -> isTransposed)
         compact(render(jValue))
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
     }
   }
 }

@@ -53,7 +53,14 @@ private[ml] trait DifferentiableLossAggregator[
     if (other.weightSum != 0) {
       weightSum += other.weightSum
       lossSum += other.lossSum
-      BLAS.getBLAS(dim).daxpy(dim, 1.0, other.gradientSumArray, 1, this.gradientSumArray, 1)
+
+      var i = 0
+      val localThisGradientSumArray = this.gradientSumArray
+      val localOtherGradientSumArray = other.gradientSumArray
+      while (i < dim) {
+        localThisGradientSumArray(i) += localOtherGradientSumArray(i)
+        i += 1
+      }
     }
     this
   }

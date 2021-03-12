@@ -17,7 +17,6 @@
 
 package org.apache.spark.internal
 
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
@@ -271,13 +270,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")
 
-  private[spark] val EXECUTOR_METRICS_FILESYSTEM_SCHEMES =
-    ConfigBuilder("spark.executor.metrics.fileSystemSchemes")
-      .doc("The file system schemes to report in executor metrics.")
-      .version("3.1.0")
-      .stringConf
-      .createWithDefaultString("file,hdfs")
-
   private[spark] val EXECUTOR_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
       .withPrepended(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS)
@@ -420,67 +412,6 @@ package object config {
       .intConf
       .createWithDefault(1)
 
-  private[spark] val STORAGE_DECOMMISSION_ENABLED =
-    ConfigBuilder("spark.storage.decommission.enabled")
-      .doc("Whether to decommission the block manager when decommissioning executor")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED =
-    ConfigBuilder("spark.storage.decommission.shuffleBlocks.enabled")
-      .doc("Whether to transfer shuffle blocks during block manager decommissioning. Requires " +
-        "a migratable shuffle resolver (like sort based shuffle)")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS =
-    ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxThreads")
-      .doc("Maximum number of threads to use in migrating shuffle files.")
-      .version("3.1.0")
-      .intConf
-      .checkValue(_ > 0, "The maximum number of threads should be positive")
-      .createWithDefault(8)
-
-  private[spark] val STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED =
-    ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
-      .doc("Whether to transfer RDD blocks during block manager decommissioning.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
-    ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
-      .internal()
-      .doc("Maximum number of failures which can be handled for the replication of " +
-        "one RDD block when block manager is decommissioning and trying to move its " +
-        "existing blocks.")
-      .version("3.1.0")
-      .intConf
-      .createWithDefault(3)
-
-  private[spark] val STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL =
-    ConfigBuilder("spark.storage.decommission.replicationReattemptInterval")
-      .internal()
-      .doc("The interval of time between consecutive cache block replication reattempts " +
-        "happening on each decommissioning executor (due to storage decommissioning).")
-      .version("3.1.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(_ > 0, "Time interval between two consecutive attempts of " +
-        "cache block replication should be positive.")
-      .createWithDefaultString("30s")
-
-  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH =
-    ConfigBuilder("spark.storage.decommission.fallbackStorage.path")
-      .doc("The location for fallback storage during block manager decommissioning. " +
-        "For example, `s3a://spark-storage/`. In case of empty, fallback storage is disabled. " +
-        "The storage should be managed by TTL because Spark will not clean it up.")
-      .version("3.1.0")
-      .stringConf
-      .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
-      .createOptional
-
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")
@@ -499,10 +430,9 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
-  private[spark] val STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT =
-    ConfigBuilder("spark.storage.blockManagerHeartbeatTimeoutMs")
+  private[spark] val STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT =
+    ConfigBuilder("spark.storage.blockManagerSlaveTimeoutMs")
       .version("0.7.0")
-      .withAlternative("spark.storage.blockManagerSlaveTimeoutMs")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
@@ -612,16 +542,6 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")
       .version("1.2.0")
       .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
-
-  private[spark] val LEGACY_LOCALITY_WAIT_RESET =
-    ConfigBuilder("spark.locality.wait.legacyResetOnTaskLaunch")
-    .doc("Whether to use the legacy behavior of locality wait, which resets the delay timer " +
-      "anytime a task is scheduled. See Delay Scheduling section of TaskSchedulerImpl's class " +
-      "documentation for more details.")
-    .internal()
-    .version("3.1.0")
-    .booleanConf
-    .createWithDefault(false)
 
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .version("0.5.0")
@@ -739,83 +659,74 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val EXCLUDE_ON_FAILURE_ENABLED =
-    ConfigBuilder("spark.excludeOnFailure.enabled")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.enabled")
+  // Blacklist confs
+  private[spark] val BLACKLIST_ENABLED =
+    ConfigBuilder("spark.blacklist.enabled")
+      .version("2.1.0")
       .booleanConf
       .createOptional
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
-    ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerExecutor")
+    ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerExecutor")
+      .version("2.1.0")
       .intConf
       .createWithDefault(1)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
-    ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerNode")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerNode")
+    ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerNode")
+      .version("2.1.0")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC =
-    ConfigBuilder("spark.excludeOnFailure.application.maxFailedTasksPerExecutor")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.application.maxFailedTasksPerExecutor")
+    ConfigBuilder("spark.blacklist.application.maxFailedTasksPerExecutor")
+      .version("2.2.0")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
-    ConfigBuilder("spark.excludeOnFailure.stage.maxFailedTasksPerExecutor")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.stage.maxFailedTasksPerExecutor")
+    ConfigBuilder("spark.blacklist.stage.maxFailedTasksPerExecutor")
+      .version("2.1.0")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
-    ConfigBuilder("spark.excludeOnFailure.application.maxFailedExecutorsPerNode")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.application.maxFailedExecutorsPerNode")
+    ConfigBuilder("spark.blacklist.application.maxFailedExecutorsPerNode")
+      .version("2.2.0")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
-    ConfigBuilder("spark.excludeOnFailure.stage.maxFailedExecutorsPerNode")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.stage.maxFailedExecutorsPerNode")
+    ConfigBuilder("spark.blacklist.stage.maxFailedExecutorsPerNode")
+      .version("2.1.0")
       .intConf
       .createWithDefault(2)
 
-  private[spark] val EXCLUDE_ON_FAILURE_TIMEOUT_CONF =
-    ConfigBuilder("spark.excludeOnFailure.timeout")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.timeout")
+  private[spark] val BLACKLIST_TIMEOUT_CONF =
+    ConfigBuilder("spark.blacklist.timeout")
+      .version("2.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val EXCLUDE_ON_FAILURE_KILL_ENABLED =
-    ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.killBlacklistedExecutors")
+  private[spark] val BLACKLIST_KILL_ENABLED =
+    ConfigBuilder("spark.blacklist.killBlacklistedExecutors")
+      .version("2.2.0")
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF =
-    ConfigBuilder("spark.scheduler.executorTaskExcludeOnFailureTime")
+  private[spark] val BLACKLIST_LEGACY_TIMEOUT_CONF =
+    ConfigBuilder("spark.scheduler.executorTaskBlacklistTime")
       .internal()
-      .version("3.1.0")
-      .withAlternative("spark.scheduler.executorTaskBlacklistTime")
+      .version("1.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED =
-    ConfigBuilder("spark.excludeOnFailure.application.fetchFailure.enabled")
-      .version("3.1.0")
-      .withAlternative("spark.blacklist.application.fetchFailure.enabled")
+  private[spark] val BLACKLIST_FETCH_FAILURE_ENABLED =
+    ConfigBuilder("spark.blacklist.application.fetchFailure.enabled")
+      .version("2.3.0")
       .booleanConf
       .createWithDefault(false)
+  // End blacklist confs
 
   private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
     ConfigBuilder("spark.files.fetchFailure.unRegisterOutputOnHost")
@@ -1441,9 +1352,10 @@ package object config {
 
   private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
     ConfigBuilder("spark.shuffle.readHostLocalDisk")
-      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled, shuffle " +
-        "blocks requested from those block managers which are running on the same host are " +
-        "read from the disk directly instead of being fetched as remote blocks over the network.")
+      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled and external " +
+        s"shuffle `${SHUFFLE_SERVICE_ENABLED.key}` is enabled), shuffle " +
+        "blocks requested from those block managers which are running on the same host are read " +
+        "from the disk directly instead of being fetched as remote blocks over the network.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -1479,12 +1391,10 @@ package object config {
       .createWithDefaultString("365d")
 
   private[spark] val UNSCHEDULABLE_TASKSET_TIMEOUT =
-    ConfigBuilder("spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout")
+    ConfigBuilder("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
       .doc("The timeout in seconds to wait to acquire a new executor and schedule a task " +
-        "before aborting a TaskSet which is unschedulable because all executors are " +
-        "excluded due to failures.")
-      .version("3.1.0")
-      .withAlternative("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
+        "before aborting a TaskSet which is unschedulable because of being completely blacklisted.")
+      .version("2.4.1")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
       .createWithDefault(120)
@@ -1813,16 +1723,6 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
-  private[spark] val ARCHIVES = ConfigBuilder("spark.archives")
-    .version("3.1.0")
-    .doc("Comma-separated list of archives to be extracted into the working directory of each " +
-      "executor. .jar, .tar.gz, .tgz and .zip are supported. You can specify the directory " +
-      "name to unpack via adding '#' after the file name to unpack, for example, " +
-      "'file.zip#directory'. This configuration is experimental.")
-    .stringConf
-    .toSequence
-    .createWithDefault(Nil)
-
   private[spark] val SUBMIT_DEPLOY_MODE = ConfigBuilder("spark.submit.deployMode")
     .version("1.5.0")
     .stringConf
@@ -1856,7 +1756,6 @@ package object config {
     ConfigBuilder("spark.scheduler.mode")
       .version("0.8.0")
       .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
       .createWithDefault(SchedulingMode.FIFO.toString)
 
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
@@ -1903,30 +1802,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val DECOMMISSION_ENABLED =
-    ConfigBuilder("spark.decommission.enabled")
-      .doc("When decommission enabled, Spark will try its best to shutdown the executor " +
-        s"gracefully. Spark will try to migrate all the RDD blocks (controlled by " +
-        s"${STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key}) and shuffle blocks (controlled by " +
-        s"${STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key}) from the decommissioning " +
-        s"executor to a remote executor when ${STORAGE_DECOMMISSION_ENABLED.key} is enabled. " +
-        s"With decommission enabled, Spark will also decommission an executor instead of " +
-        s"killing when ${DYN_ALLOCATION_ENABLED.key} enabled.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
-    ConfigBuilder("spark.executor.decommission.killInterval")
-      .doc("Duration after which a decommissioned executor will be killed forcefully." +
-        "This config is useful for cloud environments where we know in advance when " +
-        "an executor is going to go down after decommissioning signal i.e. around 2 mins " +
-        "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
-        "used to decide what tasks running on decommission executors to speculate.")
-      .version("3.1.0")
-      .timeConf(TimeUnit.SECONDS)
-      .createOptional
-
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .version("2.0.0")
@@ -1939,88 +1814,10 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
-  private[spark] val RESOURCE_PROFILE_MERGE_CONFLICTS =
-    ConfigBuilder("spark.scheduler.resource.profileMergeConflicts")
-      .doc("If set to true, Spark will merge ResourceProfiles when different profiles " +
-        "are specified in RDDs that get combined into a single stage. When they are merged, " +
-        "Spark chooses the maximum of each resource and creates a new ResourceProfile. The " +
-        "default of false results in Spark throwing an exception if multiple different " +
-        "ResourceProfiles are found in RDDs going into the same stage.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val STANDALONE_SUBMIT_WAIT_APP_COMPLETION =
-    ConfigBuilder("spark.standalone.submit.waitAppCompletion")
-      .doc("In standalone cluster mode, controls whether the client waits to exit until the " +
-        "application completes. If set to true, the client process will stay alive polling " +
-        "the driver's status. Otherwise, the client process will exit after submission.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val EXECUTOR_ALLOW_SPARK_CONTEXT =
     ConfigBuilder("spark.executor.allowSparkContext")
       .doc("If set to true, SparkContext can be created in executors.")
       .version("3.0.1")
       .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH =
-    ConfigBuilder("spark.executor.killOnFatalError.depth")
-      .doc("The max depth of the exception chain in a failed task Spark will search for a fatal " +
-        "error to check whether it should kill an executor. 0 means not checking any fatal " +
-        "error, 1 means checking only the exception but not the cause, and so on.")
-      .internal()
-      .version("3.1.0")
-      .intConf
-      .checkValue(_ >= 0, "needs to be a non-negative value")
-      .createWithDefault(5)
-
-  private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
-    ConfigBuilder("spark.shuffle.push.enabled")
-      .doc("Set to 'true' to enable push-based shuffle on the client side and this works in " +
-        "conjunction with the server side flag spark.shuffle.server.mergedShuffleFileManagerImpl " +
-        "which needs to be set with the appropriate " +
-        "org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for push-based " +
-        "shuffle to be enabled")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  private[spark] val SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS =
-    ConfigBuilder("spark.shuffle.push.maxRetainedMergerLocations")
-      .doc("Maximum number of shuffle push merger locations cached for push based shuffle. " +
-        "Currently, shuffle push merger locations are nothing but external shuffle services " +
-        "which are responsible for handling pushed blocks and merging them and serving " +
-        "merged blocks for later shuffle fetch.")
-      .version("3.1.0")
-      .intConf
-      .createWithDefault(500)
-
-  private[spark] val SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO =
-    ConfigBuilder("spark.shuffle.push.mergersMinThresholdRatio")
-      .doc("The minimum number of shuffle merger locations required to enable push based " +
-        "shuffle for a stage. This is specified as a ratio of the number of partitions in " +
-        "the child stage. For example, a reduce stage which has 100 partitions and uses the " +
-        "default value 0.05 requires at least 5 unique merger locations to enable push based " +
-        "shuffle. Merger locations are currently defined as external shuffle services.")
-      .version("3.1.0")
-      .doubleConf
-      .createWithDefault(0.05)
-
-  private[spark] val SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD =
-    ConfigBuilder("spark.shuffle.push.mergersMinStaticThreshold")
-      .doc(s"The static threshold for number of shuffle push merger locations should be " +
-        "available in order to enable push based shuffle for a stage. Note this config " +
-        s"works in conjunction with ${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key}. " +
-        "Maximum of spark.shuffle.push.mergersMinStaticThreshold and " +
-        s"${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key} ratio number of mergers needed to " +
-        "enable push based shuffle for a stage. For eg: with 1000 partitions for the child " +
-        "stage with spark.shuffle.push.mergersMinStaticThreshold as 5 and " +
-        s"${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key} set to 0.05, we would need " +
-        "at least 50 mergers to enable push based shuffle for that stage.")
-      .version("3.1.0")
-      .doubleConf
-      .createWithDefault(5)
+      .createWithDefault(true)
 }

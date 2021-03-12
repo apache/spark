@@ -612,7 +612,7 @@ object WriteAheadLogSuite {
       }
     }
     writer.close()
-    segments.toSeq
+    segments
   }
 
   /**
@@ -685,7 +685,7 @@ object WriteAheadLogSuite {
     } finally {
       reader.close()
     }
-    buffer.toSeq
+    buffer
   }
 
   /** Read all the data from a log file using reader class and return the list of byte buffers. */

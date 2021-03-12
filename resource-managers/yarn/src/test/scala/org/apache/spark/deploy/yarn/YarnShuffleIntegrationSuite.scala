@@ -23,8 +23,7 @@ import java.nio.charset.StandardCharsets
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.Matchers
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._

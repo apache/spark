@@ -19,6 +19,7 @@ package org.apache.spark.ml.tree.impl
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel

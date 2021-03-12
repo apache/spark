@@ -39,7 +39,6 @@ class ScanOperationSuite extends SparkFunSuite {
         assert(projects(0) === colB)
         assert(projects(1) === aliasR)
         assert(filters.size === 1)
-      case _ => assert(false)
     }
   }
 
@@ -51,7 +50,6 @@ class ScanOperationSuite extends SparkFunSuite {
         assert(projects(0) === colA)
         assert(projects(1) === colB)
         assert(filters.size === 1)
-      case _ => assert(false)
     }
   }
 
@@ -67,7 +65,6 @@ class ScanOperationSuite extends SparkFunSuite {
         assert(projects.size === 2)
         assert(projects(0) === colA)
         assert(projects(1) === aliasId)
-      case _ => assert(false)
     }
   }
 
@@ -84,7 +81,6 @@ class ScanOperationSuite extends SparkFunSuite {
         assert(projects(0) === colA)
         assert(projects(1) === aliasR)
         assert(filters.size === 1)
-      case _ => assert(false)
     }
   }
 
@@ -97,7 +93,6 @@ class ScanOperationSuite extends SparkFunSuite {
         assert(projects(0) === colA)
         assert(projects(1) === aliasR)
         assert(filters.size === 1)
-      case _ => assert(false)
     }
   }
 

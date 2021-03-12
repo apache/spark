@@ -25,16 +25,11 @@ import sys
 import unittest
 
 from pyspark.sql import Row
-from pyspark.sql.functions import col
-from pyspark.sql.udf import UserDefinedFunction
+from pyspark.sql.functions import col, UserDefinedFunction
 from pyspark.sql.utils import AnalysisException
-from pyspark.sql.types import ByteType, ShortType, IntegerType, FloatType, DateType, \
-    TimestampType, MapType, StringType, StructType, StructField, ArrayType, DoubleType, LongType, \
-    DecimalType, BinaryType, BooleanType, NullType
-from pyspark.sql.types import (  # type: ignore
-    _array_signed_int_typecode_ctype_mappings, _array_type_mappings,
+from pyspark.sql.types import *
+from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_type_mappings, \
     _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type
-)
 from pyspark.testing.sqlutils import ReusedSQLTestCase, ExamplePointUDT, PythonOnlyUDT, \
     ExamplePoint, PythonOnlyPoint, MyObject
 
@@ -62,7 +57,7 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(10, df3.count())
 
     def test_apply_schema_to_dict_and_rows(self):
-        schema = StructType().add("a", IntegerType()).add("b", StringType())
+        schema = StructType().add("b", StringType()).add("a", IntegerType())
         input = [{"a": 1}, {"b": "coffee"}]
         rdd = self.sc.parallelize(input)
         for verify in [False, True]:
@@ -78,6 +73,7 @@ class TypesTests(ReusedSQLTestCase):
             self.assertEqual(10, df4.count())
 
     def test_create_dataframe_schema_mismatch(self):
+        input = [Row(a=1)]
         rdd = self.sc.parallelize(range(3)).map(lambda i: Row(a=i))
         schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
         df = self.spark.createDataFrame(rdd, schema)
@@ -180,7 +176,7 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(df.columns, ['col1', '_2'])
 
     def test_infer_schema_fails(self):
-        with self.assertRaisesRegex(TypeError, 'field a'):
+        with self.assertRaisesRegexp(TypeError, 'field a'):
             self.spark.createDataFrame(self.spark.sparkContext.parallelize([[1, 1], ["x", 1]]),
                                        schema=["a", "b"], samplingRatio=0.99)
 
@@ -553,6 +549,7 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
 
+    @unittest.skipIf(sys.version < "3", "only Python 3 infers bytes as binary type")
     def test_infer_binary_type(self):
         binaryrow = [Row(f1='a', f2=b"abcd")]
         df = self.sc.parallelize(binaryrow).toDF()
@@ -578,18 +575,18 @@ class TypesTests(ReusedSQLTestCase):
             ArrayType(LongType()),
             ArrayType(LongType())
         ), ArrayType(LongType()))
-        with self.assertRaisesRegex(TypeError, 'element in array'):
+        with self.assertRaisesRegexp(TypeError, 'element in array'):
             _merge_type(ArrayType(LongType()), ArrayType(DoubleType()))
 
         self.assertEqual(_merge_type(
             MapType(StringType(), LongType()),
             MapType(StringType(), LongType())
         ), MapType(StringType(), LongType()))
-        with self.assertRaisesRegex(TypeError, 'key of map'):
+        with self.assertRaisesRegexp(TypeError, 'key of map'):
             _merge_type(
                 MapType(StringType(), LongType()),
                 MapType(DoubleType(), LongType()))
-        with self.assertRaisesRegex(TypeError, 'value of map'):
+        with self.assertRaisesRegexp(TypeError, 'value of map'):
             _merge_type(
                 MapType(StringType(), LongType()),
                 MapType(StringType(), DoubleType()))
@@ -598,7 +595,7 @@ class TypesTests(ReusedSQLTestCase):
             StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
             StructType([StructField("f1", LongType()), StructField("f2", StringType())])
         ), StructType([StructField("f1", LongType()), StructField("f2", StringType())]))
-        with self.assertRaisesRegex(TypeError, 'field f1'):
+        with self.assertRaisesRegexp(TypeError, 'field f1'):
             _merge_type(
                 StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
                 StructType([StructField("f1", DoubleType()), StructField("f2", StringType())]))
@@ -607,7 +604,7 @@ class TypesTests(ReusedSQLTestCase):
             StructType([StructField("f1", StructType([StructField("f2", LongType())]))]),
             StructType([StructField("f1", StructType([StructField("f2", LongType())]))])
         ), StructType([StructField("f1", StructType([StructField("f2", LongType())]))]))
-        with self.assertRaisesRegex(TypeError, 'field f2 in field f1'):
+        with self.assertRaisesRegexp(TypeError, 'field f2 in field f1'):
             _merge_type(
                 StructType([StructField("f1", StructType([StructField("f2", LongType())]))]),
                 StructType([StructField("f1", StructType([StructField("f2", StringType())]))]))
@@ -616,7 +613,7 @@ class TypesTests(ReusedSQLTestCase):
             StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]),
             StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())])
         ), StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]))
-        with self.assertRaisesRegex(TypeError, 'element in array field f1'):
+        with self.assertRaisesRegexp(TypeError, 'element in array field f1'):
             _merge_type(
                 StructType([
                     StructField("f1", ArrayType(LongType())),
@@ -635,7 +632,7 @@ class TypesTests(ReusedSQLTestCase):
         ), StructType([
             StructField("f1", MapType(StringType(), LongType())),
             StructField("f2", StringType())]))
-        with self.assertRaisesRegex(TypeError, 'value of map field f1'):
+        with self.assertRaisesRegexp(TypeError, 'value of map field f1'):
             _merge_type(
                 StructType([
                     StructField("f1", MapType(StringType(), LongType())),
@@ -648,7 +645,7 @@ class TypesTests(ReusedSQLTestCase):
             StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
             StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))])
         ), StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]))
-        with self.assertRaisesRegex(TypeError, 'key of map element in array field f1'):
+        with self.assertRaisesRegexp(TypeError, 'key of map element in array field f1'):
             _merge_type(
                 StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
                 StructType([StructField("f1", ArrayType(MapType(DoubleType(), LongType())))])
@@ -677,6 +674,10 @@ class TypesTests(ReusedSQLTestCase):
             supported_string_types += ['u']
             # test unicode
             assertCollectSuccess('u', u'a')
+        if sys.version_info[0] < 3:
+            supported_string_types += ['c']
+            # test string
+            assertCollectSuccess('c', 'a')
 
         # supported float and double
         #
@@ -729,12 +730,16 @@ class TypesTests(ReusedSQLTestCase):
         #
         # Keys in _array_type_mappings is a complete list of all supported types,
         # and types not in _array_type_mappings are considered unsupported.
-        # PyPy seems not having array.typecodes.
-        all_types = set(['b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'q', 'Q', 'f', 'd'])
+        # `array.typecodes` are not supported in python 2.
+        if sys.version_info[0] < 3:
+            all_types = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
+        else:
+            # PyPy seems not having array.typecodes.
+            all_types = set(['b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'q', 'Q', 'f', 'd'])
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
-            with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
+            with self.assertRaises(TypeError):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
 
@@ -771,7 +776,10 @@ class DataTypeTests(unittest.TestCase):
         self.assertEqual(repr(row), "<Row('Alice', 11)>")
 
         # test __repr__ with unicode values
-        self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
+        if sys.version_info.major >= 3:
+            self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
+        else:
+            self.assertEqual(repr(Row(u"数", u"量")), r"<Row(u'\u6570', u'\u91cf')>")
 
     def test_empty_row(self):
         row = Row()
@@ -789,13 +797,13 @@ class DataTypeTests(unittest.TestCase):
 class DataTypeVerificationTests(unittest.TestCase):
 
     def test_verify_type_exception_msg(self):
-        self.assertRaisesRegex(
+        self.assertRaisesRegexp(
             ValueError,
             "test_name",
             lambda: _make_type_verifier(StringType(), nullable=False, name="test_name")(None))
 
         schema = StructType([StructField('a', StructType([StructField('b', IntegerType())]))])
-        self.assertRaisesRegex(
+        self.assertRaisesRegexp(
             TypeError,
             "field b in field a",
             lambda: _make_type_verifier(schema)([["data"]]))
@@ -889,6 +897,7 @@ class DataTypeVerificationTests(unittest.TestCase):
             ({"s": "a", "f": 1.0}, schema),
             (Row(s="a", i=1), schema),
             (Row(s="a", i=None), schema),
+            (Row(s="a", i=1, f=1.0), schema),
             (["a", 1], schema),
             (["a", None], schema),
             (("a", 1), schema),
@@ -973,20 +982,25 @@ class DataTypeVerificationTests(unittest.TestCase):
             with self.assertRaises(exp, msg=msg):
                 _make_type_verifier(data_type, nullable=False)(obj)
 
+    @unittest.skipIf(sys.version_info[:2] < (3, 6), "Create Row without sorting fields")
     def test_row_without_field_sorting(self):
+        sorting_enabled_tmp = Row._row_field_sorting_enabled
+        Row._row_field_sorting_enabled = False
+
         r = Row(b=1, a=2)
         TestRow = Row("b", "a")
         expected = TestRow(1, 2)
 
         self.assertEqual(r, expected)
         self.assertEqual(repr(r), "Row(b=1, a=2)")
+        Row._row_field_sorting_enabled = sorting_enabled_tmp
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_types import *  # noqa: F401
+    from pyspark.sql.tests.test_types import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

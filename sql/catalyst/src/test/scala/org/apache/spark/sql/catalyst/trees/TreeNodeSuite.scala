@@ -583,9 +583,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         JObject(
           "class" -> classOf[Union].getName,
           "num-children" -> 2,
-          "children" -> List(0, 1),
-          "byName" -> JBool(false),
-          "allowMissingCol" -> JBool(false)),
+          "children" -> List(0, 1)),
         JObject(
           "class" -> classOf[JsonTestTreeNode].getName,
           "num-children" -> 0,

@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.plans
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTag}
 import org.apache.spark.sql.internal.SQLConf
@@ -36,9 +35,14 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * The tree traverse APIs like `transform`, `foreach`, `collect`, etc. that are
  * inherited from `TreeNode`, do not traverse into query plans inside subqueries.
  */
-abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
-  extends TreeNode[PlanType] with SQLConfHelper {
+abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
+
+  /**
+   * The active config object within the current scope.
+   * See [[SQLConf.get]] for more information.
+   */
+  def conf: SQLConf = SQLConf.get
 
   def output: Seq[Attribute]
 
@@ -176,14 +180,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    *             rewrite attribute references in the parent nodes.
    * @param skipCond a boolean condition to indicate if we can skip transforming a plan node to save
    *                 time.
-   * @param canGetOutput a boolean condition to indicate if we can get the output of a plan node
-   *                     to prune the attributes mapping to be propagated. The default value is true
-   *                     as only unresolved logical plan can't get output.
    */
   def transformUpWithNewOutput(
       rule: PartialFunction[PlanType, (PlanType, Seq[(Attribute, Attribute)])],
-      skipCond: PlanType => Boolean = _ => false,
-      canGetOutput: PlanType => Boolean = _ => true): PlanType = {
+      skipCond: PlanType => Boolean = _ => false): PlanType = {
     def rewrite(plan: PlanType): (PlanType, Seq[(Attribute, Attribute)]) = {
       if (skipCond(plan)) {
         plan -> Nil
@@ -206,7 +206,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
             .exists(_._2.map(_._2.exprId).distinct.length > 1),
             "Found duplicate rewrite attributes")
 
-          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan.toSeq)
+          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan)
           // Using attrMapping from the children plans to rewrite their parent node.
           // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
           newPlan = newPlan.transformExpressions {
@@ -237,16 +237,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           val existingAttrMappingSet = transferAttrMapping.map(_._2).toSet
           newValidAttrMapping.filterNot { case (_, a) => existingAttrMappingSet.contains(a) }
         }
-        val resultAttrMapping = if (canGetOutput(plan)) {
-          // We propagate the attributes mapping to the parent plan node to update attributes, so
-          // the `newAttr` must be part of this plan's output.
-          (transferAttrMapping ++ newOtherAttrMapping).filter {
-            case (_, newAttr) => planAfterRule.outputSet.contains(newAttr)
-          }
-        } else {
-          transferAttrMapping ++ newOtherAttrMapping
-        }
-        planAfterRule -> resultAttrMapping.toSeq
+        planAfterRule -> (transferAttrMapping ++ newOtherAttrMapping).toSeq
       }
     }
     rewrite(this)._1

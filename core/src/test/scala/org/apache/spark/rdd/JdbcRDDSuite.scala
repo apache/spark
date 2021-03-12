@@ -26,8 +26,7 @@ import org.apache.spark.util.Utils
 
 class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
+  before {
     Utils.classForName("org.apache.derby.jdbc.EmbeddedDriver")
     val conn = DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb;create=true")
     try {
@@ -97,7 +96,7 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
     assert(rdd.reduce(_ + _) === 5050)
   }
 
-  override def afterAll(): Unit = {
+  after {
     try {
       DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb;shutdown=true")
     } catch {
@@ -105,6 +104,5 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
         // Normal single database shutdown
         // https://db.apache.org/derby/docs/10.2/ref/rrefexcept71493.html
     }
-    super.afterAll()
   }
 }

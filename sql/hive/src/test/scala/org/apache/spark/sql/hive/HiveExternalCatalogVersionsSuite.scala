@@ -42,37 +42,26 @@ import org.apache.spark.util.Utils
  * Test HiveExternalCatalog backward compatibility.
  *
  * Note that, this test suite will automatically download spark binary packages of different
- * versions to a local directory. If the `spark.test.cache-dir` system property is defined, this
- * directory will be used. If there is already a spark folder with expected version under this
- * local directory, e.g. `/{cache-dir}/spark-2.0.3`, downloading for this spark version will be
- * skipped. If the system property is not present, a temporary directory will be used and cleaned
- * up after the test.
+ * versions to a local directory `/tmp/spark-test`. If there is already a spark folder with
+ * expected version under this local directory, e.g. `/tmp/spark-test/spark-2.0.3`, we will skip the
+ * downloading for this spark version.
  */
 @SlowHiveTest
 @ExtendedHiveTest
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
-  import HiveExternalCatalogVersionsSuite._
+  private val isTestAtLeastJava9 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
   private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
-  // For local test, you can set `spark.test.cache-dir` to a static value like `/tmp/test-spark`, to
+  // For local test, you can set `sparkTestingDir` to a static value like `/tmp/test-spark`, to
   // avoid downloading Spark of different versions in each run.
-  private val sparkTestingDir = Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY))
-      .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
+  private val sparkTestingDir = new File("/tmp/test-spark")
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-  val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-    "2.3.7"
-  } else {
-    "1.2.1"
-  }
 
   override def afterAll(): Unit = {
     try {
       Utils.deleteRecursively(wareHousePath)
       Utils.deleteRecursively(tmpDataDir)
-      // Only delete sparkTestingDir if it wasn't defined to a static location by the system prop
-      if (Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY)).isEmpty) {
-        Utils.deleteRecursively(sparkTestingDir)
-      }
+      Utils.deleteRecursively(sparkTestingDir)
     } finally {
       super.afterAll()
     }
@@ -153,9 +142,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     new String(Files.readAllBytes(contentPath), StandardCharsets.UTF_8)
   }
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-
+  private def prepare(): Unit = {
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
@@ -205,7 +192,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--master", "local[2]",
         "--conf", s"${UI_ENABLED.key}=false",
         "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
@@ -217,14 +204,23 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     tempPyFile.delete()
   }
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    if (!isTestAtLeastJava9) {
+      prepare()
+    }
+  }
+
   test("backward compatibility") {
+    // TODO SPARK-28704 Test backward compatibility on JDK9+ once we have a version supports JDK9+
+    assume(!isTestAtLeastJava9)
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
       "--master", "local[2]",
       "--conf", s"${UI_ENABLED.key}=false",
       "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
+      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
       "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
       "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
@@ -251,9 +247,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
       // do not throw exception during object initialization.
       case NonFatal(_) => Seq("3.0.1", "2.4.7") // A temporary fallback to use a specific version
     }
-    versions
-      .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
-      .filter(v => v.startsWith("3") || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+    versions.filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
   }
 
   protected var spark: SparkSession = _
@@ -315,8 +309,3 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
     }
   }
 }
-
-object HiveExternalCatalogVersionsSuite {
-  private val SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY = "spark.test.cache-dir"
-}
-

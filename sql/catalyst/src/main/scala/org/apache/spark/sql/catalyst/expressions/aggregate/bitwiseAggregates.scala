@@ -60,7 +60,6 @@ abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes 
       > SELECT _FUNC_(col) FROM VALUES (3), (5) AS tab(col);
        1
   """,
-  group = "agg_funcs",
   since = "3.0.0")
 case class BitAndAgg(child: Expression) extends BitAggregate {
 

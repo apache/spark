@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
@@ -61,8 +62,7 @@ import org.apache.spark.sql.types._
  *                            functions.
  * - [[NamedExpression]]: An [[Expression]] that is named.
  * - [[TimeZoneAwareExpression]]: A common base trait for time zone aware expressions.
- * - [[SubqueryExpression]]: A base interface for expressions that contain a
- *                           [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
+ * - [[SubqueryExpression]]: A base interface for expressions that contain a [[LogicalPlan]].
  *
  * - [[LeafExpression]]: an expression that has no child.
  * - [[UnaryExpression]]: an expression that has one child.
@@ -297,9 +297,6 @@ abstract class Expression extends TreeNode[Expression] {
  */
 trait Unevaluable extends Expression {
 
-  /** Unevaluable is not foldable because we don't have an eval for it. */
-  final override def foldable: Boolean = false
-
   final override def eval(input: InternalRow = null): Any =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
@@ -320,24 +317,12 @@ trait Unevaluable extends Expression {
  */
 trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override def nullable: Boolean = child.nullable
+  override def foldable: Boolean = child.foldable
   override def dataType: DataType = child.dataType
   // As this expression gets replaced at optimization with its `child" expression,
   // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
   // are semantically equal.
   override lazy val canonicalized: Expression = child.canonicalized
-
-  /**
-   * Only used to generate SQL representation of this expression.
-   *
-   * Implementations should override this with original parameters
-   */
-  def exprsReplaced: Seq[Expression]
-
-  override def sql: String = mkString(exprsReplaced.map(_.sql))
-
-  def mkString(childrenString: Seq[String]): String = {
-    prettyName + childrenString.mkString("(", ", ", ")")
-  }
 }
 
 /**
@@ -1059,12 +1044,10 @@ trait ComplexTypeMergingExpression extends Expression {
         s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
   }
 
-  private lazy val internalDataType: DataType = {
+  override def dataType: DataType = {
     dataTypeCheck
     inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
-
-  override def dataType: DataType = internalDataType
 }
 
 /**

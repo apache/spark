@@ -79,7 +79,7 @@ class ParquetToSparkSchemaConverter(
       }
     }
 
-    StructType(fields.toSeq)
+    StructType(fields)
   }
 
   /**
@@ -225,6 +225,10 @@ class ParquetToSparkSchemaConverter(
           s"Invalid map type: $field")
 
         val keyType = keyValueType.getType(0)
+        ParquetSchemaConverter.checkConversionRequirement(
+          keyType.isPrimitive,
+          s"Map key type is expected to be a primitive type, but found: $keyType")
+
         val valueType = keyValueType.getType(1)
         val valueOptional = valueType.isRepetition(OPTIONAL)
         MapType(

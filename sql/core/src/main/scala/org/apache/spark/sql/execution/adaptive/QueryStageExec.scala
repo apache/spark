@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.{Future, Promise}
 
@@ -90,18 +89,19 @@ abstract class QueryStageExec extends LeafExecNode {
   /**
    * Compute the statistics of the query stage if executed, otherwise None.
    */
-  def computeStats(): Option[Statistics] = resultOption.get().map { _ =>
-    val runtimeStats = getRuntimeStatistics
-    val dataSize = runtimeStats.sizeInBytes.max(0)
-    val numOutputRows = runtimeStats.rowCount.map(_.max(0))
-    Statistics(dataSize, numOutputRows)
+  def computeStats(): Option[Statistics] = resultOption.map { _ =>
+    // Metrics `dataSize` are available in both `ShuffleExchangeExec` and `BroadcastExchangeExec`.
+    val exchange = plan match {
+      case r: ReusedExchangeExec => r.child
+      case e: Exchange => e
+      case _ => throw new IllegalStateException("wrong plan for query stage:\n " + plan.treeString)
+    }
+    Statistics(sizeInBytes = exchange.metrics("dataSize").value)
   }
 
   @transient
   @volatile
-  protected var _resultOption = new AtomicReference[Option[Any]](None)
-
-  private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
+  private[adaptive] var resultOption: Option[Any] = None
 
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
@@ -128,8 +128,7 @@ abstract class QueryStageExec extends LeafExecNode {
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      printNodeId: Boolean,
-      indent: Int = 0): Unit = {
+      printNodeId: Boolean): Unit = {
     super.generateTreeString(depth,
       lastChildren,
       append,
@@ -137,10 +136,9 @@ abstract class QueryStageExec extends LeafExecNode {
       prefix,
       addSuffix,
       maxFields,
-      printNodeId,
-      indent)
+      printNodeId)
     plan.generateTreeString(
-      depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, printNodeId, indent)
+      depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, printNodeId)
   }
 }
 
@@ -163,11 +161,9 @@ case class ShuffleQueryStageExec(
   }
 
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
-    val reuse = ShuffleQueryStageExec(
+    ShuffleQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, shuffle))
-    reuse._resultOption = this._resultOption
-    reuse
   }
 
   override def cancel(): Unit = {
@@ -184,8 +180,8 @@ case class ShuffleQueryStageExec(
    * this method returns None, as there is no map statistics.
    */
   def mapStats: Option[MapOutputStatistics] = {
-    assert(resultOption.get().isDefined, s"${getClass.getSimpleName} should already be ready")
-    val stats = resultOption.get().get.asInstanceOf[MapOutputStatistics]
+    assert(resultOption.isDefined, "ShuffleQueryStageExec should already be ready")
+    val stats = resultOption.get.asInstanceOf[MapOutputStatistics]
     Option(stats)
   }
 
@@ -227,11 +223,9 @@ case class BroadcastQueryStageExec(
   }
 
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
-    val reuse = BroadcastQueryStageExec(
+    BroadcastQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, broadcast))
-    reuse._resultOption = this._resultOption
-    reuse
   }
 
   override def cancel(): Unit = {

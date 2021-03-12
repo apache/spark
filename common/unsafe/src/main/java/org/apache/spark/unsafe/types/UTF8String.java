@@ -635,13 +635,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimLeft(UTF8String trimString) {
     if (trimString == null) return null;
     // the searching byte position in the source string
-    int searchIdx = 0;
+    int srchIdx = 0;
     // the first beginning byte position of a non-matching character
     int trimIdx = 0;
 
-    while (searchIdx < numBytes) {
+    while (srchIdx < numBytes) {
       UTF8String searchChar = copyUTF8String(
-          searchIdx, searchIdx + numBytesForFirstByte(this.getByte(searchIdx)) - 1);
+          srchIdx, srchIdx + numBytesForFirstByte(this.getByte(srchIdx)) - 1);
       int searchCharBytes = searchChar.numBytes;
       // try to find the matching for the searchChar in the trimString set
       if (trimString.find(searchChar, 0) >= 0) {
@@ -650,9 +650,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         // no matching, exit the search
         break;
       }
-      searchIdx += searchCharBytes;
+      srchIdx += searchCharBytes;
     }
-    if (searchIdx == 0) {
+    if (srchIdx == 0) {
       // Nothing trimmed
       return this;
     }

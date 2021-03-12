@@ -21,10 +21,11 @@ import java.net.URI
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -70,8 +71,8 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
   }
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
-    TestHive.sessionState.analyzer.execute(TestHive.sessionState.sqlParser.parsePlan(sql)).collect {
-      case CreateTableCommand(tableDesc, ifNotExists) => (tableDesc, ifNotExists)
+    TestHive.sessionState.sqlParser.parsePlan(sql).collect {
+      case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
     }.head
   }
 
@@ -88,7 +89,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
   test("Test the default fileformat for Hive-serde tables") {
     withSQLConf("hive.default.fileformat" -> "orc") {
       val (desc, exists) = extractTableDesc(
-        "CREATE TABLE IF NOT EXISTS fileformat_test (id int) USING hive")
+        "CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
       assert(exists)
       assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
       assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
@@ -96,8 +97,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
     }
 
     withSQLConf("hive.default.fileformat" -> "parquet") {
-      val (desc, exists) = extractTableDesc(
-        "CREATE TABLE IF NOT EXISTS fileformat_test (id int) USING hive")
+      val (desc, exists) = extractTableDesc("CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
       assert(exists)
       val input = desc.storage.inputFormat
       val output = desc.storage.outputFormat

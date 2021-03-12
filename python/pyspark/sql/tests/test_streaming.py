@@ -20,9 +20,8 @@ import shutil
 import tempfile
 import time
 
-from pyspark.sql import Row
 from pyspark.sql.functions import lit
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType
+from pyspark.sql.types import *
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -69,12 +68,9 @@ class StreamingTests(ReusedSQLTestCase):
     def test_stream_read_options_overwrite(self):
         bad_schema = StructType([StructField("test", IntegerType(), False)])
         schema = StructType([StructField("data", StringType(), False)])
-        # SPARK-32516 disables the overwrite behavior by default.
-        with self.sql_conf({"spark.sql.legacy.pathOptionBehavior.enabled": True}):
-            df = self.spark.readStream.format('csv')\
-                .option('path', 'python/test_support/sql/fake')\
-                .schema(bad_schema)\
-                .load(path='python/test_support/sql/streaming', schema=schema, format='text')
+        df = self.spark.readStream.format('csv').option('path', 'python/test_support/sql/fake') \
+            .schema(bad_schema)\
+            .load(path='python/test_support/sql/streaming', schema=schema, format='text')
         self.assertTrue(df.isStreaming)
         self.assertEqual(df.schema.simpleString(), "struct<data:string>")
 
@@ -114,12 +110,10 @@ class StreamingTests(ReusedSQLTestCase):
         chk = os.path.join(tmpPath, 'chk')
         fake1 = os.path.join(tmpPath, 'fake1')
         fake2 = os.path.join(tmpPath, 'fake2')
-        # SPARK-32516 disables the overwrite behavior by default.
-        with self.sql_conf({"spark.sql.legacy.pathOptionBehavior.enabled": True}):
-            q = df.writeStream.option('checkpointLocation', fake1)\
-                .format('memory').option('path', fake2) \
-                .queryName('fake_query').outputMode('append') \
-                .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
+        q = df.writeStream.option('checkpointLocation', fake1)\
+            .format('memory').option('path', fake2) \
+            .queryName('fake_query').outputMode('append') \
+            .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
 
         try:
             self.assertEqual(q.name, 'this_query')
@@ -570,36 +564,13 @@ class StreamingTests(ReusedSQLTestCase):
             if q:
                 q.stop()
 
-    def test_streaming_read_from_table(self):
-        with self.table("input_table", "this_query"):
-            self.spark.sql("CREATE TABLE input_table (value string) USING parquet")
-            self.spark.sql("INSERT INTO input_table VALUES ('aaa'), ('bbb'), ('ccc')")
-            df = self.spark.readStream.table("input_table")
-            self.assertTrue(df.isStreaming)
-            q = df.writeStream.format('memory').queryName('this_query').start()
-            q.processAllAvailable()
-            q.stop()
-            result = self.spark.sql("SELECT * FROM this_query ORDER BY value").collect()
-            self.assertEqual(
-                set([Row(value='aaa'), Row(value='bbb'), Row(value='ccc')]), set(result))
-
-    def test_streaming_write_to_table(self):
-        with self.table("output_table"), tempfile.TemporaryDirectory() as tmpdir:
-            df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-            q = df.writeStream.toTable("output_table", format='parquet', checkpointLocation=tmpdir)
-            self.assertTrue(q.isActive)
-            time.sleep(3)
-            q.stop()
-            result = self.spark.sql("SELECT value FROM output_table").collect()
-            self.assertTrue(len(result) > 0)
-
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_streaming import *  # noqa: F401
+    from pyspark.sql.tests.test_streaming import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

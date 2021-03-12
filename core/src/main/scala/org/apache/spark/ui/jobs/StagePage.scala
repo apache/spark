@@ -141,11 +141,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val summary =
       <div>
-        <ul class="list-unstyled">
-          <li>
-            <strong>Resource Profile Id: </strong>
-            {stageData.resourceProfileId}
-          </li>
+        <ul class="unstyled">
           <li>
             <strong>Total Time Across All Tasks: </strong>
             {UIUtils.formatDuration(stageData.executorRunTime)}
@@ -212,6 +208,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         stageData,
         UIUtils.prependBaseUri(request, parent.basePath) +
           s"/stages/stage/?id=${stageId}&attempt=${stageAttemptId}",
+        currentTime,
         pageSize = taskPageSize,
         sortColumn = taskSortColumn,
         desc = taskSortDesc,
@@ -415,7 +412,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <form id={s"form-event-timeline-page"}
                 method="get"
                 action=""
-                class="form-inline float-right justify-content-end"
+                class="form-inline pull-right"
                 style="margin-bottom: 0px;">
             <label>Tasks: {totalTasks}. {totalPages} Pages. Jump to</label>
             <input type="hidden" name="id" value={stageId.toString} />
@@ -423,18 +420,17 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
             <input type="text"
                    name="task.eventTimelinePageNumber"
                    id={s"form-event-timeline-page-no"}
-                   value={page.toString}
-                   class="col-1 form-control" />
+                   value={page.toString} class="span1" />
 
             <label>. Show </label>
             <input type="text"
                    id={s"form-event-timeline-page-size"}
                    name="task.eventTimelinePageSize"
                    value={pageSize.toString}
-                   class="col-1 form-control" />
+                   class="span1" />
             <label>items in a page.</label>
 
-            <button type="submit" class="btn btn-spark">Go</button>
+            <button type="submit" class="btn">Go</button>
           </form>
         </div>
       </div>
@@ -451,6 +447,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
 private[ui] class TaskDataSource(
     stage: StageData,
+    currentTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
@@ -472,6 +469,8 @@ private[ui] class TaskDataSource(
     _tasksToShow
   }
 
+  def tasks: Seq[TaskData] = _tasksToShow
+
   def executorLogs(id: String): Map[String, String] = {
     executorIdToLogs.getOrElseUpdate(id,
       store.asOption(store.executorSummary(id)).map(_.executorLogs).getOrElse(Map.empty))
@@ -482,6 +481,7 @@ private[ui] class TaskDataSource(
 private[ui] class TaskPagedTable(
     stage: StageData,
     basePath: String,
+    currentTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
@@ -489,12 +489,10 @@ private[ui] class TaskPagedTable(
 
   import ApiHelper._
 
-  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
-
   override def tableId: String = "task-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-sm table-striped table-head-clickable"
+    "table table-bordered table-condensed table-striped table-head-clickable"
 
   override def pageSizeFormField: String = "task.pageSize"
 
@@ -502,12 +500,14 @@ private[ui] class TaskPagedTable(
 
   override val dataSource: TaskDataSource = new TaskDataSource(
     stage,
+    currentTime,
     pageSize,
     sortColumn,
     desc,
     store)
 
   override def pageLink(page: Int): String = {
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     basePath +
       s"&$pageNumberFormField=$page" +
       s"&task.sort=$encodedSortColumn" +
@@ -515,7 +515,10 @@ private[ui] class TaskPagedTable(
       s"&$pageSizeFormField=$pageSize"
   }
 
-  override def goButtonFormPath: String = s"$basePath&task.sort=$encodedSortColumn&task.desc=$desc"
+  override def goButtonFormPath: String = {
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+    s"$basePath&task.sort=$encodedSortColumn&task.desc=$desc"
+  }
 
   def headers: Seq[Node] = {
     import ApiHelper._
@@ -746,7 +749,7 @@ private[spark] object ApiHelper {
   val HEADER_SHUFFLE_READ_TIME = "Shuffle Read Blocked Time"
   val HEADER_SHUFFLE_TOTAL_READS = "Shuffle Read Size / Records"
   val HEADER_SHUFFLE_REMOTE_READS = "Shuffle Remote Reads"
-  val HEADER_SHUFFLE_WRITE_TIME = "Shuffle Write Time"
+  val HEADER_SHUFFLE_WRITE_TIME = "Write Time"
   val HEADER_SHUFFLE_WRITE_SIZE = "Shuffle Write Size / Records"
   val HEADER_MEM_SPILL = "Spill (Memory)"
   val HEADER_DISK_SPILL = "Spill (Disk)"

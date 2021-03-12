@@ -16,10 +16,11 @@
 #
 import os
 import time
+import random
 import threading
 import unittest
 
-from pyspark import SparkContext, SparkConf, InheritableThread
+from pyspark import SparkContext, SparkConf
 
 
 class PinThreadTests(unittest.TestCase):
@@ -142,34 +143,13 @@ class PinThreadTests(unittest.TestCase):
                 is_job_cancelled[i],
                 "Thread {i}: Job in group B did not succeeded.".format(i=i))
 
-    def test_inheritable_local_property(self):
-        self.sc.setLocalProperty("a", "hi")
-        expected = []
-
-        def get_inner_local_prop():
-            expected.append(self.sc.getLocalProperty("b"))
-
-        def get_outer_local_prop():
-            expected.append(self.sc.getLocalProperty("a"))
-            self.sc.setLocalProperty("b", "hello")
-            t2 = InheritableThread(target=get_inner_local_prop)
-            t2.start()
-            t2.join()
-
-        t1 = InheritableThread(target=get_outer_local_prop)
-        t1.start()
-        t1.join()
-
-        self.assertEqual(self.sc.getLocalProperty("b"), None)
-        self.assertEqual(expected, ["hi", "hello"])
-
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_pin_thread import *  # noqa: F401
+    from pyspark.tests.test_pin_thread import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

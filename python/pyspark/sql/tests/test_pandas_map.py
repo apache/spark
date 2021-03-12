@@ -15,9 +15,14 @@
 # limitations under the License.
 #
 import os
+import sys
 import time
 import unittest
 
+if sys.version >= '3':
+    unicode = str
+
+from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 
@@ -27,7 +32,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
+    pandas_requirement_message or pyarrow_requirement_message)
 class MapInPandasTests(ReusedSQLTestCase):
 
     @classmethod
@@ -61,7 +66,7 @@ class MapInPandasTests(ReusedSQLTestCase):
         df = self.spark.range(10)
         actual = df.mapInPandas(func, 'id long').collect()
         expected = df.collect()
-        self.assertEqual(actual, expected)
+        self.assertEquals(actual, expected)
 
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
@@ -75,7 +80,7 @@ class MapInPandasTests(ReusedSQLTestCase):
 
         actual = df.mapInPandas(func, df.schema).collect()
         expected = df.collect()
-        self.assertEqual(actual, expected)
+        self.assertEquals(actual, expected)
 
     def test_different_output_length(self):
         def func(iterator):
@@ -84,7 +89,7 @@ class MapInPandasTests(ReusedSQLTestCase):
 
         df = self.spark.range(10)
         actual = df.repartition(1).mapInPandas(func, 'a long').collect()
-        self.assertEqual(set((r.a for r in actual)), set(range(100)))
+        self.assertEquals(set((r.a for r in actual)), set(range(100)))
 
     def test_empty_iterator(self):
         def empty_iter(_):
@@ -110,7 +115,7 @@ class MapInPandasTests(ReusedSQLTestCase):
         df = self.spark.range(10)
         actual = df.mapInPandas(func, 'id long').mapInPandas(func, 'id long').collect()
         expected = df.collect()
-        self.assertEqual(actual, expected)
+        self.assertEquals(actual, expected)
 
     def test_self_join(self):
         # SPARK-34319: self-join with MapInPandas
@@ -122,10 +127,10 @@ class MapInPandasTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_map import *  # noqa: F401
+    from pyspark.sql.tests.test_pandas_map import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -78,7 +78,6 @@ case class BroadcastExchangeExec(
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
     "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
@@ -91,13 +90,16 @@ case class BroadcastExchangeExec(
 
   override def runtimeStatistics: Statistics = {
     val dataSize = metrics("dataSize").value
-    val rowCount = metrics("numOutputRows").value
-    Statistics(dataSize, Some(rowCount))
+    Statistics(dataSize)
   }
 
   @transient
   private lazy val promise = Promise[broadcast.Broadcast[Any]]()
 
+  /**
+   * For registering callbacks on `relationFuture`.
+   * Note that calling this field will not start the execution of broadcast job.
+   */
   @transient
   override lazy val completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]] =
     promise.future
@@ -116,7 +118,6 @@ case class BroadcastExchangeExec(
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
-            longMetric("numOutputRows") += numRows
             if (numRows >= MAX_BROADCAST_TABLE_ROWS) {
               throw new SparkException(
                 s"Cannot broadcast the table over $MAX_BROADCAST_TABLE_ROWS rows: $numRows rows")

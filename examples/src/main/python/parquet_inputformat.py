@@ -29,6 +29,8 @@ $ ./bin/spark-submit --driver-class-path /path/to/example/jar \\
 {u'favorite_color': u'red', u'name': u'Ben', u'favorite_numbers': []}
 <...more log output...>
 """
+from __future__ import print_function
+
 import sys
 
 from pyspark.sql import SparkSession

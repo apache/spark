@@ -23,21 +23,22 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
-class V2SessionCatalog(catalog: SessionCatalog)
-  extends TableCatalog with SupportsNamespaces with SQLConfHelper {
+class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
+  extends TableCatalog with SupportsNamespaces {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
   import V2SessionCatalog._
 
@@ -85,7 +86,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(TableCatalog.PROP_LOCATION))
-    val storage = DataSource.buildStorageFormatFromOptions(toOptions(tableProperties.toMap))
+    val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
 
@@ -111,12 +112,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
     loadTable(ident)
   }
 
-  private def toOptions(properties: Map[String, String]): Map[String, String] = {
-    properties.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
-      case (key, value) => key.drop(TableCatalog.OPTION_PREFIX.length) -> value
-    }.toMap
-  }
-
   override def alterTable(
       ident: Identifier,
       changes: TableChange*): Table = {
@@ -131,18 +126,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
     val comment = properties.get(TableCatalog.PROP_COMMENT)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
-    val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
-    val storage = if (location.isDefined) {
-      catalogTable.storage.copy(locationUri = location)
-    } else {
-      catalogTable.storage
-    }
 
     try {
       catalog.alterTable(
-        catalogTable.copy(
-          properties = properties, schema = schema, owner = owner, comment = comment,
-          storage = storage))
+        catalogTable
+          .copy(properties = properties, schema = schema, owner = owner, comment = comment))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
@@ -300,7 +288,7 @@ private[sql] object V2SessionCatalog {
           s"SessionCatalog does not support partition transform: $transform")
     }
 
-    (identityCols.toSeq, bucketSpec)
+    (identityCols, bucketSpec)
   }
 
   private def toCatalogDatabase(

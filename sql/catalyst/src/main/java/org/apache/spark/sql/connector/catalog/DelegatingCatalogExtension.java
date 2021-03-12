@@ -100,11 +100,6 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   }
 
   @Override
-  public boolean purgeTable(Identifier ident) {
-    return asTableCatalog().purgeTable(ident);
-  }
-
-  @Override
   public void renameTable(
       Identifier oldIdent,
       Identifier newIdent) throws NoSuchTableException, TableAlreadyExistsException {

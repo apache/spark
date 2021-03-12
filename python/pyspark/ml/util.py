@@ -16,9 +16,16 @@
 #
 
 import json
+import sys
 import os
 import time
 import uuid
+import warnings
+
+if sys.version > '3':
+    basestring = str
+    unicode = str
+    long = int
 
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
@@ -53,10 +60,10 @@ class Identifiable(object):
     @classmethod
     def _randomUID(cls):
         """
-        Generate a unique string id for the object. The default implementation
+        Generate a unique unicode id for the object. The default implementation
         concatenates the class name, "_", and 12 random hex chars.
         """
-        return str(cls.__name__ + "_" + uuid.uuid4().hex[-12:])
+        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[-12:])
 
 
 @inherit_doc
@@ -106,7 +113,6 @@ class MLWriter(BaseReadWrite):
     def __init__(self):
         super(MLWriter, self).__init__()
         self.shouldOverwrite = False
-        self.optionMap = {}
 
     def _handleOverwrite(self, path):
         from pyspark.ml.wrapper import JavaWrapper
@@ -131,14 +137,6 @@ class MLWriter(BaseReadWrite):
     def overwrite(self):
         """Overwrites if the output path already exists."""
         self.shouldOverwrite = True
-        return self
-
-    def option(self, key, value):
-        """
-        Adds an option to the underlying MLWriter. See the documentation for the specific model's
-        writer for possible options. The option name (key) is case-insensitive.
-        """
-        self.optionMap[key.lower()] = str(value)
         return self
 
 
@@ -172,8 +170,8 @@ class JavaMLWriter(MLWriter):
 
     def save(self, path):
         """Save the ML instance to the input path."""
-        if not isinstance(path, str):
-            raise TypeError("path should be a string, got type %s" % type(path))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
         self._jwrite.save(path)
 
     def overwrite(self):
@@ -277,8 +275,8 @@ class JavaMLReader(MLReader):
 
     def load(self, path):
         """Load the ML instance from the input path."""
-        if not isinstance(path, str):
-            raise TypeError("path should be a string, got type %s" % type(path))
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
         java_obj = self._jread.load(path)
         if not hasattr(self._clazz, "_from_java"):
             raise NotImplementedError("This Java ML type cannot be loaded into Python currently: %r"
@@ -385,13 +383,6 @@ class DefaultParamsWriter(MLWriter):
         DefaultParamsWriter.saveMetadata(self.instance, path, self.sc)
 
     @staticmethod
-    def extractJsonParams(instance, skipParams):
-        paramMap = instance.extractParamMap()
-        jsonParams = {param.name: value for param, value in paramMap.items()
-                      if param.name not in skipParams}
-        return jsonParams
-
-    @staticmethod
     def saveMetadata(instance, path, sc, extraMetadata=None, paramMap=None):
         """
         Saves metadata + Params to: path + "/metadata"
@@ -404,12 +395,8 @@ class DefaultParamsWriter(MLWriter):
         - defaultParamMap (since 2.4.0)
         - (optionally, extra metadata)
 
-        Parameters
-        ----------
-        extraMetadata : dict, optional
-            Extra metadata to be saved at same level as uid, paramMap, etc.
-        paramMap : dict, optional
-            If given, this is saved in the "paramMap" field.
+        :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
+        :param paramMap:  If given, this is saved in the "paramMap" field.
         """
         metadataPath = os.path.join(path, "metadata")
         metadataJson = DefaultParamsWriter._get_metadata_to_save(instance,
@@ -424,9 +411,7 @@ class DefaultParamsWriter(MLWriter):
         Helper for :py:meth:`DefaultParamsWriter.saveMetadata` which extracts the JSON to save.
         This is useful for ensemble models which need to save metadata for many sub-models.
 
-        Notes
-        -----
-        See :py:meth:`DefaultParamsWriter.saveMetadata` for details on what this includes.
+        .. note:: :py:meth:`DefaultParamsWriter.saveMetadata` for details on what this includes.
         """
         uid = instance.uid
         cls = instance.__module__ + '.' + instance.__class__.__name__
@@ -445,7 +430,7 @@ class DefaultParamsWriter(MLWriter):
         for p in instance._defaultParamMap:
             jsonDefaultParams[p.name] = instance._defaultParamMap[p]
 
-        basicMetadata = {"class": cls, "timestamp": int(round(time.time() * 1000)),
+        basicMetadata = {"class": cls, "timestamp": long(round(time.time() * 1000)),
                          "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams,
                          "defaultParamMap": jsonDefaultParams}
         if extraMetadata is not None:
@@ -513,12 +498,7 @@ class DefaultParamsReader(MLReader):
         """
         Load metadata saved using :py:meth:`DefaultParamsWriter.saveMetadata`
 
-        Parameters
-        ----------
-        path : str
-        sc : :py:class:`pyspark.SparkContext`
-        expectedClassName : str, optional
-            If non empty, this is checked against the loaded metadata.
+        :param expectedClassName:  If non empty, this is checked against the loaded metadata.
         """
         metadataPath = os.path.join(path, "metadata")
         metadataStr = sc.textFile(metadataPath, 1).first()
@@ -531,12 +511,8 @@ class DefaultParamsReader(MLReader):
         Parse metadata JSON string produced by :py:meth`DefaultParamsWriter._get_metadata_to_save`.
         This is a helper function for :py:meth:`DefaultParamsReader.loadMetadata`.
 
-        Parameters
-        ----------
-        metadataStr : str
-            JSON string of metadata
-        expectedClassName : str, optional
-            If non empty, this is checked against the loaded metadata.
+        :param metadataStr:  JSON string of metadata
+        :param expectedClassName:  If non empty, this is checked against the loaded metadata.
         """
         metadata = json.loads(metadataStr)
         className = metadata['class']
@@ -546,16 +522,15 @@ class DefaultParamsReader(MLReader):
         return metadata
 
     @staticmethod
-    def getAndSetParams(instance, metadata, skipParams=None):
+    def getAndSetParams(instance, metadata):
         """
         Extract Params from metadata, and set them in the instance.
         """
         # Set user-supplied param values
         for paramName in metadata['paramMap']:
             param = instance.getParam(paramName)
-            if skipParams is None or paramName not in skipParams:
-                paramValue = metadata['paramMap'][paramName]
-                instance.set(param, paramValue)
+            paramValue = metadata['paramMap'][paramName]
+            instance.set(param, paramValue)
 
         # Set default param values
         majorAndMinorVersions = VersionUtils.majorMinorVersion(metadata['sparkVersion'])
@@ -572,20 +547,13 @@ class DefaultParamsReader(MLReader):
                 instance._setDefault(**{paramName: paramValue})
 
     @staticmethod
-    def isPythonParamsInstance(metadata):
-        return metadata['class'].startswith('pyspark.ml.')
-
-    @staticmethod
     def loadParamsInstance(path, sc):
         """
         Load a :py:class:`Params` instance from the given path, and return it.
         This assumes the instance inherits from :py:class:`MLReadable`.
         """
         metadata = DefaultParamsReader.loadMetadata(path, sc)
-        if DefaultParamsReader.isPythonParamsInstance(metadata):
-            pythonClassName = metadata['class']
-        else:
-            pythonClassName = metadata['class'].replace("org.apache.spark", "pyspark")
+        pythonClassName = metadata['class'].replace("org.apache.spark", "pyspark")
         py_type = DefaultParamsReader.__get_class(pythonClassName)
         instance = py_type.load(path)
         return instance
@@ -654,13 +622,3 @@ class MetaAlgorithmReadWrite:
             nestedStages.extend(MetaAlgorithmReadWrite.getAllNestedStages(pySubStage))
 
         return [pyInstance] + nestedStages
-
-    @staticmethod
-    def getUidMap(instance):
-        nestedStages = MetaAlgorithmReadWrite.getAllNestedStages(instance)
-        uidMap = {stage.uid: stage for stage in nestedStages}
-        if len(nestedStages) != len(uidMap):
-            raise RuntimeError(f'{instance.__class__.__module__}.{instance.__class__.__name__}'
-                               f'.load found a compound estimator with stages with duplicate '
-                               f'UIDs. List of UIDs: {list(uidMap.keys())}.')
-        return uidMap

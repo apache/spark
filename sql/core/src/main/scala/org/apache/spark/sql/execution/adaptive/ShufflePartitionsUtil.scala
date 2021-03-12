@@ -91,14 +91,6 @@ object ShufflePartitionsUtil extends Logging {
     var latestSplitPoint = 0
     var coalescedSize = 0L
     var i = 0
-
-    def createPartitionSpec(forceCreate: Boolean = false): Unit = {
-      // Skip empty inputs, as it is a waste to launch an empty task.
-      if (coalescedSize > 0 || forceCreate) {
-        partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, i)
-      }
-    }
-
     while (i < numPartitions) {
       // We calculate the total size of i-th shuffle partitions from all shuffles.
       var totalSizeOfCurrentPartition = 0L
@@ -111,7 +103,7 @@ object ShufflePartitionsUtil extends Logging {
       // If including the `totalSizeOfCurrentPartition` would exceed the target size, then start a
       // new coalesced partition.
       if (i > latestSplitPoint && coalescedSize + totalSizeOfCurrentPartition > targetSize) {
-        createPartitionSpec()
+        partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, i)
         latestSplitPoint = i
         // reset postShuffleInputSize.
         coalescedSize = totalSizeOfCurrentPartition
@@ -120,9 +112,9 @@ object ShufflePartitionsUtil extends Logging {
       }
       i += 1
     }
-    // Create at least one partition if all partitions are empty.
-    createPartitionSpec(partitionSpecs.isEmpty)
-    partitionSpecs.toSeq
+    partitionSpecs += CoalescedPartitionSpec(latestSplitPoint, numPartitions)
+
+    partitionSpecs
   }
 
   /**

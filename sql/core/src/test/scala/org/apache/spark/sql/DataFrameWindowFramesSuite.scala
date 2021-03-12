@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.sql.Date
+
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession

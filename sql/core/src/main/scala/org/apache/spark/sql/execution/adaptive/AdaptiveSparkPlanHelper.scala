@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This class provides utility methods related to tree traversal of an [[AdaptiveSparkPlanExec]]
@@ -63,7 +65,7 @@ trait AdaptiveSparkPlanHelper {
   def mapPlans[A](p: SparkPlan)(f: SparkPlan => A): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(p)(ret += f(_))
-    ret.toSeq
+    ret
   }
 
   /**
@@ -73,7 +75,7 @@ trait AdaptiveSparkPlanHelper {
   def flatMap[A](p: SparkPlan)(f: SparkPlan => TraversableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(p)(ret ++= f(_))
-    ret.toSeq
+    ret
   }
 
   /**
@@ -84,7 +86,7 @@ trait AdaptiveSparkPlanHelper {
     val ret = new collection.mutable.ArrayBuffer[B]()
     val lifted = pf.lift
     foreach(p)(node => lifted(node).foreach(ret.+=))
-    ret.toSeq
+    ret
   }
 
   /**
@@ -115,7 +117,7 @@ trait AdaptiveSparkPlanHelper {
 
   /**
    * Returns a sequence containing the subqueries in this plan, also including the (nested)
-   * subqueries in its children
+   * subquries in its children
    */
   def subqueriesAll(p: SparkPlan): Seq[SparkPlan] = {
     val subqueries = flatMap(p)(_.subqueries)
@@ -134,5 +136,19 @@ trait AdaptiveSparkPlanHelper {
   def stripAQEPlan(p: SparkPlan): SparkPlan = p match {
     case a: AdaptiveSparkPlanExec => a.executedPlan
     case other => other
+  }
+
+  /**
+   * Returns a cloned [[SparkSession]] with adaptive execution disabled, or the original
+   * [[SparkSession]] if its adaptive execution is already disabled.
+   */
+  def getOrCloneSessionWithAqeOff[T](session: SparkSession): SparkSession = {
+    if (!session.sessionState.conf.adaptiveExecutionEnabled) {
+      session
+    } else {
+      val newSession = session.cloneSession()
+      newSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
+      newSession
+    }
   }
 }

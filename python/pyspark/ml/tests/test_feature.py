@@ -16,7 +16,11 @@
 # limitations under the License.
 #
 
+import sys
 import unittest
+
+if sys.version > '3':
+    basestring = str
 
 from pyspark.ml.feature import Binarizer, CountVectorizer, CountVectorizerModel, HashingTF, IDF, \
     NGram, RFormula, StopWordsRemover, StringIndexer, StringIndexerModel, VectorSizeHint
@@ -87,7 +91,7 @@ class FeatureTests(SparkSessionTestCase):
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["panda"])
         self.assertEqual(type(stopWordRemover.getStopWords()), list)
-        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], str))
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], basestring))
         # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
@@ -169,7 +173,7 @@ class FeatureTests(SparkSessionTestCase):
 
         # Test an empty vocabulary
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(Exception, "vocabSize.*invalid.*0"):
+            with self.assertRaisesRegexp(Exception, "vocabSize.*invalid.*0"):
                 CountVectorizerModel.from_vocabulary([], inputCol="words")
 
         # Test model with default settings can transform
@@ -301,10 +305,10 @@ class HashingTFTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_feature import *  # noqa: F401
+    from pyspark.ml.tests.test_feature import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -23,6 +23,7 @@ import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient, DownloadFileManager}
 import org.apache.spark.storage.{BlockId, EncryptedManagedBuffer, StorageLevel}
@@ -33,7 +34,7 @@ import org.apache.spark.util.ThreadUtils
  * BlockTransferService contains both client and server inside.
  */
 private[spark]
-abstract class BlockTransferService extends BlockStoreClient {
+abstract class BlockTransferService extends BlockStoreClient with Logging {
 
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
@@ -109,7 +110,6 @@ abstract class BlockTransferService extends BlockStoreClient {
    * This method is similar to [[uploadBlock]], except this one blocks the thread
    * until the upload finishes.
    */
-  @throws[java.io.IOException]
   def uploadBlockSync(
       hostname: String,
       port: Int,

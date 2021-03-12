@@ -97,7 +97,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
   }
 
   def getShards(): Seq[Shard] = {
-    kinesisClient.describeStream(_streamName).getStreamDescription.getShards.asScala.toSeq
+    kinesisClient.describeStream(_streamName).getStreamDescription.getShards.asScala
   }
 
   def splitShard(shardId: String): Unit = {
@@ -137,7 +137,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
    * Expose a Python friendly API.
    */
   def pushData(testData: java.util.List[Int]): Unit = {
-    pushData(testData.asScala.toSeq, aggregate = false)
+    pushData(testData.asScala, aggregate = false)
   }
 
   def deleteStream(): Unit = {
@@ -289,6 +289,6 @@ private[kinesis] class SimpleDataGenerator(
       sentSeqNumbers += ((num, seqNumber))
     }
 
-    shardIdToSeqNumbers.mapValues(_.toSeq).toMap
+    shardIdToSeqNumbers.toMap
   }
 }

@@ -26,9 +26,7 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 import org.mockito.ArgumentMatchers.{anyList, anyString, eq => meq}
 import org.mockito.Mockito.{never, times, verify, when}
-import org.scalatest.BeforeAndAfter
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}

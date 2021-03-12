@@ -54,20 +54,15 @@ import org.apache.spark.sql.types._
 class ParquetReadSupport(
     val convertTz: Option[ZoneId],
     enableVectorizedReader: Boolean,
-    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-    int96RebaseMode: LegacyBehaviorPolicy.Value)
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value)
   extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
-  def this() = {
+  def this() {
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
     // used in the vectorized reader, where we get the convertTz/rebaseDateTime value directly,
     // and the values here are ignored.
-    this(
-      None,
-      enableVectorizedReader = true,
-      datetimeRebaseMode = LegacyBehaviorPolicy.CORRECTED,
-      int96RebaseMode = LegacyBehaviorPolicy.LEGACY)
+    this(None, enableVectorizedReader = true, datetimeRebaseMode = LegacyBehaviorPolicy.CORRECTED)
   }
 
   /**
@@ -136,8 +131,7 @@ class ParquetReadSupport(
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
       convertTz,
-      datetimeRebaseMode,
-      int96RebaseMode)
+      datetimeRebaseMode)
   }
 }
 

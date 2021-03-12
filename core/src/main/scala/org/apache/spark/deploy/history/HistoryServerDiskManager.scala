@@ -137,12 +137,10 @@ private class HistoryServerDiskManager(
    * being used so that it's not evicted when running out of designated space.
    */
   def openStore(appId: String, attemptId: Option[String]): Option[File] = {
-    var newSize: Long = 0
     val storePath = active.synchronized {
       val path = appStorePath(appId, attemptId)
       if (path.isDirectory()) {
-        newSize = sizeOf(path)
-        active(appId -> attemptId) = newSize
+        active(appId -> attemptId) = sizeOf(path)
         Some(path)
       } else {
         None
@@ -150,7 +148,7 @@ private class HistoryServerDiskManager(
     }
 
     storePath.foreach { path =>
-      updateApplicationStoreInfo(appId, attemptId, newSize)
+      updateAccessTime(appId, attemptId)
     }
 
     storePath
@@ -255,11 +253,10 @@ private class HistoryServerDiskManager(
     new File(appStoreDir, fileName)
   }
 
-  private def updateApplicationStoreInfo(
-      appId: String, attemptId: Option[String], newSize: Long): Unit = {
+  private def updateAccessTime(appId: String, attemptId: Option[String]): Unit = {
     val path = appStorePath(appId, attemptId)
-    val info = ApplicationStoreInfo(path.getAbsolutePath(), clock.getTimeMillis(), appId,
-      attemptId, newSize)
+    val info = ApplicationStoreInfo(path.getAbsolutePath(), clock.getTimeMillis(), appId, attemptId,
+      sizeOf(path))
     listing.write(info)
   }
 
@@ -315,7 +312,7 @@ private class HistoryServerDiskManager(
           s"exceeded ($current > $max)")
       }
 
-      updateApplicationStoreInfo(appId, attemptId, newSize)
+      updateAccessTime(appId, attemptId)
 
       active.synchronized {
         active(appId -> attemptId) = newSize

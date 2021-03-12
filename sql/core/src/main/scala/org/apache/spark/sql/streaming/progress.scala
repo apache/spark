@@ -43,7 +43,6 @@ class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
     val memoryUsedBytes: Long,
-    val numRowsDroppedByWatermark: Long,
     val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
@@ -53,17 +52,13 @@ class StateOperatorProgress private[sql](
   /** The pretty (i.e. indented) JSON representation of this progress. */
   def prettyJson: String = pretty(render(jsonValue))
 
-  private[sql] def copy(
-      newNumRowsUpdated: Long,
-      newNumRowsDroppedByWatermark: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes,
-      newNumRowsDroppedByWatermark, customMetrics)
+  private[sql] def copy(newNumRowsUpdated: Long): StateOperatorProgress =
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, customMetrics)
 
   private[sql] def jsonValue: JValue = {
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
     ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
-    ("numRowsDroppedByWatermark" -> JInt(numRowsDroppedByWatermark)) ~
     ("customMetrics" -> {
       if (!customMetrics.isEmpty) {
         val keys = customMetrics.keySet.asScala.toSeq.sorted
@@ -231,7 +226,7 @@ class SinkProgress protected[sql](
     val numOutputRows: Long) extends Serializable {
 
   /** SinkProgress without custom metrics. */
-  protected[sql] def this(description: String) = {
+  protected[sql] def this(description: String) {
     this(description, DEFAULT_NUM_OUTPUT_ROWS)
   }
 

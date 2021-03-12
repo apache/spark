@@ -125,11 +125,6 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     testOneToOneMathFunction(sinh, math.sinh)
   }
 
-  test("asinh") {
-    testOneToOneMathFunction(asinh,
-      (x: Double) => math.log(x + math.sqrt(x * x + 1)) )
-  }
-
   test("cos") {
     testOneToOneMathFunction(cos, math.cos)
   }
@@ -142,11 +137,6 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     testOneToOneMathFunction(cosh, math.cosh)
   }
 
-  test("acosh") {
-    testOneToOneMathFunction(acosh,
-      (x: Double) => math.log(x + math.sqrt(x * x - 1)) )
-  }
-
   test("tan") {
     testOneToOneMathFunction(tan, math.tan)
   }
@@ -157,11 +147,6 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("tanh") {
     testOneToOneMathFunction(tanh, math.tanh)
-  }
-
-  test("atanh") {
-    testOneToOneMathFunction(atanh,
-      (x: Double) => (0.5 * (math.log1p(x) - math.log1p(-x))) )
   }
 
   test("degrees") {

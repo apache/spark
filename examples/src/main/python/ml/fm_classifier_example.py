@@ -18,6 +18,8 @@
 """
 FMClassifier Example.
 """
+from __future__ import print_function
+
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import FMClassifier
@@ -67,9 +69,9 @@ if __name__ == "__main__":
     print("Test set accuracy = %g" % accuracy)
 
     fmModel = model.stages[2]
-    print("Factors: " + str(fmModel.factors))  # type: ignore
-    print("Linear: " + str(fmModel.linear))  # type: ignore
-    print("Intercept: " + str(fmModel.intercept))  # type: ignore
+    print("Factors: " + str(fmModel.factors))
+    print("Linear: " + str(fmModel.linear))
+    print("Intercept: " + str(fmModel.intercept))
     # $example off$
 
     spark.stop()

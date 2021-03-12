@@ -102,19 +102,18 @@ class DatasetCacheSuite extends QueryTest
   test("persist and then groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(_._1)
-    val aggregated = grouped.mapGroups { (g, iter) => (g, iter.map(_._2).sum) }
-    aggregated.persist()
+    val agged = grouped.mapGroups { (g, iter) => (g, iter.map(_._2).sum) }
+    agged.persist()
 
     checkDataset(
-      aggregated.filter(_._1 == "b"),
+      agged.filter(_._1 == "b"),
       ("b", 3))
-    assertCached(aggregated.filter(_._1 == "b"))
+    assertCached(agged.filter(_._1 == "b"))
 
     ds.unpersist(blocking = true)
     assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
-    aggregated.unpersist(blocking = true)
-    assert(aggregated.storageLevel == StorageLevel.NONE,
-           "The Dataset aggregated should not be cached.")
+    agged.unpersist(blocking = true)
+    assert(agged.storageLevel == StorageLevel.NONE, "The Dataset agged should not be cached.")
   }
 
   test("persist and then withColumn") {

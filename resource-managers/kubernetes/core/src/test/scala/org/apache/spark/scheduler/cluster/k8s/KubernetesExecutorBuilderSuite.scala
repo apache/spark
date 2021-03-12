@@ -21,7 +21,6 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.resource.ResourceProfile
 
 class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
 
@@ -33,8 +32,7 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     sparkConf.set("spark.driver.host", "https://driver.host.com")
     val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
     val secMgr = new SecurityManager(sparkConf)
-    val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, defaultProfile).pod
+    new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client)
   }
 
 }

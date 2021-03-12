@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 
 class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with PredicateHelper {
@@ -187,23 +188,25 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
     checkCondition(!(('e || 'f) && ('g || 'h)), (!'e && !'f) || (!'g && !'h))
   }
 
-  private val analyzer = new Analyzer(
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry))
+  private val caseInsensitiveConf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> false)
+  private val caseInsensitiveAnalyzer = new Analyzer(
+    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, caseInsensitiveConf),
+    caseInsensitiveConf)
 
   test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
-    val plan = analyzer.execute(
+    val plan = caseInsensitiveAnalyzer.execute(
       testRelation.where(('a > 2 && 'b > 3) || ('A > 2 && 'b < 5)))
     val actual = Optimize.execute(plan)
-    val expected = analyzer.execute(
+    val expected = caseInsensitiveAnalyzer.execute(
       testRelation.where('a > 2 && ('b > 3 || 'b < 5)))
     comparePlans(actual, expected)
   }
 
   test("(a || b) && (a || c) => a || (b && c) when case insensitive") {
-    val plan = analyzer.execute(
+    val plan = caseInsensitiveAnalyzer.execute(
       testRelation.where(('a > 2 || 'b > 3) && ('A > 2 || 'b < 5)))
     val actual = Optimize.execute(plan)
-    val expected = analyzer.execute(
+    val expected = caseInsensitiveAnalyzer.execute(
       testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
     comparePlans(actual, expected)
   }
@@ -218,14 +221,14 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
 
   test("Complementation Laws - null handling") {
     checkCondition('e && !'e,
-      testRelationWithData.where(And(Literal(null, BooleanType), 'e.isNull)).analyze)
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), false)).analyze)
     checkCondition(!'e && 'e,
-      testRelationWithData.where(And(Literal(null, BooleanType), 'e.isNull)).analyze)
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), false)).analyze)
 
     checkCondition('e || !'e,
-      testRelationWithData.where(Or('e.isNotNull, Literal(null, BooleanType))).analyze)
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), true)).analyze)
     checkCondition(!'e || 'e,
-      testRelationWithData.where(Or('e.isNotNull, Literal(null, BooleanType))).analyze)
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), true)).analyze)
   }
 
   test("Complementation Laws - negative case") {

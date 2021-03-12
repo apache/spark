@@ -45,7 +45,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
           if (jobStatus == status) Some(jobId) else None
         }
         if (jobs.nonEmpty) {
-          <li class="job-url">
+          <li>
             <strong>{label} </strong>
             {jobs.toSeq.sorted.map { jobId =>
               <a href={jobURL(request, jobId.intValue())}>{jobId.toString}</a><span>&nbsp;</span>
@@ -59,7 +59,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
       val summary =
         <div>
-          <ul class="list-unstyled">
+          <ul class="unstyled">
             <li>
               <strong>Submitted Time: </strong>{UIUtils.formatDate(executionUIData.submissionTime)}
             </li>

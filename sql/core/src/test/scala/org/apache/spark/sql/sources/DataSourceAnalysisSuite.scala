@@ -23,13 +23,12 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.DataSourceAnalysis
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
-class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with SQLHelper {
+class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private var targetAttributes: Seq[Attribute] = _
   private var targetPartitionSchema: StructType = _
@@ -52,26 +51,19 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
   }
 
   Seq(true, false).foreach { caseSensitive =>
-    def testRule(testName: String, caseSensitive: Boolean)(func: => Unit): Unit = {
-      test(s"$testName (caseSensitive: $caseSensitive)") {
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-          func
-        }
-      }
-    }
-
+    val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
     def cast(e: Expression, dt: DataType): Expression = {
-      SQLConf.get.storeAssignmentPolicy match {
+      conf.storeAssignmentPolicy match {
         case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
-          AnsiCast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
+          AnsiCast(e, dt, Option(conf.sessionLocalTimeZone))
         case _ =>
-          Cast(e, dt, Option(SQLConf.get.sessionLocalTimeZone))
+          Cast(e, dt, Option(conf.sessionLocalTimeZone))
       }
     }
-    val rule = DataSourceAnalysis
-    testRule(
-      "convertStaticPartitions only handle INSERT having at least static partitions",
-        caseSensitive) {
+    val rule = DataSourceAnalysis(conf)
+    test(
+      s"convertStaticPartitions only handle INSERT having at least static partitions " +
+        s"(caseSensitive: $caseSensitive)") {
       intercept[AssertionError] {
         rule.convertStaticPartitions(
           sourceAttributes = Seq('e.int, 'f.int),
@@ -81,7 +73,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       }
     }
 
-    testRule("Missing columns", caseSensitive) {
+    test(s"Missing columns (caseSensitive: $caseSensitive)") {
       // Missing columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
@@ -92,7 +84,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       }
     }
 
-    testRule("Missing partitioning columns", caseSensitive) {
+    test(s"Missing partitioning columns (caseSensitive: $caseSensitive)") {
       // Missing partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
@@ -121,7 +113,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       }
     }
 
-    testRule("Wrong partitioning columns", caseSensitive) {
+    test(s"Wrong partitioning columns (caseSensitive: $caseSensitive)") {
       // Wrong partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
@@ -152,7 +144,9 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       }
     }
 
-    testRule("Static partitions need to appear before dynamic partitions", caseSensitive) {
+    test(
+      s"Static partitions need to appear before dynamic partitions" +
+      s" (caseSensitive: $caseSensitive)") {
       // Static partitions need to appear before dynamic partitions.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
@@ -163,7 +157,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       }
     }
 
-    testRule("All static partitions", caseSensitive) {
+    test(s"All static partitions (caseSensitive: $caseSensitive)") {
       if (!caseSensitive) {
         val nonPartitionedAttributes = Seq('e.int, 'f.int)
         val expected = nonPartitionedAttributes ++
@@ -201,7 +195,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       }
     }
 
-    testRule("Static partition and dynamic partition", caseSensitive) {
+    test(s"Static partition and dynamic partition (caseSensitive: $caseSensitive)") {
       val nonPartitionedAttributes = Seq('e.int, 'f.int)
       val dynamicPartitionAttributes = Seq('g.int)
       val expected =

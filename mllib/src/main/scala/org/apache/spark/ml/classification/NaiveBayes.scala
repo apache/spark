@@ -22,7 +22,6 @@ import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -180,7 +179,7 @@ class NaiveBayes @Since("1.5.0") (
     }
 
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
+      col($(weightCol)).cast(DoubleType)
     } else {
       lit(1.0)
     }
@@ -260,7 +259,7 @@ class NaiveBayes @Since("1.5.0") (
     import spark.implicits._
 
     val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
+      col($(weightCol)).cast(DoubleType)
     } else {
       lit(1.0)
     }
@@ -406,26 +405,18 @@ class NaiveBayesModel private[ml] (
    * This precomputes log(1.0 - exp(theta)) and its sum which are used for the linear algebra
    * application of this condition (in predict function).
    */
-  @transient private lazy val thetaMinusNegTheta = $(modelType) match {
+  @transient private lazy val (thetaMinusNegTheta, piMinusThetaSum) = $(modelType) match {
     case Bernoulli =>
-      theta.map(value => value - math.log1p(-math.exp(value)))
-    case _ =>
-      // This should never happen.
-      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
-        "Variables thetaMinusNegTheta should only be precomputed in Bernoulli NB.")
-  }
-
-  @transient private lazy val piMinusThetaSum = $(modelType) match {
-    case Bernoulli =>
+      val thetaMinusNegTheta = theta.map(value => value - math.log1p(-math.exp(value)))
       val negTheta = theta.map(value => math.log1p(-math.exp(value)))
       val ones = new DenseVector(Array.fill(theta.numCols)(1.0))
       val piMinusThetaSum = pi.toDense.copy
       BLAS.gemv(1.0, negTheta, ones, 1.0, piMinusThetaSum)
-      piMinusThetaSum
+      (thetaMinusNegTheta, piMinusThetaSum)
     case _ =>
       // This should never happen.
       throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}. " +
-        "Variables piMinusThetaSum should only be precomputed in Bernoulli NB.")
+        "Variables thetaMinusNegTheta and negThetaSum should only be precomputed in Bernoulli NB.")
   }
 
   /**

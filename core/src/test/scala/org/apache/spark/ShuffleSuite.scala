@@ -20,8 +20,7 @@ package org.apache.spark
 import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService}
 
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.internal.config
@@ -183,7 +182,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
     val pairs2: RDD[MutablePair[Int, String]] = sc.parallelize(data2, 2)
     val results = new CoGroupedRDD[Int](Seq(pairs1, pairs2), new HashPartitioner(2))
-      .map(p => (p._1, p._2.map(_.toSeq)))
+      .map(p => (p._1, p._2.map(_.toArray)))
       .collectAsMap()
 
     assert(results(1)(0).length === 3)

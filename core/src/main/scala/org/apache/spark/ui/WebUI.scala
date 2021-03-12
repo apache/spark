@@ -58,11 +58,11 @@ private[spark] abstract class WebUI(
   private val className = Utils.getFormattedClassName(this)
 
   def getBasePath: String = basePath
-  def getTabs: Seq[WebUITab] = tabs.toSeq
-  def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
+  def getTabs: Seq[WebUITab] = tabs
+  def getHandlers: Seq[ServletContextHandler] = handlers
 
   def getDelegatingHandlers: Seq[DelegatingServletContextHandler] = {
-    handlers.map(new DelegatingServletContextHandler(_)).toSeq
+    handlers.map(new DelegatingServletContextHandler(_))
   }
 
   /** Attaches a tab to this UI, along with all of its attached pages. */

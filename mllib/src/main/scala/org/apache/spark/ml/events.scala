@@ -20,7 +20,7 @@ package org.apache.spark.ml
 import com.fasterxml.jackson.annotation.JsonIgnore
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.util.{MLReader, MLWriter}
 import org.apache.spark.scheduler.SparkListenerEvent
@@ -31,8 +31,10 @@ import org.apache.spark.sql.{DataFrame, Dataset}
  * after each operation (the event should document this).
  *
  * @note This is supported via [[Pipeline]] and [[PipelineModel]].
+ * @note This is experimental and unstable. Do not use this unless you fully
+ *   understand what `Unstable` means.
  */
-@Evolving
+@Unstable
 sealed trait MLEvent extends SparkListenerEvent {
   // Do not log ML events in event log. It should be revisited to see
   // how it works with history server.
@@ -42,7 +44,7 @@ sealed trait MLEvent extends SparkListenerEvent {
 /**
  * Event fired before `Transformer.transform`.
  */
-@Evolving
+@Unstable
 case class TransformStart() extends MLEvent {
   @JsonIgnore var transformer: Transformer = _
   @JsonIgnore var input: Dataset[_] = _
@@ -51,7 +53,7 @@ case class TransformStart() extends MLEvent {
 /**
  * Event fired after `Transformer.transform`.
  */
-@Evolving
+@Unstable
 case class TransformEnd() extends MLEvent {
   @JsonIgnore var transformer: Transformer = _
   @JsonIgnore var output: Dataset[_] = _
@@ -60,7 +62,7 @@ case class TransformEnd() extends MLEvent {
 /**
  * Event fired before `Estimator.fit`.
  */
-@Evolving
+@Unstable
 case class FitStart[M <: Model[M]]() extends MLEvent {
   @JsonIgnore var estimator: Estimator[M] = _
   @JsonIgnore var dataset: Dataset[_] = _
@@ -69,7 +71,7 @@ case class FitStart[M <: Model[M]]() extends MLEvent {
 /**
  * Event fired after `Estimator.fit`.
  */
-@Evolving
+@Unstable
 case class FitEnd[M <: Model[M]]() extends MLEvent {
   @JsonIgnore var estimator: Estimator[M] = _
   @JsonIgnore var model: M = _
@@ -78,7 +80,7 @@ case class FitEnd[M <: Model[M]]() extends MLEvent {
 /**
  * Event fired before `MLReader.load`.
  */
-@Evolving
+@Unstable
 case class LoadInstanceStart[T](path: String) extends MLEvent {
   @JsonIgnore var reader: MLReader[T] = _
 }
@@ -86,7 +88,7 @@ case class LoadInstanceStart[T](path: String) extends MLEvent {
 /**
  * Event fired after `MLReader.load`.
  */
-@Evolving
+@Unstable
 case class LoadInstanceEnd[T]() extends MLEvent {
   @JsonIgnore var reader: MLReader[T] = _
   @JsonIgnore var instance: T = _
@@ -95,7 +97,7 @@ case class LoadInstanceEnd[T]() extends MLEvent {
 /**
  * Event fired before `MLWriter.save`.
  */
-@Evolving
+@Unstable
 case class SaveInstanceStart(path: String) extends MLEvent {
   @JsonIgnore var writer: MLWriter = _
 }
@@ -103,7 +105,7 @@ case class SaveInstanceStart(path: String) extends MLEvent {
 /**
  * Event fired after `MLWriter.save`.
  */
-@Evolving
+@Unstable
 case class SaveInstanceEnd(path: String) extends MLEvent {
   @JsonIgnore var writer: MLWriter = _
 }

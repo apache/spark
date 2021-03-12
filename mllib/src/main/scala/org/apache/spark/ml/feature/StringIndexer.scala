@@ -78,12 +78,12 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
     ParamValidators.inArray(StringIndexer.supportedStringOrderType))
 
-  setDefault(handleInvalid -> StringIndexer.ERROR_INVALID,
-    stringOrderType -> StringIndexer.frequencyDesc)
-
   /** @group getParam */
   @Since("2.3.0")
   def getStringOrderType: String = $(stringOrderType)
+
+  setDefault(handleInvalid -> StringIndexer.ERROR_INVALID,
+    stringOrderType -> StringIndexer.frequencyDesc)
 
   /** Returns the input and output column names corresponding in pair. */
   private[feature] def getInOutCols(): (Array[String], Array[String]) = {
@@ -220,8 +220,7 @@ class StringIndexer @Since("1.4.0") (
 
     val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
     val allLabels = dataset.select(selectedCols: _*)
-      .collect().toSeq.flatMap(_.toSeq)
-      .asInstanceOf[scala.collection.Seq[scala.collection.Seq[String]]].toSeq
+      .collect().toSeq.flatMap(_.toSeq).asInstanceOf[Seq[Seq[String]]]
     ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
       val sorted = labels.filter(_ != null).sorted
       if (ascending) {
@@ -523,7 +522,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         val data = sparkSession.read.parquet(dataPath)
           .select("labelsArray")
           .head()
-        data.getSeq[scala.collection.Seq[String]](0).map(_.toArray).toArray
+        data.getAs[Seq[Seq[String]]](0).map(_.toArray).toArray
       }
       val model = new StringIndexerModel(metadata.uid, labelsArray)
       metadata.getAndSetParams(model)

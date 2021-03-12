@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -115,9 +116,7 @@ private[streaming] class ReceivedBlockTracker(
       // a few thousand elements.  So we explicitly allocate a collection for serialization which
       // we know doesn't have this issue.  (See SPARK-26734).
       val streamIdToBlocks = streamIds.map { streamId =>
-        val blocks = mutable.ArrayBuffer[ReceivedBlockInfo]()
-        blocks ++= getReceivedBlockQueue(streamId).clone()
-        (streamId, blocks.toSeq)
+        (streamId, mutable.ArrayBuffer(getReceivedBlockQueue(streamId).clone(): _*))
       }.toMap
       val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
       if (writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))) {

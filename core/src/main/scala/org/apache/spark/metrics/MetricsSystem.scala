@@ -156,7 +156,7 @@ private[spark] class MetricsSystem private (
   }
 
   def getSourcesByName(sourceName: String): Seq[Source] =
-    sources.filter(_.sourceName == sourceName).toSeq
+    sources.filter(_.sourceName == sourceName)
 
   def registerSource(source: Source): Unit = {
     sources += source

@@ -22,17 +22,15 @@ import scala.util.Random
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 class UISeleniumSuite
-  extends HiveThriftServer2TestBase
+  extends HiveThriftJdbcTest
   with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _
@@ -57,7 +55,7 @@ class UISeleniumSuite
     }
   }
 
-  override protected def serverStartCommand(): Seq[String] = {
+  override protected def serverStartCommand(port: Int) = {
     val portConf = if (mode == ServerMode.binary) {
       ConfVars.HIVE_SERVER2_THRIFT_PORT
     } else {
@@ -71,7 +69,7 @@ class UISeleniumSuite
         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
-        |  --hiveconf $portConf=0
+        |  --hiveconf $portConf=$port
         |  --driver-class-path ${sys.props("java.class.path")}
         |  --conf spark.ui.enabled=true
         |  --conf spark.ui.port=$uiPort

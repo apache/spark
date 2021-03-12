@@ -47,19 +47,19 @@ class StatsReportListener extends SparkListener with Logging {
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
     implicit val sc = stageCompleted
     this.logInfo(s"Finished stage: ${getStatusDetail(stageCompleted.stageInfo)}")
-    showMillisDistribution("task runtime:", (info, _) => info.duration, taskInfoMetrics.toSeq)
+    showMillisDistribution("task runtime:", (info, _) => info.duration, taskInfoMetrics)
 
     // Shuffle write
     showBytesDistribution("shuffle bytes written:",
-      (_, metric) => metric.shuffleWriteMetrics.bytesWritten, taskInfoMetrics.toSeq)
+      (_, metric) => metric.shuffleWriteMetrics.bytesWritten, taskInfoMetrics)
 
     // Fetch & I/O
     showMillisDistribution("fetch wait time:",
-      (_, metric) => metric.shuffleReadMetrics.fetchWaitTime, taskInfoMetrics.toSeq)
+      (_, metric) => metric.shuffleReadMetrics.fetchWaitTime, taskInfoMetrics)
     showBytesDistribution("remote bytes read:",
-      (_, metric) => metric.shuffleReadMetrics.remoteBytesRead, taskInfoMetrics.toSeq)
+      (_, metric) => metric.shuffleReadMetrics.remoteBytesRead, taskInfoMetrics)
     showBytesDistribution("task result size:",
-      (_, metric) => metric.resultSize, taskInfoMetrics.toSeq)
+      (_, metric) => metric.resultSize, taskInfoMetrics)
 
     // Runtime breakdown
     val runtimePcts = taskInfoMetrics.map { case (info, metrics) =>

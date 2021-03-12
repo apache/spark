@@ -31,22 +31,20 @@ import org.apache.spark.ui.UIUtils
 private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab) {
 
   def toNodeSeq(request: HttpServletRequest): Seq[Node] = {
-    <table class="table table-bordered table-striped table-sm sortable table-fixed">
+    <table class="table table-bordered table-striped table-condensed sortable table-fixed">
       <thead>
-        <tr>
-          <th>Pool Name</th>
-          <th>
-            <span data-toggle="tooltip" data-placement="top" title="Pool's minimum share of CPU
-             cores">Minimum Share</span>
-          </th>
-          <th>
-            <span data-toggle="tooltip" data-placement="top" title="Pool's share of cluster
-             resources relative to others">Pool Weight</span>
-          </th>
-          <th>Active Stages</th>
-          <th>Running Tasks</th>
-          <th>SchedulingMode</th>
-        </tr>
+        <th>Pool Name</th>
+        <th>
+          <span data-toggle="tooltip" data-placement="top" title="Pool's minimum share of CPU
+           cores">Minimum Share</span>
+        </th>
+        <th>
+          <span data-toggle="tooltip" data-placement="top" title="Pool's share of cluster resources
+           relative to others">Pool Weight</span>
+        </th>
+        <th>Active Stages</th>
+        <th>Running Tasks</th>
+        <th>Scheduling Mode</th>
       </thead>
       <tbody>
         {pools.map { case (s, p) => poolRow(request, s, p) }}

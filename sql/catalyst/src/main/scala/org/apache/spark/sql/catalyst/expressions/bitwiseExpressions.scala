@@ -32,11 +32,8 @@ import org.apache.spark.sql.types._
     Examples:
       > SELECT 3 _FUNC_ 5;
        1
-  """,
-  since = "1.4.0")
+  """)
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
-
-  protected override val failOnError: Boolean = false
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -67,11 +64,8 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
     Examples:
       > SELECT 3 _FUNC_ 5;
        7
-  """,
-  since = "1.4.0")
+  """)
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
-
-  protected override val failOnError: Boolean = false
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -102,11 +96,8 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
     Examples:
       > SELECT 3 _FUNC_ 5;
        6
-  """,
-  since = "1.4.0")
+  """)
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
-
-  protected override val failOnError: Boolean = false
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -135,10 +126,8 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
     Examples:
       > SELECT _FUNC_ 0;
        -1
-  """,
-  since = "1.4.0")
-case class BitwiseNot(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  """)
+case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
 
@@ -175,8 +164,7 @@ case class BitwiseNot(child: Expression)
        0
   """,
   since = "3.0.0")
-case class BitwiseCount(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+case class BitwiseCount(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
 

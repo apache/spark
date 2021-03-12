@@ -82,18 +82,6 @@ In `cluster` mode, the driver runs on a different machine than the client, so `S
 
 Running Spark on YARN requires a binary distribution of Spark which is built with YARN support.
 Binary distributions can be downloaded from the [downloads page](https://spark.apache.org/downloads.html) of the project website.
-There are two variants of Spark binary distributions you can download. One is pre-built with a certain
-version of Apache Hadoop; this Spark distribution contains built-in Hadoop runtime, so we call it `with-hadoop` Spark
-distribution. The other one is pre-built with user-provided Hadoop; since this Spark distribution
-doesn't contain a built-in Hadoop runtime, it's smaller, but users have to provide a Hadoop installation separately.
-We call this variant `no-hadoop` Spark distribution. For `with-hadoop` Spark distribution, since
-it contains a built-in Hadoop runtime already, by default, when a job is submitted to Hadoop Yarn cluster, to prevent jar conflict, it will not
-populate Yarn's classpath into Spark. To override this behavior, you can set <code>spark.yarn.populateHadoopClasspath=true</code>.
-For `no-hadoop` Spark distribution, Spark will populate Yarn's classpath by default in order to get Hadoop runtime. For `with-hadoop` Spark distribution,
-if your application depends on certain library that is only available in the cluster, you can try to populate the Yarn classpath by setting
-the property mentioned above. If you run into jar conflict issue by doing so, you will need to turn it off and include this library
-in your application jar.
-
 To build Spark yourself, refer to [Building Spark](building-spark.html).
 
 To make Spark runtime jars accessible from YARN side, you can specify `spark.yarn.archive` or `spark.yarn.jars`. For details please refer to [Spark Properties](#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will create a zip file with all jars under `$SPARK_HOME/jars` and upload it to the distributed cache.
@@ -167,15 +155,6 @@ To use a custom metrics.properties for the application master and executors, upd
     To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu.amount</code>
   </td>
   <td>3.0.0</td>
-</tr>
-<tr>
-  <td><code>spark.yarn.applicationType</code></td>
-  <td><code>SPARK</code></td>
-  <td>
-    Defines more specific application types, e.g. <code>SPARK</code>, <code>SPARK-SQL</code>, <code>SPARK-STREAMING</code>,
-    <code>SPARK-MLLIB</code> and <code>SPARK-GRAPH</code>. Please be careful not to exceed 20 characters.
-  </td>
-  <td>3.1.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.driver.resource.{resource-type}.amount</code></td>
@@ -408,10 +387,7 @@ To use a custom metrics.properties for the application master and executors, upd
 </tr>
 <tr>
   <td><code>spark.yarn.populateHadoopClasspath</code></td>
-  <td>
-    For <code>with-hadoop</code> Spark distribution, this is set to false; 
-    for <code>no-hadoop</code> distribution, this is set to true.
-  </td>
+  <td>true</td>
   <td>
     Whether to populate Hadoop classpath from <code>yarn.application.classpath</code> and
     <code>mapreduce.application.classpath</code> Note that if this is set to <code>false</code>, 
@@ -551,12 +527,12 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.launch.excludeOnFailure.enabled</code></td>
+  <td><code>spark.yarn.blacklist.executor.launch.blacklisting.enabled</code></td>
   <td>false</td>
   <td>
-  Flag to enable exclusion of nodes having YARN resource allocation problems.
-  The error limit for excluding can be configured by
-  <code>spark.excludeOnFailure.application.maxFailedExecutorsPerNode</code>.
+  Flag to enable blacklisting of nodes having YARN resource allocation problems.
+  The error limit for blacklisting can be configured by
+  <code>spark.blacklist.application.maxFailedExecutorsPerNode</code>.
   </td>
   <td>2.4.0</td>
 </tr>
@@ -640,11 +616,6 @@ For example, the user wants to request 2 GPUs for each executor. The user can ju
 If the user has a user defined YARN resource, lets call it `acceleratorX` then the user must specify <code>spark.yarn.executor.resource.acceleratorX.amount=2</code> and <code>spark.executor.resource.acceleratorX.amount=2</code>.
 
 YARN does not tell Spark the addresses of the resources allocated to each container. For that reason, the user must specify a discovery script that gets run by the executor on startup to discover what resources are available to that executor. You can find an example scripts in `examples/src/main/scripts/getGpusResources.sh`. The script must have execute permissions set and the user should setup permissions to not allow malicious users to modify it. The script should write to STDOUT a JSON string in the format of the ResourceInformation class. This has the resource name and an array of resource addresses available to just that executor.
-
-# Stage Level Scheduling Overview
-
-Stage level scheduling is supported on YARN when dynamic allocation is enabled. One thing to note that is YARN specific is that each ResourceProfile requires a different container priority on YARN. The mapping is simply the ResourceProfile id becomes the priority, on YARN lower numbers are higher priority. This means that profiles created earlier will have a higher priority in YARN. Normally this won't matter as Spark finishes one stage before starting another one, the only case this might have an affect is in a job server type scenario, so its something to keep in mind.
-Note there is a difference in the way custom resources are handled between the base default profile and custom ResourceProfiles. To allow for the user to request YARN containers with extra resources without Spark scheduling on them, the user can specify resources via the <code>spark.yarn.executor.resource.</code> config. Those configs are only used in the base default profile though and do not get propagated into any other custom ResourceProfiles. This is because there would be no way to remove them if you wanted a stage to not have them. This results in your default profile getting custom resources defined in <code>spark.yarn.executor.resource.</code> plus spark defined resources of GPU or FPGA. Spark converts GPU and FPGA resources into the YARN built in types <code>yarn.io/gpu</code>) and <code>yarn.io/fpga</code>, but does not know the mapping of any other resources. Any other Spark custom resources are not propagated to YARN for the default profile. So if you want Spark to schedule based off a custom resource and have it requested from YARN, you must specify it in both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>) configs. Leave the Spark config off if you only want YARN containers with the extra resources but Spark not to schedule using them. Now for custom ResourceProfiles, it doesn't currently have a way to only specify YARN resources without Spark scheduling off of them. This means for custom ResourceProfiles we propagate all the resources defined in the ResourceProfile to YARN. We still convert GPU and FPGA to the YARN build in types as well. This requires that the name of any custom resources you specify match what they are defined as in YARN.
 
 # Important notes
 

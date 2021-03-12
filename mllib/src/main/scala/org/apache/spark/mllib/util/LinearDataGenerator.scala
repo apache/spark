@@ -20,6 +20,8 @@ package org.apache.spark.mllib.util
 import scala.collection.JavaConverters._
 import scala.util.Random
 
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
+
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, Vectors}

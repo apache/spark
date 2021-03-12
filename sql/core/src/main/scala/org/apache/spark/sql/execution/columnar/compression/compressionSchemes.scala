@@ -23,6 +23,7 @@ import java.nio.ByteOrder
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
@@ -181,7 +182,8 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
     private var _uncompressedSize = 0
     private var _compressedSize = 0
 
-    private var lastValue: T#InternalType = _
+    // Using `MutableRow` to store the last value to avoid boxing/unboxing cost.
+    private val lastValue = new SpecificInternalRow(Seq(columnType.dataType))
     private var lastRun = 0
 
     override def uncompressedSize: Int = _uncompressedSize
@@ -193,16 +195,16 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       val actualSize = columnType.actualSize(row, ordinal)
       _uncompressedSize += actualSize
 
-      if (lastValue == null) {
-        lastValue = columnType.clone(value)
+      if (lastValue.isNullAt(0)) {
+        columnType.copyField(row, ordinal, lastValue, 0)
         lastRun = 1
         _compressedSize += actualSize + 4
       } else {
-        if (lastValue == value) {
+        if (columnType.getField(lastValue, 0) == value) {
           lastRun += 1
         } else {
           _compressedSize += actualSize + 4
-          lastValue = columnType.clone(value)
+          columnType.copyField(row, ordinal, lastValue, 0)
           lastRun = 1
         }
       }
@@ -212,27 +214,30 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       to.putInt(RunLengthEncoding.typeId)
 
       if (from.hasRemaining) {
+        val currentValue = new SpecificInternalRow(Seq(columnType.dataType))
         var currentRun = 1
-        var currentValue = columnType.extract(from)
+        val value = new SpecificInternalRow(Seq(columnType.dataType))
+
+        columnType.extract(from, currentValue, 0)
 
         while (from.hasRemaining) {
-          val value = columnType.extract(from)
+          columnType.extract(from, value, 0)
 
-          if (value == currentValue) {
+          if (value.get(0, columnType.dataType) == currentValue.get(0, columnType.dataType)) {
             currentRun += 1
           } else {
             // Writes current run
-            columnType.append(currentValue, to)
+            columnType.append(currentValue, 0, to)
             to.putInt(currentRun)
 
             // Resets current run
-            currentValue = value
+            columnType.copyField(value, 0, currentValue, 0)
             currentRun = 1
           }
         }
 
         // Writes the last run
-        columnType.append(currentValue, to)
+        columnType.append(currentValue, 0, to)
         to.putInt(currentRun)
       }
 

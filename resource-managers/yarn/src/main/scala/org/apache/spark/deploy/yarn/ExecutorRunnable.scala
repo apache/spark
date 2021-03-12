@@ -19,11 +19,12 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.nio.ByteBuffer
-import java.util.Collections
+import java.util.{Collections, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
 
+import org.apache.hadoop.HadoopIllegalArgumentException
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
@@ -39,6 +40,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.Utils
 
 private[yarn] class ExecutorRunnable(

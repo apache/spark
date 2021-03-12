@@ -349,7 +349,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
-  test("subscribing topic by pattern with topic deletions") {
+  // TODO (SPARK-31731): re-enable it
+  ignore("subscribing topic by pattern with topic deletions") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-seems"
     val topic2 = topicPrefix + "-bad"
@@ -362,7 +363,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
-      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", s"$topicPrefix-.*")
       .option("failOnDataLoss", "false")
@@ -400,7 +400,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
-      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("startingOffsets", "earliest")
       .option("subscribePattern", s"$topicPrefix-.*")
@@ -590,7 +589,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
-      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribe", topic)
       // If a topic is deleted and we try to poll data starting from offset 0,
@@ -607,9 +605,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     // in executors.
     val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
       override def open(partitionId: Long, version: Long): Boolean = {
-        // Re-create topic since Kafka auto topic creation is not supported by Spark
         KafkaSourceSuite.globalTestUtils.deleteTopic(topic)
-        KafkaSourceSuite.globalTestUtils.createTopic(topic)
         true
       }
 
@@ -691,25 +687,19 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
   }
 
   test("allow group.id prefix") {
-    // Group ID prefix is only supported by consumer based offset reader
-    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
-      testGroupId("groupIdPrefix", (expected, actual) => {
-        assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
-          "Valid consumer groups don't contain the expected group id - " +
-            s"Valid consumer groups: $actual / expected group id: $expected")
-      })
-    }
+    testGroupId("groupIdPrefix", (expected, actual) => {
+      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+        "Valid consumer groups don't contain the expected group id - " +
+        s"Valid consumer groups: $actual / expected group id: $expected")
+    })
   }
 
   test("allow group.id override") {
-    // Group ID override is only supported by consumer based offset reader
-    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
-      testGroupId("kafka.group.id", (expected, actual) => {
-        assert(actual.exists(_ === expected), "Valid consumer groups don't " +
-          s"contain the expected group id - Valid consumer groups: $actual / " +
-          s"expected group id: $expected")
-      })
-    }
+    testGroupId("kafka.group.id", (expected, actual) => {
+      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+        s"contain the expected group id - Valid consumer groups: $actual / " +
+        s"expected group id: $expected")
+    })
   }
 
   private def testGroupId(groupIdKey: String,
@@ -1128,20 +1118,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 }
 
 
-class KafkaMicroBatchV1SourceWithAdminSuite extends KafkaMicroBatchV1SourceSuite {
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    spark.conf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
-  }
-}
-
-class KafkaMicroBatchV2SourceWithAdminSuite extends KafkaMicroBatchV2SourceSuite {
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    spark.conf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
-  }
-}
-
 class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -1199,6 +1175,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   }
 
   testWithUninterruptibleThread("minPartitions is supported") {
+    import testImplicits._
 
     val topic = newTopic()
     val tp = new TopicPartition(topic, 0)
@@ -1563,8 +1540,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       makeSureGetOffsetCalled,
       Execute { q =>
         // wait to reach the last offset in every partition
-        q.awaitOffset(0,
-          KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L).toMap), streamingTimeout.toMillis)
+        q.awaitOffset(
+          0, KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L)), streamingTimeout.toMillis)
       },
       CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22),
       StopStream,
@@ -1883,7 +1860,6 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
         .option("kafka.metadata.max.age.ms", "1")
         .option("subscribePattern", "stress.*")
         .option("failOnDataLoss", "false")
-        .option("kafka.request.timeout.ms", "3000")
         .option("kafka.default.api.timeout.ms", "3000")
         .load()
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")

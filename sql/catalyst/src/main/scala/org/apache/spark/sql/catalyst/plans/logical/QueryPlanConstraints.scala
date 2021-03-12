@@ -29,14 +29,16 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    */
   lazy val constraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
-      validConstraints
-        .union(inferAdditionalConstraints(validConstraints))
-        .union(constructIsNotNullConstraints(validConstraints, output))
-        .filter { c =>
-          c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
-        }
+      ExpressionSet(
+        validConstraints
+          .union(inferAdditionalConstraints(validConstraints))
+          .union(constructIsNotNullConstraints(validConstraints, output))
+          .filter { c =>
+            c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
+          }
+      )
     } else {
-      ExpressionSet()
+      ExpressionSet(Set.empty)
     }
   }
 
@@ -48,7 +50,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    *
    * See [[Canonicalize]] for more details.
    */
-  protected lazy val validConstraints: ExpressionSet = ExpressionSet()
+  protected lazy val validConstraints: Set[Expression] = Set.empty
 }
 
 trait ConstraintHelper {
@@ -58,28 +60,22 @@ trait ConstraintHelper {
    * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
    * additional constraint of the form `b = 5`.
    */
-  def inferAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
-    var inferredConstraints = ExpressionSet()
-    // IsNotNull should be constructed by `constructIsNotNullConstraints`.
-    val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
-    predicates.foreach {
+  def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    var inferredConstraints = Set.empty[Expression]
+    constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = predicates - eq
+        val candidateConstraints = constraints - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l @ Cast(_: Attribute, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
-      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _)) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
       case _ => // No inference
     }
     inferredConstraints -- constraints
   }
 
   private def replaceConstraints(
-      constraints: ExpressionSet,
+      constraints: Set[Expression],
       source: Expression,
-      destination: Expression): ExpressionSet = constraints.map(_ transform {
+      destination: Attribute): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
   })
 
@@ -89,15 +85,15 @@ trait ConstraintHelper {
    * returns a constraint of the form `isNotNull(a)`
    */
   def constructIsNotNullConstraints(
-      constraints: ExpressionSet,
-      output: Seq[Attribute]): ExpressionSet = {
+      constraints: Set[Expression],
+      output: Seq[Attribute]): Set[Expression] = {
     // First, we propagate constraints from the null intolerant expressions.
-    var isNotNullConstraints = constraints.flatMap(inferIsNotNullConstraints(_))
+    var isNotNullConstraints: Set[Expression] = constraints.flatMap(inferIsNotNullConstraints)
 
     // Second, we infer additional constraints from non-nullable attributes that are part of the
     // operator's output
     val nonNullableAttributes = output.filterNot(_.nullable)
-    isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull)
+    isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull).toSet
 
     isNotNullConstraints -- constraints
   }

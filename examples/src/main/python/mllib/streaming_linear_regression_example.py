@@ -18,6 +18,8 @@
 """
 Streaming Linear Regression Example.
 """
+from __future__ import print_function
+
 # $example on$
 import sys
 # $example off$

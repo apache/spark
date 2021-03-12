@@ -110,11 +110,6 @@ private[spark] class SparkUI private (
     }
   }
 
-  override def checkUIViewPermissions(appId: String, attemptId: Option[String],
-      user: String): Boolean = {
-    securityManager.checkUIViewPermissions(user)
-  }
-
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
       id = appId,

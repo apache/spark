@@ -19,10 +19,14 @@ import os
 import sys
 import tempfile
 import unittest
-from io import StringIO
 
 from pyspark import SparkConf, SparkContext, BasicProfiler
 from pyspark.testing.utils import PySparkTestCase
+
+if sys.version >= "3":
+    from io import StringIO
+else:
+    from StringIO import StringIO
 
 
 class ProfilerTests(PySparkTestCase):
@@ -85,11 +89,11 @@ class ProfilerTests2(unittest.TestCase):
     def test_profiler_disabled(self):
         sc = SparkContext(conf=SparkConf().set("spark.python.profile", "false"))
         try:
-            self.assertRaisesRegex(
+            self.assertRaisesRegexp(
                 RuntimeError,
                 "'spark.python.profile' configuration must be set",
                 lambda: sc.show_profiles())
-            self.assertRaisesRegex(
+            self.assertRaisesRegexp(
                 RuntimeError,
                 "'spark.python.profile' configuration must be set",
                 lambda: sc.dump_profiles("/tmp/abc"))
@@ -98,10 +102,10 @@ class ProfilerTests2(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_profiler import *  # noqa: F401
+    from pyspark.tests.test_profiler import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

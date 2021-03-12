@@ -48,11 +48,9 @@ class AnalysisException protected[sql] (
 
   // Outputs an exception without the logical plan.
   // For testing only
-  def getSimpleMessage: String = if (line.isDefined || startPosition.isDefined) {
+  def getSimpleMessage: String = {
     val lineAnnotation = line.map(l => s" line $l").getOrElse("")
     val positionAnnotation = startPosition.map(p => s" pos $p").getOrElse("")
     s"$message;$lineAnnotation$positionAnnotation"
-  } else {
-    message
   }
 }

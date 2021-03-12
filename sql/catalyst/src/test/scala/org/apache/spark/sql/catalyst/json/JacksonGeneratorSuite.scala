@@ -26,8 +26,8 @@ import org.apache.spark.sql.types._
 
 class JacksonGeneratorSuite extends SparkFunSuite {
 
-  val utcId = DateTimeUtils.TimeZoneUTC.getID
-  val option = new JSONOptions(Map.empty, utcId)
+  val gmtId = DateTimeUtils.TimeZoneGMT.getID
+  val option = new JSONOptions(Map.empty, gmtId)
 
   test("initial with StructType and write out a row") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)
@@ -45,7 +45,7 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     val input = InternalRow(null)
     val writer = new CharArrayWriter()
     val allowNullOption =
-      new JSONOptions(Map("ignoreNullFields" -> "false"), utcId)
+      new JSONOptions(Map("ignoreNullFields" -> "false"), gmtId)
     val gen = new JacksonGenerator(dataType, writer, allowNullOption)
     gen.write(input)
     gen.flush()
@@ -59,7 +59,7 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     val input = InternalRow(InternalRow(null))
     val writer = new CharArrayWriter()
     val allowNullOption =
-      new JSONOptions(Map("ignoreNullFields" -> "false"), utcId)
+      new JSONOptions(Map("ignoreNullFields" -> "false"), gmtId)
     val gen = new JacksonGenerator(dataType, writer, allowNullOption)
     gen.write(input)
     gen.flush()

@@ -20,6 +20,8 @@ Logistic regression using MLlib.
 
 This example requires NumPy (http://www.numpy.org/).
 """
+from __future__ import print_function
+
 import sys
 
 from pyspark import SparkContext

@@ -43,9 +43,7 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
       testCase(succeededExecutor(2), PodSucceeded),
       testCase(failedExecutorWithoutDeletion(3), PodFailed),
       testCase(deletedExecutor(4), PodDeleted),
-      testCase(unknownExecutor(5), PodUnknown),
-      testCase(finishedExecutorWithRunningSidecar(6, 0), PodSucceeded),
-      testCase(finishedExecutorWithRunningSidecar(7, 1), PodFailed)
+      testCase(unknownExecutor(5), PodUnknown)
     )
     doTest(testCases)
   }
@@ -76,12 +74,11 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
       Map(
         0L -> PodPending(originalPods(0)),
         1L -> PodSucceeded(succeededExecutor(1))))
-    val pendingExec = pendingExecutor(2)
-    val snapshotWithNewPod = snapshotWithUpdatedPod.withUpdate(pendingExec)
+    val snapshotWithNewPod = snapshotWithUpdatedPod.withUpdate(pendingExecutor(2))
     assert(snapshotWithNewPod.executorPods ===
       Map(
         0L -> PodPending(originalPods(0)),
         1L -> PodSucceeded(succeededExecutor(1)),
-        2L -> PodPending(pendingExec)))
+        2L -> PodPending(pendingExecutor(2))))
   }
 }

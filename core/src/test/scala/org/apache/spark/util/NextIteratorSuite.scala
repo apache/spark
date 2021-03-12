@@ -21,8 +21,7 @@ import java.util.NoSuchElementException
 
 import scala.collection.mutable.Buffer
 
-import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 

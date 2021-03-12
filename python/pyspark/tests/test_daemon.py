@@ -73,10 +73,10 @@ class DaemonTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_daemon import *  # noqa: F401
+    from pyspark.tests.test_daemon import *
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

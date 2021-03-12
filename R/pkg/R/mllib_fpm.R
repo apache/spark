@@ -122,12 +122,11 @@ setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
 # Get association rules.
 
 #' @return A \code{SparkDataFrame} with association rules.
-#'         The \code{SparkDataFrame} contains five columns:
+#'         The \code{SparkDataFrame} contains four columns:
 #'         \code{antecedent} (an array of the same type as the input column),
 #'         \code{consequent} (an array of the same type as the input column),
-#'         \code{confidence} (confidence for the rule)
-#'         \code{lift} (lift for the rule)
-#'         and \code{support} (support for the rule)
+#'         \code{condfidence} (confidence for the rule)
+#'         and \code{lift} (lift for the rule)
 #' @rdname spark.fpGrowth
 #' @aliases associationRules,FPGrowthModel-method
 #' @note spark.associationRules(FPGrowthModel) since 2.2.0

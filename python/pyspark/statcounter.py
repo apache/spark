@@ -134,8 +134,6 @@ class StatCounter(object):
     def asDict(self, sample=False):
         """Returns the :class:`StatCounter` members as a ``dict``.
 
-        Examples
-        --------
         >>> sc.parallelize([1., 2., 3., 4.]).stats().asDict()
         {'count': 4L,
          'max': 4.0,

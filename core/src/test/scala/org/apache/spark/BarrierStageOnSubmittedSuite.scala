@@ -270,7 +270,6 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
         dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0"]}""")
 
       val conf = new SparkConf()
-        // Setup a local cluster which would only has one executor with 2 CPUs and 1 GPU.
         .setMaster("local-cluster[1, 2, 1024]")
         .setAppName("test-cluster")
         .set(WORKER_GPU_ID.amountConf, "1")
@@ -279,13 +278,14 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
         .set(TASK_GPU_ID.amountConf, "1")
         // disable barrier stage retry to fail the application as soon as possible
         .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 1)
+        // disable the check to simulate the behavior of Standalone in order to
+        // reproduce the issue.
+        .set(Tests.SKIP_VALIDATE_CORES_TESTING, true)
       sc = new SparkContext(conf)
+      // setup an executor which will have 2 CPUs and 1 GPU
       TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
 
       val exception = intercept[BarrierJobSlotsNumberCheckFailed] {
-        // Setup a barrier stage which contains 2 tasks and each task requires 1 CPU and 1 GPU.
-        // Therefore, the total resources requirement (2 CPUs and 2 GPUs) of this barrier stage
-        // can not be satisfied since the cluster only has 2 CPUs and 1 GPU in total.
         sc.parallelize(Range(1, 10), 2)
           .barrier()
           .mapPartitions { iter => iter }

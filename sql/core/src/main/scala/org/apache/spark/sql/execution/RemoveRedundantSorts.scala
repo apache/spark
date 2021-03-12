@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  * if the child satisfies the required distribution so that it is safe to remove not only a
  * local sort but also a global sort when its child already satisfies required sort orders.
  */
-object RemoveRedundantSorts extends Rule[SparkPlan] {
+case class RemoveRedundantSorts(conf: SQLConf) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED)) {
       plan

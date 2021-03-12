@@ -119,7 +119,6 @@ private[thriftserver] class ExecutionInfo(
   def isExecutionActive: Boolean = {
     !(state == ExecutionState.FAILED ||
       state == ExecutionState.CANCELED ||
-      state == ExecutionState.TIMEDOUT ||
       state == ExecutionState.CLOSED)
   }
 

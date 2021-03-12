@@ -50,6 +50,8 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     val metricsEnabledDimensions: Set[String]
   ) extends ReceiverInputDStream[T](_ssc) {
 
+  import KinesisReadConfigurations._
+
   private[streaming]
   override def createBlockRDD(time: Time, blockInfos: Seq[ReceivedBlockInfo]): RDD[T] = {
 

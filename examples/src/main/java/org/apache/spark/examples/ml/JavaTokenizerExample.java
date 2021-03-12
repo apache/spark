@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import scala.collection.mutable.Seq;
+import scala.collection.mutable.WrappedArray;
 
 import org.apache.spark.ml.feature.RegexTokenizer;
 import org.apache.spark.ml.feature.Tokenizer;
@@ -69,7 +69,7 @@ public class JavaTokenizerExample {
         .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
 
     spark.udf().register(
-      "countTokens", (Seq<?> words) -> words.size(), DataTypes.IntegerType);
+      "countTokens", (WrappedArray<?> words) -> words.size(), DataTypes.IntegerType);
 
     Dataset<Row> tokenized = tokenizer.transform(sentenceDataFrame);
     tokenized.select("sentence", "words")

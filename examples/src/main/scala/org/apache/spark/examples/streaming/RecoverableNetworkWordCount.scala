@@ -32,7 +32,7 @@ import org.apache.spark.util.{IntParam, LongAccumulator}
 /**
  * Use this singleton to get or register a Broadcast variable.
  */
-object WordExcludeList {
+object WordBlacklist {
 
   @volatile private var instance: Broadcast[Seq[String]] = null
 
@@ -40,8 +40,8 @@ object WordExcludeList {
     if (instance == null) {
       synchronized {
         if (instance == null) {
-          val wordExcludeList = Seq("a", "b", "c")
-          instance = sc.broadcast(wordExcludeList)
+          val wordBlacklist = Seq("a", "b", "c")
+          instance = sc.broadcast(wordBlacklist)
         }
       }
     }
@@ -60,7 +60,7 @@ object DroppedWordsCounter {
     if (instance == null) {
       synchronized {
         if (instance == null) {
-          instance = sc.longAccumulator("DroppedWordsCounter")
+          instance = sc.longAccumulator("WordsInBlacklistCounter")
         }
       }
     }
@@ -117,13 +117,13 @@ object RecoverableNetworkWordCount {
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map((_, 1)).reduceByKey(_ + _)
     wordCounts.foreachRDD { (rdd: RDD[(String, Int)], time: Time) =>
-      // Get or register the excludeList Broadcast
-      val excludeList = WordExcludeList.getInstance(rdd.sparkContext)
+      // Get or register the blacklist Broadcast
+      val blacklist = WordBlacklist.getInstance(rdd.sparkContext)
       // Get or register the droppedWordsCounter Accumulator
       val droppedWordsCounter = DroppedWordsCounter.getInstance(rdd.sparkContext)
-      // Use excludeList to drop words and use droppedWordsCounter to count them
+      // Use blacklist to drop words and use droppedWordsCounter to count them
       val counts = rdd.filter { case (word, count) =>
-        if (excludeList.value.contains(word)) {
+        if (blacklist.value.contains(word)) {
           droppedWordsCounter.add(count)
           false
         } else {

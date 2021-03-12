@@ -226,9 +226,8 @@ private[spark] object IDFModel {
     }
   }
 
-  private[spark] def transformDense(
-      idf: Vector,
-      values: Array[Double]): Array[Double] = {
+  private[spark] def transformDense(idf: Vector,
+                                    values: Array[Double]): Array[Double] = {
     val n = values.length
     val newValues = new Array[Double](n)
     var j = 0
@@ -239,10 +238,9 @@ private[spark] object IDFModel {
     newValues
   }
 
-  private[spark] def transformSparse(
-      idf: Vector,
-      indices: Array[Int],
-      values: Array[Double]): (Array[Int], Array[Double]) = {
+  private[spark] def transformSparse(idf: Vector,
+                                     indices: Array[Int],
+                                     values: Array[Double]): (Array[Int], Array[Double]) = {
     val nnz = indices.length
     val newValues = new Array[Double](nnz)
     var k = 0

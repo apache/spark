@@ -560,7 +560,7 @@ class Word2VecModel private[spark] (
 
   /**
    * Find synonyms of the vector representation of a word, possibly
-   * including any words in the model vocabulary whose vector representation
+   * including any words in the model vocabulary whose vector respresentation
    * is the supplied vector.
    * @param vector vector representation of a word
    * @param num number of synonyms to find

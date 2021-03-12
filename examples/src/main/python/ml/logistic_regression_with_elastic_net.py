@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import print_function
+
 # $example on$
 from pyspark.ml.classification import LogisticRegression
 # $example off$

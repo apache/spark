@@ -17,10 +17,11 @@
 
 package org.apache.spark.streaming
 
-import java.io.{IOException, ObjectInputStream}
+import java.io.{File, IOException, ObjectInputStream}
 import java.util.concurrent.{ConcurrentLinkedQueue, TimeUnit}
 
 import scala.collection.JavaConverters._
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.scalatest.BeforeAndAfterEach

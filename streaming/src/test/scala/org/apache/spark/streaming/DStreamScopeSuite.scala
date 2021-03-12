@@ -190,7 +190,7 @@ class DStreamScopeSuite
     assertDefined(foreachBaseScope)
     assert(foreachBaseScope.get.name === "foreachRDD")
 
-    val rddScopes = generatedRDDs.map { _.scope }.toSeq
+    val rddScopes = generatedRDDs.map { _.scope }
     assertDefined(rddScopes: _*)
     rddScopes.zipWithIndex.foreach { case (rddScope, idx) =>
       assert(rddScope.get.name === "reduceByKey")

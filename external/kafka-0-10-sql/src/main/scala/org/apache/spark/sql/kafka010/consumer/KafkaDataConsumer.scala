@@ -19,7 +19,6 @@ package org.apache.spark.sql.kafka010.consumer
 
 import java.{util => ju}
 import java.io.Closeable
-import java.time.Duration
 import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
@@ -29,7 +28,6 @@ import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaC
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaTokenUtil}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
@@ -75,7 +73,7 @@ private[kafka010] class InternalKafkaConsumer(
 
     // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
     seek(offset)
-    val p = consumer.poll(Duration.ofMillis(pollTimeoutMs))
+    val p = consumer.poll(pollTimeoutMs)
     val r = p.records(topicPartition)
     logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
     val offsetAfterPoll = consumer.position(topicPartition)
@@ -142,7 +140,6 @@ private[kafka010] class InternalKafkaConsumer(
  *                                 should check if the pre-fetched data is still valid.
  * @param _offsetAfterPoll the Kafka offset after calling `poll`. We will use this offset to
  *                           poll when `records` is drained.
- * @param _availableOffsetRange the available offset range in Kafka when polling the records.
  */
 private[consumer] case class FetchedData(
     private var _records: ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]],
@@ -238,9 +235,6 @@ private[kafka010] class KafkaDataConsumer(
     consumerPool: InternalKafkaConsumerPool,
     fetchedDataPool: FetchedDataPool) extends Logging {
   import KafkaDataConsumer._
-
-  private val isTokenProviderEnabled =
-    HadoopDelegationTokenManager.isServiceEnabled(SparkEnv.get.conf, "kafka")
 
   // Exposed for testing
   @volatile private[consumer] var _consumer: Option[InternalKafkaConsumer] = None
@@ -545,8 +539,8 @@ private[kafka010] class KafkaDataConsumer(
       retrieveConsumer()
     }
     require(_consumer.isDefined, "Consumer must be defined")
-    if (isTokenProviderEnabled && KafkaTokenUtil.needTokenUpdate(
-        _consumer.get.kafkaParamsWithSecurity, _consumer.get.clusterConfig)) {
+    if (KafkaTokenUtil.needTokenUpdate(SparkEnv.get.conf, _consumer.get.kafkaParamsWithSecurity,
+        _consumer.get.clusterConfig)) {
       logDebug("Cached consumer uses an old delegation token, invalidating.")
       releaseConsumer()
       consumerPool.invalidateKey(cacheKey)

@@ -1223,28 +1223,28 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Python-friendly version of [[MLUtils.convertVectorColumnsToML()]].
    */
   def convertVectorColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertVectorColumnsToML(dataset, cols.asScala.toSeq: _*)
+    MLUtils.convertVectorColumnsToML(dataset, cols.asScala: _*)
   }
 
   /**
    * Python-friendly version of [[MLUtils.convertVectorColumnsFromML()]]
    */
   def convertVectorColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala.toSeq: _*)
+    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala: _*)
   }
 
   /**
    * Python-friendly version of [[MLUtils.convertMatrixColumnsToML()]].
    */
   def convertMatrixColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala.toSeq: _*)
+    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala: _*)
   }
 
   /**
    * Python-friendly version of [[MLUtils.convertMatrixColumnsFromML()]]
    */
   def convertMatrixColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala.toSeq: _*)
+    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala: _*)
   }
 }
 

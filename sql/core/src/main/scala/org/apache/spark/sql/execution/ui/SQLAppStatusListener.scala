@@ -183,7 +183,7 @@ class SQLAppStatusListener(
     } else {
       info.accumulables
     }
-    updateStageMetrics(event.stageId, event.stageAttemptId, info.taskId, info.index, accums.toSeq,
+    updateStageMetrics(event.stageId, event.stageAttemptId, info.taskId, info.index, accums,
       info.successful)
   }
 
@@ -211,7 +211,7 @@ class SQLAppStatusListener(
 
     val maxMetricsFromAllStages = new mutable.HashMap[Long, Array[Long]]()
 
-    taskMetrics.filter(m => metricTypes.contains(m._1)).foreach { case (id, values) =>
+    taskMetrics.foreach { case (id, values) =>
       val prev = allMetrics.getOrElse(id, null)
       val updated = if (prev != null) {
         prev ++ values
@@ -222,8 +222,7 @@ class SQLAppStatusListener(
     }
 
     // Find the max for each metric id between all stages.
-    val validMaxMetrics = maxMetrics.filter(m => metricTypes.contains(m._1))
-    validMaxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
+    maxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
       val updated = maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
       if (value > updated(0)) {
         updated(0) = value
@@ -291,7 +290,7 @@ class SQLAppStatusListener(
           cluster.id,
           cluster.name,
           cluster.desc,
-          toStoredNodes(cluster.nodes.toSeq),
+          toStoredNodes(cluster.nodes),
           cluster.metrics)
         new SparkPlanGraphNodeWrapper(null, storedCluster)
 
@@ -341,7 +340,7 @@ class SQLAppStatusListener(
 
     val exec = getOrCreateExecution(executionId)
     exec.physicalPlanDescription = physicalPlanDescription
-    exec.metrics ++= sqlPlanMetrics
+    exec.metrics = sqlPlanMetrics
     update(exec)
   }
 
@@ -349,7 +348,7 @@ class SQLAppStatusListener(
     val SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, sqlPlanMetrics) = event
 
     val exec = getOrCreateExecution(executionId)
-    exec.metrics ++= sqlPlanMetrics
+    exec.metrics = exec.metrics ++ sqlPlanMetrics
     update(exec)
   }
 
@@ -451,7 +450,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
   var jobs = Map[Int, JobExecutionStatus]()
   var stages = Set[Int]()
-  var driverAccumUpdates = Seq[(Long, Long)]()
+  var driverAccumUpdates = Map[Long, Long]()
 
   @volatile var metricsValues: Map[Long, String] = null
 

@@ -36,7 +36,7 @@ trait JavaTestBase extends TestSuiteBase {
       ssc: JavaStreamingContext,
       data: JList[JList[T]],
       numPartitions: Int): JavaDStream[T] = {
-    val seqData = data.asScala.map(_.asScala.toSeq).toSeq
+    val seqData = data.asScala.map(_.asScala)
 
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]

@@ -413,8 +413,16 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-        null, data + rowId * 4L, count * 4L);
+    if (!bigEndianPlatform) {
+      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+          null, data + rowId * 4L, count * 4L);
+    } else {
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.BIG_ENDIAN);
+      long offset = data + 4L * rowId;
+      for (int i = 0; i < count; ++i, offset += 4) {
+        Platform.putFloat(null, offset, bb.getFloat(srcIndex + (4 * i)));
+      }
+    }
   }
 
   @Override
@@ -473,8 +481,16 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-      null, data + rowId * 8L, count * 8L);
+    if (!bigEndianPlatform) {
+      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+        null, data + rowId * 8L, count * 8L);
+    } else {
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.BIG_ENDIAN);
+      long offset = data + 8L * rowId;
+      for (int i = 0; i < count; ++i, offset += 8) {
+        Platform.putDouble(null, offset, bb.getDouble(srcIndex + (8 * i)));
+      }
+    }
   }
 
   @Override

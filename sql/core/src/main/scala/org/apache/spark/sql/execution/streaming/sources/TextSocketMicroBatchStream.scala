@@ -85,7 +85,7 @@ class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
             TextSocketMicroBatchStream.this.synchronized {
               val newData = (
                 UTF8String.fromString(line),
-                DateTimeUtils.millisToMicros(Calendar.getInstance().getTimeInMillis)
+                DateTimeUtils.fromMillis(Calendar.getInstance().getTimeInMillis)
               )
               currentOffset += 1
               batches.append(newData)

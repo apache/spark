@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.FileNotFoundException
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
@@ -147,7 +149,7 @@ private object MarkingFileOutput {
    * @param outputPath destination directory
    * @param conf configuration to create the FS with
    * @return the status of the marker
-   * @throws java.io.FileNotFoundException if the marker is absent
+   * @throws FileNotFoundException if the marker is absent
    */
   def checkMarker(outputPath: Path, conf: Configuration): FileStatus = {
     outputPath.getFileSystem(conf).getFileStatus(new Path(outputPath, "marker"))

@@ -20,6 +20,8 @@ A simple example demonstrating basic Spark SQL features.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/basic.py
 """
+from __future__ import print_function
+
 # $example on:init_session$
 from pyspark.sql import SparkSession
 # $example off:init_session$
@@ -30,7 +32,7 @@ from pyspark.sql import Row
 
 # $example on:programmatic_schema$
 # Import data types
-from pyspark.sql.types import StringType, StructType, StructField
+from pyspark.sql.types import *
 # $example off:programmatic_schema$
 
 
