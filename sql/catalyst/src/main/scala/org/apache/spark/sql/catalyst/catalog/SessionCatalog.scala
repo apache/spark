@@ -1715,6 +1715,7 @@ class SessionCatalog(
     clearTempTables()
     globalTempViewManager.clear()
     functionRegistry.clear()
+    tableFunctionRegistry.clear()
     tableRelationCache.invalidateAll()
     // restore built-in functions
     FunctionRegistry.builtin.listFunction().foreach { f =>
@@ -1723,6 +1724,14 @@ class SessionCatalog(
       require(expressionInfo.isDefined, s"built-in function '$f' is missing expression info")
       require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
       functionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
+    }
+    // restore built-in table functions
+    TableFunctionRegistry.builtin.listFunction().foreach { f =>
+      val expressionInfo = TableFunctionRegistry.builtin.lookupFunction(f)
+      val functionBuilder = TableFunctionRegistry.builtin.lookupFunctionBuilder(f)
+      require(expressionInfo.isDefined, s"built-in function '$f' is missing expression info")
+      require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
+      tableFunctionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
     }
   }
 
