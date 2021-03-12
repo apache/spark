@@ -1,17 +1,17 @@
 TakeOrderedAndProject [channel,id,sales,returns,profit]
-  WholeStageCodegen (79)
+  WholeStageCodegen (76)
     HashAggregate [channel,id,sales,returns,profit]
       InputAdapter
         Exchange [channel,id,sales,returns,profit] #1
-          WholeStageCodegen (78)
+          WholeStageCodegen (75)
             HashAggregate [channel,id,sales,returns,profit]
               InputAdapter
                 Union
-                  WholeStageCodegen (25)
+                  WholeStageCodegen (24)
                     HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter
                         Exchange [channel,id] #2
-                          WholeStageCodegen (24)
+                          WholeStageCodegen (23)
                             HashAggregate [channel,id,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                               InputAdapter
                                 Union
@@ -70,30 +70,29 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                   ReusedExchange [s_store_sk] #5
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk] #4
-                                  WholeStageCodegen (15)
+                                  WholeStageCodegen (14)
                                     Project [cs_call_center_sk,sales,returns,profit,profit_loss]
-                                      InputAdapter
-                                        BroadcastNestedLoopJoin
-                                          WholeStageCodegen (11)
-                                            HashAggregate [cs_call_center_sk,sum,sum] [sum(UnscaledValue(cs_ext_sales_price)),sum(UnscaledValue(cs_net_profit)),sales,profit,sum,sum]
-                                              InputAdapter
-                                                Exchange [cs_call_center_sk] #8
-                                                  WholeStageCodegen (10)
-                                                    HashAggregate [cs_call_center_sk,cs_ext_sales_price,cs_net_profit] [sum,sum,sum,sum]
-                                                      Project [cs_call_center_sk,cs_ext_sales_price,cs_net_profit]
-                                                        BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet default.catalog_sales [cs_call_center_sk,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
-                                                                ReusedSubquery [d_date_sk] #1
-                                                          InputAdapter
-                                                            ReusedExchange [d_date_sk] #4
+                                      BroadcastNestedLoopJoin
+                                        HashAggregate [cs_call_center_sk,sum,sum] [sum(UnscaledValue(cs_ext_sales_price)),sum(UnscaledValue(cs_net_profit)),sales,profit,sum,sum]
+                                          InputAdapter
+                                            Exchange [cs_call_center_sk] #8
+                                              WholeStageCodegen (10)
+                                                HashAggregate [cs_call_center_sk,cs_ext_sales_price,cs_net_profit] [sum,sum,sum,sum]
+                                                  Project [cs_call_center_sk,cs_ext_sales_price,cs_net_profit]
+                                                    BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.catalog_sales [cs_call_center_sk,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
+                                                            ReusedSubquery [d_date_sk] #1
+                                                      InputAdapter
+                                                        ReusedExchange [d_date_sk] #4
+                                        InputAdapter
                                           BroadcastExchange #9
-                                            WholeStageCodegen (14)
+                                            WholeStageCodegen (13)
                                               HashAggregate [sum,sum] [sum(UnscaledValue(cr_return_amount)),sum(UnscaledValue(cr_net_loss)),returns,profit_loss,sum,sum]
                                                 InputAdapter
                                                   Exchange #10
-                                                    WholeStageCodegen (13)
+                                                    WholeStageCodegen (12)
                                                       HashAggregate [cr_return_amount,cr_net_loss] [sum,sum,sum,sum]
                                                         Project [cr_return_amount,cr_net_loss]
                                                           BroadcastHashJoin [cr_returned_date_sk,d_date_sk]
@@ -103,13 +102,13 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                   ReusedSubquery [d_date_sk] #1
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk] #4
-                                  WholeStageCodegen (23)
+                                  WholeStageCodegen (22)
                                     Project [wp_web_page_sk,sales,returns,profit,profit_loss]
                                       BroadcastHashJoin [wp_web_page_sk,wp_web_page_sk]
                                         HashAggregate [wp_web_page_sk,sum,sum] [sum(UnscaledValue(ws_ext_sales_price)),sum(UnscaledValue(ws_net_profit)),sales,profit,sum,sum]
                                           InputAdapter
                                             Exchange [wp_web_page_sk] #11
-                                              WholeStageCodegen (18)
+                                              WholeStageCodegen (17)
                                                 HashAggregate [wp_web_page_sk,ws_ext_sales_price,ws_net_profit] [sum,sum,sum,sum]
                                                   Project [ws_ext_sales_price,ws_net_profit,wp_web_page_sk]
                                                     BroadcastHashJoin [ws_web_page_sk,wp_web_page_sk]
@@ -124,18 +123,18 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                             ReusedExchange [d_date_sk] #4
                                                       InputAdapter
                                                         BroadcastExchange #12
-                                                          WholeStageCodegen (17)
+                                                          WholeStageCodegen (16)
                                                             Filter [wp_web_page_sk]
                                                               ColumnarToRow
                                                                 InputAdapter
                                                                   Scan parquet default.web_page [wp_web_page_sk]
                                         InputAdapter
                                           BroadcastExchange #13
-                                            WholeStageCodegen (22)
+                                            WholeStageCodegen (21)
                                               HashAggregate [wp_web_page_sk,sum,sum] [sum(UnscaledValue(wr_return_amt)),sum(UnscaledValue(wr_net_loss)),returns,profit_loss,sum,sum]
                                                 InputAdapter
                                                   Exchange [wp_web_page_sk] #14
-                                                    WholeStageCodegen (21)
+                                                    WholeStageCodegen (20)
                                                       HashAggregate [wp_web_page_sk,wr_return_amt,wr_net_loss] [sum,sum,sum,sum]
                                                         Project [wr_return_amt,wr_net_loss,wp_web_page_sk]
                                                           BroadcastHashJoin [wr_returned_date_sk,d_date_sk]
@@ -150,20 +149,20 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                   ReusedExchange [wp_web_page_sk] #12
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk] #4
-                  WholeStageCodegen (51)
+                  WholeStageCodegen (49)
                     HashAggregate [channel,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),id,sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter
                         Exchange [channel] #15
-                          WholeStageCodegen (50)
+                          WholeStageCodegen (48)
                             HashAggregate [channel,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                               HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                 InputAdapter
                                   ReusedExchange [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] #16
-                  WholeStageCodegen (77)
+                  WholeStageCodegen (74)
                     HashAggregate [sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),channel,id,sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter
                         Exchange #17
-                          WholeStageCodegen (76)
+                          WholeStageCodegen (73)
                             HashAggregate [sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                               HashAggregate [channel,id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                                 InputAdapter

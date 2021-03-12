@@ -815,32 +815,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("alter table rename after analyze table") {
-    Seq(true, false).foreach { analyzedBySpark =>
-      val oldName = "tab1"
-      val newName = "tab2"
-      withTable(oldName, newName) {
-        createNonPartitionedTable(oldName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
-        val fetchedStats1 = checkTableStats(
-          oldName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        sql(s"ALTER TABLE $oldName RENAME TO $newName")
-        val fetchedStats2 = checkTableStats(
-          newName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        assert(fetchedStats1 == fetchedStats2)
-
-        // ALTER TABLE RENAME does not affect the contents of Hive specific statistics
-        val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $newName")
-
-        val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-        val numRows = extractStatsPropValues(describeResult, "numRows")
-        val totalSize = extractStatsPropValues(describeResult, "totalSize")
-        assert(rawDataSize.isDefined && rawDataSize.get > 0, "rawDataSize is lost")
-        assert(numRows.isDefined && numRows.get == 500, "numRows is lost")
-        assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
-      }
-    }
-  }
-
   test("alter table should not have the side effect to store statistics in Spark side") {
     val table = "alter_table_side_effect"
     withTable(table) {

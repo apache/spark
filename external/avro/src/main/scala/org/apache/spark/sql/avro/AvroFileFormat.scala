@@ -22,7 +22,6 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.Schema
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
@@ -91,7 +90,7 @@ private[sql] class AvroFileFormat extends FileFormat
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
-      val userProvidedSchema = parsedOptions.schema.map(new Schema.Parser().parse)
+      val userProvidedSchema = parsedOptions.schema
 
       // TODO Removes this check once `FileFormat` gets a general file filtering interface method.
       // Doing input file filtering is improper because we may generate empty tasks that process no

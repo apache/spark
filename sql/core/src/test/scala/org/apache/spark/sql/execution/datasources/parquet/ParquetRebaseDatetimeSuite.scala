@@ -100,7 +100,7 @@ abstract class ParquetRebaseDatetimeSuite
   private def inReadConfToOptions(
       conf: String,
       mode: LegacyBehaviorPolicy.Value): Map[String, String] = conf match {
-    case SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key =>
+    case SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key =>
       Map(ParquetOptions.INT96_REBASE_MODE -> mode.toString)
     case _ => Map(ParquetOptions.DATETIME_REBASE_MODE -> mode.toString)
   }
@@ -128,8 +128,8 @@ abstract class ParquetRebaseDatetimeSuite
         toJavaType: String => T,
         checkDefaultLegacyRead: String => Unit,
         tsOutputType: String = "TIMESTAMP_MICROS",
-        inWriteConf: String = SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
-        inReadConf: String = SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key): Unit = {
+        inWriteConf: String = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
+        inReadConf: String = SQLConf.PARQUET_REBASE_MODE_IN_READ.key): Unit = {
       withTempPaths(2) { paths =>
         paths.foreach(_.delete())
         val path2_4 = getResourceParquetFilePath("test-data/" + fileName)
@@ -209,8 +209,8 @@ abstract class ParquetRebaseDatetimeSuite
             java.sql.Timestamp.valueOf,
             checkDefaultRead,
             tsOutputType = "INT96",
-            inWriteConf = SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
-            inReadConf = SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key)
+            inWriteConf = SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
+            inReadConf = SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key)
         }
       }
     }
@@ -224,20 +224,20 @@ abstract class ParquetRebaseDatetimeSuite
           "TIMESTAMP_MILLIS",
           "1001-01-01 01:02:03.123",
           "1001-01-07 01:09:05.123",
-          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
-          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key),
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
+          SQLConf.PARQUET_REBASE_MODE_IN_READ.key),
         (
           "TIMESTAMP_MICROS",
           "1001-01-01 01:02:03.123456",
           "1001-01-07 01:09:05.123456",
-          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
-          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key),
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
+          SQLConf.PARQUET_REBASE_MODE_IN_READ.key),
         (
           "INT96",
           "1001-01-01 01:02:03.123456",
           "1001-01-07 01:09:05.123456",
-          SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
-          SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key
+          SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
+          SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key
         )
       ).foreach { case (outType, tsStr, nonRebased, inWriteConf, inReadConf) =>
         withClue(s"output type $outType") {
@@ -282,7 +282,7 @@ abstract class ParquetRebaseDatetimeSuite
     Seq(false, true).foreach { dictionaryEncoding =>
       withTempPath { dir =>
         val path = dir.getAbsolutePath
-        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+        withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
           Seq.tabulate(N)(_ => "1001-01-01").toDF("dateS")
             .select($"dateS".cast("date").as("date"))
             .repartition(1)
@@ -295,7 +295,7 @@ abstract class ParquetRebaseDatetimeSuite
           // The file metadata indicates if it needs rebase or not, so we can always get the
           // correct result regardless of the "rebase mode" config.
           runInMode(
-            SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key,
+            SQLConf.PARQUET_REBASE_MODE_IN_READ.key,
             Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
             checkAnswer(
               spark.read.options(options).parquet(path),
@@ -330,17 +330,17 @@ abstract class ParquetRebaseDatetimeSuite
         }
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
       withTempPath { dir =>
         checkMetadataKey(dir, exists = true)
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
       withTempPath { dir =>
         checkMetadataKey(dir, exists = false)
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
       withTempPath { dir => intercept[SparkException] { checkMetadataKey(dir, exists = false) } }
     }
   }
@@ -352,22 +352,22 @@ abstract class ParquetRebaseDatetimeSuite
         .write
         .parquet(dir.getAbsolutePath)
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
       withTempPath { dir =>
         saveTs(dir)
         assert(getMetaData(dir)(SPARK_LEGACY_INT96) === "")
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
       withTempPath { dir =>
         saveTs(dir)
         assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
       withTempPath { dir => intercept[SparkException] { saveTs(dir) } }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
       withTempPath { dir =>
         saveTs(dir, "2020-10-22 01:02:03")
         assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)

@@ -30,7 +30,6 @@ private[spark] trait RTestsSuite { k8sSuite: KubernetesSuite =>
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverRPodCheck,
       executorPodChecker = doBasicExecutorRPodCheck,
-      appLocator = appLocator,
       isJVM = false)
   }
 }
