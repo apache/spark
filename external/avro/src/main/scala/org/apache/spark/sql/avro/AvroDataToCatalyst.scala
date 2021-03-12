@@ -103,9 +103,8 @@ private[avro] case class AvroDataToCatalyst(
   private def getBinaryOffset(binary: Array[Byte]): Int = {
     // 2 magic number plus 8 fingerprint bytes
     val skipOffset = 10;
-    val magicBytes: Array[Byte] = Array(0xC3.toByte, 0x01.toByte)
     var offset = 0
-    if (binary(0) == magicBytes(0) && binary(1) == magicBytes(1)) {
+    if (binary(0) == 0xC3.toByte && binary(1) == 0x01.toByte) {
       offset = skipOffset
     }
     offset
