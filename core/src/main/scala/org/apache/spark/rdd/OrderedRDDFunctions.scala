@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partitioner, RangePartitioner, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partitioner, RangePartitioner, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.collection.ExternalSorter
@@ -76,9 +76,10 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
   def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
     if (self.partitioner == Some(partitioner)) {
       self.mapPartitions(iter => {
-        val sorter = new ExternalSorter[K, V, V](TaskContext.get, None, None, Some(ordering))
+        val context = TaskContext.get()
+        val sorter = new ExternalSorter[K, V, V](context, None, None, Some(ordering))
         sorter.insertAll(iter)
-        sorter.interruptibleCompletionIterator.asInstanceOf[Iterator[(K, V)]]
+        new InterruptibleIterator(context, sorter.completionIterator.asInstanceOf[Iterator[(K, V)]])
       }, preservesPartitioning = true)
     } else {
       new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)

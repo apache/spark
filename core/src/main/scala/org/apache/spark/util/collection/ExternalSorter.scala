@@ -677,17 +677,15 @@ private[spark] class ExternalSorter[K, V, C](
    * On task completion (success, failure, or cancellation), it updates related task metrics,
    * and releases resources by calling `stop()`.
    */
-  def interruptibleCompletionIterator: Iterator[Product2[K, C]] = {
+  def completionIterator: Iterator[Product2[K, C]] = {
+    context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
+    context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
     // Use completion callback to stop sorter if task was finished/cancelled.
-    context.addTaskCompletionListener[Unit]{ _ =>
-      context.taskMetrics().incMemoryBytesSpilled(this.memoryBytesSpilled)
-      context.taskMetrics().incDiskBytesSpilled(this.diskBytesSpilled)
-      context.taskMetrics().incPeakExecutionMemory(this.peakMemoryUsedBytes)
-      this.stop()
-    }
-    val completionIterator = CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](
-      this.iterator, this.stop())
-    new InterruptibleIterator(context, completionIterator)
+    context.addTaskCompletionListener[Unit](_ => {
+      stop()
+    })
+    CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](iterator, stop())
   }
 
   /**
