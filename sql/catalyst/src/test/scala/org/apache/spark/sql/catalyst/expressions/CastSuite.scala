@@ -237,6 +237,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1.5f, 1.toLong)
     checkCast(1.5f, 1.5)
     checkCast(1.5f, "1.5")
+    checkCast(16777215.0f, java.time.Instant.ofEpochSecond(16777215))
   }
 
   test("cast from double") {
