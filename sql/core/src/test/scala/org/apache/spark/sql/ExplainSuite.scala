@@ -454,7 +454,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
-  test("Do not show Statistics(sizeInBytes=8.0 EiB) if we don't have valid stats") {
+  test("SPARK-34725: Do not show Statistics(sizeInBytes=8.0 EiB) if we don't have valid stats") {
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 int) USING PARQUET PARTITIONED BY (p1 int)")
       val explainString = sql("SELECT * FROM t1")
