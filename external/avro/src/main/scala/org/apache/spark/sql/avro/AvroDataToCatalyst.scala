@@ -96,7 +96,7 @@ private[avro] case class AvroDataToCatalyst(
    * defined in avro BinaryMessageEncoder.java as of now we are assuming that the binary
    * provided was encoded via avro BinaryEncoder.java. However some serializers use
    * the former strategy instead which prepend the binary with a magic number followed
-   * by a header and 8-byte schema fingerprint. This method detects the presence
+   * by a 8-byte schema fingerprint. This method detects the presence
    * of the magic number and if thats the case the offset returned skips the magic
    * plus fingerprint bytes.
    */
