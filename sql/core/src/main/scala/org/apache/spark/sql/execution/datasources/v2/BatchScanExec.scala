@@ -49,6 +49,13 @@ case class BatchScanExec(
   }
 
   override def doCanonicalize(): BatchScanExec = {
-    this.copy(output = output.map(QueryPlan.normalizeExpressions(_, output)))
+    val canonicalizedScan = scan match {
+      case s: FileScan =>
+        s.withFilters(QueryPlan.normalizePredicates(s.partitionFilters, output),
+          QueryPlan.normalizePredicates(s.dataFilters, output))
+      case _ => scan
+    }
+    this.copy(output = output.map(QueryPlan.normalizeExpressions(_, output)),
+      scan = canonicalizedScan)
   }
 }

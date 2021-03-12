@@ -86,7 +86,7 @@ trait FileScan extends Scan
 
   override def equals(obj: Any): Boolean = obj match {
     case f: FileScan =>
-      fileIndex == f.fileIndex && readSchema == f.readSchema
+      fileIndex == f.fileIndex && readSchema == f.readSchema &&
         ExpressionSet(partitionFilters) == ExpressionSet(f.partitionFilters) &&
         ExpressionSet(dataFilters) == ExpressionSet(f.dataFilters)
 
