@@ -62,11 +62,14 @@ from airflow.utils.state import State
 from airflow.utils.timezone import datetime
 from airflow.utils.types import DagRunType
 from airflow.www import app as application
+from airflow.www.extensions import init_views
+from airflow.www.extensions.init_appbuilder_links import init_appbuilder_links
 from airflow.www.views import ConnectionModelView, get_safe_url, truncate_task_duration
 from tests.test_utils import fab_utils
 from tests.test_utils.asserts import assert_queries_count
 from tests.test_utils.config import conf_vars
 from tests.test_utils.db import clear_db_runs
+from tests.test_utils.decorators import dont_initialize_flask_app_submodules
 from tests.test_utils.mock_plugins import mock_plugin_manager
 
 
@@ -121,6 +124,14 @@ class TemplateWithContext(NamedTuple):
 
 class TestBase(unittest.TestCase):
     @classmethod
+    @dont_initialize_flask_app_submodules(
+        skip_all_except=[
+            "init_appbuilder",
+            "init_appbuilder_views",
+            "init_flash_views",
+            "init_jinja_globals",
+        ]
+    )
     def setUpClass(cls):
         settings.configure_orm()
         cls.session = settings.Session
@@ -138,36 +149,38 @@ class TestBase(unittest.TestCase):
         self.login()
 
     def login(self, username='test', password='test'):
-        if username == 'test' and not self.appbuilder.sm.find_user(username='test'):
-            self.appbuilder.sm.add_user(
-                username='test',
-                first_name='test',
-                last_name='test',
-                email='test@fab.org',
-                role=self.appbuilder.sm.find_role('Admin'),
-                password='test',
-            )
-        if username == 'test_user' and not self.appbuilder.sm.find_user(username='test_user'):
-            self.appbuilder.sm.add_user(
-                username='test_user',
-                first_name='test_user',
-                last_name='test_user',
-                email='test_user@fab.org',
-                role=self.appbuilder.sm.find_role('User'),
-                password='test_user',
-            )
+        with mock.patch('flask_appbuilder.security.manager.check_password_hash') as set_mock:
+            set_mock.return_value = True
+            if username == 'test' and not self.appbuilder.sm.find_user(username='test'):
+                self.appbuilder.sm.add_user(
+                    username='test',
+                    first_name='test',
+                    last_name='test',
+                    email='test@fab.org',
+                    role=self.appbuilder.sm.find_role('Admin'),
+                    password='test',
+                )
+            if username == 'test_user' and not self.appbuilder.sm.find_user(username='test_user'):
+                self.appbuilder.sm.add_user(
+                    username='test_user',
+                    first_name='test_user',
+                    last_name='test_user',
+                    email='test_user@fab.org',
+                    role=self.appbuilder.sm.find_role('User'),
+                    password='test_user',
+                )
 
-        if username == 'test_viewer' and not self.appbuilder.sm.find_user(username='test_viewer'):
-            self.appbuilder.sm.add_user(
-                username='test_viewer',
-                first_name='test_viewer',
-                last_name='test_viewer',
-                email='test_viewer@fab.org',
-                role=self.appbuilder.sm.find_role('Viewer'),
-                password='test_viewer',
-            )
+            if username == 'test_viewer' and not self.appbuilder.sm.find_user(username='test_viewer'):
+                self.appbuilder.sm.add_user(
+                    username='test_viewer',
+                    first_name='test_viewer',
+                    last_name='test_viewer',
+                    email='test_viewer@fab.org',
+                    role=self.appbuilder.sm.find_role('Viewer'),
+                    password='test_viewer',
+                )
 
-        return self.client.post('/login/', data={"username": username, "password": password})
+            return self.client.post('/login/', data={"username": username, "password": password})
 
     def logout(self):
         return self.client.get('/logout/')
@@ -228,6 +241,7 @@ class TestBase(unittest.TestCase):
 class TestConnectionModelView(TestBase):
     def setUp(self):
         super().setUp()
+
         self.connection = {
             'conn_id': 'test_conn',
             'conn_type': 'http',
@@ -243,6 +257,7 @@ class TestConnectionModelView(TestBase):
         super().tearDown()
 
     def test_create_connection(self):
+        init_views.init_connection_form()
         resp = self.client.post('/connection/add', data=self.connection, follow_redirects=True)
         self.check_content_in_response('Added Row', resp)
 
@@ -391,7 +406,6 @@ class TestPoolModelView(TestBase):
         self.check_content_in_response('Already exists.', resp)
 
     def test_create_pool_with_empty_name(self):
-
         self.pool['pool'] = ''
         resp = self.client.post('/pool/add', data=self.pool, follow_redirects=True)
         self.check_content_in_response('This field is required.', resp)
@@ -426,7 +440,8 @@ class TestMountPoint(unittest.TestCase):
     def setUpClass(cls):
         application.app = None
         application.appbuilder = None
-        app = application.cached_app(config={'WTF_CSRF_ENABLED': False}, testing=True)
+        app = application.create_app(testing=True)
+        app.config['WTF_CSRF_ENABLED'] = False
         cls.client = Client(app, BaseResponse)
 
     @classmethod
@@ -459,6 +474,9 @@ class TestAirflowBaseViews(TestBase):
         models.DagBag(include_examples=True).sync_to_db()
         cls.dagbag = models.DagBag(include_examples=True, read_dags_from_db=True)
         cls.app.dag_bag = cls.dagbag
+        init_views.init_api_connexion(cls.app)
+        init_views.init_plugins(cls.app)
+        init_appbuilder_links(cls.app)
 
     def setUp(self):
         super().setUp()
@@ -1183,6 +1201,11 @@ class TestConfigurationView(TestBase):
 
 
 class TestRedocView(TestBase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        init_views.init_api_connexion(cls.app)
+
     def test_should_render_template(self):
         with self.capture_templates() as templates:
             resp = self.client.get('redoc')
@@ -1201,6 +1224,9 @@ class TestLogView(TestBase):
     ENDPOINT = f'log?dag_id={DAG_ID}&task_id={TASK_ID}&execution_date={DEFAULT_DATE}'
 
     @classmethod
+    @dont_initialize_flask_app_submodules(
+        skip_all_except=["init_appbuilder", "init_jinja_globals", "init_appbuilder_views"]
+    )
     def setUpClass(cls):
         # Make sure that the configure_logging is not cached
         cls.old_modules = dict(sys.modules)
@@ -1771,8 +1797,6 @@ class TestDagACLView(TestBase):
         clear_db_runs()
         self.prepare_dagruns()
         self.logout()
-        self.appbuilder.sm.sync_roles()
-        self.add_permission_for_role()
 
     def login(self, username='dag_tester', password='dag_test'):
         dag_tester_role = self.appbuilder.sm.add_role('dag_acl_tester')
@@ -1868,6 +1892,9 @@ class TestDagACLView(TestBase):
         dag_read_only_role = self.appbuilder.sm.find_role('dag_acl_read_only')
         self.appbuilder.sm.add_permission_role(dag_read_only_role, read_only_perm_on_dag)
         self.appbuilder.sm.add_permission_role(dag_read_only_role, website_permission)
+
+        dag_acl_faker_role = self.appbuilder.sm.find_role('dag_acl_faker')
+        self.appbuilder.sm.add_permission_role(dag_acl_faker_role, website_permission)
 
     def test_permission_exist(self):
         self.create_user_and_login(
@@ -1984,6 +2011,7 @@ class TestDagACLView(TestBase):
         self.check_content_in_response('example_bash_operator', resp)
 
     def test_dag_stats_success_when_selecting_dags(self):
+        self.add_permission_for_role()
         resp = self.client.post(
             'dag_stats', data={'dag_ids': ['example_subdag_operator']}, follow_redirects=True
         )
@@ -2349,6 +2377,7 @@ class TestDagACLView(TestBase):
         self.check_content_in_response('example_subdag_operator', resp)
 
     def test_blocked_success_when_selecting_dags(self):
+        self.add_permission_for_role()
         resp = self.client.post(
             'blocked', data={'dag_ids': ['example_subdag_operator']}, follow_redirects=True
         )
@@ -2363,6 +2392,7 @@ class TestDagACLView(TestBase):
             data={'dag_ids': ['example_subdag_operator', 'example_bash_operator']},
             follow_redirects=True,
         )
+
         blocked_dags = {blocked['dag_id'] for blocked in json.loads(resp.data.decode('utf-8'))}
         assert 'example_bash_operator' in blocked_dags
         assert 'example_subdag_operator' in blocked_dags
@@ -2580,6 +2610,7 @@ class TestDagACLView(TestBase):
         url = 'log?task_id=runme_0&dag_id=example_bash_operator&execution_date={}'.format(
             self.percent_encode(self.default_date)
         )
+
         resp = self.client.get(url, follow_redirects=True)
         self.check_content_in_response('Log by attempts', resp)
         url = (
