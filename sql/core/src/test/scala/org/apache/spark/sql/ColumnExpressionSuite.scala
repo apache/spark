@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDate, Period}
 import java.util.Locale
 
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -2387,5 +2387,57 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(addDF, Row(Period.ofMonths(11), Duration.ofDays(11)))
     val subDF = df.select($"year-month-A" - $"year-month-B", $"day-time-A" - $"day-time-B")
     checkAnswer(subDF, Row(Period.ofMonths(9), Duration.ofDays(9)))
+  }
+
+  test("SPARK-34721: add a year-month interval to a date") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      Seq(
+        (LocalDate.of(1900, 10, 1), Period.ofMonths(0)) -> LocalDate.of(1900, 10, 1),
+        (LocalDate.of(1970, 1, 1), Period.ofMonths(-1)) -> LocalDate.of(1969, 12, 1),
+        (LocalDate.of(2021, 3, 11), Period.ofMonths(1)) -> LocalDate.of(2021, 4, 11),
+        (LocalDate.of(2020, 12, 31), Period.ofMonths(2)) -> LocalDate.of(2021, 2, 28),
+        (LocalDate.of(2021, 5, 31), Period.ofMonths(-3)) -> LocalDate.of(2021, 2, 28),
+        (LocalDate.of(2020, 2, 29), Period.ofYears(1)) -> LocalDate.of(2021, 2, 28),
+        (LocalDate.of(1, 1, 1), Period.ofYears(2020)) -> LocalDate.of(2021, 1, 1)
+      ).foreach { case ((date, period), result) =>
+        val df = Seq((date, period)).toDF("date", "interval")
+        checkAnswer(df.select($"date" + $"interval", $"interval" + $"date"), Row(result, result))
+      }
+
+      val e = intercept[SparkException] {
+        Seq((LocalDate.of(2021, 3, 11), Period.ofMonths(Int.MaxValue)))
+          .toDF("date", "interval")
+          .select($"date" + $"interval")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("integer overflow"))
+    }
+  }
+
+  test("SPARK-34721: subtract a year-month interval from a date") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      Seq(
+        (LocalDate.of(1582, 10, 4), Period.ofMonths(0)) -> LocalDate.of(1582, 10, 4),
+        (LocalDate.of(1582, 10, 15), Period.ofMonths(1)) -> LocalDate.of(1582, 9, 15),
+        (LocalDate.of(1, 1, 1), Period.ofMonths(-1)) -> LocalDate.of(1, 2, 1),
+        (LocalDate.of(9999, 10, 31), Period.ofMonths(-2)) -> LocalDate.of(9999, 12, 31),
+        (LocalDate.of(2021, 5, 31), Period.ofMonths(3)) -> LocalDate.of(2021, 2, 28),
+        (LocalDate.of(2021, 2, 28), Period.ofYears(1)) -> LocalDate.of(2020, 2, 28),
+        (LocalDate.of(2020, 2, 29), Period.ofYears(4)) -> LocalDate.of(2016, 2, 29)
+      ).foreach { case ((date, period), result) =>
+        val df = Seq((date, period)).toDF("date", "interval")
+        checkAnswer(df.select($"date" - $"interval"), Row(result))
+      }
+
+      val e = intercept[SparkException] {
+        Seq((LocalDate.of(2021, 3, 11), Period.ofMonths(Int.MaxValue)))
+          .toDF("date", "interval")
+          .select($"date" - $"interval")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("integer overflow"))
+    }
   }
 }
