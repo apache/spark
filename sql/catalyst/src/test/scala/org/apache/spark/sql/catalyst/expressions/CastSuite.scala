@@ -237,7 +237,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1.5f, 1.toLong)
     checkCast(1.5f, 1.5)
     checkCast(1.5f, "1.5")
-    checkCast(16777215.0f, java.time.Instant.ofEpochSecond(16777215))
   }
 
   test("cast from double") {
@@ -1697,6 +1696,10 @@ class CastSuite extends CastSuiteBase {
 
   test("Cast from double II") {
     checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
+  }
+
+  test("SPARK-34727: cast from float II") {
+    checkCast(16777215.0f, java.time.Instant.ofEpochSecond(16777215))
   }
 }
 
