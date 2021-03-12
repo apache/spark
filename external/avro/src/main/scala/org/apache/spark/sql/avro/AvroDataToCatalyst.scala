@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMo
 import org.apache.spark.sql.types._
 
 private[avro] case class AvroDataToCatalyst(
-                                             child: Expression,
-                                             jsonFormatSchema: String,
-                                             options: Map[String, String])
+    child: Expression,
+    jsonFormatSchema: String,
+    options: Map[String, String])
   extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
@@ -80,25 +80,35 @@ private[avro] case class AvroDataToCatalyst(
   }
 
   @transient private lazy val nullResultRow: Any = dataType match {
-    case st: StructType =>
-      val resultRow = new SpecificInternalRow(st.map(_.dataType))
-      for (i <- 0 until st.length) {
-        resultRow.setNullAt(i)
-      }
-      resultRow
+      case st: StructType =>
+        val resultRow = new SpecificInternalRow(st.map(_.dataType))
+        for(i <- 0 until st.length) {
+          resultRow.setNullAt(i)
+        }
+        resultRow
 
-    case _ =>
-      null
-  }
-
-  private def getBinaryOffset(binary: Array[Byte]): Int = {
-    val MAGIC_ONE = 0xC3.toByte
-    val MAGIC_TWO = 0x01.toByte
-
-    binary match {
-      case Array(MAGIC_ONE, MAGIC_TWO, _*) => 10
-      case _ => 0
+      case _ =>
+        null
     }
+
+  /**
+   * This computes the offset for avro binary decoding based on the presence of a magic number
+   * defined in avro BinaryMessageEncoder.java as of now we are assuming that the binary
+   * provided was encoded via avro BinaryEncoder.java. However some serializers use
+   * the former strategy instead which prepend the binary with a magic number followed
+   * by a header and 8-byte schema fingerprint. This method detects the presence
+   * of the magic number and if thats the case the offset returned skips the magic
+   * plus fingerprint bytes.
+   */
+  private def getBinaryOffset(binary: Array[Byte]): Int = {
+    // 2 magic number plus 8 fingerprint bytes
+    val skipOffset = 10;
+    val magicBytes: Array[Byte] = Array(0xC3.toByte, 0x01.toByte)
+    var offset = 0
+    if (binary(0) == magicBytes(0) && binary(1) == magicBytes(1)) {
+      offset = skipOffset
+    }
+    offset
   }
 
   override def nullSafeEval(input: Any): Any = {
@@ -108,7 +118,7 @@ private[avro] case class AvroDataToCatalyst(
       decoder = DecoderFactory.get().binaryDecoder(
         binary,
         offset,
-        binary.length-offset, decoder
+        binary.length - offset, decoder
       )
       result = reader.read(result, decoder)
       val deserialized = deserializer.deserialize(result)
