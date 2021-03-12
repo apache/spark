@@ -21,7 +21,7 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions.explode
 
 /**
- * Benchmark to measure performance for generate exec operator(with codegen).
+ * Benchmark to measure performance for generate exec operator.
  * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
@@ -39,10 +39,10 @@ object GenerateExecBenchmark extends SqlBasedBenchmark {
       import spark.implicits._
       val numRecords = 100000000
       codegenBenchmark("GenerateExec Benchmark", numRecords) {
-            val srcDF = spark.range(numRecords).map {
-              x => Data(x.toFloat, Map(x.toString -> x.toString ), s"value3$x")
-            }.select($"value1", explode($"value2"), $"value3")
-            srcDF.noop()
+        val srcDF = spark.range(numRecords).map {
+          x => Data(x.toFloat, Map(x.toString -> x.toString), s"value3$x")
+        }.select($"value1", explode($"value2"), $"value3")
+        srcDF.noop()
       }
     }
   }
