@@ -95,6 +95,12 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
   private def replaceNullWithFalse(e: Expression): Expression = e match {
     case Literal(null, BooleanType) =>
       FalseLiteral
+    // In SQL, the `Not(IN)` expression evaluates as follows:
+    // `NULL not in (1)` -> NULL
+    // `NULL not in (1, NULL)` -> NULL
+    // `1 not in (1, NULL)` -> false
+    // `1 not in (2, NULL)` -> NULL
+    // In predicate, NULL is equal to false, so we can simplify them to false directly.
     case Not(In(value, list)) if (value +: list).exists(isNullLiteral) =>
       FalseLiteral
     case Not(InSet(value, list)) if isNullLiteral(value) || list.contains(null) =>
