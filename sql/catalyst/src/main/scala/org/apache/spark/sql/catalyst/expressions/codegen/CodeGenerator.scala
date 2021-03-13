@@ -1089,7 +1089,8 @@ class CodegenContext extends Logging {
           // Generate the code for this expression tree and wrap it in a function.
           val fnName = freshName("subExpr")
           val inputVars = inputVarsForAllFuncs(i)
-          val argList = inputVars.map(v => s"${v.javaType.getName} ${v.variableName}")
+          val argList =
+            inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
           val returnType = javaType(expr.dataType)
           val fn =
             s"""
