@@ -19,16 +19,18 @@ import datetime
 from typing import Dict, Iterable, Union
 
 from airflow.exceptions import AirflowException
-from airflow.operators.branch_operator import BaseBranchOperator
+from airflow.operators.branch import BaseBranchOperator
 from airflow.utils import timezone
 from airflow.utils.decorators import apply_defaults
 
 
-class DateTimeBranchOperator(BaseBranchOperator):
+class BranchDateTimeOperator(BaseBranchOperator):
     """
     Branches into one of two lists of tasks depending on the current datetime.
+    For more information on how to use this operator, take a look at the guide:
+    :ref:`howto/operator:BranchDateTimeOperator`
 
-    True branch will be returned when `datetime.datetime.now()` falls below
+    True branch will be returned when ``datetime.datetime.now()`` falls below
     ``target_upper`` and above ``target_lower``.
 
     :param follow_task_ids_if_true: task id or task ids to follow if
