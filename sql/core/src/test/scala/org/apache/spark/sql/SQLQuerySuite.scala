@@ -4068,27 +4068,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-33482: Fix FileScan canonicalization") {
-    Seq(true, false).foreach { aqe =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
-        withTempPath { path =>
-          spark.range(5).toDF().write.mode("overwrite").parquet(path.toString)
-          withTempView("t") {
-            spark.read.parquet(path.toString).createOrReplaceTempView("t")
-            val df = sql(
-              """
-                |SELECT *
-                |FROM t AS t1
-                |JOIN t AS t2 ON t2.id = t1.id
-                |JOIN t AS t3 ON t3.id = t2.id
-                |""".stripMargin)
-            df.collect()
-            df.explain()
-            val reusedExchanges = collect(df.queryExecution.executedPlan) {
-              case r: ReusedExchangeExec => r
-            }
-            assert(reusedExchanges.size == 1)
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(5).toDF().write.mode("overwrite").parquet(path.toString)
+        withTempView("t") {
+          spark.read.parquet(path.toString).createOrReplaceTempView("t")
+          val df = sql(
+            """
+              |SELECT *
+              |FROM t AS t1
+              |JOIN t AS t2 ON t2.id = t1.id
+              |JOIN t AS t3 ON t3.id = t2.id
+              |""".stripMargin)
+          df.collect()
+          val reusedExchanges = collect(df.queryExecution.executedPlan) {
+            case r: ReusedExchangeExec => r
           }
+          assert(reusedExchanges.size == 1)
         }
       }
     }
