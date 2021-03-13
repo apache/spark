@@ -413,7 +413,9 @@ abstract class DynamicPartitionPruningSuiteBase
   test("DPP triggers only for certain types of query",
     DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
       Given("dynamic partition pruning disabled")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
         val df = sql(
@@ -465,8 +467,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("left-semi join with partition column on the right side")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
         val df = sql(
           """
             |SELECT * FROM dim_store s
@@ -474,7 +475,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id AND s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkPartitionPruningPredicate(df, true, false)
       }
 
       Given("left outer with partition column on the left side")
@@ -491,15 +492,14 @@ abstract class DynamicPartitionPruningSuiteBase
 
       Given("right outer join with partition column on the left side")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
         val df = sql(
           """
             |SELECT * FROM fact_sk f RIGHT OUTER JOIN dim_store s
             |ON f.store_id = s.store_id WHERE s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, false, false)
+        checkPartitionPruningPredicate(df, true, false)
       }
     }
   }
@@ -1406,63 +1406,6 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("Filtering side can not broadcast by join type") {
-    withTable("t1", "t2") {
-      spark.range(1000).selectExpr("id", "id % 100 AS part")
-        .write
-        .partitionBy("part")
-        .saveAsTable("t1")
-      spark.range(5).selectExpr("id", "id as foo")
-        .write
-        .saveAsTable("t2")
-      withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        Given("LEFT JOIN and left side can broadcast by size")
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-          val df = sql(
-            """
-              |SELECT t2.* FROM t2
-              |LEFT JOIN t1 ON t2.id = t1.id AND t2.id = t1.part WHERE t2.foo = 2
-        """.stripMargin)
-
-          checkPartitionPruningPredicate(df, true, false)
-          checkAnswer(df, Row(2, 2) :: Nil)
-        }
-
-        Given("LEFT SEMI JOIN and left side can broadcast by size")
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-          val df = sql(
-            """
-              |SELECT t2.* FROM t2
-              |LEFT SEMI JOIN t1 ON t2.id = t1.id AND t2.id = t1.part WHERE t2.foo = 2
-          """.stripMargin)
-
-          checkPartitionPruningPredicate(df, true, false)
-          checkAnswer(df, Row(2, 2) :: Nil)
-        }
-
-        Given("RIGHT JOIN and right side can broadcast by size")
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-          val df = sql(
-            """
-              |SELECT t2.* FROM t1
-              |RIGHT JOIN t2 ON t2.id = t1.id AND t2.id = t1.part
-              |WHERE t2.foo = 2
-          """.stripMargin)
-
-          checkPartitionPruningPredicate(df, true, false)
-
-          checkAnswer(df, Row(2, 2) :: Nil)
-        }
-      }
-    }
-  }
-}
-
-class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase {
-  override val adaptiveExecutionOn: Boolean = false
-}
-
   test("SPARK-34595: DPP support RLIKE expression") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
       val df = sql(
@@ -1486,6 +1429,39 @@ class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase
         Row(1110, 3) ::
         Row(1120, 4) :: Nil
       )
+    }
+  }
+
+  test("SPARK-32855: Filtering side can not broadcast by join type",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+
+      val sqlStr =
+        """
+          |SELECT s.store_id,f. product_id FROM dim_store s
+          |LEFT JOIN fact_sk f
+          |ON f.store_id = s.store_id WHERE s.country = 'NL'
+          """.stripMargin
+
+      // DPP will only apply if disable reuseBroadcastOnly
+      Seq(true, false).foreach { reuseBroadcastOnly =>
+        withSQLConf(
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
+          val df = sql(sqlStr)
+          checkPartitionPruningPredicate(df, !reuseBroadcastOnly, false)
+        }
+      }
+
+      // DPP will only apply if left side can broadcast by size
+      Seq(1L, 100000L).foreach { threshold =>
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$threshold") {
+          val df = sql(sqlStr)
+          checkPartitionPruningPredicate(df, threshold > 10L, false)
+        }
+      }
     }
   }
 }

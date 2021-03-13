@@ -88,34 +88,22 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       joinKeys: Seq[Expression],
       partScan: LogicalRelation,
       canBuildBroadcast: Boolean): LogicalPlan = {
+    val reuseEnabled = SQLConf.get.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
-    lazy val hasBenefit = pruningHasBenefit(
-      pruningKey, partScan, filteringKey, filteringPlan, canBuildBroadcast)
-    if (canBuildBroadcast) {
-      if (SQLConf.get.exchangeReuseEnabled || hasBenefit) {
-        // insert a DynamicPruning wrapper to identify the subquery during query planning
-        Filter(
-          DynamicPruningSubquery(
-            pruningKey,
-            filteringPlan,
-            joinKeys,
-            index,
-            SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit),
-          pruningPlan)
-      } else {
-        // abort dynamic partition pruning
-        pruningPlan
-      }
-    } else if (hasBenefit) {
+    lazy val hasBenefit =
+      pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan, canBuildBroadcast)
+    if (reuseEnabled || hasBenefit) {
+      // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
         DynamicPruningSubquery(
           pruningKey,
           filteringPlan,
           joinKeys,
           index,
-          onlyInBroadcast = false),
+          SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit),
         pruningPlan)
     } else {
+      // abort dynamic partition pruning
       pruningPlan
     }
   }
@@ -169,8 +157,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     if (canBuildBroadcast) {
       estimatePruningSideSize > overhead
     } else {
-      // We need to ensure that the otherPlan can collect to the driver.
-      canBroadcastBySize(otherPlan, SQLConf.get) && estimatePruningSideSize * 0.04 > overhead
+      // We need to make sure that otherPlan can be broadcast by size to avoid driver OOM
+      canBroadcastBySize(otherPlan, conf) && estimatePruningSideSize * 0.04 > overhead
     }
   }
 
