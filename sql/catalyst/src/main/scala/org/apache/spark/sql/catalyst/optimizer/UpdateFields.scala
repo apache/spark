@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, UpdateFields, With
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
+
 /**
  * Optimizes [[UpdateFields]] expression chains.
  */

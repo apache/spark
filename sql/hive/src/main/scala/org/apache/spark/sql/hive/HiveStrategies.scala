@@ -36,6 +36,7 @@ import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.internal.HiveSerDe
 
+
 /**
  * Determine the database, serde/format and schema of the Hive serde table, according to the storage
  * properties.

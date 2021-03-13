@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
 
+
 /**
  * Finds all the expressions that are unevaluable and replace/rewrite them with semantically
  * equivalent expressions that can be evaluated. Currently we replace two kinds of expressions:
