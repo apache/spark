@@ -193,10 +193,7 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   /**
-   * The implementation for these joins:
-   *
-   *   LeftSemi
-   *   LeftAnti
+   * The implementation for LeftSemi and LeftAnti joins.
    */
   private def leftExistenceJoin(
       relation: Broadcast[Array[InternalRow]],
@@ -220,16 +217,13 @@ case class BroadcastNestedLoopJoinExec(
       case BuildLeft if condition.isEmpty =>
         // If condition is empty, do not need to read rows from streamed side at all.
         // Only need to know whether streamed side is empty or not.
-        val streamExistsRDD: RDD[Boolean] = streamed.execute().mapPartitionsInternal {
-          streamedIter => Iterator.single(streamedIter.hasNext)
-        }
-        val streamExists = streamExistsRDD.fold(false)(_ || _)
+        val streamExists = !streamed.execute().isEmpty()
         if (streamExists == exists) {
           sparkContext.makeRDD(relation.value)
         } else {
           sparkContext.emptyRDD
         }
-      case BuildLeft =>
+      case _ => // BuildLeft
         val matchedBroadcastRows = getMatchedBroadcastRowsBitSet(streamed.execute(), relation)
         val buf: CompactBuffer[InternalRow] = new CompactBuffer()
         var i = 0
@@ -268,7 +262,7 @@ case class BroadcastNestedLoopJoinExec(
             }
           }
         }
-      case BuildLeft =>
+      case _ => // BuildLeft
         val matchedBroadcastRows = getMatchedBroadcastRowsBitSet(streamed.execute(), relation)
         val buf: CompactBuffer[InternalRow] = new CompactBuffer()
         var i = 0
