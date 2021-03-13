@@ -735,20 +735,20 @@ select * from a left join b on udf(i) = x and i = udf(y) and udf(x) = udf(i);
 --
 -- test NULL behavior of whole-row Vars, per bug #5025
 --
-select udf(t1.q2), udf(count(t2.*))
+select udf(t1.q2), udf(count(t2.q1, t2.q2))
 from int8_tbl t1 left join int8_tbl t2 on (udf(udf(t1.q2)) = t2.q1)
 group by udf(t1.q2) order by 1;
 
-select udf(udf(t1.q2)), udf(count(t2.*))
+select udf(udf(t1.q2)), udf(count(t2.q1, t2.q2))
 from int8_tbl t1 left join (select * from int8_tbl) t2 on (udf(udf(t1.q2)) = udf(t2.q1))
 group by udf(udf(t1.q2)) order by 1;
 
 -- [SPARK-28330] Enhance query limit
--- select t1.q2, count(t2.*)
+-- select t1.q2, count(t2.q1, t2.q2)
 -- from int8_tbl t1 left join (select * from int8_tbl offset 0) t2 on (t1.q2 = t2.q1)
 -- group by t1.q2 order by 1;
 
-select udf(t1.q2) as q2, udf(udf(count(t2.*)))
+select udf(t1.q2) as q2, udf(udf(count(t2.q1, t2.q2)))
 from int8_tbl t1 left join
   (select udf(q1) as q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
   on (udf(t1.q2) = udf(t2.q1))

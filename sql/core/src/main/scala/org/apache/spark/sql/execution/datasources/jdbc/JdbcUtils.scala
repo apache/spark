@@ -226,11 +226,11 @@ object JdbcUtils extends Logging {
       case java.sql.Types.REAL          => DoubleType
       case java.sql.Types.REF           => StringType
       case java.sql.Types.REF_CURSOR    => null
-      case java.sql.Types.ROWID         => LongType
+      case java.sql.Types.ROWID         => StringType
       case java.sql.Types.SMALLINT      => IntegerType
       case java.sql.Types.SQLXML        => StringType
       case java.sql.Types.STRUCT        => StringType
-      case java.sql.Types.TIME          => IntegerType
+      case java.sql.Types.TIME          => TimestampType
       case java.sql.Types.TIME_WITH_TIMEZONE
                                         => null
       case java.sql.Types.TIMESTAMP     => TimestampType
@@ -310,11 +310,15 @@ object JdbcUtils extends Logging {
       val metadata = new MetadataBuilder()
       metadata.putLong("scale", fieldScale)
 
-      // SPARK-33888
-      // - include TIME type metadata
-      // - always build the metadata
-      if (dataType == java.sql.Types.TIME) {
-        metadata.putBoolean("logical_time_type", true)
+      dataType match {
+        case java.sql.Types.TIME =>
+          // SPARK-33888
+          // - include TIME type metadata
+          // - always build the metadata
+          metadata.putBoolean("logical_time_type", true)
+        case java.sql.Types.ROWID =>
+          metadata.putBoolean("rowid", true)
+        case _ =>
       }
 
       val columnType =
@@ -421,23 +425,6 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setFloat(pos, rs.getFloat(pos + 1))
 
-
-    // SPARK-33888 - sql TIME type represents as physical int in millis
-    // Represents a time of day, with no reference to a particular calendar,
-    // time zone or date, with a precision of one millisecond.
-    // It stores the number of milliseconds after midnight, 00:00:00.000.
-    case IntegerType if metadata.contains("logical_time_type") =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => {
-        val rawTime = rs.getTime(pos + 1)
-        if (rawTime != null) {
-          val rawTimeInNano = rawTime.toLocalTime().toNanoOfDay()
-          val timeInMillis = Math.toIntExact(TimeUnit.NANOSECONDS.toMillis(rawTimeInNano))
-          row.setInt(pos, timeInMillis)
-        } else {
-          row.update(pos, null)
-        }
-      }
-
     case IntegerType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setInt(pos, rs.getInt(pos + 1))
@@ -465,10 +452,33 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setByte(pos, rs.getByte(pos + 1))
 
+    case StringType if metadata.contains("rowid") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos, UTF8String.fromString(rs.getRowId(pos + 1).toString))
+
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
         row.update(pos, UTF8String.fromString(rs.getString(pos + 1)))
+
+    // SPARK-34357 - sql TIME type represents as zero epoch timestamp.
+    // It is mapped as Spark TimestampType but fixed at 1970-01-01 for day,
+    // time portion is time of day, with no reference to a particular calendar,
+    // time zone or date, with a precision till microseconds.
+    // It stores the number of milliseconds after midnight, 00:00:00.000000
+    case TimestampType if metadata.contains("logical_time_type") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) => {
+        val rawTime = rs.getTime(pos + 1)
+        if (rawTime != null) {
+          val localTimeMicro = TimeUnit.NANOSECONDS.toMicros(
+            rawTime.toLocalTime().toNanoOfDay())
+          val utcTimeMicro = DateTimeUtils.toUTCTime(
+            localTimeMicro, SQLConf.get.sessionLocalTimeZone)
+          row.setLong(pos, utcTimeMicro)
+        } else {
+          row.update(pos, null)
+        }
+      }
 
     case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>

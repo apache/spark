@@ -895,7 +895,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
       val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.message.contains("cannot resolve '`a`' given input columns: [t.i, t.j]"))
+      assert(e.message.contains("cannot resolve 'a' given input columns: [t.i, t.j]"))
     }
   }
 
@@ -1115,12 +1115,12 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
            |SELECT c1 FROM t1
            |WHERE
            |c1 IN ((
-           |        SELECT c1 FROM t2
+           |        SELECT c1 + 1 AS c1 FROM t2
            |        ORDER BY c1
            |       )
            |       UNION
            |       (
-           |         SELECT c1 FROM t2
+           |         SELECT c1 + 2 AS c1 FROM t2
            |         ORDER BY c1
            |       ))
         """.stripMargin

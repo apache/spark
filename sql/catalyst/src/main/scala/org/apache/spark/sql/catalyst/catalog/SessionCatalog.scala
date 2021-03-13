@@ -622,8 +622,7 @@ class SessionCatalog(
   }
 
   /**
-   * Generate a [[View]] operator from the view description if the view stores sql text,
-   * otherwise, it is same to `getRawTempView`
+   * Generate a [[View]] operator from the temporary view stored.
    */
   def getTempView(name: String): Option[LogicalPlan] = synchronized {
     getRawTempView(name).map(getTempViewPlan)
@@ -641,8 +640,7 @@ class SessionCatalog(
   }
 
   /**
-   * Generate a [[View]] operator from the view description if the view stores sql text,
-   * otherwise, it is same to `getRawGlobalTempView`
+   * Generate a [[View]] operator from the global temporary view stored.
    */
   def getGlobalTempView(name: String): Option[LogicalPlan] = {
     getRawGlobalTempView(name).map(getTempViewPlan)
@@ -683,7 +681,7 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
       tempViews.get(table).map {
-        case TemporaryViewRelation(metadata) => metadata
+        case TemporaryViewRelation(metadata, _) => metadata
         case plan =>
           CatalogTable(
             identifier = TableIdentifier(table),
@@ -693,7 +691,7 @@ class SessionCatalog(
       }.getOrElse(getTableMetadata(name))
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
       globalTempViewManager.get(table).map {
-        case TemporaryViewRelation(metadata) => metadata
+        case TemporaryViewRelation(metadata, _) => metadata
         case plan =>
           CatalogTable(
             identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
@@ -838,9 +836,11 @@ class SessionCatalog(
 
   private def getTempViewPlan(plan: LogicalPlan): LogicalPlan = {
     plan match {
-      case viewInfo: TemporaryViewRelation =>
-        fromCatalogTable(viewInfo.tableMeta, isTempView = true)
-      case v => v
+      case TemporaryViewRelation(tableMeta, None) =>
+        fromCatalogTable(tableMeta, isTempView = true)
+      case TemporaryViewRelation(tableMeta, Some(plan)) =>
+        View(desc = tableMeta, isTempView = true, child = plan)
+      case other => other
     }
   }
 
@@ -909,12 +909,12 @@ class SessionCatalog(
     isTempView(nameParts.asTableIdentifier)
   }
 
-  private def lookupTempView(name: TableIdentifier): Option[LogicalPlan] = {
+  def lookupTempView(name: TableIdentifier): Option[LogicalPlan] = {
     val tableName = formatTableName(name.table)
     if (name.database.isEmpty) {
-      tempViews.get(tableName)
+      tempViews.get(tableName).map(getTempViewPlan)
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
-      globalTempViewManager.get(tableName)
+      globalTempViewManager.get(tableName).map(getTempViewPlan)
     } else {
       None
     }
@@ -1021,7 +1021,26 @@ class SessionCatalog(
   }
 
   /**
-   * Refresh the cache entry for a metastore table, if any.
+   * Refresh table entries in structures maintained by the session catalog such as:
+   *   - The map of temporary or global temporary view names to their logical plans
+   *   - The relation cache which maps table identifiers to their logical plans
+   *
+   * For temp views, it refreshes their logical plans, and as a consequence of that it can refresh
+   * the file indexes of the base relations (`HadoopFsRelation` for instance) used in the views.
+   * The method still keeps the views in the internal lists of session catalog.
+   *
+   * For tables/views, it removes their entries from the relation cache.
+   *
+   * The method is supposed to use in the following situations:
+   *   1. The logical plan of a table/view was changed, and cached table/view data is cleared
+   *      explicitly. For example, like in `AlterTableRenameCommand` which re-caches the table
+   *      itself. Otherwise if you need to refresh cached data, consider using of
+   *      `CatalogImpl.refreshTable()`.
+   *   2. A table/view doesn't exist, and need to only remove its entry in the relation cache since
+   *      the cached data is invalidated explicitly like in `DropTableCommand` which uncaches
+   *      table/view data itself.
+   *   3. Meta-data (such as file indexes) of any relation used in a temporary view should be
+   *      updated.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
     lookupTempView(name).map(_.refresh).getOrElse {
@@ -1390,9 +1409,14 @@ class SessionCatalog(
       Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
     if (clsForUDAF.isAssignableFrom(clazz)) {
       val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
-      val e = cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
-        .newInstance(input,
-          clazz.getConstructor().newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
+      val e = cls.getConstructor(
+          classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int], classOf[Option[String]])
+        .newInstance(
+          input,
+          clazz.getConstructor().newInstance().asInstanceOf[Object],
+          Int.box(1),
+          Int.box(1),
+          Some(name))
         .asInstanceOf[ImplicitCastInputTypes]
 
       // Check input argument size

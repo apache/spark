@@ -372,8 +372,8 @@ struct<>
 org.apache.spark.sql.AnalysisException
 
 Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [(sum(DISTINCT (outer(a.`four`) + b.`four`)) = CAST(CAST(udf(ansi_cast(four as string)) AS INT) AS BIGINT))]
-Invalid expressions: [sum(DISTINCT (outer(a.`four`) + b.`four`))]
+Expression in where clause: [(sum(DISTINCT (outer(a.four) + b.four)) = CAST(CAST(udf(ansi_cast(four as string)) AS INT) AS BIGINT))]
+Invalid expressions: [sum(DISTINCT (outer(a.four) + b.four))]
 
 
 -- !query
@@ -384,4 +384,4 @@ from tenk1 o
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`o.unique1`' given input columns: [i.even, i.fivethous, i.four, i.hundred, i.odd, i.string4, i.stringu1, i.stringu2, i.ten, i.tenthous, i.thousand, i.twenty, i.two, i.twothousand, i.unique1, i.unique2]; line 2 pos 67
+cannot resolve 'o.unique1' given input columns: [i.even, i.fivethous, i.four, i.hundred, i.odd, i.string4, i.stringu1, i.stringu2, i.ten, i.tenthous, i.thousand, i.twenty, i.two, i.twothousand, i.unique1, i.unique2]; line 2 pos 67

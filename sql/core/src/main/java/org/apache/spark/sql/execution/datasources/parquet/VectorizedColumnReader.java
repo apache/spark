@@ -42,9 +42,12 @@ import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupporte
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
+import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT32;
+import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.createRLEIterator;
 
@@ -111,7 +114,9 @@ public class VectorizedColumnReader {
   private boolean isDecimalTypeMatched(DataType dt) {
     DecimalType d = (DecimalType) dt;
     DecimalMetadata dm = descriptor.getPrimitiveType().getDecimalMetadata();
-    return dm != null && dm.getPrecision() == d.precision() && dm.getScale() == d.scale();
+    // It's OK if the required decimal precision is larger than or equal to the physical decimal
+    // precision in the Parquet metadata, as long as the decimal scale is the same.
+    return dm != null && dm.getPrecision() <= d.precision() && dm.getScale() == d.scale();
   }
 
   private boolean canReadAsIntDecimal(DataType dt) {
@@ -273,7 +278,17 @@ public class VectorizedColumnReader {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
-          column.setDictionary(new ParquetDictionary(dictionary));
+          PrimitiveType primitiveType = descriptor.getPrimitiveType();
+          if (primitiveType.getOriginalType() == OriginalType.DECIMAL &&
+              primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+              primitiveType.getPrimitiveTypeName() == INT64) {
+            // We need to make sure that we initialize the right type for the dictionary otherwise
+            // WritableColumnVector will throw an exception when trying to decode to an Int when the
+            // dictionary is in fact initialized as Long
+            column.setDictionary(new ParquetDictionary(dictionary, true));
+          } else {
+            column.setDictionary(new ParquetDictionary(dictionary, false));
+          }
         } else {
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
         }
@@ -575,11 +590,12 @@ public class VectorizedColumnReader {
     if (column.dataType() == DataTypes.LongType ||
         canReadAsLongDecimal(column.dataType())) {
       defColumn.readLongs(
-        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn,
+        DecimalType.is32BitDecimalType(column.dataType()));
     } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
       if ("CORRECTED".equals(datetimeRebaseMode)) {
         defColumn.readLongs(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, false);
       } else {
         boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
         defColumn.readLongsWithRebase(

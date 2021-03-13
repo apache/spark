@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedView}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView}
 import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
@@ -192,11 +192,6 @@ private[spark] object QueryCompilationErrors {
       s"$quoted as it's not a data source v2 relation.")
   }
 
-  def expectTableNotTempViewError(quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table",
-      t.origin.line, t.origin.startPosition)
-  }
-
   def expectTableOrPermanentViewNotTempViewError(
       quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table or permanent view.",
@@ -231,9 +226,18 @@ private[spark] object QueryCompilationErrors {
       t.origin.line, t.origin.startPosition)
   }
 
-  def expectTableNotViewError(v: ResolvedView, cmd: String, t: TreeNode[_]): Throwable = {
+  def expectTableNotViewError(
+      v: ResolvedView, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val viewStr = if (v.isTemp) "temp view" else "view"
-    new AnalysisException(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.",
+    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    new AnalysisException(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectViewNotTableError(
+      v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
+    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    new AnalysisException(s"${v.identifier.quoted} is a table. '$cmd' expects a view.$hintStr",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -249,6 +253,11 @@ private[spark] object QueryCompilationErrors {
 
   def invalidStarUsageError(prettyName: String): Throwable = {
     new AnalysisException(s"Invalid usage of '*' in $prettyName")
+  }
+
+  def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
+    new AnalysisException(s"count($targetString.*) is not allowed. " +
+      "Please use count(*) or expand the columns manually, e.g. count(col1, col2)")
   }
 
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {
@@ -731,5 +740,18 @@ private[spark] object QueryCompilationErrors {
   def noHandlerForUDAFError(name: String): Throwable = {
     new InvalidUDFClassException(s"No handler for UDAF '$name'. " +
       "Use sparkSession.udf.register(...) instead.")
+  }
+
+  def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
+    new AnalysisException("Database from v1 session catalog is not specified")
+  }
+
+  def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
+    new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
+  }
+
+  def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
+    new AnalysisException(s"Invalid partitionExprs specified: $sortOrders For range " +
+      "partitioning use REPARTITION_BY_RANGE instead.")
   }
 }

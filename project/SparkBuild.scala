@@ -97,6 +97,9 @@ object SparkBuild extends PomBuild {
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
+    if (profiles.contains("jdwp-test-debug")) {
+      sys.props.put("test.jdwp.enabled", "true")
+    }
     profiles
   }
 
@@ -1060,6 +1063,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
+    javaOptions in Test += "-Dspark.hadoop.hadoop.security.key.provider.path=test:///",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=false",
     javaOptions in Test += "-Dderby.system.durability=test",
     javaOptions in Test += "-Dio.netty.tryReflectionSetAccessible=true",
@@ -1070,6 +1074,19 @@ object TestSettings {
     javaOptions in Test ++= "-Xmx4g -Xss4m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
+    javaOptions in Test ++= {
+      val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
+
+      if (jdwpEnabled) {
+        val jdwpAddr = sys.props.getOrElse("test.jdwp.address", "localhost:0")
+        val jdwpServer = sys.props.getOrElse("test.jdwp.server", "y")
+        val jdwpSuspend = sys.props.getOrElse("test.jdwp.suspend", "y")
+        ("-agentlib:jdwp=transport=dt_socket," +
+          s"suspend=$jdwpSuspend,server=$jdwpServer,address=$jdwpAddr").split(" ").toSeq
+      } else {
+        Seq.empty
+      }
+    },
     // Exclude tags defined in a system property
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
       sys.props.get("test.exclude.tags").map { tags =>

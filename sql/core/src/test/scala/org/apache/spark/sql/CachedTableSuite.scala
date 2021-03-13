@@ -1330,26 +1330,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-33786: Cache's storage level should be respected when a table name is altered.") {
-    withTable("old", "new") {
-      withTempPath { path =>
-        def getStorageLevel(tableName: String): StorageLevel = {
-          val table = spark.table(tableName)
-          val cachedData = spark.sharedState.cacheManager.lookupCachedData(table).get
-          cachedData.cachedRepresentation.cacheBuilder.storageLevel
-        }
-        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
-        sql(s"CREATE TABLE old USING parquet LOCATION '${path.toURI}'")
-        sql("CACHE TABLE old OPTIONS('storageLevel' 'MEMORY_ONLY')")
-        val oldStorageLevel = getStorageLevel("old")
-
-        sql("ALTER TABLE old RENAME TO new")
-        val newStorageLevel = getStorageLevel("new")
-        assert(oldStorageLevel === newStorageLevel)
-      }
-    }
-  }
-
   test("SPARK-34027: refresh cache in partitions recovering") {
     withTable("t") {
       sql("CREATE TABLE t (id int, part int) USING parquet PARTITIONED BY (part)")
@@ -1424,6 +1404,109 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       sql(s"DROP TABLE $t")
       val e = intercept[AnalysisException](sql("SELECT * FROM v"))
       assert(e.message.contains(s"Table or view not found: $t"))
+    }
+  }
+
+  test("SPARK-34347: cascading cache invalidation - SQLContext.uncacheTable") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        withTempView("view1", "view2") {
+          sql("CREATE TEMPORARY VIEW view1 AS SELECT * FROM testData WHERE key > 1")
+          sql("CACHE TABLE view2 AS SELECT * FROM view1 WHERE value > 1")
+          assert(spark.catalog.isCached("view2"))
+
+          val oldView = spark.table("view2")
+          spark.sqlContext.uncacheTable("view1")
+          assert(storeAnalyzed ==
+            spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
+            s"when storeAnalyzed = $storeAnalyzed")
+        }
+      }
+    }
+  }
+
+  test("SPARK-34347: cascading cache invalidation - SQLContext.uncacheTable (global temp view)") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        withGlobalTempView("view1") {
+          withTempView("view2") {
+            val db = spark.sharedState.globalTempViewManager.database
+            sql("CREATE GLOBAL TEMPORARY VIEW view1 AS SELECT * FROM testData WHERE key > 1")
+            sql(s"CACHE TABLE view2 AS SELECT * FROM $db.view1 WHERE value > 1")
+            assert(spark.catalog.isCached("view2"))
+
+            val oldView = spark.table("view2")
+            spark.sqlContext.uncacheTable(s"$db.view1")
+            assert(storeAnalyzed ==
+              spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
+              s"when storeAnalyzed = $storeAnalyzed")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-34546: ALTER VIEW AS should uncache if a temp view is cached") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        withTempView("tv") {
+          testAlterTemporaryViewAsWithCache(TableIdentifier("tv"), storeAnalyzed)
+        }
+      }
+    }
+  }
+
+  test("SPARK-34546: ALTER VIEW AS should uncache if a global temp view is cached") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        withGlobalTempView("global_tv") {
+          val db = spark.sharedState.globalTempViewManager.database
+          testAlterTemporaryViewAsWithCache(TableIdentifier("global_tv", Some(db)), storeAnalyzed)
+        }
+      }
+    }
+  }
+
+  private def testAlterTemporaryViewAsWithCache(
+      ident: TableIdentifier,
+      storeAnalyzed: Boolean): Unit = {
+    val (tempViewStr, viewName) = if (ident.database.nonEmpty) {
+      ("GLOBAL TEMPORARY", s"${ident.database.get}.${ident.table}")
+    } else {
+      ("TEMPORARY", ident.table)
+    }
+
+    sql(s"CREATE $tempViewStr VIEW ${ident.table} AS SELECT 1")
+
+    sql(s"CACHE TABLE $viewName")
+    assert(spark.catalog.isCached(viewName))
+    assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).nonEmpty)
+
+    if (storeAnalyzed) {
+      // Altered temporary view will have the same plan, thus it will not be uncached.
+      // Note that this check is done only if a temporary view stores an analyzed view.
+      sql(s"ALTER VIEW $viewName as SELECT 1")
+      assert(spark.catalog.isCached(viewName))
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).nonEmpty)
+    }
+
+    sql(s"ALTER VIEW $viewName as SELECT 2")
+    assert(!spark.catalog.isCached(viewName))
+    assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).isEmpty)
+  }
+
+  test("SPARK-34546: ALTER VIEW AS should uncache if a permanent view is cached") {
+    withView("view") {
+      sql("CREATE VIEW view AS SELECT 1")
+      sql("CACHE TABLE view")
+      assert(spark.catalog.isCached("view"))
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).nonEmpty)
+
+      // ALTER VIEW AS on a permanent view should uncache even if the replacing view produces
+      // the same result.
+      sql("ALTER VIEW view as SELECT 1")
+      assert(!spark.catalog.isCached("view"))
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).isEmpty)
     }
   }
 }

@@ -189,7 +189,10 @@ case class CreateDataSourceTableAsSelectCommand(
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
             sparkSession.sqlContext.conf.manageFilesourcePartitions =>
           // Need to recover partitions into the metastore so our saved data is visible.
-          sessionState.executePlan(AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+          sessionState.executePlan(RepairTableCommand(
+            table.identifier,
+            enableAddPartitions = true,
+            enableDropPartitions = false)).toRdd
         case _ =>
       }
     }
@@ -217,7 +220,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, query, outputColumnNames, physicalPlan)
+      dataSource.writeAndRead(mode, query, outputColumnNames, physicalPlan, metrics)
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)

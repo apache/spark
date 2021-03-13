@@ -21,14 +21,20 @@ import org.apache.spark.sql.execution.vectorized.Dictionary;
 
 public final class ParquetDictionary implements Dictionary {
   private org.apache.parquet.column.Dictionary dictionary;
+  private boolean castLongToInt = false;
 
-  public ParquetDictionary(org.apache.parquet.column.Dictionary dictionary) {
+  public ParquetDictionary(org.apache.parquet.column.Dictionary dictionary, boolean castLongToInt) {
     this.dictionary = dictionary;
+    this.castLongToInt = castLongToInt;
   }
 
   @Override
   public int decodeToInt(int id) {
-    return dictionary.decodeToInt(id);
+    if (castLongToInt) {
+      return (int) dictionary.decodeToLong(id);
+    } else {
+      return dictionary.decodeToInt(id);
+    }
   }
 
   @Override

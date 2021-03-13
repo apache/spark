@@ -18,7 +18,9 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 // Disable AQE because metric info is different with AQE on/off
@@ -32,6 +34,31 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
   test("writing data out metrics dynamic partition: hive") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
       testMetricsDynamicPartition("hive", "hive", "t1")
+    }
+  }
+
+  test("SPARK-34567: Add metrics for CTAS operator") {
+    Seq(false, true).foreach { canOptimized =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> canOptimized.toString) {
+        withTable("t") {
+          val df = sql(s"CREATE TABLE t STORED AS PARQUET AS SELECT 1 as a")
+          val dataWritingCommandExec =
+            df.queryExecution.executedPlan.asInstanceOf[DataWritingCommandExec]
+          dataWritingCommandExec.executeCollect()
+          val createTableAsSelect = dataWritingCommandExec.cmd
+          if (canOptimized) {
+            assert(createTableAsSelect.isInstanceOf[OptimizedCreateHiveTableAsSelectCommand])
+          } else {
+            assert(createTableAsSelect.isInstanceOf[CreateHiveTableAsSelectCommand])
+          }
+          assert(createTableAsSelect.metrics.contains("numFiles"))
+          assert(createTableAsSelect.metrics("numFiles").value == 1)
+          assert(createTableAsSelect.metrics.contains("numOutputBytes"))
+          assert(createTableAsSelect.metrics("numOutputBytes").value > 0)
+          assert(createTableAsSelect.metrics.contains("numOutputRows"))
+          assert(createTableAsSelect.metrics("numOutputRows").value == 1)
+        }
+      }
     }
   }
 }

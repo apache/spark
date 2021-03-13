@@ -150,5 +150,5 @@ abstract class FileTable(
 }
 
 object FileTable {
-  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
+  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE).asJava
 }
