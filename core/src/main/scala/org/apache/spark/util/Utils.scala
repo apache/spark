@@ -3003,6 +3003,12 @@ private[spark] object Utils extends Logging {
     resultProps
   }
 
+  /** Create a new properties object with the same values as `props` while handling null case */
+  def clonePropertiesOrNull(props: Properties): Properties = props match {
+    case null => null
+    case _ => cloneProperties(props)
+  }
+
   /**
    * Convert a sequence of `Path`s to a metadata string. When the length of metadata string
    * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
