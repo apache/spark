@@ -56,7 +56,8 @@ case class BatchScanExec(
           QueryPlan.normalizePredicates(s.dataFilters, output))
       case _ => scan
     }
-    this.copy(output = output.map(QueryPlan.normalizeExpressions(_, output)),
+    this.copy(
+      output = output.map(QueryPlan.normalizeExpressions(_, output)),
       scan = canonicalizedScan)
   }
 }
