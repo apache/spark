@@ -2489,4 +2489,41 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       assert(e.getMessage.contains("long overflow"))
     }
   }
+
+  test("SPARK-34739: subtract a year-month interval from a timestamp") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingZoneIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
+          Seq(
+            (LocalDateTime.of(1582, 10, 4, 0, 0, 0), Period.ofMonths(0)) ->
+              LocalDateTime.of(1582, 10, 4, 0, 0, 0),
+            (LocalDateTime.of(1582, 10, 15, 23, 59, 59, 999999000), Period.ofMonths(1)) ->
+              LocalDateTime.of(1582, 9, 15, 23, 59, 59, 999999000),
+            (LocalDateTime.of(1, 1, 1, 1, 1, 1, 1000), Period.ofMonths(-1)) ->
+              LocalDateTime.of(1, 2, 1, 1, 1, 1, 1000),
+            (LocalDateTime.of(9999, 10, 31, 23, 59, 59, 999000000), Period.ofMonths(-2)) ->
+              LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999000000),
+            (LocalDateTime.of(2021, 5, 31, 0, 0, 0, 1000), Period.ofMonths(3)) ->
+              LocalDateTime.of(2021, 2, 28, 0, 0, 0, 1000),
+            (LocalDateTime.of(2021, 2, 28, 11, 12, 13, 123456000), Period.ofYears(1)) ->
+              LocalDateTime.of(2020, 2, 28, 11, 12, 13, 123456000),
+            (LocalDateTime.of(2020, 2, 29, 1, 2, 3, 5000), Period.ofYears(4)) ->
+              LocalDateTime.of(2016, 2, 29, 1, 2, 3, 5000)
+          ).foreach { case ((ldt, period), expected) =>
+            val df = Seq((ldt.atZone(zid).toInstant, period)).toDF("ts", "interval")
+            checkAnswer(df.select($"ts" - $"interval"), Row(expected.atZone(zid).toInstant))
+          }
+        }
+      }
+
+      val e = intercept[SparkException] {
+        Seq((Instant.parse("2021-03-14T18:55:00Z"), Period.ofMonths(Int.MaxValue)))
+          .toDF("ts", "interval")
+          .select($"ts" - $"interval")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+    }
+  }
 }
