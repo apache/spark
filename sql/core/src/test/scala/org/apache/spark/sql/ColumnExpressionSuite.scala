@@ -28,7 +28,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.outstandingZoneIds
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2392,17 +2392,23 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-34721: add a year-month interval to a date") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
-      Seq(
-        (LocalDate.of(1900, 10, 1), Period.ofMonths(0)) -> LocalDate.of(1900, 10, 1),
-        (LocalDate.of(1970, 1, 1), Period.ofMonths(-1)) -> LocalDate.of(1969, 12, 1),
-        (LocalDate.of(2021, 3, 11), Period.ofMonths(1)) -> LocalDate.of(2021, 4, 11),
-        (LocalDate.of(2020, 12, 31), Period.ofMonths(2)) -> LocalDate.of(2021, 2, 28),
-        (LocalDate.of(2021, 5, 31), Period.ofMonths(-3)) -> LocalDate.of(2021, 2, 28),
-        (LocalDate.of(2020, 2, 29), Period.ofYears(1)) -> LocalDate.of(2021, 2, 28),
-        (LocalDate.of(1, 1, 1), Period.ofYears(2020)) -> LocalDate.of(2021, 1, 1)
-      ).foreach { case ((date, period), result) =>
-        val df = Seq((date, period)).toDF("date", "interval")
-        checkAnswer(df.select($"date" + $"interval", $"interval" + $"date"), Row(result, result))
+      outstandingTimezonesIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid) {
+          Seq(
+            (LocalDate.of(1900, 10, 1), Period.ofMonths(0)) -> LocalDate.of(1900, 10, 1),
+            (LocalDate.of(1970, 1, 1), Period.ofMonths(-1)) -> LocalDate.of(1969, 12, 1),
+            (LocalDate.of(2021, 3, 11), Period.ofMonths(1)) -> LocalDate.of(2021, 4, 11),
+            (LocalDate.of(2020, 12, 31), Period.ofMonths(2)) -> LocalDate.of(2021, 2, 28),
+            (LocalDate.of(2021, 5, 31), Period.ofMonths(-3)) -> LocalDate.of(2021, 2, 28),
+            (LocalDate.of(2020, 2, 29), Period.ofYears(1)) -> LocalDate.of(2021, 2, 28),
+            (LocalDate.of(1, 1, 1), Period.ofYears(2020)) -> LocalDate.of(2021, 1, 1)
+          ).foreach { case ((date, period), result) =>
+            val df = Seq((date, period)).toDF("date", "interval")
+            checkAnswer(
+              df.select($"date" + $"interval", $"interval" + $"date"),
+              Row(result, result))
+          }
+        }
       }
 
       val e = intercept[SparkException] {
@@ -2418,17 +2424,21 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-34721: subtract a year-month interval from a date") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
-      Seq(
-        (LocalDate.of(1582, 10, 4), Period.ofMonths(0)) -> LocalDate.of(1582, 10, 4),
-        (LocalDate.of(1582, 10, 15), Period.ofMonths(1)) -> LocalDate.of(1582, 9, 15),
-        (LocalDate.of(1, 1, 1), Period.ofMonths(-1)) -> LocalDate.of(1, 2, 1),
-        (LocalDate.of(9999, 10, 31), Period.ofMonths(-2)) -> LocalDate.of(9999, 12, 31),
-        (LocalDate.of(2021, 5, 31), Period.ofMonths(3)) -> LocalDate.of(2021, 2, 28),
-        (LocalDate.of(2021, 2, 28), Period.ofYears(1)) -> LocalDate.of(2020, 2, 28),
-        (LocalDate.of(2020, 2, 29), Period.ofYears(4)) -> LocalDate.of(2016, 2, 29)
-      ).foreach { case ((date, period), result) =>
-        val df = Seq((date, period)).toDF("date", "interval")
-        checkAnswer(df.select($"date" - $"interval"), Row(result))
+      outstandingTimezonesIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid) {
+          Seq(
+            (LocalDate.of(1582, 10, 4), Period.ofMonths(0)) -> LocalDate.of(1582, 10, 4),
+            (LocalDate.of(1582, 10, 15), Period.ofMonths(1)) -> LocalDate.of(1582, 9, 15),
+            (LocalDate.of(1, 1, 1), Period.ofMonths(-1)) -> LocalDate.of(1, 2, 1),
+            (LocalDate.of(9999, 10, 31), Period.ofMonths(-2)) -> LocalDate.of(9999, 12, 31),
+            (LocalDate.of(2021, 5, 31), Period.ofMonths(3)) -> LocalDate.of(2021, 2, 28),
+            (LocalDate.of(2021, 2, 28), Period.ofYears(1)) -> LocalDate.of(2020, 2, 28),
+            (LocalDate.of(2020, 2, 29), Period.ofYears(4)) -> LocalDate.of(2016, 2, 29)
+          ).foreach { case ((date, period), result) =>
+            val df = Seq((date, period)).toDF("date", "interval")
+            checkAnswer(df.select($"date" - $"interval"), Row(result))
+          }
+        }
       }
 
       val e = intercept[SparkException] {
