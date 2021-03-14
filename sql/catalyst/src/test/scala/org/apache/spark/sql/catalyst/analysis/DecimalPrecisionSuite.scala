@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Unio
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-
 class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)
   private val analyzer = new Analyzer(catalog)
@@ -48,10 +47,6 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   private val u: Expression = UnresolvedAttribute("u")
   private val f: Expression = UnresolvedAttribute("f")
   private val b: Expression = UnresolvedAttribute("b")
-
-  before {
-    catalog.createTempView("table", relation, overrideIfExists = true)
-  }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {
     val plan = Project(Seq(Alias(expression, "c")()), relation)
