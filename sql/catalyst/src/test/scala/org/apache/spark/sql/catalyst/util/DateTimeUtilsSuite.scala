@@ -393,7 +393,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(dateAddMonths(input, -13) === days(1996, 1, 28))
   }
 
-  test("timestamp add months") {
+  test("SPARK-34739: timestamp add months") {
     outstandingZoneIds.foreach { zid =>
       Seq(
         (date(2021, 3, 13, 21, 28, 13, 123456, zid), 0, date(2021, 3, 13, 21, 28, 13, 123456, zid)),
