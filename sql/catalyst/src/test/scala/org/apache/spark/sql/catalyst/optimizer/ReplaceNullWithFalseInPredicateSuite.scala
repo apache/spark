@@ -456,15 +456,26 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
 
   private def testMerge(originalCond: Expression, expectedCond: Expression): Unit = {
     val func = (rel: LogicalPlan, expr: Expression) => {
+      val target = rel.as("target")
+      val source = rel.as("source")
       val assignments = Seq(
-        Assignment('i, 'i),
-        Assignment('b, 'b),
-        Assignment('a, 'a),
-        Assignment('m, 'm)
+        Assignment(UnresolvedAttribute("target.i"), UnresolvedAttribute("source.i")),
+        Assignment(UnresolvedAttribute("target.b"), UnresolvedAttribute("source.b")),
+        Assignment(UnresolvedAttribute("target.a"), UnresolvedAttribute("source.a")),
+        Assignment(UnresolvedAttribute("target.m"), UnresolvedAttribute("source.m"))
       )
-      val matchedActions = UpdateAction(Some(expr), assignments) :: DeleteAction(Some(expr)) :: Nil
-      val notMatchedActions = InsertAction(Some(expr), assignments) :: Nil
-      MergeIntoTable(rel, rel, mergeCondition = expr, matchedActions, notMatchedActions)
+      val matchedCond = expr.transform {
+        case UnresolvedAttribute(nameParts) => new UnresolvedAttribute("target" +: nameParts)
+        case e => e
+      }
+      val notMatchedCond = expr.transform {
+        case UnresolvedAttribute(nameParts) => new UnresolvedAttribute("source" +: nameParts)
+        case e => e
+      }
+      val matchedActions = UpdateAction(Some(matchedCond), assignments) ::
+        DeleteAction(Some(matchedCond)) :: Nil
+      val notMatchedActions = InsertAction(Some(notMatchedCond), assignments) :: Nil
+      MergeIntoTable(target, source, matchedCond, matchedActions, notMatchedActions)
     }
     test(func, originalCond, expectedCond)
   }

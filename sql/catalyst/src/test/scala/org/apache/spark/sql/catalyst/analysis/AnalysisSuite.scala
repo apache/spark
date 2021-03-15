@@ -671,6 +671,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
+  test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
+    val assignments = Assignment('a, 'a) :: Nil
+    val cond = 'a > 1
+    val matchedActions = UpdateAction(Some(cond), assignments) :: DeleteAction(Some(cond)) :: Nil
+    val notMatchedActions = InsertAction(Some(cond), assignments) :: Nil
+    val merge = MergeIntoTable(testRelation, testRelation, cond, matchedActions, notMatchedActions)
+    assertAnalysisError(merge, "Reference 'a' is ambiguous" :: Nil)
+  }
+
   test("SPARK-24488 Generator with multiple aliases") {
     assertAnalysisSuccess(
       listRelation.select(Explode($"list").as("first_alias").as("second_alias")))
