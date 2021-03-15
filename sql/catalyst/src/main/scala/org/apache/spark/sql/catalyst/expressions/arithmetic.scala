@@ -184,10 +184,7 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
           |}
           |""".stripMargin)
 
-    case _: IntegerType if failOnError =>
-      defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
-
-    case _: LongType if failOnError =>
+    case IntegerType | LongType if failOnError =>
       defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
 
 
