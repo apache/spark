@@ -1818,7 +1818,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val ignoreNulls =
       Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
     val function = UnresolvedFunction(
-      getFunctionIdentifier(ctx.functionName), arguments, isDistinct, filter, ignoreNulls)
+      getFunctionMultiparts(ctx.functionName), arguments, isDistinct, filter, ignoreNulls)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1829,7 +1829,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case _ => function
     }
   }
-
 
   /**
    * Create a function database (optional) and name pair, for multipartIdentifier.
@@ -1847,6 +1846,25 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Get a function identifier consist by database (optional) and name.
+   */
+  protected def getFunctionIdentifier(ctx: FunctionNameContext): FunctionIdentifier = {
+    if (ctx.qualifiedName != null) {
+      visitFunctionName(ctx.qualifiedName)
+    } else {
+      FunctionIdentifier(ctx.getText, None)
+    }
+  }
+
+  protected def getFunctionMultiparts(ctx: FunctionNameContext): Seq[String] = {
+    if (ctx.qualifiedName != null) {
+      ctx.qualifiedName().identifier().asScala.map(_.getText).toSeq
+    } else {
+      Seq(ctx.getText)
+    }
+  }
+
+  /**
    * Create a function database (optional) and name pair.
    */
   private def visitFunctionName(ctx: ParserRuleContext, texts: Seq[String]): FunctionIdentifier = {
@@ -1858,18 +1876,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
-  /**
-   * Get a function identifier consist by database (optional) and name.
-   */
-  protected def getFunctionIdentifier(ctx: FunctionNameContext): FunctionIdentifier = {
-    if (ctx.qualifiedName != null) {
-      visitFunctionName(ctx.qualifiedName)
-    } else {
-      FunctionIdentifier(ctx.getText, None)
-    }
-  }
-
-  /**
+    /**
    * Create an [[LambdaFunction]].
    */
   override def visitLambda(ctx: LambdaContext): Expression = withOrigin(ctx) {

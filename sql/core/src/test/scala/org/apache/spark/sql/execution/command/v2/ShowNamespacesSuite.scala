@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
+import org.apache.spark.sql.connector.catalog.BasicInMemoryCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSuiteBase {
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.testcat_no_namespace", classOf[BasicInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.testcat_no_namespace", classOf[BasicInMemoryCatalog].getName)
 
   test("IN namespace doesn't exist") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {

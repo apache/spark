@@ -113,9 +113,9 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       assert(v1SessionCatalog.getCurrentDatabase == "default")
 
       // Check namespace existence if currentCatalog implements SupportsNamespaces.
-      withSQLConf("spark.sql.catalog.testCatalog" -> classOf[InMemoryTableCatalog].getName) {
+      withSQLConf("spark.sql.catalog.testCatalog" -> classOf[V2InMemoryCatalog].getName) {
         catalogManager.setCurrentCatalog("testCatalog")
-        catalogManager.currentCatalog.asInstanceOf[InMemoryTableCatalog]
+        catalogManager.currentCatalog.asInstanceOf[V2InMemoryCatalog]
           .createNamespace(Array("test3"), Map.empty[String, String].asJava)
         assert(v1SessionCatalog.getCurrentDatabase == "default")
         catalogManager.setCurrentNamespace(Array("test3"))

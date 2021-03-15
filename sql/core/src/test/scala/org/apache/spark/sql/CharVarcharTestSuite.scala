@@ -21,7 +21,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
-import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.connector.catalog.V2InMemoryPartitionCatalog
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -870,7 +870,7 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
   override def format: String = "foo"
   protected override def sparkConf = {
     super.sparkConf
-      .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
+      .set("spark.sql.catalog.testcat", classOf[V2InMemoryPartitionCatalog].getName)
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
   }
 }

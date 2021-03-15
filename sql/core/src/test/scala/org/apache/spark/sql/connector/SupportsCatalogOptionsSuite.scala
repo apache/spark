@@ -55,7 +55,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     spark.conf.set(
       V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
     spark.conf.set(
-      s"spark.sql.catalog.$catalogName", classOf[InMemoryTableCatalog].getName)
+      s"spark.sql.catalog.$catalogName", classOf[V2InMemoryCatalog].getName)
   }
 
   override def afterEach(): Unit = {

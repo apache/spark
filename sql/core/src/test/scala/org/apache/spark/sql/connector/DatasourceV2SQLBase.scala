@@ -32,11 +32,11 @@ trait DatasourceV2SQLBase
   }
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testpart", classOf[InMemoryPartitionTableCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[V2InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testpart", classOf[V2InMemoryPartitionCatalog].getName)
     spark.conf.set(
-      "spark.sql.catalog.testcat_atomic", classOf[StagingInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
+      "spark.sql.catalog.testcat_atomic", classOf[StagingInMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat2", classOf[V2InMemoryCatalog].getName)
     spark.conf.set(
       V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
 

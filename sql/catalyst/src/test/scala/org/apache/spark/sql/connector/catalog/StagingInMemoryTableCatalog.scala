@@ -27,8 +27,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTableCatalog {
-  import InMemoryTableCatalog._
+class StagingInMemoryCatalog extends V2InMemoryCatalog with StagingTableCatalog {
+  import V2InMemoryCatalog._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def stageCreate(

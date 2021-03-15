@@ -32,8 +32,8 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
 
   def ref(name: String): NamedReference = LogicalExpressions.parseReference(name)
 
-  private val catalog: InMemoryTableCatalog = {
-    val newCatalog = new InMemoryTableCatalog
+  private val catalog: V2InMemoryCatalog = {
+    val newCatalog = new V2InMemoryCatalog
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog.createTable(
       ident,

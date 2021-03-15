@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.Hex
-import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.connector.catalog.V2InMemoryPartitionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.unsafe.types.UTF8String
@@ -320,7 +320,7 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
 
   protected override def sparkConf: SparkConf = {
     super.sparkConf
-      .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
+      .set("spark.sql.catalog.testcat", classOf[V2InMemoryPartitionCatalog].getName)
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
   }
 }

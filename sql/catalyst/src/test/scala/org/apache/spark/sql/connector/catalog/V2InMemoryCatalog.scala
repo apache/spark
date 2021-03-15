@@ -22,122 +22,14 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class BasicInMemoryTableCatalog extends TableCatalog {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-  protected val namespaces: util.Map[List[String], Map[String, String]] =
-    new ConcurrentHashMap[List[String], Map[String, String]]()
-
-  protected val tables: util.Map[Identifier, Table] =
-    new ConcurrentHashMap[Identifier, Table]()
-
-  private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
-
-  private var _name: Option[String] = None
-
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
-    _name = Some(name)
-  }
-
-  override def name: String = _name.get
-
-  override def listTables(namespace: Array[String]): Array[Identifier] = {
-    tables.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
-  }
-
-  override def loadTable(ident: Identifier): Table = {
-    Option(tables.get(ident)) match {
-      case Some(table) =>
-        table
-      case _ =>
-        throw new NoSuchTableException(ident)
-    }
-  }
-
-  override def invalidateTable(ident: Identifier): Unit = {
-    invalidatedTables.add(ident)
-  }
-
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    createTable(ident, schema, partitions, properties, Distributions.unspecified(),
-      Array.empty, None)
-  }
-
-  def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String],
-      distribution: Distribution,
-      ordering: Array[SortOrder],
-      requiredNumPartitions: Option[Int]): Table = {
-    if (tables.containsKey(ident)) {
-      throw new TableAlreadyExistsException(ident)
-    }
-
-    InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
-
-    val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTable(tableName, schema, partitions, properties, distribution,
-      ordering, requiredNumPartitions)
-    tables.put(ident, table)
-    namespaces.putIfAbsent(ident.namespace.toList, Map())
-    table
-  }
-
-  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    val table = loadTable(ident).asInstanceOf[InMemoryTable]
-    val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
-
-    // fail if the last column in the schema was dropped
-    if (schema.fields.isEmpty) {
-      throw new IllegalArgumentException(s"Cannot drop all fields")
-    }
-
-    val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
-      .withData(table.data)
-
-    tables.put(ident, newTable)
-
-    newTable
-  }
-
-  override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
-
-  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
-    if (tables.containsKey(newIdent)) {
-      throw new TableAlreadyExistsException(newIdent)
-    }
-
-    Option(tables.remove(oldIdent)) match {
-      case Some(table) =>
-        tables.put(newIdent, table)
-      case _ =>
-        throw new NoSuchTableException(oldIdent)
-    }
-  }
-
-  def isTableInvalidated(ident: Identifier): Boolean = {
-    invalidatedTables.contains(ident)
-  }
-
-  def clearTables(): Unit = {
-    tables.clear()
-  }
-}
-
-class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
+class V2InMemoryCatalog extends BasicInMemoryCatalog with SupportsNamespaces {
   private def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
   }
@@ -210,9 +102,17 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       throw new NoSuchNamespaceException(namespace)
     }
   }
+
+  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
+    if (namespace.isEmpty || namespaceExists(namespace)) {
+      super.listFunctions(namespace)
+    } else {
+      throw new NoSuchNamespaceException(namespace)
+    }
+  }
 }
 
-object InMemoryTableCatalog {
+object V2InMemoryCatalog {
   val SIMULATE_FAILED_CREATE_PROPERTY = "spark.sql.test.simulateFailedCreate"
   val SIMULATE_DROP_BEFORE_REPLACE_PROPERTY = "spark.sql.test.simulateDropBeforeReplace"
 

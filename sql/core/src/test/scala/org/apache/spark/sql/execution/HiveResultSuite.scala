@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.time.{Duration, Period}
 
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
+import org.apache.spark.sql.connector.catalog.V2InMemoryCatalog
 import org.apache.spark.sql.execution.HiveResult._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -80,7 +80,7 @@ class HiveResultSuite extends SharedSparkSession {
   }
 
   test("SHOW TABLES in hive result") {
-    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[V2InMemoryCatalog].getName) {
       Seq(("testcat.ns", "tbl", "foo"), ("spark_catalog.default", "tbl", "csv")).foreach {
         case (ns, tbl, source) =>
           withTable(s"$ns.$tbl") {
@@ -94,7 +94,7 @@ class HiveResultSuite extends SharedSparkSession {
   }
 
   test("DESCRIBE TABLE in hive result") {
-    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[V2InMemoryCatalog].getName) {
       Seq(("testcat.ns", "tbl", "foo"), ("spark_catalog.default", "tbl", "csv")).foreach {
         case (ns, tbl, source) =>
           withTable(s"$ns.$tbl") {

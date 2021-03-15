@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier, InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier, InMemoryPartitionTable, V2InMemoryCatalog, V2InMemoryPartitionCatalog}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -36,8 +36,8 @@ trait CommandSuiteBase extends SharedSparkSession {
 
   // V2 catalogs created and used especially for testing
   override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
-    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
+    .set(s"spark.sql.catalog.$catalog", classOf[V2InMemoryPartitionCatalog].getName)
+    .set(s"spark.sql.catalog.non_part_$catalog", classOf[V2InMemoryCatalog].getName)
 
   def checkLocation(
       t: String,

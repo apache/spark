@@ -494,7 +494,7 @@ class DataSourceV2SQLSuite
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat.table_name" +
         s" USING foo" +
-        s" TBLPROPERTIES (`${InMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
+        s" TBLPROPERTIES (`${V2InMemoryCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
         s" AS SELECT id FROM source")
     }
 
@@ -519,7 +519,7 @@ class DataSourceV2SQLSuite
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat_atomic.table_name" +
         s" USING foo" +
-        s" TBLPROPERTIES (`${InMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
+        s" TBLPROPERTIES (`${V2InMemoryCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
         s" AS SELECT id FROM source")
     }
 
@@ -578,7 +578,7 @@ class DataSourceV2SQLSuite
   }
 
   test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table is dropped before commit.") {
-    import InMemoryTableCatalog._
+    import V2InMemoryCatalog._
     spark.sql(s"CREATE TABLE testcat_atomic.created USING $v2Source AS SELECT id, data FROM source")
     intercept[CannotReplaceMissingTableException] {
       spark.sql(s"REPLACE TABLE testcat_atomic.replaced" +
@@ -1390,7 +1390,7 @@ class DataSourceV2SQLSuite
       "and namespace does not exist") {
     // Namespaces are not required to exist for v2 catalogs
     // that does not implement SupportsNamespaces.
-    withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
+    withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryCatalog].getName) {
       val catalogManager = spark.sessionState.catalogManager
 
       sql("USE dummy.ns1")
@@ -1547,7 +1547,7 @@ class DataSourceV2SQLSuite
           |CLUSTERED BY (`a.b`) INTO 4 BUCKETS
         """.stripMargin)
 
-      val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+      val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[V2InMemoryCatalog]
       val table = testCatalog.loadTable(Identifier.of(Array.empty, "t"))
       val partitioning = table.partitioning()
       assert(partitioning.length == 1 && partitioning.head.name() == "bucket")
@@ -1614,7 +1614,7 @@ class DataSourceV2SQLSuite
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
 
-      val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+      val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[V2InMemoryCatalog]
       val identifier = Identifier.of(Array("ns1", "ns2"), "tbl")
 
       assert(!testCatalog.isTableInvalidated(identifier))
@@ -1630,7 +1630,7 @@ class DataSourceV2SQLSuite
         sql("CREATE TEMPORARY VIEW t AS SELECT 2")
         sql("USE testcat.ns")
 
-        val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+        val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[V2InMemoryCatalog]
         val identifier = Identifier.of(Array("ns"), "t")
 
         assert(!testCatalog.isTableInvalidated(identifier))
@@ -2142,7 +2142,7 @@ class DataSourceV2SQLSuite
 
   test("global temp view should not be masked by v2 catalog") {
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[V2InMemoryCatalog].getName)
 
     try {
       sql("create global temp view v as select 1")
@@ -2167,7 +2167,7 @@ class DataSourceV2SQLSuite
 
   test("SPARK-30104: v2 catalog named global_temp will be masked") {
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[V2InMemoryCatalog].getName)
 
     val e = intercept[AnalysisException] {
       // Since the following multi-part name starts with `globalTempDB`, it is resolved to
@@ -2366,7 +2366,7 @@ class DataSourceV2SQLSuite
     intercept[AnalysisException](sql("COMMENT ON TABLE testcat.abc IS NULL"))
 
     val globalTempDB = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set(s"spark.sql.catalog.$globalTempDB", classOf[V2InMemoryCatalog].getName)
     withTempView("v") {
       sql("create global temp view v as select 1")
       val e = intercept[AnalysisException](sql("COMMENT ON TABLE global_temp.v IS NULL"))

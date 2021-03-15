@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.lang.reflect.Method
 import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -44,6 +45,7 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -1958,6 +1960,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
       plan.resolveExpressions {
+        case f @ UnresolvedFunction(NonSessionCatalogAndIdentifier(_, _), _, _, _, _) =>
+          // no-op if this is from a v2 catalog
+          f
         case f: UnresolvedFunction
           if externalFunctionNameSet.contains(normalizeFuncName(f.name)) => f
         case f: UnresolvedFunction if v1SessionCatalog.isRegisteredFunction(f.name) => f
@@ -2016,9 +2021,71 @@ class Analyzer(override val catalogManager: CatalogManager)
                   name, other.getClass.getCanonicalName)
               }
             }
-          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter, ignoreNulls) =>
+          case UnresolvedFunction(NonSessionCatalogAndIdentifier(v2Catalog, ident), arguments,
+            isDistinct, filter, ignoreNulls) if v2Catalog.isFunctionCatalog =>
+            val unbound = v2Catalog.asFunctionCatalog.loadFunction(ident)
+
+            val inputType = StructType(arguments.zipWithIndex.map {
+              case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+            })
+
+            val bound = try {
+              unbound.bind(inputType)
+            } catch {
+              case unsupported: UnsupportedOperationException =>
+                failAnalysis(s"Function ${unbound.name} cannot process input: " +
+                  s"(${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
+                  unsupported.getMessage)
+            }
+
+            bound match {
+              case scalarFunc: ScalarFunction[_] =>
+                if (isDistinct) {
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    scalarFunc.name(), "DISTINCT")
+                } else if (filter.isDefined) {
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    scalarFunc.name(), "FILTER clause")
+                } else {
+                  val argClasses = inputType.fields.map(_.dataType)
+                  findMethod(scalarFunc, ScalarFunction.MAGIC_METHOD_NAME, Some(argClasses)) match {
+                    case Some(_) =>
+                      val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
+                      Invoke(caller, ScalarFunction.MAGIC_METHOD_NAME, scalarFunc.resultType(),
+                        arguments, returnNullable = scalarFunc.isResultNullable)
+                    case _ =>
+                      // TODO: handle functions defined in Scala too - in Scala, even if a
+                      //  subclass do not override the default method in parent interface defined
+                      //  in Java, the method can still be found from `getDeclaredMethod`.
+                      findMethod(scalarFunc, "produceResult", Some(Seq(inputType))) match {
+                        case Some(_) =>
+                          ApplyFunctionExpression(scalarFunc, arguments)
+                        case None =>
+                          failAnalysis(s"ScalarFunction '${bound.name()}' neither implement " +
+                            s"magic method nor override 'produceResult'")
+                      }
+                  }
+                }
+              case aggFunc: V2AggregateFunction[_, _] =>
+                // due to type erasure we can't match by parameter types here, so this check will
+                // succeed even if the class doesn't override `update` but implements another
+                // method with the same name.
+                findMethod(aggFunc, "update") match {
+                  case Some(_) =>
+                    val aggregator = V2Aggregator(aggFunc, arguments)
+                    AggregateExpression(aggregator, Complete, isDistinct, filter)
+                  case None =>
+                    failAnalysis(s"AggregateFunction '${bound.name()}' neither implement magic " +
+                      s"method nor override 'update'")
+                }
+              case _ =>
+                failAnalysis(s"Function ${bound.name()} does not implement ScalarFunction or " +
+                  s"AggregateFunction")
+            }
+
+          case u @ UnresolvedFunction(parts, arguments, isDistinct, filter, ignoreNulls) =>
             withPosition(u) {
-              v1SessionCatalog.lookupFunction(funcId, arguments) match {
+              v1SessionCatalog.lookupFunction(parts.asFunctionIdentifier, arguments) match {
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
@@ -2097,6 +2164,29 @@ class Analyzer(override val catalogManager: CatalogManager)
               }
             }
         }
+    }
+
+    /**
+     * Check if the input `fn` implements the given `methodName`. If `inputType` is set, it also
+     * tries to match it against the declared parameter types.
+     */
+    private def findMethod(
+        fn: BoundFunction,
+        methodName: String,
+        inputTypeOpt: Option[Seq[DataType]] = None): Option[Method] = {
+      val cls = fn.getClass
+      inputTypeOpt match {
+        case Some(inputType) =>
+          try {
+            val argClasses = inputType.map(ScalaReflection.dataTypeJavaClass)
+            Some(cls.getDeclaredMethod(methodName, argClasses: _*))
+          } catch {
+            case _: NoSuchMethodException =>
+              None
+          }
+        case None =>
+          cls.getDeclaredMethods.find(_.getName == methodName)
+      }
     }
   }
 

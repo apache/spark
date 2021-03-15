@@ -29,7 +29,7 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, ExternalCatalog, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, InMemoryTable, InMemoryTableCatalog, Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, InMemoryTable, Table, V2InMemoryCatalog}
 import org.apache.spark.sql.types._
 
 class TableLookupCacheSuite extends AnalysisTest with Matchers {
@@ -45,7 +45,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
         CatalogStorageFormat.empty,
         StructType(Seq(StructField("a", IntegerType)))),
       ignoreIfExists = false)
-    val v2Catalog = new InMemoryTableCatalog {
+    val v2Catalog = new V2InMemoryCatalog {
       override def loadTable(ident: Identifier): Table = {
         val catalogTable = externalCatalog.getTable("default", ident.name)
         new InMemoryTable(
