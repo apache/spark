@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
@@ -31,7 +30,7 @@ import org.apache.spark.util.ThreadUtils
 /**
  * Test cases for the builder pattern of [[SparkSession]].
  */
-class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach with Eventually {
+class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     // This suite should not interfere with the other test suites.
