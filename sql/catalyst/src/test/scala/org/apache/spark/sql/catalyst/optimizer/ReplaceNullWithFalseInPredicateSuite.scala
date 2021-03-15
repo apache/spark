@@ -459,10 +459,10 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       val target = rel.as("target")
       val source = rel.as("source")
       val assignments = Seq(
-        Assignment(UnresolvedAttribute("target.i"), UnresolvedAttribute("source.i")),
-        Assignment(UnresolvedAttribute("target.b"), UnresolvedAttribute("source.b")),
-        Assignment(UnresolvedAttribute("target.a"), UnresolvedAttribute("source.a")),
-        Assignment(UnresolvedAttribute("target.m"), UnresolvedAttribute("source.m"))
+        Assignment(UnresolvedAttribute("i"), UnresolvedAttribute("source.i")),
+        Assignment(UnresolvedAttribute("b"), UnresolvedAttribute("source.b")),
+        Assignment(UnresolvedAttribute("a"), UnresolvedAttribute("source.a")),
+        Assignment(UnresolvedAttribute("m"), UnresolvedAttribute("source.m"))
       )
       val matchedCond = expr.transform {
         case UnresolvedAttribute(nameParts) => new UnresolvedAttribute("target" +: nameParts)
