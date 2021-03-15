@@ -502,7 +502,7 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
       input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
     case _: FloatType => input =>
       val f = input.asInstanceOf[Float]
-      if (f.isNaN || f.isInfinite) null else (f * MICROS_PER_SECOND).toLong
+      if (f.isNaN || f.isInfinite) null else (f.toDouble * MICROS_PER_SECOND).toLong
     case _: DoubleType => input =>
       val d = input.asInstanceOf[Double]
       if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
@@ -517,13 +517,14 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
       val operand = s"new java.math.BigDecimal($MICROS_PER_SECOND)"
       defineCodeGen(ctx, ev, c => s"$c.toJavaBigDecimal().multiply($operand).longValueExact()")
     case other =>
+      val castToDouble = if (other.isInstanceOf[FloatType]) "(double)" else ""
       nullSafeCodeGen(ctx, ev, c => {
         val typeStr = CodeGenerator.boxedType(other)
         s"""
            |if ($typeStr.isNaN($c) || $typeStr.isInfinite($c)) {
            |  ${ev.isNull} = true;
            |} else {
-           |  ${ev.value} = (long)($c * $MICROS_PER_SECOND);
+           |  ${ev.value} = (long)($castToDouble$c * $MICROS_PER_SECOND);
            |}
            |""".stripMargin
       })
