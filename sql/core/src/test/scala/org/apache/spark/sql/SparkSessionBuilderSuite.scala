@@ -19,18 +19,22 @@ package org.apache.spark.sql
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.{CleanerListener, SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.util.ExecutionListenerBus
 import org.apache.spark.util.ThreadUtils
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
  */
-class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
+class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach with Eventually {
 
   override def afterEach(): Unit = {
     // This suite should not interfere with the other test suites.
@@ -38,6 +42,36 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     SparkSession.clearActiveSession()
     SparkSession.getDefaultSession.foreach(_.stop())
     SparkSession.clearDefaultSession()
+  }
+
+  test("SPARK-34087: Fix memory leak of ExecutionListenerBus") {
+    val spark = SparkSession.builder()
+      .master("local")
+      .getOrCreate()
+    (1 to 100).foreach { _ =>
+      spark.cloneSession()
+      SparkSession.clearActiveSession()
+    }
+    var cleanedNum = 0
+    val listener = new CleanerListener {
+      override def rddCleaned(rddId: Int): Unit = {}
+      override def shuffleCleaned(shuffleId: Int): Unit = {}
+      override def broadcastCleaned(broadcastId: Long): Unit = {}
+      override def accumCleaned(accId: Long): Unit = {}
+      override def checkpointCleaned(rddId: Long): Unit = {}
+      override def listenerCleaned(listener: SparkListener): Unit = {
+        if (listener.isInstanceOf[ExecutionListenerBus]) {
+          cleanedNum += 1
+        }
+      }
+    }
+    spark.sparkContext.cleaner.foreach(_.attachListener(listener))
+    eventually(timeout(10.seconds)) {
+      System.gc()
+      // Since GC can't 100% guarantee all out-of-referenced objects be cleaned at one time,
+      // here, we check at least one listener is cleaned up to prove the mechanism works.
+      assert(cleanedNum > 0)
+    }
   }
 
   test("create with config options and propagate them to SparkContext and SparkSession") {

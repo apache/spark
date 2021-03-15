@@ -471,6 +471,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           toBeCleanedAccIds.synchronized { toBeCleanedAccIds -= accId }
         }
         def checkpointCleaned(rddId: Long): Unit = {}
+        def listenerCleaned(listener: SparkListener): Unit = {}
       }
       spark.sparkContext.cleaner.get.attachListener(cleanerListener)
 

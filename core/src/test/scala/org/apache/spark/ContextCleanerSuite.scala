@@ -31,6 +31,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
+import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
 
@@ -396,6 +397,8 @@ class CleanerTester(
       toBeCheckpointIds.synchronized { toBeCheckpointIds -= rddId }
       logInfo("checkpoint  " + rddId + " cleaned")
     }
+
+    def listenerCleaned(listener: SparkListener): Unit = {}
   }
 
   val MAX_VALIDATION_ATTEMPTS = 10

@@ -27,6 +27,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
+import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, ThreadUtils, Utils}
 
@@ -39,6 +40,7 @@ private case class CleanShuffle(shuffleId: Int) extends CleanupTask
 private case class CleanBroadcast(broadcastId: Long) extends CleanupTask
 private case class CleanAccum(accId: Long) extends CleanupTask
 private case class CleanCheckpoint(rddId: Int) extends CleanupTask
+private case class CleanSparkListener(listener: SparkListener) extends CleanupTask
 
 /**
  * A WeakReference associated with a CleanupTask.
@@ -175,6 +177,13 @@ private[spark] class ContextCleaner(
     referenceBuffer.add(new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue))
   }
 
+  /** Register a SparkListener to be cleaned up when its owner is garbage collected. */
+  def registerSparkListenerForCleanup(
+      listenerOwner: AnyRef,
+      listener: SparkListener): Unit = {
+    registerForCleanup(listenerOwner, CleanSparkListener(listener))
+  }
+
   /** Keep cleaning RDD, shuffle, and broadcast state. */
   private def keepCleaning(): Unit = Utils.tryOrStopSparkContext(sc) {
     while (!stopped) {
@@ -197,6 +206,8 @@ private[spark] class ContextCleaner(
                 doCleanupAccum(accId, blocking = blockOnCleanupTasks)
               case CleanCheckpoint(rddId) =>
                 doCleanCheckpoint(rddId)
+              case CleanSparkListener(listener) =>
+                doCleanSparkListener(listener)
             }
           }
         }
@@ -276,6 +287,16 @@ private[spark] class ContextCleaner(
     }
   }
 
+  def doCleanSparkListener(listener: SparkListener): Unit = {
+    try {
+      logDebug(s"Cleaning Spark listener $listener")
+      sc.listenerBus.removeListener(listener)
+      listeners.asScala.foreach(_.listenerCleaned(listener))
+    } catch {
+      case e: Exception => logError(s"Error cleaning Spark listener $listener", e)
+    }
+  }
+
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 }
@@ -293,4 +314,5 @@ private[spark] trait CleanerListener {
   def broadcastCleaned(broadcastId: Long): Unit
   def accumCleaned(accId: Long): Unit
   def checkpointCleaned(rddId: Long): Unit
+  def listenerCleaned(listener: SparkListener): Unit
 }
