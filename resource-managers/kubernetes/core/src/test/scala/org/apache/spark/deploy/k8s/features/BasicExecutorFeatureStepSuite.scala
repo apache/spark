@@ -17,13 +17,11 @@
 package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
-
 import io.fabric8.kubernetes.api.model._
 import org.mockito.MockitoAnnotations
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesTolerationsUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.rpc.RpcEndpointAddress
@@ -91,6 +89,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Nil,
+        Nil,
         Seq.empty[String]))
     val executor = step.configurePod(SparkPod.initialPod())
 
@@ -131,6 +130,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Nil,
+        Nil,
         Seq.empty[String]))
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
   }
@@ -151,6 +151,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Map("qux" -> "quux"),
+        Nil,
         Nil,
         Seq.empty[String]))
     val executor = step.configurePod(SparkPod.initialPod())
@@ -179,10 +180,42 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Nil,
+        Nil,
         Seq.empty[String]))
     val executor = step.configurePod(SparkPod.initialPod())
     // This is checking that basic executor + executorMemory = 1408 + 42 = 1450
     assert(executor.container.getResources.getRequests.get("memory").getAmount === "1450Mi")
+  }
+
+  test("test tolerations") {
+
+    val conf = baseConf.clone()
+    conf.set("spark.kubernetes.executor.toleration.0.effect", "NoSchedule")
+    conf.set("spark.kubernetes.executor.toleration.0.operator", "Exists")
+    conf.set("spark.kubernetes.executor.toleration.0.key", "taboola.com/scratch-disk-xl")
+
+    val tolerations = KubernetesTolerationsUtils.parseTolerationsWithPrefix(
+      conf, KUBERNETES_EXECUTOR_TOLERATION_PREFIX).map(_.get)
+
+    val step = new BasicExecutorFeatureStep(
+      KubernetesConf(
+        conf,
+        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        LABELS,
+        ANNOTATIONS,
+        Map.empty,
+        Map.empty,
+        Map.empty,
+        Nil,
+        tolerations,
+        Seq.empty[String]))
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.pod.getSpec.getTolerations.get(0).getEffect === "NoSchedule")
+    assert(executor.pod.getSpec.getTolerations.get(0).getOperator === "Exists")
+    assert(executor.pod.getSpec.getTolerations.get(0).getKey === "taboola.com/scratch-disk-xl")
+
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

@@ -94,6 +94,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
+      Nil,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -119,6 +120,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map("secret" -> "secretMountPath"),
       Map("EnvName" -> "SecretName:secretKey"),
       Map.empty,
+      Nil,
       Nil,
       Seq.empty[String])
     validateStepTypesApplied(
@@ -148,6 +150,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
+      Nil,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -173,6 +176,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Nil,
       Seq.empty[String])
     validateStepTypesApplied(
@@ -205,6 +209,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       volumeSpec :: Nil,
+      Nil,
       Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -231,6 +236,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Nil,
       Seq.empty[String])
     validateStepTypesApplied(

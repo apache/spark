@@ -260,4 +260,6 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
+  val KUBERNETES_EXECUTOR_TOLERATION_PREFIX = "spark.kubernetes.executor.toleration."
+  val KUBERNETES_DRIVER_TOLERATION_PREFIX = "spark.kubernetes.driver.toleration."
 }

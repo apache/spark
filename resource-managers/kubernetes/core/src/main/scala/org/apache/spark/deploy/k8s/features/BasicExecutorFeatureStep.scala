@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ListBuffer
 
 import io.fabric8.kubernetes.api.model._
 
@@ -28,6 +29,8 @@ import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTI
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
+
+
 
 private[spark] class BasicExecutorFeatureStep(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
@@ -170,7 +173,7 @@ private[spark] class BasicExecutorFeatureStep(
         .withName(pod.getMetadata.getName)
         .withUid(pod.getMetadata.getUid)
         .build())
-    val executorPod = new PodBuilder(pod.pod)
+    var executorPodBuilder = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
         .withLabels(kubernetesConf.roleLabels.asJava)
@@ -182,8 +185,25 @@ private[spark] class BasicExecutorFeatureStep(
         .withRestartPolicy("Never")
         .withNodeSelector(kubernetesConf.nodeSelector().asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets(): _*)
-        .endSpec()
-      .build()
+
+
+    var tolerartions = new ListBuffer[Toleration]()
+    for (tolerartion <- kubernetesConf.tolerations) {
+      tolerartions += new Toleration(
+        tolerartion.effect,
+        tolerartion.key,
+        tolerartion.operator,
+        if (tolerartion.tolerationSeconds != null) tolerartion.tolerationSeconds.toLong else null,
+        tolerartion.value
+      )
+    }
+
+    if (tolerartions.toList.size > 0) {
+      executorPodBuilder = executorPodBuilder
+      .withTolerations(tolerartions.toList.asJava)
+    }
+
+    val executorPod = executorPodBuilder.endSpec().build()
 
     SparkPod(executorPod, containerWithLimitCores)
   }

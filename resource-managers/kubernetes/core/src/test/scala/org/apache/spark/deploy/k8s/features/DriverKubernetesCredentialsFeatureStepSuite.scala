@@ -62,6 +62,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       Map.empty,
       Map.empty,
       Nil,
+      Nil,
       Seq.empty[String])
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
     assert(kubernetesCredentialsStep.configurePod(BASE_DRIVER_POD) === BASE_DRIVER_POD)
@@ -93,6 +94,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Nil,
       Seq.empty[String])
 
@@ -132,6 +134,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       Map.empty,
       Map.empty,
       Map.empty,
+      Nil,
       Nil,
       Seq.empty[String])
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)

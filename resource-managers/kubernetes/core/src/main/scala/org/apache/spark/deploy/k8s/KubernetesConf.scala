@@ -61,6 +61,7 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleSecretEnvNamesToKeyRefs: Map[String, String],
     roleEnvs: Map[String, String],
     roleVolumes: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]],
+    tolerations: Iterable[KubernetesTolerationSpec[_ <: KubernetesTolerationSpecificConf]],
     sparkFiles: Seq[String]) {
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
@@ -175,6 +176,10 @@ private[spark] object KubernetesConf {
       .map(str => str.split(",").toSeq)
       .getOrElse(Seq.empty[String]) ++ additionalFiles
 
+
+    val tolerations = KubernetesTolerationsUtils.parseTolerationsWithPrefix(
+      sparkConf, KUBERNETES_DRIVER_TOLERATION_PREFIX).map(_.get)
+
     KubernetesConf(
       sparkConfWithMainAppJar,
       KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
@@ -186,6 +191,7 @@ private[spark] object KubernetesConf {
       driverSecretEnvNamesToKeyRefs,
       driverEnvs,
       driverVolumes,
+      tolerations,
       sparkFiles)
   }
 
@@ -231,6 +237,10 @@ private[spark] object KubernetesConf {
       }
     }
 
+    val tolerations = KubernetesTolerationsUtils.parseTolerationsWithPrefix(
+      sparkConf, KUBERNETES_EXECUTOR_TOLERATION_PREFIX).map(_.get)
+
+
     KubernetesConf(
       sparkConf.clone(),
       KubernetesExecutorSpecificConf(executorId, driverPod),
@@ -242,6 +252,7 @@ private[spark] object KubernetesConf {
       executorEnvSecrets,
       executorEnv,
       executorVolumes,
+      tolerations,
       Seq.empty[String])
   }
 }
