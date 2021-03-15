@@ -21,6 +21,7 @@ import java.net.URL
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.CoarseGrainedExecutorBackend.Arguments
 import org.apache.spark.internal.Logging
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
@@ -70,11 +71,12 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
 private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
 
   def main(args: Array[String]): Unit = {
-    val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments, SparkEnv, ResourceProfile) =>
-      CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile) =>
-      new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
-        arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath.toSeq,
-        env, arguments.resourcesFileOpt, resourceProfile)
+    val createFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile, Seq[URL]) =>
+      CoarseGrainedExecutorBackend = {
+      case (rpcEnv, arguments, env, resourceProfile, userClassPath) =>
+        new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
+          arguments.bindAddress, arguments.hostname, arguments.cores, userClassPath,
+          env, arguments.resourcesFileOpt, resourceProfile)
     }
     val backendArgs = CoarseGrainedExecutorBackend.parseArguments(args,
       this.getClass.getCanonicalName.stripSuffix("$"))

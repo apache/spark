@@ -30,6 +30,8 @@ import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.EXECUTOR_USER_CLASS_PATH_ENTRIES
+import org.apache.spark.util.Utils
 
 private case class CacheEntry(
   uri: URI,
@@ -89,6 +91,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
 
   /**
    * Writes down information about cached files needed in executors to the given configuration.
+   * This includes the user classpath which will be leveraged by executors for loading user classes.
    */
   def updateConfiguration(conf: SparkConf): Unit = {
     conf.set(CACHED_FILES, distCacheEntries.map(_.uri.toString).toSeq)
@@ -96,6 +99,14 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
     conf.set(CACHED_FILES_TIMESTAMPS, distCacheEntries.map(_.modTime).toSeq)
     conf.set(CACHED_FILES_VISIBILITIES, distCacheEntries.map(_.visibility.name()).toSeq)
     conf.set(CACHED_FILES_TYPES, distCacheEntries.map(_.resType.name()).toSeq)
+    val userClassPath = Client.getUserClasspath(conf).map { uri =>
+      if (Utils.isLocalUri(uri.toString)) {
+        Client.getClusterPath(conf, uri.getPath)
+      } else {
+        uri.getPath
+      }
+    }.toSeq
+    conf.set(EXECUTOR_USER_CLASS_PATH_ENTRIES, userClassPath)
   }
 
   /**

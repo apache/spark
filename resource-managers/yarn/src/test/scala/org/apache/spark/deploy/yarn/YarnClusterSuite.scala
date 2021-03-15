@@ -150,12 +150,20 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, result)
   }
 
-  test("run Spark in yarn-client mode with additional jar") {
-    testWithAddJar(true)
+  test("run Spark in yarn-client mode with additional jar using URI scheme 'local'") {
+    testWithAddJar(clientMode = true, "local")
   }
 
-  test("run Spark in yarn-cluster mode with additional jar") {
-    testWithAddJar(false)
+  test("run Spark in yarn-cluster mode with additional jar using URI scheme 'local'") {
+    testWithAddJar(clientMode = false, "local")
+  }
+
+  test("run Spark in yarn-client mode with additional jar using URI scheme 'file'") {
+    testWithAddJar(clientMode = true, "file")
+  }
+
+  test("run Spark in yarn-cluster mode with additional jar using URI scheme 'file'") {
+    testWithAddJar(clientMode = false, "file")
   }
 
   test("run Spark in yarn-cluster mode unsuccessfully") {
@@ -286,14 +294,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, result)
   }
 
-  private def testWithAddJar(clientMode: Boolean): Unit = {
+  private def testWithAddJar(clientMode: Boolean, jarUriScheme: String): Unit = {
     val originalJar = TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
-      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
-      extraClassPath = Seq(originalJar.getPath()),
-      extraJars = Seq("local:" + originalJar.getPath()))
+      appArgs = Seq(driverResult.getAbsolutePath, executorResult.getAbsolutePath),
+      extraJars = Seq(s"$jarUriScheme:${originalJar.getPath}"))
     checkResult(finalState, driverResult, "ORIGINAL")
     checkResult(finalState, executorResult, "ORIGINAL")
   }

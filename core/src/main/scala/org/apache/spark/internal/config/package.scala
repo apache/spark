@@ -750,6 +750,16 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val EXECUTOR_USER_CLASS_PATH_ENTRIES =
+    ConfigBuilder("spark.executor.userClassPath.entries")
+      .internal()
+      .doc("Internal conf used to pass the user classpath entries to executors. This is a " +
+        "comma-separated list of paths which may be absolute or relative and are expected " +
+        "to exist on the host filesystem where the executor is running.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[spark] val TASK_MAX_DIRECT_RESULT_SIZE =
     ConfigBuilder("spark.task.maxDirectResultSize")
       .version("2.0.0")
