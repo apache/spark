@@ -265,9 +265,20 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("SPARK-34742: Abs throws exception when input is out of range in ANSI mode") {
+    val minValues = Seq(
+      Literal(Byte.MinValue, ByteType),
+      Literal(Short.MinValue, ShortType),
+      Literal(Int.MinValue),
+      Literal(Long.MinValue)
+    )
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      Seq(Literal(Int.MinValue), Literal(Long.MinValue)).foreach { v =>
-        checkExceptionInExpression[ArithmeticException](Abs(v, true), "out of range")
+      minValues.foreach { v =>
+        checkExceptionInExpression[ArithmeticException](Abs(v), "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      minValues.foreach { v =>
+        checkEvaluation(Abs(v), v.value)
       }
     }
   }

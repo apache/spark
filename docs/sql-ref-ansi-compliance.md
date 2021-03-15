@@ -48,7 +48,7 @@ SELECT 2147483647 + 1;
 java.lang.ArithmeticException: integer overflow
 
 SELECT abs(-2147483648);
-java.lang.ArithmeticException: integer out of range
+java.lang.ArithmeticException: integer overflow
 
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;

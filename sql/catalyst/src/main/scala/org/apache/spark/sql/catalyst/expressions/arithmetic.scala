@@ -160,25 +160,36 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
     case _: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
 
-    case _: IntegerType if failOnError =>
+    case _: ByteType if failOnError =>
       nullSafeCodeGen(ctx, ev, eval =>
         s"""
-           |if ($eval == ${Int.MinValue}) {
-           |  throw new ArithmeticException("integer out of range");
-           |} else {
-           |  ${ev.value} = java.lang.Math.abs($eval);
-           |}
-           |""".stripMargin)
+          |if ($eval == ${Byte.MinValue}) {
+          |  throw new ArithmeticException("byte overflow");
+          |} else if ($eval < 0) {
+          |  ${ev.value} = -$eval;
+          |} else {
+          |  ${ev.value} = $eval;
+          |}
+          |""".stripMargin)
+
+    case _: ShortType if failOnError =>
+      nullSafeCodeGen(ctx, ev, eval =>
+        s"""
+          |if ($eval == ${Short.MinValue}) {
+          |  throw new ArithmeticException("short overflow");
+          |} else if ($eval < 0) {
+          |  ${ev.value} = -$eval;
+          |} else {
+          |  ${ev.value} = $eval;
+          |}
+          |""".stripMargin)
+
+    case _: IntegerType if failOnError =>
+      defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
 
     case _: LongType if failOnError =>
-      nullSafeCodeGen(ctx, ev, eval =>
-        s"""
-           |if ($eval == ${Long.MinValue}L) {
-           |  throw new ArithmeticException("integer out of range");
-           |} else {
-           |  ${ev.value} = java.lang.Math.abs($eval);
-           |}
-           |""".stripMargin)
+      defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
+
 
     case dt: NumericType =>
       defineCodeGen(ctx, ev, c => s"(${CodeGenerator.javaType(dt)})(java.lang.Math.abs($c))")
