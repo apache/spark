@@ -1500,4 +1500,42 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
- }
+
+  test("SPARK-34739: add a year-month interval to a timestamp") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    for (zid <- outstandingZoneIds) {
+      val timeZoneId = Option(zid.getId)
+      sdf.setTimeZone(TimeZone.getTimeZone(zid))
+
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:11:12.123").getTime)),
+          Literal(Period.ofMonths(2)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2016-03-29 10:11:12.123").getTime)))
+
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal.create(null, TimestampType),
+          Literal(Period.ofMonths(1)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
+          Literal.create(null, YearMonthIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal.create(null, TimestampType),
+          Literal.create(null, YearMonthIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, interval: Expression) => TimestampAddYMInterval(ts, interval, timeZoneId),
+        TimestampType, YearMonthIntervalType)
+    }
+  }
+}

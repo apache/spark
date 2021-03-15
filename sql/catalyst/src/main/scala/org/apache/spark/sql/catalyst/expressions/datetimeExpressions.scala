@@ -1522,6 +1522,40 @@ case class DateAddYMInterval(date: Expression, interval: Expression) extends Add
   override def sql: String = s"${left.sql} + ${right.sql}"
 }
 
+// Adds the year-month interval to the timestamp
+case class TimestampAddYMInterval(
+    timestamp: Expression,
+    interval: Expression,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
+
+  def this(timestamp: Expression, interval: Expression) = this(timestamp, interval, None)
+
+  override def left: Expression = timestamp
+  override def right: Expression = interval
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, YearMonthIntervalType)
+
+  override def dataType: DataType = TimestampType
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nullSafeEval(micros: Any, months: Any): Any = {
+    timestampAddMonths(micros.asInstanceOf[Long], months.asInstanceOf[Int], zoneId)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (micros, months) => {
+      s"""$dtu.timestampAddMonths($micros, $months, $zid)"""
+    })
+  }
+}
+
 /**
  * Returns number of months between times `timestamp1` and `timestamp2`.
  * If `timestamp1` is later than `timestamp2`, then the result is positive.
