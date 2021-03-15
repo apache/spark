@@ -48,8 +48,12 @@ private[deploy] class HadoopFSDelegationTokenProvider
       creds: Credentials): Option[Long] = {
     try {
       val fileSystems = HadoopFSDelegationTokenProvider.hadoopFSsToAccess(sparkConf, hadoopConf)
+      // The hosts on which the file systems to be excluded from token renewal
+      val fsToExclude = sparkConf.get(KERBEROS_FILESYSTEM_RENEWAL_EXCLUDE)
+        .map(new Path(_).getFileSystem(hadoopConf).getUri.getHost)
+        .toSet
       val fetchCreds = fetchDelegationTokens(getTokenRenewer(hadoopConf), fileSystems, creds,
-        hadoopConf, sparkConf)
+        fsToExclude)
 
       // Get the token renewal interval if it is not set. It will only be called once.
       if (tokenRenewalInterval == null) {
@@ -101,17 +105,11 @@ private[deploy] class HadoopFSDelegationTokenProvider
       renewer: String,
       filesystems: Set[FileSystem],
       creds: Credentials,
-      hadoopConf: Configuration,
-      sparkConf: SparkConf): Credentials = {
-
-    // The hosts on which the file systems to be excluded from token renewal
-    val fsToExclude = sparkConf.get(KERBEROS_FILESYSTEM_RENEWAL_EXCLUDE)
-      .map(new Path(_).getFileSystem(hadoopConf).getUri.getHost)
-      .toSet
+      fsToExclude: Set[String]): Credentials = {
 
     filesystems.foreach { fs =>
       if (fsToExclude.contains(fs.getUri.getHost)) {
-        // RM skips renewing token with empty renewer
+        // YARN RM skips renewing token with empty renewer
         logInfo(s"getting token for: $fs with empty renewer to skip renewal")
         fs.addDelegationTokens("", creds)
       } else {
@@ -133,7 +131,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
     val renewer = UserGroupInformation.getCurrentUser().getUserName()
 
     val creds = new Credentials()
-    fetchDelegationTokens(renewer, filesystems, creds, hadoopConf, sparkConf)
+    fetchDelegationTokens(renewer, filesystems, creds, Set.empty)
 
     val renewIntervals = creds.getAllTokens.asScala.filter {
       _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
