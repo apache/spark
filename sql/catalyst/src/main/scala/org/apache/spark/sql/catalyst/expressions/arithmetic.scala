@@ -145,18 +145,41 @@ case class UnaryPositive(child: Expression)
   """,
   since = "1.2.0",
   group = "math_funcs")
-case class Abs(child: Expression)
+case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+
+  def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   override def dataType: DataType = child.dataType
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
+
+    case _: IntegerType if failOnError =>
+      nullSafeCodeGen(ctx, ev, eval =>
+        s"""
+           |if ($eval == ${Int.MinValue}) {
+           |  throw new ArithmeticException("integer out of range");
+           |} else {
+           |  ${ev.value} = java.lang.Math.abs($eval);
+           |}
+           |""".stripMargin)
+
+    case _: LongType if failOnError =>
+      nullSafeCodeGen(ctx, ev, eval =>
+        s"""
+           |if ($eval == ${Long.MinValue}L) {
+           |  throw new ArithmeticException("integer out of range");
+           |} else {
+           |  ${ev.value} = java.lang.Math.abs($eval);
+           |}
+           |""".stripMargin)
+
     case dt: NumericType =>
       defineCodeGen(ctx, ev, c => s"(${CodeGenerator.javaType(dt)})(java.lang.Math.abs($c))")
   }

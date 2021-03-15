@@ -260,7 +260,15 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Abs(negativeLongLit), - negativeLong)
 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Abs, tpe)
+      checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
+    }
+  }
+
+  test("SPARK-34742: Abs throws exception when input is out of range in ANSI mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(Literal(Int.MinValue), Literal(Long.MinValue)).foreach { v =>
+        checkExceptionInExpression[ArithmeticException](Abs(v, true), "out of range")
+      }
     }
   }
 

@@ -99,6 +99,14 @@ private[sql] object IntegerExactNumeric extends IntIsIntegral with Ordering.IntO
   override def times(x: Int, y: Int): Int = Math.multiplyExact(x, y)
 
   override def negate(x: Int): Int = Math.negateExact(x)
+
+  override def abs(x: Int): Int = {
+    if (x == Int.MinValue) {
+      throw new ArithmeticException(s"integer out of range")
+    } else {
+      Math.abs(x)
+    }
+  }
 }
 
 private[sql] object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
@@ -116,6 +124,14 @@ private[sql] object LongExactNumeric extends LongIsIntegral with Ordering.LongOr
     } else {
       throw new ArithmeticException(s"Casting $x to int causes overflow")
     }
+
+  override def abs(x: Long): Long = {
+    if (x == Long.MinValue) {
+      throw new ArithmeticException(s"long integer out of range")
+    } else {
+      Math.abs(x)
+    }
+  }
 }
 
 private[sql] object FloatExactNumeric extends FloatIsFractional {
