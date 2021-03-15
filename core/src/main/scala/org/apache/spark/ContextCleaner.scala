@@ -291,7 +291,6 @@ private[spark] class ContextCleaner(
     try {
       logDebug(s"Cleaning Spark listener $listener")
       sc.listenerBus.removeListener(listener)
-      listeners.asScala.foreach(_.listenerCleaned(listener))
     } catch {
       case e: Exception => logError(s"Error cleaning Spark listener $listener", e)
     }
