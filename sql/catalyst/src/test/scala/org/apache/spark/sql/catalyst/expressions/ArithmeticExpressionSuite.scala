@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -574,6 +575,45 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkExceptionInExpression[ArithmeticException](operator(one, zero), "divide by zero")
         }
       }
+    }
+  }
+
+  test("SPARK-34677: exact add and subtract of day-time and year-month intervals") {
+    Seq(true, false).foreach { failOnError =>
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
+          failOnError),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Subtract(
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          failOnError
+        ),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Add(
+          Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          failOnError
+        ),
+        "overflow")
+
+      checkExceptionInExpression[ArithmeticException](
+        Subtract(
+          Literal.create(Duration.ofDays(-106751991), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          failOnError
+        ),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Add(
+          Literal.create(Duration.ofDays(106751991), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          failOnError
+        ),
+        "overflow")
     }
   }
 }

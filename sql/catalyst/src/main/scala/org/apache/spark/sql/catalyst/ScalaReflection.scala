@@ -243,6 +243,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
         createDeserializerForDuration(path)
 
+      case t if isSubtype(t, localTypeOf[java.time.Period]) =>
+        createDeserializerForPeriod(path)
+
       case t if isSubtype(t, localTypeOf[java.lang.String]) =>
         createDeserializerForString(path, returnNullable = false)
 
@@ -528,6 +531,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
         createSerializerForJavaDuration(inputObject)
 
+      case t if isSubtype(t, localTypeOf[java.time.Period]) =>
+        createSerializerForJavaPeriod(inputObject)
+
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         createSerializerForScalaBigDecimal(inputObject)
 
@@ -748,6 +754,8 @@ object ScalaReflection extends ScalaReflection {
         Schema(CalendarIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
         Schema(DayTimeIntervalType, nullable = true)
+      case t if isSubtype(t, localTypeOf[java.time.Period]) =>
+        Schema(YearMonthIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
@@ -846,7 +854,8 @@ object ScalaReflection extends ScalaReflection {
     TimestampType -> classOf[TimestampType.InternalType],
     BinaryType -> classOf[BinaryType.InternalType],
     CalendarIntervalType -> classOf[CalendarInterval],
-    DayTimeIntervalType -> classOf[DayTimeIntervalType.InternalType]
+    DayTimeIntervalType -> classOf[DayTimeIntervalType.InternalType],
+    YearMonthIntervalType -> classOf[YearMonthIntervalType.InternalType]
   )
 
   val typeBoxedJavaMapping = Map[DataType, Class[_]](
@@ -859,7 +868,8 @@ object ScalaReflection extends ScalaReflection {
     DoubleType -> classOf[java.lang.Double],
     DateType -> classOf[java.lang.Integer],
     TimestampType -> classOf[java.lang.Long],
-    DayTimeIntervalType -> classOf[java.lang.Long]
+    DayTimeIntervalType -> classOf[java.lang.Long],
+    YearMonthIntervalType -> classOf[java.lang.Integer]
   )
 
   def dataTypeJavaClass(dt: DataType): Class[_] = {

@@ -1,7 +1,7 @@
 == Physical Plan ==
 * Sort (52)
 +- * Project (51)
-   +- BroadcastNestedLoopJoin Inner BuildRight (50)
+   +- * BroadcastNestedLoopJoin Inner BuildRight (50)
       :- * HashAggregate (28)
       :  +- Exchange (27)
       :     +- * HashAggregate (26)
@@ -175,7 +175,7 @@ Results [1]: [count#15]
 Input [1]: [count#15]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#16]
 
-(28) HashAggregate [codegen id : 5]
+(28) HashAggregate [codegen id : 10]
 Input [1]: [count#15]
 Keys: []
 Functions [1]: [count(1)]
@@ -189,38 +189,38 @@ Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
 
-(30) ColumnarToRow [codegen id : 9]
+(30) ColumnarToRow [codegen id : 8]
 Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 
-(31) Filter [codegen id : 9]
+(31) Filter [codegen id : 8]
 Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 Condition : ((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AND isnotnull(ws_web_page_sk#3))
 
-(32) Project [codegen id : 9]
+(32) Project [codegen id : 8]
 Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
 Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 
 (33) ReusedExchange [Reuses operator id: 9]
 Output [1]: [wp_web_page_sk#5]
 
-(34) BroadcastHashJoin [codegen id : 9]
+(34) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_web_page_sk#3]
 Right keys [1]: [wp_web_page_sk#5]
 Join condition: None
 
-(35) Project [codegen id : 9]
+(35) Project [codegen id : 8]
 Output [2]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2]
 Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, wp_web_page_sk#5]
 
 (36) ReusedExchange [Reuses operator id: 16]
 Output [1]: [hd_demo_sk#8]
 
-(37) BroadcastHashJoin [codegen id : 9]
+(37) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_ship_hdemo_sk#2]
 Right keys [1]: [hd_demo_sk#8]
 Join condition: None
 
-(38) Project [codegen id : 9]
+(38) Project [codegen id : 8]
 Output [1]: [ws_sold_time_sk#1]
 Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, hd_demo_sk#8]
 
@@ -231,14 +231,14 @@ Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
-(40) ColumnarToRow [codegen id : 8]
+(40) ColumnarToRow [codegen id : 7]
 Input [2]: [t_time_sk#11, t_hour#12]
 
-(41) Filter [codegen id : 8]
+(41) Filter [codegen id : 7]
 Input [2]: [t_time_sk#11, t_hour#12]
 Condition : (((isnotnull(t_hour#12) AND (t_hour#12 >= 19)) AND (t_hour#12 <= 20)) AND isnotnull(t_time_sk#11))
 
-(42) Project [codegen id : 8]
+(42) Project [codegen id : 7]
 Output [1]: [t_time_sk#11]
 Input [2]: [t_time_sk#11, t_hour#12]
 
@@ -246,16 +246,16 @@ Input [2]: [t_time_sk#11, t_hour#12]
 Input [1]: [t_time_sk#11]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#19]
 
-(44) BroadcastHashJoin [codegen id : 9]
+(44) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_sold_time_sk#1]
 Right keys [1]: [t_time_sk#11]
 Join condition: None
 
-(45) Project [codegen id : 9]
+(45) Project [codegen id : 8]
 Output: []
 Input [2]: [ws_sold_time_sk#1, t_time_sk#11]
 
-(46) HashAggregate [codegen id : 9]
+(46) HashAggregate [codegen id : 8]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
@@ -266,7 +266,7 @@ Results [1]: [count#21]
 Input [1]: [count#21]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#22]
 
-(48) HashAggregate [codegen id : 10]
+(48) HashAggregate [codegen id : 9]
 Input [1]: [count#21]
 Keys: []
 Functions [1]: [count(1)]
@@ -277,14 +277,14 @@ Results [1]: [count(1)#23 AS pmc#24]
 Input [1]: [pmc#24]
 Arguments: IdentityBroadcastMode, [id=#25]
 
-(50) BroadcastNestedLoopJoin
+(50) BroadcastNestedLoopJoin [codegen id : 10]
 Join condition: None
 
-(51) Project [codegen id : 11]
+(51) Project [codegen id : 10]
 Output [1]: [CheckOverflow((promote_precision(cast(amc#18 as decimal(15,4))) / promote_precision(cast(pmc#24 as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#26]
 Input [2]: [amc#18, pmc#24]
 
-(52) Sort [codegen id : 11]
+(52) Sort [codegen id : 10]
 Input [1]: [am_pm_ratio#26]
 Arguments: [am_pm_ratio#26 ASC NULLS FIRST], true, 0
 

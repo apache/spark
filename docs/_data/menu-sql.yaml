@@ -263,7 +263,11 @@
                   url: sql-ref-syntax-aux-resource-mgmt-add-file.html
                 - text: ADD JAR
                   url: sql-ref-syntax-aux-resource-mgmt-add-jar.html
+                - text: ADD ARCHIVE
+                  url: sql-ref-syntax-aux-resource-mgmt-add-archive.html
                 - text: LIST FILE
                   url: sql-ref-syntax-aux-resource-mgmt-list-file.html
                 - text: LIST JAR
                   url: sql-ref-syntax-aux-resource-mgmt-list-jar.html
+                - text: LIST ARCHIVE
+                  url: sql-ref-syntax-aux-resource-mgmt-list-archive.html

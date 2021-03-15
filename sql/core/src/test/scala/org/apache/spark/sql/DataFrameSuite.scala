@@ -2551,7 +2551,7 @@ class DataFrameSuite extends QueryTest
     val err = intercept[AnalysisException] {
       df.groupBy($"d", $"b").as[GroupByKey, Row]
     }
-    assert(err.getMessage.contains("cannot resolve '`d`'"))
+    assert(err.getMessage.contains("cannot resolve 'd'"))
   }
 
   test("emptyDataFrame should be foldable") {

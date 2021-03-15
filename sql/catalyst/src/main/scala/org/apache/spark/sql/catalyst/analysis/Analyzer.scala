@@ -338,6 +338,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformExpressionsUp {
         case a @ Add(l, r, f) if a.childrenResolved => (l.dataType, r.dataType) match {
+          case (DateType, YearMonthIntervalType) => DateAddYMInterval(l, r)
+          case (YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
           case (CalendarIntervalType, CalendarIntervalType) => a
           case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
@@ -348,6 +350,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case _ => a
         }
         case s @ Subtract(l, r, f) if s.childrenResolved => (l.dataType, r.dataType) match {
+          case (DateType, YearMonthIntervalType) =>
+            DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
           case (CalendarIntervalType, CalendarIntervalType) => s
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
@@ -879,7 +883,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
     EliminateSubqueryAliases(plan) match {
-      case v: View if v.isDataFrameTempView => v.child
+      case v: View if v.isTempViewStoringAnalyzedPlan => v.child
       case other => other
     }
   }
@@ -3977,6 +3981,8 @@ object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
       val children = e.children.grouped(2).flatMap {
         case Seq(NamePlaceholder, e: NamedExpression) if e.resolved =>
           Seq(Literal(e.name), e)
+        case Seq(NamePlaceholder, e: ExtractValue) if e.resolved && e.name.isDefined =>
+          Seq(Literal(e.name.get), e)
         case kv =>
           kv
       }

@@ -1445,4 +1445,68 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
     }
   }
+
+  test("SPARK-34546: ALTER VIEW AS should uncache if a temp view is cached") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        withTempView("tv") {
+          testAlterTemporaryViewAsWithCache(TableIdentifier("tv"), storeAnalyzed)
+        }
+      }
+    }
+  }
+
+  test("SPARK-34546: ALTER VIEW AS should uncache if a global temp view is cached") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        withGlobalTempView("global_tv") {
+          val db = spark.sharedState.globalTempViewManager.database
+          testAlterTemporaryViewAsWithCache(TableIdentifier("global_tv", Some(db)), storeAnalyzed)
+        }
+      }
+    }
+  }
+
+  private def testAlterTemporaryViewAsWithCache(
+      ident: TableIdentifier,
+      storeAnalyzed: Boolean): Unit = {
+    val (tempViewStr, viewName) = if (ident.database.nonEmpty) {
+      ("GLOBAL TEMPORARY", s"${ident.database.get}.${ident.table}")
+    } else {
+      ("TEMPORARY", ident.table)
+    }
+
+    sql(s"CREATE $tempViewStr VIEW ${ident.table} AS SELECT 1")
+
+    sql(s"CACHE TABLE $viewName")
+    assert(spark.catalog.isCached(viewName))
+    assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).nonEmpty)
+
+    if (storeAnalyzed) {
+      // Altered temporary view will have the same plan, thus it will not be uncached.
+      // Note that this check is done only if a temporary view stores an analyzed view.
+      sql(s"ALTER VIEW $viewName as SELECT 1")
+      assert(spark.catalog.isCached(viewName))
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).nonEmpty)
+    }
+
+    sql(s"ALTER VIEW $viewName as SELECT 2")
+    assert(!spark.catalog.isCached(viewName))
+    assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).isEmpty)
+  }
+
+  test("SPARK-34546: ALTER VIEW AS should uncache if a permanent view is cached") {
+    withView("view") {
+      sql("CREATE VIEW view AS SELECT 1")
+      sql("CACHE TABLE view")
+      assert(spark.catalog.isCached("view"))
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).nonEmpty)
+
+      // ALTER VIEW AS on a permanent view should uncache even if the replacing view produces
+      // the same result.
+      sql("ALTER VIEW view as SELECT 1")
+      assert(!spark.catalog.isCached("view"))
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).isEmpty)
+    }
+  }
 }

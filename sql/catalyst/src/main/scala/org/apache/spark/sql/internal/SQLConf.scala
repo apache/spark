@@ -863,7 +863,9 @@ object SQLConf {
       .doc("The threshold of set size for InSet predicate when pruning partitions through Hive " +
         "Metastore. When the set size exceeds the threshold, we rewrite the InSet predicate " +
         "to be greater than or equal to the minimum value in set and less than or equal to the " +
-        "maximum value in set. Larger values may cause Hive Metastore stack overflow.")
+        "maximum value in set. Larger values may cause Hive Metastore stack overflow. But for " +
+        "InSet inside Not with values exceeding the threshold, we won't push it to Hive Metastore."
+      )
       .version("3.1.0")
       .internal()
       .intConf

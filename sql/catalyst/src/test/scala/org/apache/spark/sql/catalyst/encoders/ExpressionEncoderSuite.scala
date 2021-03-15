@@ -167,9 +167,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Array.empty[Int], "empty array of int")
   encodeDecodeTest(Array.empty[String], "empty array of string")
 
-  encodeDecodeTest(Array(Array(31, -123), null, Array(4, 67)), "array of array of int")
+  encodeDecodeTest(Array(Array(31, -123), null, Array(4, 67)), "array of array of int",
+    useFallback = true)
   encodeDecodeTest(Array(Array("abc", "xyz"), Array[String](null), null, Array("1", null, "2")),
-    "array of array of string")
+    "array of array of string", useFallback = true)
 
   encodeDecodeTest(Map(1 -> "a", 2 -> "b"), "map")
   encodeDecodeTest(Map(1 -> "a", 2 -> null), "map with null")
@@ -195,8 +196,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     encoderFor(Encoders.javaSerialization[JavaSerializable]))
 
   // test product encoders
-  private def productTest[T <: Product : ExpressionEncoder](input: T): Unit = {
-    encodeDecodeTest(input, input.getClass.getSimpleName)
+  private def productTest[T <: Product : ExpressionEncoder](
+      input: T, useFallback: Boolean = false): Unit = {
+    encodeDecodeTest(input, input.getClass.getSimpleName, useFallback)
   }
 
   case class InnerClass(i: Int)
@@ -214,7 +216,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     OuterScopes.addOuterScope(MalformedClassObject)
     encodeDecodeTest(
       MalformedClassObject.MalformedNameExample(42),
-      "nested Scala class should work")
+      "nested Scala class should work",
+      useFallback = true)
   }
 
   object OuterLevelWithVeryVeryVeryLongClassName1 {
@@ -284,7 +287,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
         .OuterLevelWithVeryVeryVeryLongClassName19
         .OuterLevelWithVeryVeryVeryLongClassName20
         .MalformedNameExample(42),
-      "deeply nested Scala class should work")
+      "deeply nested Scala class should work",
+      useFallback = true)
   }
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
@@ -296,7 +300,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   productTest(OptionalData(None, None, None, None, None, None, None, None, None))
 
   encodeDecodeTest(Seq(Some(1), None), "Option in array")
-  encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map")
+  encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map",
+    useFallback = true)
 
   productTest(BoxedData(1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true))
 
@@ -314,7 +319,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       Map(1 -> null),
       PrimitiveData(1, 1, 1, 1, 1, 1, true)))
 
-  productTest(NestedArray(Array(Array(1, -2, 3), null, Array(4, 5, -6))))
+  productTest(NestedArray(Array(Array(1, -2, 3), null, Array(4, 5, -6))), useFallback = true)
 
   productTest(("Seq[(String, String)]",
     Seq(("a", "b"))))
@@ -474,8 +479,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest((1, FooEnum.E1), "Tuple with Int and scala Enum")
   encodeDecodeTest((null, FooEnum.E1, FooEnum.E2), "Tuple with Null and scala Enum")
   encodeDecodeTest(Seq(FooEnum.E1, null), "Seq with scala Enum")
-  encodeDecodeTest(Map("key" -> FooEnum.E1), "Map with String key and scala Enum")
-  encodeDecodeTest(Map(FooEnum.E1 -> "value"), "Map with scala Enum key and String value")
+  encodeDecodeTest(Map("key" -> FooEnum.E1), "Map with String key and scala Enum",
+    useFallback = true)
+  encodeDecodeTest(Map(FooEnum.E1 -> "value"), "Map with scala Enum key and String value",
+    useFallback = true)
   encodeDecodeTest(FooClassWithEnum(1, FooEnum.E1), "case class with Int and scala Enum")
   encodeDecodeTest(FooEnum.E1, "scala Enum")
 
@@ -555,8 +562,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
-      testName: String): Unit = {
-    testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input") {
+      testName: String,
+      useFallback: Boolean = false): Unit = {
+    testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input", useFallback) {
       val encoder = implicitly[ExpressionEncoder[T]]
 
       // Make sure encoder is serializable.
@@ -650,9 +658,16 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     r
   }
 
-  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any): Unit = {
-    test(testName) {
-      verifyNotLeakingReflectionObjects(testFun)
+  private def testAndVerifyNotLeakingReflectionObjects(
+      testName: String, useFallback: Boolean = false)(testFun: => Any): Unit = {
+    if (useFallback) {
+      testFallback(testName) {
+        verifyNotLeakingReflectionObjects(testFun)
+      }
+    } else {
+      test(testName) {
+        verifyNotLeakingReflectionObjects(testFun)
+      }
     }
   }
 }

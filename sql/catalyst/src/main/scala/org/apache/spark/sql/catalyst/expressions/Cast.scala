@@ -1322,7 +1322,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           if (Float.isNaN($c) || Float.isInfinite($c)) {
             $evNull = true;
           } else {
-            $evPrim = (long)($c * $MICROS_PER_SECOND);
+            $evPrim = (long)((double)$c * $MICROS_PER_SECOND);
           }
         """
   }

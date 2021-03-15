@@ -326,7 +326,7 @@ class DatasetSuite extends QueryTest
       e = intercept[AnalysisException] {
         ds.select(expr("`(_1|_2)`").as[Int])
       }.getMessage
-      assert(e.contains("cannot resolve '`(_1|_2)`'"))
+      assert(e.contains("cannot resolve '(_1|_2)'"))
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
@@ -864,7 +864,7 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"), e.getMessage)
+    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
   }
 
   test("runtime nullability check") {
@@ -1853,7 +1853,7 @@ class DatasetSuite extends QueryTest
         .map(b => b - 1)
         .collect()
     }
-    assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
+    assert(thrownException.message.contains("Cannot up cast id from bigint to tinyint"))
   }
 
   test("SPARK-26690: checkpoints should be executed with an execution id") {
@@ -2011,6 +2011,11 @@ class DatasetSuite extends QueryTest
   test("SPARK-34605: implicit encoder for java.time.Duration") {
     val duration = java.time.Duration.ofMinutes(10)
     assert(spark.range(1).map { _ => duration }.head === duration)
+  }
+
+  test("SPARK-34615: implicit encoder for java.time.Period") {
+    val period = java.time.Period.ofYears(9999).withMonths(11)
+    assert(spark.range(1).map { _ => period }.head === period)
   }
 }
 
