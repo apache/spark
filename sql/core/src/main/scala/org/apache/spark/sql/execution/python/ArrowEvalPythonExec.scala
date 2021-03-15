@@ -99,8 +99,8 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
   private def plainSchema(schema: Seq[DataType]): Seq[DataType] =
     schema.map(v => plainSchema(v, false)).toList
 
-  /** Erase User-Defined Types and returns the plain Spark StructType instead.
-   *
+  /**
+   * Erase User-Defined Types and returns the plain Spark StructType instead.
    * @note
    * PyArrow returns `ArrayType` with `containsNull=true`
    */
