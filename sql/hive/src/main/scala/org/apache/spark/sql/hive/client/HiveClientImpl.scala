@@ -155,7 +155,7 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  ShutdownHookManager.addShutdownHook( () => state.close())
+  ShutdownHookManager.addShutdownHook(() => state.close())
 
   // Log the default warehouse location.
   logInfo(
