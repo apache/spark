@@ -397,8 +397,6 @@ class CleanerTester(
       toBeCheckpointIds.synchronized { toBeCheckpointIds -= rddId }
       logInfo("checkpoint  " + rddId + " cleaned")
     }
-
-    def listenerCleaned(listener: SparkListener): Unit = {}
   }
 
   val MAX_VALIDATION_ATTEMPTS = 10

@@ -44,36 +44,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
     SparkSession.clearDefaultSession()
   }
 
-  test("SPARK-34087: Fix memory leak of ExecutionListenerBus") {
-    val spark = SparkSession.builder()
-      .master("local")
-      .getOrCreate()
-    (1 to 100).foreach { _ =>
-      spark.cloneSession()
-      SparkSession.clearActiveSession()
-    }
-    var cleanedNum = 0
-    val listener = new CleanerListener {
-      override def rddCleaned(rddId: Int): Unit = {}
-      override def shuffleCleaned(shuffleId: Int): Unit = {}
-      override def broadcastCleaned(broadcastId: Long): Unit = {}
-      override def accumCleaned(accId: Long): Unit = {}
-      override def checkpointCleaned(rddId: Long): Unit = {}
-      override def listenerCleaned(listener: SparkListener): Unit = {
-        if (listener.isInstanceOf[ExecutionListenerBus]) {
-          cleanedNum += 1
-        }
-      }
-    }
-    spark.sparkContext.cleaner.foreach(_.attachListener(listener))
-    eventually(timeout(10.seconds)) {
-      System.gc()
-      // Since GC can't 100% guarantee all out-of-referenced objects be cleaned at one time,
-      // here, we check at least one listener is cleaned up to prove the mechanism works.
-      assert(cleanedNum > 0)
-    }
-  }
-
   test("create with config options and propagate them to SparkContext and SparkSession") {
     val session = SparkSession.builder()
       .master("local")

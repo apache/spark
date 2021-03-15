@@ -314,5 +314,4 @@ private[spark] trait CleanerListener {
   def broadcastCleaned(broadcastId: Long): Unit
   def accumCleaned(accId: Long): Unit
   def checkpointCleaned(rddId: Long): Unit
-  def listenerCleaned(listener: SparkListener): Unit
 }

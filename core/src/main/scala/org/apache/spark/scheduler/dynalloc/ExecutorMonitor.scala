@@ -458,8 +458,6 @@ private[spark] class ExecutorMonitor(
 
   override def checkpointCleaned(rddId: Long): Unit = { }
 
-  override def listenerCleaned(listener: SparkListener): Unit = {}
-
   // Visible for testing.
   private[dynalloc] def isExecutorIdle(id: String): Boolean = {
     Option(executors.get(id)).map(_.isIdle).getOrElse(throw new NoSuchElementException(id))
