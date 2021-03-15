@@ -2998,15 +2998,12 @@ private[spark] object Utils extends Logging {
 
   /** Create a new properties object with the same values as `props` */
   def cloneProperties(props: Properties): Properties = {
+    if (props == null) {
+      return props
+    }
     val resultProps = new Properties()
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
-  }
-
-  /** Create a new properties object with the same values as `props` while handling null case */
-  def clonePropertiesOrNull(props: Properties): Properties = props match {
-    case null => null
-    case _ => cloneProperties(props)
   }
 
   /**

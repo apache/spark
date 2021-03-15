@@ -894,7 +894,7 @@ private[spark] class DAGScheduler(
       timeout: Long,
       properties: Properties): PartialResult[R] = {
     val jobId = nextJobId.getAndIncrement()
-    val clonedProperties = Utils.clonePropertiesOrNull(properties)
+    val clonedProperties = Utils.cloneProperties(properties)
     if (rdd.partitions.isEmpty) {
       // Return immediately if the job is running 0 tasks
       val time = clock.getTimeMillis()
@@ -1168,7 +1168,7 @@ private[spark] class DAGScheduler(
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
     listenerBus.post(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos,
-        Utils.clonePropertiesOrNull(properties)))
+        Utils.cloneProperties(properties)))
     submitStage(finalStage)
   }
 
@@ -1207,7 +1207,7 @@ private[spark] class DAGScheduler(
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
     listenerBus.post(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos,
-        Utils.clonePropertiesOrNull(properties)))
+        Utils.cloneProperties(properties)))
     submitStage(finalStage)
 
     // If the whole stage has already finished, tell the listener and remove it
@@ -1341,7 +1341,7 @@ private[spark] class DAGScheduler(
       case NonFatal(e) =>
         stage.makeNewStageAttempt(partitionsToCompute.size)
         listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo,
-          Utils.clonePropertiesOrNull(properties)))
+          Utils.cloneProperties(properties)))
         abortStage(stage, s"Task creation failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage
         return
@@ -1356,7 +1356,7 @@ private[spark] class DAGScheduler(
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     }
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo,
-      Utils.clonePropertiesOrNull(properties)))
+      Utils.cloneProperties(properties)))
 
     // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
     // Broadcasted binary for the task, used to dispatch tasks to executors. Note that we broadcast
