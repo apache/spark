@@ -193,50 +193,86 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   /**
-   * The implementation for these joins:
-   *
-   *   LeftSemi with BuildRight
-   *   LeftAnti with BuildRight
+   * The implementation for LeftSemi and LeftAnti joins.
    */
   private def leftExistenceJoin(
       relation: Broadcast[Array[InternalRow]],
       exists: Boolean): RDD[InternalRow] = {
-    assert(buildSide == BuildRight)
-    streamed.execute().mapPartitionsInternal { streamedIter =>
-      val buildRows = relation.value
-      val joinedRow = new JoinedRow
+    buildSide match {
+      case BuildRight =>
+        streamed.execute().mapPartitionsInternal { streamedIter =>
+          val buildRows = relation.value
+          val joinedRow = new JoinedRow
 
-      if (condition.isDefined) {
-        streamedIter.filter(l =>
-          buildRows.exists(r => boundCondition(joinedRow(l, r))) == exists
-        )
-      } else if (buildRows.nonEmpty == exists) {
-        streamedIter
-      } else {
-        Iterator.empty
-      }
+          if (condition.isDefined) {
+            streamedIter.filter(l =>
+              buildRows.exists(r => boundCondition(joinedRow(l, r))) == exists
+            )
+          } else if (buildRows.nonEmpty == exists) {
+            streamedIter
+          } else {
+            Iterator.empty
+          }
+        }
+      case BuildLeft if condition.isEmpty =>
+        // If condition is empty, do not need to read rows from streamed side at all.
+        // Only need to know whether streamed side is empty or not.
+        val streamExists = !streamed.execute().isEmpty()
+        if (streamExists == exists) {
+          sparkContext.makeRDD(relation.value)
+        } else {
+          sparkContext.emptyRDD
+        }
+      case _ => // BuildLeft
+        val matchedBroadcastRows = getMatchedBroadcastRowsBitSet(streamed.execute(), relation)
+        val buf: CompactBuffer[InternalRow] = new CompactBuffer()
+        var i = 0
+        val buildRows = relation.value
+        while (i < buildRows.length) {
+          if (matchedBroadcastRows.get(i) == exists) {
+            buf += buildRows(i).copy()
+          }
+          i += 1
+        }
+        sparkContext.makeRDD(buf)
     }
   }
 
+  /**
+   * The implementation for ExistenceJoin
+   */
   private def existenceJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
-    assert(buildSide == BuildRight)
-    streamed.execute().mapPartitionsInternal { streamedIter =>
-      val buildRows = relation.value
-      val joinedRow = new JoinedRow
+    buildSide match {
+      case BuildRight =>
+        streamed.execute().mapPartitionsInternal { streamedIter =>
+          val buildRows = relation.value
+          val joinedRow = new JoinedRow
 
-      if (condition.isDefined) {
-        val resultRow = new GenericInternalRow(Array[Any](null))
-        streamedIter.map { row =>
-          val result = buildRows.exists(r => boundCondition(joinedRow(row, r)))
-          resultRow.setBoolean(0, result)
-          joinedRow(row, resultRow)
+          if (condition.isDefined) {
+            val resultRow = new GenericInternalRow(Array[Any](null))
+            streamedIter.map { row =>
+              val result = buildRows.exists(r => boundCondition(joinedRow(row, r)))
+              resultRow.setBoolean(0, result)
+              joinedRow(row, resultRow)
+            }
+          } else {
+            val resultRow = new GenericInternalRow(Array[Any](buildRows.nonEmpty))
+            streamedIter.map { row =>
+              joinedRow(row, resultRow)
+            }
+          }
         }
-      } else {
-        val resultRow = new GenericInternalRow(Array[Any](buildRows.nonEmpty))
-        streamedIter.map { row =>
-          joinedRow(row, resultRow)
+      case _ => // BuildLeft
+        val matchedBroadcastRows = getMatchedBroadcastRowsBitSet(streamed.execute(), relation)
+        val buf: CompactBuffer[InternalRow] = new CompactBuffer()
+        var i = 0
+        val buildRows = relation.value
+        while (i < buildRows.length) {
+          val result = new GenericInternalRow(Array[Any](matchedBroadcastRows.get(i)))
+          buf += new JoinedRow(buildRows(i).copy(), result)
+          i += 1
         }
-      }
+        sparkContext.makeRDD(buf)
     }
   }
 
@@ -246,71 +282,10 @@ case class BroadcastNestedLoopJoinExec(
    *   LeftOuter with BuildLeft
    *   RightOuter with BuildRight
    *   FullOuter
-   *   LeftSemi with BuildLeft
-   *   LeftAnti with BuildLeft
-   *   ExistenceJoin with BuildLeft
    */
   private def defaultJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     val streamRdd = streamed.execute()
-
-    val matchedBuildRows = streamRdd.mapPartitionsInternal { streamedIter =>
-      val buildRows = relation.value
-      val matched = new BitSet(buildRows.length)
-      val joinedRow = new JoinedRow
-
-      streamedIter.foreach { streamedRow =>
-        var i = 0
-        while (i < buildRows.length) {
-          if (boundCondition(joinedRow(streamedRow, buildRows(i)))) {
-            matched.set(i)
-          }
-          i += 1
-        }
-      }
-      Seq(matched).toIterator
-    }
-
-    val matchedBroadcastRows = matchedBuildRows.fold(
-      new BitSet(relation.value.length)
-    )(_ | _)
-
-    joinType match {
-      case LeftSemi =>
-        assert(buildSide == BuildLeft)
-        val buf: CompactBuffer[InternalRow] = new CompactBuffer()
-        var i = 0
-        val rel = relation.value
-        while (i < rel.length) {
-          if (matchedBroadcastRows.get(i)) {
-            buf += rel(i).copy()
-          }
-          i += 1
-        }
-        return sparkContext.makeRDD(buf)
-      case _: ExistenceJoin =>
-        val buf: CompactBuffer[InternalRow] = new CompactBuffer()
-        var i = 0
-        val rel = relation.value
-        while (i < rel.length) {
-          val result = new GenericInternalRow(Array[Any](matchedBroadcastRows.get(i)))
-          buf += new JoinedRow(rel(i).copy(), result)
-          i += 1
-        }
-        return sparkContext.makeRDD(buf)
-      case LeftAnti =>
-        val notMatched: CompactBuffer[InternalRow] = new CompactBuffer()
-        var i = 0
-        val rel = relation.value
-        while (i < rel.length) {
-          if (!matchedBroadcastRows.get(i)) {
-            notMatched += rel(i).copy()
-          }
-          i += 1
-        }
-        return sparkContext.makeRDD(notMatched)
-      case _ =>
-    }
-
+    val matchedBroadcastRows = getMatchedBroadcastRowsBitSet(streamRdd, relation)
     val notMatchedBroadcastRows: Seq[InternalRow] = {
       val nulls = new GenericInternalRow(streamed.output.size)
       val buf: CompactBuffer[InternalRow] = new CompactBuffer()
@@ -358,6 +333,34 @@ case class BroadcastNestedLoopJoinExec(
     )
   }
 
+  /**
+   * Get matched rows from broadcast side as a [[BitSet]].
+   * Create a local [[BitSet]] for broadcast side on each RDD partition,
+   * and merge all [[BitSet]]s together.
+   */
+  private def getMatchedBroadcastRowsBitSet(
+      streamRdd: RDD[InternalRow],
+      relation: Broadcast[Array[InternalRow]]): BitSet = {
+    val matchedBuildRows = streamRdd.mapPartitionsInternal { streamedIter =>
+      val buildRows = relation.value
+      val matched = new BitSet(buildRows.length)
+      val joinedRow = new JoinedRow
+
+      streamedIter.foreach { streamedRow =>
+        var i = 0
+        while (i < buildRows.length) {
+          if (boundCondition(joinedRow(streamedRow, buildRows(i)))) {
+            matched.set(i)
+          }
+          i += 1
+        }
+      }
+      Seq(matched).toIterator
+    }
+
+    matchedBuildRows.fold(new BitSet(relation.value.length))(_ | _)
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val broadcastedRelation = broadcast.executeBroadcast[Array[InternalRow]]()
 
@@ -366,20 +369,17 @@ case class BroadcastNestedLoopJoinExec(
         innerJoin(broadcastedRelation)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) =>
         outerJoin(broadcastedRelation)
-      case (LeftSemi, BuildRight) =>
+      case (LeftSemi, _) =>
         leftExistenceJoin(broadcastedRelation, exists = true)
-      case (LeftAnti, BuildRight) =>
+      case (LeftAnti, _) =>
         leftExistenceJoin(broadcastedRelation, exists = false)
-      case (_: ExistenceJoin, BuildRight) =>
+      case (_: ExistenceJoin, _) =>
         existenceJoin(broadcastedRelation)
       case _ =>
         /**
          * LeftOuter with BuildLeft
          * RightOuter with BuildRight
          * FullOuter
-         * LeftSemi with BuildLeft
-         * LeftAnti with BuildLeft
-         * ExistenceJoin with BuildLeft
          */
         defaultJoin(broadcastedRelation)
     }
