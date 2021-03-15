@@ -217,7 +217,7 @@ case class BroadcastNestedLoopJoinExec(
       case BuildLeft if condition.isEmpty =>
         // If condition is empty, do not need to read rows from streamed side at all.
         // Only need to know whether streamed side is empty or not.
-        val streamExists = !streamed.execute().isEmpty()
+        val streamExists = !streamed.executeTake(1).isEmpty
         if (streamExists == exists) {
           sparkContext.makeRDD(relation.value)
         } else {
