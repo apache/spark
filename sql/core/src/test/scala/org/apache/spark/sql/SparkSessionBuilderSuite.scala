@@ -20,15 +20,12 @@ package org.apache.spark.sql
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
-import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{CleanerListener, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.util.ExecutionListenerBus
 import org.apache.spark.util.ThreadUtils
 
 /**
