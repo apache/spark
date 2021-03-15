@@ -464,18 +464,13 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
         Assignment(UnresolvedAttribute("a"), UnresolvedAttribute("source.a")),
         Assignment(UnresolvedAttribute("m"), UnresolvedAttribute("source.m"))
       )
-      val matchedCond = expr.transform {
-        case UnresolvedAttribute(nameParts) => new UnresolvedAttribute("target" +: nameParts)
-        case e => e
-      }
-      val notMatchedCond = expr.transform {
+      val cond = expr.transform {
         case UnresolvedAttribute(nameParts) => new UnresolvedAttribute("source" +: nameParts)
         case e => e
       }
-      val matchedActions = UpdateAction(Some(matchedCond), assignments) ::
-        DeleteAction(Some(matchedCond)) :: Nil
-      val notMatchedActions = InsertAction(Some(notMatchedCond), assignments) :: Nil
-      MergeIntoTable(target, source, matchedCond, matchedActions, notMatchedActions)
+      val matchedActions = UpdateAction(Some(cond), assignments) :: DeleteAction(Some(cond)) :: Nil
+      val notMatchedActions = InsertAction(Some(cond), assignments) :: Nil
+      MergeIntoTable(target, source, cond, matchedActions, notMatchedActions)
     }
     test(func, originalCond, expectedCond)
   }
