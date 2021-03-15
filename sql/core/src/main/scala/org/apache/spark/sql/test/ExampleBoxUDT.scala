@@ -30,10 +30,11 @@ import org.apache.spark.sql.types.{DataType, DoubleType, SQLUserDefinedType, Str
  * @param ymax y-coordinate of the bottom-right of the box.
  */
 @SQLUserDefinedType(udt = classOf[ExampleBoxUDT])
-private[sql] class ExampleBox(val xmin: Double,
-                              val ymin: Double,
-                              val xmax: Double,
-                              val ymax: Double) extends Serializable {
+private[sql] class ExampleBox(
+    val xmin: Double,
+    val ymin: Double,
+    val xmax: Double,
+    val ymax: Double) extends Serializable {
 
   override def hashCode(): Int = {
     var hash = 13
