@@ -101,7 +101,7 @@ trait AnalysisTest extends PlanTest {
       caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val actualPlan = getAnalyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
-      val transformed = actualPlan transformUp {
+      val transformed = EliminateSubqueryAliases(actualPlan) transformUp {
         case v: View if v.isTempViewStoringAnalyzedPlan => v.child
       }
       comparePlans(transformed, expectedPlan)
