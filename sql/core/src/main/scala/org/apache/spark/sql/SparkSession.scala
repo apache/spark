@@ -103,7 +103,7 @@ class SparkSession private(
         new SparkSessionExtensions), Map.empty)
   }
 
-  val sessionUUID: String = UUID.randomUUID.toString
+  private[sql] val sessionUUID: String = UUID.randomUUID.toString
 
   sparkContext.assertNotStopped()
 
