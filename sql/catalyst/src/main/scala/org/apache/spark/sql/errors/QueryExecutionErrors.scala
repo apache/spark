@@ -293,15 +293,6 @@ object QueryExecutionErrors {
     new IllegalStateException("table stats must be specified.")
   }
 
-  def unaryMinusCauseOverflowError(originValue: Short): ArithmeticException = {
-    new ArithmeticException(s"- $originValue caused overflow.")
-  }
-
-  def binaryArithmeticCauseOverflowError(
-      eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
-    new ArithmeticException(s"$eval1 $symbol $eval2 caused overflow.")
-  }
-
   def failedSplitSubExpressionMsg(length: Int): String = {
     "Failed to split subexpression code into small functions because " +
       s"the parameter length of at least one split function went over the JVM limit: $length"

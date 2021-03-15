@@ -61,7 +61,7 @@ case class UnaryMinus(
         s"""
            |$javaType $originValue = ($javaType)($eval);
            |if ($originValue == $javaBoxedType.MIN_VALUE) {
-           |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($originValue);
+           |  throw new ArithmeticException("${dataType.simpleString} overflow");
            |}
            |${ev.value} = ($javaType)(-($originValue));
            """.stripMargin
@@ -206,8 +206,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
           val javaType = CodeGenerator.boxedType(dataType)
           s"""
              |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
-             |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(
-             |  $eval1, "$symbol", $eval2);
+             |  throw new ArithmeticException("${dataType.simpleString} overflow");
              |}
            """.stripMargin
         } else {
