@@ -48,7 +48,7 @@ case class ShowPartitionsExec(
     val schema = table.partitionSchema()
     val len = schema.length
     val partitions = new Array[String](len)
-    val timeZoneId = SQLConf.get.sessionLocalTimeZone
+    val timeZoneId = conf.sessionLocalTimeZone
     val output = partitionIdentifiers.map { row =>
       var i = 0
       while (i < len) {

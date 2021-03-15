@@ -74,7 +74,7 @@ case class CreateTempViewUsing(
       userSpecifiedSchema.map(_ + " ").getOrElse("") +
       s"replace:$replace " +
       s"provider:$provider " +
-      SQLConf.get.redactOptions(options)
+      conf.redactOptions(options)
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
