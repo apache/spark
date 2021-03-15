@@ -105,7 +105,7 @@ _virtual_operator_infos = [
                  "WHEN 2 THEN 'two' END FROM VALUES 1, 2, 3;\n      " +
                  " one\n      " +
                  " two\n      " +
-                 " NULL" ,
+                 " NULL",
         note="",
         since="1.0.1",
         deprecated=""),
