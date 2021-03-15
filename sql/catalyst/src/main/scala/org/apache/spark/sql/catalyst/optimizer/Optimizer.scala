@@ -630,11 +630,12 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * Pushes down [[LocalLimit]] beneath WINDOW.
  */
 object LimitPushDownThroughWindow extends Rule[LogicalPlan] {
-  // The window frame of RankLike and RowNumberLike is UNBOUNDED PRECEDING to CURRENT ROW.
+  // The window frame of RankLike and RowNumberLike can only be UNBOUNDED PRECEDING to CURRENT ROW.
   private def supportsPushdownThroughWindow(
       windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
     case Alias(WindowExpression(_: RankLike | _: RowNumberLike,
-        WindowSpecDefinition(Nil, _, _)), _) => true
+        WindowSpecDefinition(Nil, _,
+          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) => true
     case _ => false
   }
 
