@@ -1556,6 +1556,32 @@ case class TimestampAddYMInterval(
   }
 }
 
+// Adds a day-time interval to a timestamp
+case class TimestampAddDTInterval(timestamp: Expression, interval: Expression)
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
+
+  override def left: Expression = timestamp
+  override def right: Expression = interval
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, DayTimeIntervalType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullSafeEval(timestamp: Any, interval: Any): Any = {
+    Math.addExact(
+      timestamp.asInstanceOf[TimestampType.InternalType],
+      interval.asInstanceOf[DayTimeIntervalType.InternalType])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (timestamp, interval) => {
+      s"""java.lang.Math.addExact($timestamp, $interval)"""
+    })
+  }
+}
+
 /**
  * Returns number of months between times `timestamp1` and `timestamp2`.
  * If `timestamp1` is later than `timestamp2`, then the result is positive.
