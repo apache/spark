@@ -1741,6 +1741,13 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
 
 /**
  * Replaces logical [[Intersect]] operator with a left-semi [[Join]] operator.
+ * If [[SQLConf.pushdownDistinctInSetOperations]] = false:
+ * {{{
+ *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2
+ *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT SEMI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
+ * }}}
+ *
+ * If [[SQLConf.pushdownDistinctInSetOperations]] = true:
  * {{{
  *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2 ==>
  *   SELECT a1, a2 FROM
@@ -1756,9 +1763,9 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
  *    join conditions will be incorrect.
  */
 object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
-  private def maybeAddDistinct(logicalPlan: LogicalPlan) = logicalPlan match {
+  private def pushDownDistinct(logicalPlan: LogicalPlan) = logicalPlan match {
     case _: Distinct => logicalPlan
-    case Aggregate(groups, aggs, _) if groups.equals(aggs) => logicalPlan
+    case a: Aggregate if a.isEquallyDistinct => logicalPlan
     case _ => Distinct(logicalPlan)
   }
 
@@ -1766,20 +1773,31 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
     case Intersect(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Join(
-        maybeAddDistinct(left),
-        maybeAddDistinct(right),
-        LeftSemi,
-        joinCond.reduceLeftOption(And),
-        JoinHint.NONE)
+        .reduceLeftOption(And)
+      if (conf.pushdownDistinctInSetOperations) {
+        Join(pushDownDistinct(left), pushDownDistinct(right), LeftSemi, joinCond, JoinHint.NONE)
+      } else {
+        Distinct(Join(left, right, LeftSemi, joinCond, JoinHint.NONE))
+      }
   }
 }
 
 /**
  * Replaces logical [[Except]] operator with a left-anti [[Join]] operator.
+ * If [[SQLConf.pushdownDistinctInSetOperations]] = false:
  * {{{
  *   SELECT a1, a2 FROM Tab1 EXCEPT SELECT b1, b2 FROM Tab2
  *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT ANTI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
+ * }}}
+ *
+ * If [[SQLConf.pushdownDistinctInSetOperations]] = true:
+ * {{{
+ *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2 ==>
+ *   SELECT a1, a2 FROM
+ *     (SELECT DISTINCT a1, a2 FROM Tab1)
+ *   LEFT ANTI JOIN
+ *     (SELECT DISTINCT b1, b2 FROM Tab2)
+ *   ON a1<=>b1 AND a2<=>b2
  * }}}
  *
  * Note:
@@ -1788,11 +1806,22 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
  *    join conditions will be incorrect.
  */
 object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
+  private def pushDownDistinct(logicalPlan: LogicalPlan) = logicalPlan match {
+    case _: Distinct => logicalPlan
+    case a: Aggregate if a.isEquallyDistinct => logicalPlan
+    case _ => Distinct(logicalPlan)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Except(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And), JoinHint.NONE))
+        .reduceLeftOption(And)
+      if (conf.pushdownDistinctInSetOperations) {
+        Join(pushDownDistinct(left), pushDownDistinct(right), LeftAnti, joinCond, JoinHint.NONE)
+      } else {
+        Distinct(Join(left, right, LeftAnti, joinCond, JoinHint.NONE))
+      }
   }
 }
 

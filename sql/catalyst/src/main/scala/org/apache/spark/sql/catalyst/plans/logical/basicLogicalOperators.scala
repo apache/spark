@@ -659,6 +659,12 @@ case class Aggregate(
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
   }
+
+  // Whether this Aggregate operator is equally the Distinct operator.
+  private[sql] def isEquallyDistinct: Boolean = {
+    groupingExpressions.size == aggregateExpressions.size &&
+      groupingExpressions.zip(aggregateExpressions).forall(e => e._1.semanticEquals(e._2))
+  }
 }
 
 case class Window(
