@@ -142,8 +142,14 @@ class ParquetToSparkSchemaConverter(
           case _: DateLogicalTypeAnnotation => DateType
           case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_INT_DIGITS)
           case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
+            intTypeAnnotation.getBitWidth match {
+              case 8 => typeNotSupported()
+              case 16 => typeNotSupported()
+              case 32 => typeNotSupported()
+              case _ => illegalType()
+            }
+          case t: TimestampLogicalTypeAnnotation if t.getUnit == TimeUnit.MILLIS =>
             typeNotImplemented()
-          case _: TimestampLogicalTypeAnnotation => typeNotImplemented()
           case _ => illegalType()
         }
 
@@ -155,7 +161,7 @@ class ParquetToSparkSchemaConverter(
               case _ => illegalType()
             }
           case null => LongType
-          case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_INT_DIGITS)
+          case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_LONG_DIGITS)
           case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
             intTypeAnnotation.getBitWidth match {
               case 64 => typeNotSupported()
