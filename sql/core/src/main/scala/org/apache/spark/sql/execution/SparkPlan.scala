@@ -517,7 +517,7 @@ trait LeafExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
   override def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(conf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
     val outputStr = s"${ExplainUtils.generateFieldString("Output", output)}"
 
     if (argumentString.nonEmpty) {
