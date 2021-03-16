@@ -209,21 +209,4 @@ public class TaskMemoryManagerSuite {
     Assert.assertSame(MemoryMode.OFF_HEAP, manager.tungstenMemoryMode);
   }
 
-  @Test
-  public void memoryModeOfMemoryConsumerShouldRespectMemoryManager() {
-    final SparkConf conf1 = new SparkConf()
-      .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), true)
-      .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 1024L);
-    final TestMemoryManager onHeapMemoryManager = new TestMemoryManager(conf1);
-    final TaskMemoryManager onHeapTaskManager = new TaskMemoryManager(onHeapMemoryManager, 0);
-    TestMemoryConsumer onHeapConsumer = new TestMemoryConsumer(onHeapTaskManager);
-    Assert.assertSame(MemoryMode.OFF_HEAP, onHeapConsumer.getMode());
-
-    final SparkConf conf2 = new SparkConf()
-      .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
-    final TestMemoryManager offHeapMemoryManager = new TestMemoryManager(conf2);
-    final TaskMemoryManager offHeapTaskManager = new TaskMemoryManager(offHeapMemoryManager, 0);
-    TestMemoryConsumer offHeapConsumer = new TestMemoryConsumer(offHeapTaskManager);
-    Assert.assertSame(MemoryMode.ON_HEAP, offHeapConsumer.getMode());
-  }
 }

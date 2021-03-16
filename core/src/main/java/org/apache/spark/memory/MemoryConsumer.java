@@ -41,10 +41,7 @@ public abstract class MemoryConsumer {
   }
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager) {
-    // SPARK-34089: Use configured memory mode from TaskMemoryManager when the MemoryMode
-    // is not explicitly specified.
-    this(taskMemoryManager, taskMemoryManager.pageSizeBytes(),
-      taskMemoryManager.getTungstenMemoryMode());
+    this(taskMemoryManager, taskMemoryManager.pageSizeBytes(), MemoryMode.ON_HEAP);
   }
 
   /**
