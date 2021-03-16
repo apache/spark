@@ -342,6 +342,9 @@ class Analyzer(override val catalogManager: CatalogManager)
           case (YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
           case (TimestampType, YearMonthIntervalType) => TimestampAddYMInterval(l, r)
           case (YearMonthIntervalType, TimestampType) => TimestampAddYMInterval(r, l)
+          case (TimestampType, DayTimeIntervalType) => TimestampAddDTInterval(l, r)
+          case (DayTimeIntervalType, TimestampType) => TimestampAddDTInterval(r, l)
+
           case (CalendarIntervalType, CalendarIntervalType) => a
           case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
@@ -356,6 +359,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
           case (TimestampType, YearMonthIntervalType) =>
             DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, f)))
+          case (TimestampType, DayTimeIntervalType) =>
+            DatetimeSub(l, r, TimestampAddDTInterval(l, UnaryMinus(r, f)))
+
           case (CalendarIntervalType, CalendarIntervalType) => s
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))

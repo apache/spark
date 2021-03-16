@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
+import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.Locale
 
@@ -2524,6 +2525,50 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
       assert(e.getMessage.contains("long overflow"))
+    }
+  }
+
+  test("SPARK-34761: add/subtract a day-time interval to/from a timestamp") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingZoneIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
+          Seq(
+            ("1900-01-01T00:00:00.123456000Z", Duration.ofDays(0)) ->
+              "1900-01-01T00:00:00.123456000Z",
+            ("1970-01-01T00:00:00.1Z", Duration.ofDays(-1)) -> "1969-12-31T00:00:00.1Z",
+            ("2021-03-14T01:02:03Z", Duration.ofDays(1)) -> "2021-03-15T01:02:03Z",
+            ("2020-12-31T23:59:59.999Z", Duration.ofDays(2 * 30).plusMillis(1)) ->
+              "2021-03-02T00:00:00Z",
+            ("2020-03-16T00:00:00.000001Z", Duration.of(-1, ChronoUnit.MICROS)) ->
+              "2020-03-16T00:00:00Z",
+            ("2020-02-29T12:13:14Z", Duration.ofDays(365)) -> "2021-02-28T12:13:14Z",
+            ("1582-10-04T01:02:03.04Z", Duration.ofDays(10).plusMillis(60)) ->
+              "1582-10-14T01:02:03.1Z"
+          ).foreach { case ((instantStr, duration), expected) =>
+            val ts = Instant.parse(instantStr)
+            val result = Instant.parse(expected)
+            val df = Seq((ts, duration, result)).toDF("ts", "interval", "result")
+            checkAnswer(
+              df.select($"ts" + $"interval", $"interval" + $"ts", $"result" - $"interval"),
+              Row(result, result, ts))
+
+          }
+        }
+      }
+
+      Seq(
+        "2021-03-16T18:56:00Z" -> "ts + i",
+        "1900-03-16T18:56:00Z" -> "ts - i").foreach { case (instant, op) =>
+        val e = intercept[SparkException] {
+          Seq(
+            (Instant.parse(instant), Duration.of(Long.MaxValue, ChronoUnit.MICROS)))
+            .toDF("ts", "i")
+            .selectExpr(op)
+            .collect()
+        }.getCause
+        assert(e.isInstanceOf[ArithmeticException])
+        assert(e.getMessage.contains("long overflow"))
+      }
     }
   }
 }
