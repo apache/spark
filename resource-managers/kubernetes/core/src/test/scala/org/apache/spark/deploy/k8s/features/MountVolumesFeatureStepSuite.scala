@@ -36,6 +36,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     roleSecretEnvNamesToKeyRefs = Map.empty,
     roleEnvs = Map.empty,
     roleVolumes = Nil,
+    Nil,
     sparkFiles = Nil)
 
   test("Mounts hostPath volumes") {
