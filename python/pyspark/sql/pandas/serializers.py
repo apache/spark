@@ -162,7 +162,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         def create_array(s, dt: DataType, t: pa.DataType):
-            mask = s.isnull()
             if isinstance(dt, UserDefinedType):
                 s = s.apply(dt.serialize)
             elif isinstance(dt, ArrayType) and isinstance(dt.elementType, UserDefinedType):
@@ -177,7 +176,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             elif is_categorical_dtype(s.dtype):
                 # Note: This can be removed once minimum pyarrow version is >= 0.16.1
                 s = s.astype(s.dtypes.categories.dtype)
+
             try:
+                mask = s.isnull()
                 if t is not None and pa.types.is_list(t):
                     array = pa.StructArray.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
                 else:
