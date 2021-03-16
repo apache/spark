@@ -61,8 +61,8 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
     // the child of the view.
     case v @ View(desc, _, output, child) if child.resolved && !v.sameOutput(child) =>
       // Use the stored view query output column names to find the matching attributes. The column
-      // names may have duplication, e.g. `CREATE VIEW v AS SELECT 1 col, 2 col`. We need to make
-      // sure the that matching attributes have the same number of duplications, and pick the
+      // names may have duplication, e.g. `CREATE VIEW v(x, y) AS SELECT 1 col, 2 col`. We need to
+      // make sure the that matching attributes have the same number of duplications, and pick the
       // corresponding attribute by ordinal.
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
@@ -82,17 +82,18 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
             normalized, child.output.filter(attr => resolver(attr.name, colName)))
           if (matchedCols.length - 1 < count) {
             throw new AnalysisException(s"The SQL query of view ${desc.identifier} has an " +
-              s"incompatible schema change and column $colName cannot be resolved.")
+              s"incompatible schema change and column $colName cannot be resolved. Expect " +
+              s"more attributes named $colName")
           }
-          val col = matchedCols(count)
           nameToCounts(normalized) = count + 1
-          col
+          matchedCols(count)
         }
 
         nameToCounts.foreach { case (colName, count) =>
           if (count > 1 && nameToMatchedCols(colName).length != count) {
             throw new AnalysisException(s"The SQL query of view ${desc.identifier} has an " +
-              s"incompatible schema change and column $colName cannot be resolved.")
+              s"incompatible schema change and column $colName cannot be resolved. Expect " +
+              s"less attributes named $colName")
           }
         }
 
