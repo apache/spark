@@ -83,7 +83,7 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
           if (matchedCols.length - 1 < count) {
             throw new AnalysisException(s"The SQL query of view ${desc.identifier} has an " +
               s"incompatible schema change and column $colName cannot be resolved. Expect " +
-              s"more attributes named $colName")
+              s"more attributes named $colName in ${child.output.mkString("[", ",", "]")}")
           }
           nameToCounts(normalized) = count + 1
           matchedCols(count)
@@ -93,7 +93,7 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
           if (count > 1 && nameToMatchedCols(colName).length != count) {
             throw new AnalysisException(s"The SQL query of view ${desc.identifier} has an " +
               s"incompatible schema change and column $colName cannot be resolved. Expect " +
-              s"less attributes named $colName")
+              s"less attributes named $colName in ${child.output.mkString("[", ",", "]")}")
           }
         }
 
