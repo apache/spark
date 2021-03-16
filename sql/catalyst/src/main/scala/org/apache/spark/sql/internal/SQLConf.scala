@@ -1470,7 +1470,9 @@ object SQLConf {
   val STREAMING_SESSION_WINDOW_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.sessionWindow.stateFormatVersion")
       .internal()
-      .doc("")
+      .doc("State format version used by streaming session window in a streaming query. " +
+        "State between versions are tend to be incompatible, so state format version shouldn't " +
+        "be modified after running.")
       .version("3.2.0")
       .intConf
       .checkValue(v => Set(1).contains(v), "Valid version is 1")

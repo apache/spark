@@ -310,7 +310,8 @@ object AggUtils {
         SessionWindowMergeExec(
           windowExpressions.head.asInstanceOf[NamedExpression],
           sessionSpecAttribute,
-          SessionWindowStateStoreRestoreExec(sessionSpecAttribute, None, partialAggregate)))
+          SessionWindowStateStoreRestoreExec(sessionSpecAttribute,
+            windowExpressions.head, None, partialAggregate)))
     } else {
       val partialMerged1: SparkPlan = {
         val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))

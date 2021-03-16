@@ -451,6 +451,7 @@ case class StateStoreSaveExec(
  */
 case class SessionWindowStateStoreRestoreExec(
     keyExpressions: Seq[Attribute],
+    timeExpression: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader {
@@ -475,12 +476,13 @@ case class SessionWindowStateStoreRestoreExec(
       stateStoreCoord) { case (partitionId, iter) =>
 
       val stateStoreManager = StreamingSessionWindowStateManager.createStateManager(
-        keyExpressions, child.output, child.output, stateInfo, storeConf,
+        keyExpressions, timeExpression, child.output, child.output, stateInfo, storeConf,
         hadoopConfBcast.value.value, partitionId, stateVersion)
 
       var preKey: UnsafeRow = null
       iter.flatMap { row =>
         val key = stateStoreManager.getKey(row)
+        val startTime = stateStoreManager.getStartTime(row)
         var savedState: Seq[UnsafeRow] = null
 
         // For one key, we only get once from state store.

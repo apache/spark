@@ -150,7 +150,7 @@ class IncrementalExecution(
              UnaryExecNode(agg,
                SessionWindowMergeExec(exp,
                 sessionSpec,
-                  SessionWindowStateStoreRestoreExec(sessionSpec2, None, child)))) =>
+                  SessionWindowStateStoreRestoreExec(spec, t, None, child)))) =>
         val aggStateInfo = nextStatefulOperationStateInfo
         SessionWindowStateStoreSaveExec(
           keys,
@@ -161,7 +161,7 @@ class IncrementalExecution(
             SessionWindowMergeExec(
               exp,
               sessionSpec,
-                SessionWindowStateStoreRestoreExec(sessionSpec2, Some(aggStateInfo), child))::Nil))
+                SessionWindowStateStoreRestoreExec(spec, t, Some(aggStateInfo), child))::Nil))
 
       case StreamingDeduplicateExec(keys, child, None, None) =>
         StreamingDeduplicateExec(

@@ -26,18 +26,21 @@ import org.apache.spark._
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class StreamingSessionWindowStateManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
   val keySchema = StructType(Seq(StructField("key", StringType, true)))
+  val timeSchema = StructType(Seq(StructField("startTime", TimestampType, true),
+    StructField("endTime", TimestampType, true)))
   val inputSchema = StructType(Seq(
     StructField("key", StringType, true),
     StructField("value", IntegerType, true)))
   val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
 
   val keyAttributes = keySchema.toAttributes
+  val timeAttribute = timeSchema.toAttributes.head
   val inputRowAttributes = inputSchema.toAttributes
   val inputValueAttributes = valueSchema.toAttributes
 
@@ -123,7 +126,7 @@ class StreamingSessionWindowStateManagerSuite extends SparkFunSuite with BeforeA
     val hadoopConf: Configuration = new Configuration
 
     StreamingSessionWindowStateManager.createStateManager(
-      keyAttributes, inputValueAttributes, inputRowAttributes,
+      keyAttributes, timeAttribute, inputValueAttributes, inputRowAttributes,
       Some(stateInfo), storeConf, hadoopConf, partitionId = 0, stateFormatVersion = formatVersion)
   }
 }

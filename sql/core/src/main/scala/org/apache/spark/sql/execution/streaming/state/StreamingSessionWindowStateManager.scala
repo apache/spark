@@ -32,6 +32,8 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
 
   def getKey(row: InternalRow): UnsafeRow
 
+  def getStartTime(row: InternalRow): Long
+
   /**
    * Returns a list of states for the key. These states are candidates for session window
    * merging.
@@ -54,6 +56,7 @@ object StreamingSessionWindowStateManager {
 
   def createStateManager(
       keyAttributes: Seq[Attribute],
+      timeAttribute: Attribute,
       inputValueAttributes: Seq[Attribute],
       inputRowAttributes: Seq[Attribute],
       stateInfo: Option[StatefulOperatorStateInfo],
@@ -63,7 +66,7 @@ object StreamingSessionWindowStateManager {
       stateFormatVersion: Int): StreamingSessionWindowStateManager = {
     stateFormatVersion match {
       case 1 => new StreamingSessionWindowStateManagerImplV1(
-        keyAttributes, inputValueAttributes, inputRowAttributes,
+        keyAttributes, timeAttribute, inputValueAttributes, inputRowAttributes,
         stateInfo, storeConf, hadoopConf, partitionId)
       case _ => throw new IllegalArgumentException(s"Version $stateFormatVersion is invalid")
     }
@@ -79,6 +82,7 @@ object StreamingSessionWindowStateManager {
 
 abstract class StreamingSessionWindowStateManagerBaseImpl(
     protected val keyAttributes: Seq[Attribute],
+    protected val timeAttribute: Attribute,
     protected val inputRowAttributes: Seq[Attribute]) extends StreamingSessionWindowStateManager {
 
   protected val keySchema = StructType.fromAttributes(keyAttributes)
@@ -87,18 +91,34 @@ abstract class StreamingSessionWindowStateManagerBaseImpl(
   protected lazy val keyProjector =
     UnsafeProjection.create(keyAttributes, inputRowAttributes)
 
+  protected lazy val timeProjector =
+    UnsafeProjection.create(Seq(timeAttribute), inputRowAttributes)
+
   override def getKey(row: InternalRow): UnsafeRow = keyProjector(row)
+
+  override def getStartTime(row: InternalRow): Long =
+    timeProjector(row).getStruct(0, 2).getLong(0)
 }
 
+/**
+ * This implementation stores the states of session window as two state stores.
+ *
+ * `KeyToStartTimesStore`: the key is session window grouping key. The value is a list of start
+ * time of session windows of the key.
+ * `KeyWithStartTimeToValueStore`: the key is a tuple of grouping key and start time. The value
+ * is the aggregated row for the specific session window.
+ */
 class StreamingSessionWindowStateManagerImplV1(
     keyExpressions: Seq[Attribute],
+    timeExpression: Attribute,
     inputValueAttributes: Seq[Attribute],
     inputRowAttributes: Seq[Attribute],
     stateInfo: Option[StatefulOperatorStateInfo],
     storeConf: StateStoreConf,
     hadoopConf: Configuration,
     partitionId: Int)
-  extends StreamingSessionWindowStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
+  extends StreamingSessionWindowStateManagerBaseImpl(
+    keyExpressions, timeExpression, inputRowAttributes) {
 
   /*
   =====================================================
@@ -106,9 +126,11 @@ class StreamingSessionWindowStateManagerImplV1(
   =====================================================
    */
 
+  // TODO: We may be optimized to only retrieve the candidate states that are possibly
+  // overlapping with the given key and start time.
   override def getCandidateStates(key: UnsafeRow): Seq[UnsafeRow] = {
-    keyToStartTimes.get(key).map { startTime =>
-      val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
+    keyToStartTimes.get(key).map { candidataSt =>
+      val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, candidataSt)
       keyWithStartTimeToValue.get(keyWithStartTime)
     }
   }
