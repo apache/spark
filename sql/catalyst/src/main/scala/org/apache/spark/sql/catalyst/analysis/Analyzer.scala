@@ -340,6 +340,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         case a @ Add(l, r, f) if a.childrenResolved => (l.dataType, r.dataType) match {
           case (DateType, YearMonthIntervalType) => DateAddYMInterval(l, r)
           case (YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
+          case (TimestampType, YearMonthIntervalType) => TimestampAddYMInterval(l, r)
+          case (YearMonthIntervalType, TimestampType) => TimestampAddYMInterval(r, l)
           case (CalendarIntervalType, CalendarIntervalType) => a
           case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
@@ -352,6 +354,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         case s @ Subtract(l, r, f) if s.childrenResolved => (l.dataType, r.dataType) match {
           case (DateType, YearMonthIntervalType) =>
             DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
+          case (TimestampType, YearMonthIntervalType) =>
+            DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, f)))
           case (CalendarIntervalType, CalendarIntervalType) => s
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
@@ -1632,11 +1636,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
 
         val resolvedGroupingExprs = a.groupingExpressions
-          .map(resolveExpressionByPlanChildren(_, planForResolve, trimAlias = true))
+          .map(resolveExpressionByPlanChildren(_, planForResolve))
           .map(trimTopLevelGetStructFieldAlias)
 
         val resolvedAggExprs = a.aggregateExpressions
-          .map(resolveExpressionByPlanChildren(_, planForResolve, trimAlias = true))
+          .map(resolveExpressionByPlanChildren(_, planForResolve))
             .map(_.asInstanceOf[NamedExpression])
 
         a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
@@ -1648,15 +1652,15 @@ class Analyzer(override val catalogManager: CatalogManager)
       // of GetStructField here.
       case g: GroupingSets =>
         val resolvedSelectedExprs = g.selectedGroupByExprs
-          .map(_.map(resolveExpressionByPlanChildren(_, g, trimAlias = true))
+          .map(_.map(resolveExpressionByPlanChildren(_, g))
             .map(trimTopLevelGetStructFieldAlias))
 
         val resolvedGroupingExprs = g.groupByExprs
-          .map(resolveExpressionByPlanChildren(_, g, trimAlias = true))
+          .map(resolveExpressionByPlanChildren(_, g))
           .map(trimTopLevelGetStructFieldAlias)
 
         val resolvedAggExprs = g.aggregations
-          .map(resolveExpressionByPlanChildren(_, g, trimAlias = true))
+          .map(resolveExpressionByPlanChildren(_, g))
             .map(_.asInstanceOf[NamedExpression])
 
         g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
@@ -1895,7 +1899,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       plan: LogicalPlan,
       resolveColumnByName: Seq[String] => Option[Expression],
       resolveColumnByOrdinal: Int => Attribute,
-      trimAlias: Boolean,
       throws: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
       if (e.resolved) return e
@@ -1903,18 +1906,15 @@ class Analyzer(override val catalogManager: CatalogManager)
         case f: LambdaFunction if !f.bound => f
         case GetColumnByOrdinal(ordinal, _) => resolveColumnByOrdinal(ordinal)
         case u @ UnresolvedAttribute(nameParts) =>
-          val resolved = withPosition(u) {
-            resolveColumnByName(nameParts)
-              .orElse(resolveLiteralFunction(nameParts, u, plan))
-              .getOrElse(u)
-          }
-          val result = resolved match {
-            // When trimAlias = true, we will trim unnecessary alias of `GetStructField` and
-            // we won't trim the alias of top-level `GetStructField`. Since we will call
-            // CleanupAliases later in Analyzer, trim non top-level unnecessary alias of
-            // `GetStructField` here is safe.
-            case Alias(s: GetStructField, _) if trimAlias && !isTopLevel => s
-            case others => others
+          val result = withPosition(u) {
+            resolveColumnByName(nameParts).map {
+              // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
+              // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
+              // can trim the top-level alias if it's safe to do so. Since we will call
+              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
+              case Alias(child, _) if !isTopLevel => child
+              case other => other
+            }.orElse(resolveLiteralFunction(nameParts, u, plan)).getOrElse(u)
           }
           logDebug(s"Resolving $u to $result")
           result
@@ -1962,7 +1962,6 @@ class Analyzer(override val catalogManager: CatalogManager)
         assert(ordinal >= 0 && ordinal < plan.output.length)
         plan.output(ordinal)
       },
-      trimAlias = false,
       throws = throws)
   }
 
@@ -1972,16 +1971,11 @@ class Analyzer(override val catalogManager: CatalogManager)
    *
    * @param e The expression need to be resolved.
    * @param q The LogicalPlan whose children are used to resolve expression's attribute.
-   * @param trimAlias When true, trim unnecessary alias of GetStructField`. Note that,
-   *                  we cannot trim the alias of top-level `GetStructField`, as we should
-   *                  resolve `UnresolvedAttribute` to a named expression. The caller side
-   *                  can trim the alias of top-level `GetStructField` if it's safe to do so.
    * @return resolved Expression.
    */
   def resolveExpressionByPlanChildren(
       e: Expression,
-      q: LogicalPlan,
-      trimAlias: Boolean = false): Expression = {
+      q: LogicalPlan): Expression = {
     resolveExpression(
       e,
       q,
@@ -1989,11 +1983,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         q.resolveChildren(nameParts, resolver)
       },
       resolveColumnByOrdinal = ordinal => {
-        val candidates = q.children.flatMap(_.output)
-        assert(ordinal >= 0 && ordinal < candidates.length)
-        candidates.apply(ordinal)
+        assert(q.children.length == 1)
+        assert(ordinal >= 0 && ordinal < q.children.head.output.length)
+        q.children.head.output(ordinal)
       },
-      trimAlias = trimAlias,
       throws = true)
   }
 

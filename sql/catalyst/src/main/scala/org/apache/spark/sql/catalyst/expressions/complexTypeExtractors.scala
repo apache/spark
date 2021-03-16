@@ -455,6 +455,9 @@ case class GetMapValue(
   override def sql: String = s"${child.sql}[${key.sql}]"
   override def name: Option[String] = key match {
     case NonNullLiteral(s, StringType) => Some(s.toString)
+    // For GetMapValue(Attr("a"), "b") that is resolved from `a.b`, the string "b" may be casted to
+    // the map key type by type coercion rules. We can still get the name "b".
+    case Cast(NonNullLiteral(s, StringType), _, _) => Some(s.toString)
     case _ => None
   }
 
