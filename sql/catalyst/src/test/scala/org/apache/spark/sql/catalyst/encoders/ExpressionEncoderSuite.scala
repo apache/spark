@@ -278,7 +278,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
         .OuterLevelWithVeryVeryVeryLongClassName18
         .OuterLevelWithVeryVeryVeryLongClassName19
         .OuterLevelWithVeryVeryVeryLongClassName20)
-    encodeDecodeTest(
+    checkCompilationError(
       OuterLevelWithVeryVeryVeryLongClassName1
         .OuterLevelWithVeryVeryVeryLongClassName2
         .OuterLevelWithVeryVeryVeryLongClassName3
@@ -300,7 +300,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
         .OuterLevelWithVeryVeryVeryLongClassName19
         .OuterLevelWithVeryVeryVeryLongClassName20
         .MalformedNameExample(42),
-      "deeply nested Scala class should work")
+      "deeply nested Scala class")
   }
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
