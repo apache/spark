@@ -1861,25 +1861,13 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Literal functions do not require the user to specify braces when calling them
    * When an attributes is not resolvable, we try to resolve it as a literal function.
    */
-  private def resolveLiteralFunction(
-      nameParts: Seq[String],
-      attribute: UnresolvedAttribute,
-      plan: LogicalPlan): Option[Expression] = {
+  private def resolveLiteralFunction(nameParts: Seq[String]): Option[NamedExpression] = {
     if (nameParts.length != 1) return None
-    val isNamedExpression = plan match {
-      case Aggregate(_, aggregateExpressions, _) => aggregateExpressions.contains(attribute)
-      case GroupingSets(_, _, _, aggregateExpressions) => aggregateExpressions.contains(attribute)
-      case Project(projectList, _) => projectList.contains(attribute)
-      case Window(windowExpressions, _, _, _) => windowExpressions.contains(attribute)
-      case _ => false
-    }
-    val wrapper: (Expression, String) => Expression =
-      if (isNamedExpression) (f, n) => Alias(f, n)() else (f, _) => f
     val name = nameParts.head
-    val func = literalFunctions.find { case (fn, _, _) => caseInsensitiveResolution(fn, name) }
-    func.map { case (_, f, fn) =>
-      val funcExpr = f()
-      wrapper(funcExpr, fn(funcExpr))
+    literalFunctions.find(func => caseInsensitiveResolution(func._1, name)).map {
+      case (_, getFuncExpr, getAliasName) =>
+        val funcExpr = getFuncExpr()
+        Alias(funcExpr, getAliasName(funcExpr))()
     }
   }
 
@@ -1896,7 +1884,6 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   private def resolveExpression(
       expr: Expression,
-      plan: LogicalPlan,
       resolveColumnByName: Seq[String] => Option[Expression],
       resolveColumnByOrdinal: Int => Attribute,
       throws: Boolean): Expression = {
@@ -1907,14 +1894,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         case GetColumnByOrdinal(ordinal, _) => resolveColumnByOrdinal(ordinal)
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
-            resolveColumnByName(nameParts).map {
+            resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
               // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
               // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
               // can trim the top-level alias if it's safe to do so. Since we will call
               // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
               case Alias(child, _) if !isTopLevel => child
               case other => other
-            }.orElse(resolveLiteralFunction(nameParts, u, plan)).getOrElse(u)
+            }.getOrElse(u)
           }
           logDebug(s"Resolving $u to $result")
           result
@@ -1954,7 +1941,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       throws: Boolean = false): Expression = {
     resolveExpression(
       expr,
-      plan,
       resolveColumnByName = nameParts => {
         plan.resolve(nameParts, resolver)
       },
@@ -1978,7 +1964,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       q: LogicalPlan): Expression = {
     resolveExpression(
       e,
-      q,
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, resolver)
       },
