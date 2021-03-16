@@ -41,6 +41,7 @@ df.show()
 
 // Read a csv with delimiter
 val df2 = spark.read.options(Map("delimiter"->";")).csv(path)
+df2.show()
 // +-----+---+---------+
 // |  _c0|_c1|      _c2|
 // +-----+---+---------+
@@ -51,7 +52,7 @@ val df2 = spark.read.options(Map("delimiter"->";")).csv(path)
 
 // Read a csv with delimiter and a header
 val df3 = spark.read.options(Map("delimiter"->";","header"->"true")).csv(path)
-df.show()
+df3.show()
 // +-----+---+---------+
 // | name|age|      job|
 // +-----+---+---------+
@@ -59,7 +60,7 @@ df.show()
 // |  Bob| 32|Developer|
 // +-----+---+---------+
 
-df2.write.csv("output")
+df3.write.csv("output")
 // "output" is a folder which contains multiple csv files and a _SUCCESS file.
 
 {% endhighlight %}
