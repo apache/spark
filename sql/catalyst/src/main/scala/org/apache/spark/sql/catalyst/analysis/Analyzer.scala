@@ -948,7 +948,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           .getOrElse(u)
     }
 
-    def lookupTempView(
+    private def lookupTempView(
         identifier: Seq[String],
         isStreaming: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
@@ -966,7 +966,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       tmpView
     }
 
-    def lookupAndResolveTempView(
+    private def lookupAndResolveTempView(
         identifier: Seq[String],
         isStreaming: Boolean = false): Option[LogicalPlan] = {
       lookupTempView(identifier, isStreaming).map(ResolveRelations.resolveViews)
