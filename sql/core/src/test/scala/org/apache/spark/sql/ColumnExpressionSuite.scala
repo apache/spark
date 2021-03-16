@@ -18,8 +18,8 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 import org.apache.hadoop.io.{LongWritable, Text}
