@@ -29,4 +29,12 @@ Spark SQL provides `spark.read.csv("file_name")` to read a CSV file into Spark D
 
 </div>
 
+<div data-lang="python"  markdown="1">
+
+PySpark provides `spark.read.csv("file_name")` to read a CSV file into Spark DataFrame and `dataframe.write.csv("path")` to save or write to the CSV file. Spark supports reading pipe, comma, tab, or any other delimiter/seperator files.
+
+{% include_example csv_dataset python/sql/datasource.py %}
+
+</div>
+
 </div>

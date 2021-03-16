@@ -234,6 +234,49 @@ def json_dataset_example(spark):
     # $example off:json_dataset$
 
 
+def csv_dataset_example(spark):
+    # $example on:csv_dataset$
+    # spark is from the previous example
+    sc = spark.sparkContext
+
+    path = "examples/src/main/resources/people.csv"
+
+    df = spark.read.csv(path)
+    df.show()
+    # +------------------+
+    # |               _c0|
+    # +------------------+
+    # |      name;age;job|
+    # |Jorge;30;Developer|
+    # |  Bob;32;Developer|
+    # +------------------+
+
+    # Read a csv with delimiter, the default delimiter is ","
+    df2 = spark.read.options(delimiter=';').csv(path)
+    df2.show()
+    # +-----+---+---------+
+    # |  _c0|_c1|      _c2|
+    # +-----+---+---------+
+    # | name|age|      job|
+    # |Jorge| 30|Developer|
+    # |  Bob| 32|Developer|
+    # +-----+---+---------+
+
+    # Read a csv with delimiter and a header
+    df3 = spark.read.options(delimiter=';').options(header=True).csv(path)
+    df3.show()
+    # +-----+---+---------+
+    # | name|age|      job|
+    # +-----+---+---------+
+    # |Jorge| 30|Developer|
+    # |  Bob| 32|Developer|
+    # +-----+---+---------+
+
+    df3.write.csv("output")
+    # "output" is a folder which contains multiple csv files and a _SUCCESS file.
+    # $example off:csv_dataset$
+
+
 def jdbc_dataset_example(spark):
     # $example on:jdbc_dataset$
     # Note: JDBC loading and saving can be achieved via either the load/save or jdbc methods
@@ -292,6 +335,7 @@ if __name__ == "__main__":
     parquet_example(spark)
     parquet_schema_merging_example(spark)
     json_dataset_example(spark)
+    csv_dataset_example(spark)
     jdbc_dataset_example(spark)
 
     spark.stop()
