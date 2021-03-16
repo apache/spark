@@ -159,7 +159,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .limit(20)
+      .limit(2)
 
     comparePlans(
       Optimize.execute(originalQuery.analyze),

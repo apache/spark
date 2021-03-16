@@ -627,37 +627,6 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath WINDOW.
- */
-object LimitPushDownThroughWindow extends Rule[LogicalPlan] {
-  // The window frame of RankLike and RowNumberLike can only be UNBOUNDED PRECEDING to CURRENT ROW.
-  private def supportsPushdownThroughWindow(
-      windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
-    case Alias(WindowExpression(_: RankLike | _: RowNumberLike,
-        WindowSpecDefinition(Nil, _,
-          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) => true
-    case _ => false
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
-    case LocalLimit(limitExpr @ IntegerLiteral(limit),
-        window @ Window(windowExpressions, Nil, orderSpec, child))
-      if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
-        limit < conf.topKSortFallbackThreshold =>
-      // Sort is needed here because we need global sort.
-      window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child)))
-    // There is a Project between LocalLimit and Window if they do not have the same output.
-    case LocalLimit(limitExpr @ IntegerLiteral(limit), project @ Project(_,
-        window @ Window(windowExpressions, Nil, orderSpec, child)))
-      if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
-        limit < conf.topKSortFallbackThreshold =>
-      // Sort is needed here because we need global sort.
-      project.copy(child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
-  }
-}
-
-/**
  * Pushes Project operator to both sides of a Union operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
