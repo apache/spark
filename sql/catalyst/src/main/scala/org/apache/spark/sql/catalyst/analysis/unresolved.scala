@@ -544,6 +544,17 @@ case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpr
   override lazy val resolved = false
 }
 
+case class GetViewColumnByNameAndOrdinal(
+    viewName: String,
+    colName: String,
+    ordinal: Int,
+    expectedNumCandidates: Int)
+  extends LeafExpression with Unevaluable with NonSQLExpression {
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved = false
+}
+
 /**
  * Represents unresolved ordinal used in order by or group by.
  *
