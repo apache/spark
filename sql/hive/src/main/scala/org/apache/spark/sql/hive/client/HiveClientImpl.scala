@@ -156,11 +156,11 @@ private[hive] class HiveClientImpl(
   }
 
   private def closeState(): Unit = {
-    // these temp files are registered in o.a.h.u.ShutdownHookManager too
-    // the state.close() will delete them if they are not null and try remove them
-    // from the o.a.h.u.ShutdownHookManager which causes IllegalStateException
-    // we delete them ahead with a high priority hook here and set them to null to
-    // bypass the deletion in state.close()
+    // These temp files are registered in o.a.h.u.ShutdownHookManager too during state start.
+    // The state.close() will delete them if they are not null and try remove them from the
+    // o.a.h.u.ShutdownHookManager which causes undesirable IllegalStateException.
+    // We delete them ahead with a high priority hook here and set them to null to bypass the
+    // deletion in state.close().
     if (state.getTmpOutputFile != null) {
       state.getTmpOutputFile.delete()
       state.setTmpOutputFile(null)
