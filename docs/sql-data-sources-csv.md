@@ -25,45 +25,7 @@ license: |
 
 Spark SQL provides `spark.read.csv("file_name")` to read a CSV file into Spark DataFrame and `dataframe.write.csv("path")` to save or write to the CSV file. Spark supports reading pipe, comma, tab, or any other delimiter/seperator files.
 
-{% highlight scala %}
-import spark.implicits._
-val path = "src/main/resources/people.csv"
-
-val df = spark.read.csv(path)
-df.show()
-// +------------------+
-// |               _c0|
-// +------------------+
-// |      name;age;job|
-// |Jorge;30;Developer|
-// |  Bob;32;Developer|
-// +------------------+
-
-// Read a csv with delimiter
-val df2 = spark.read.options(Map("delimiter"->";")).csv(path)
-df2.show()
-// +-----+---+---------+
-// |  _c0|_c1|      _c2|
-// +-----+---+---------+
-// | name|age|      job|
-// |Jorge| 30|Developer|
-// |  Bob| 32|Developer|
-// +-----+---+---------+
-
-// Read a csv with delimiter and a header
-val df3 = spark.read.options(Map("delimiter"->";","header"->"true")).csv(path)
-df3.show()
-// +-----+---+---------+
-// | name|age|      job|
-// +-----+---+---------+
-// |Jorge| 30|Developer|
-// |  Bob| 32|Developer|
-// +-----+---+---------+
-
-df3.write.csv("output")
-// "output" is a folder which contains multiple csv files and a _SUCCESS file.
-
-{% endhighlight %}
+{% include_example csv_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 
 </div>
 
