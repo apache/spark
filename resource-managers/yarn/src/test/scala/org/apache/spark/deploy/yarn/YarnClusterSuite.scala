@@ -26,7 +26,6 @@ import scala.concurrent.duration._
 import scala.io.Source
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.concurrent.Eventually._
@@ -373,7 +372,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   test("SPARK-34472: ivySettings file should be localized on driver in cluster mode") {
 
     val emptyIvySettings = File.createTempFile("ivy", ".xml")
-    FileUtils.write(emptyIvySettings, "<ivysettings />", StandardCharsets.UTF_8)
+    Files.write("<ivysettings />", emptyIvySettings, StandardCharsets.UTF_8)
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,
@@ -625,7 +624,7 @@ private object YarnAddJarTest extends Logging {
       }
       if (caught.getMessage.contains("unresolved dependency: org.fake-project.test#test")) {
         // "unresolved dependency" is expected as the dependency does not exist
-        // but exception like "Ivy settings file <file> does not exist should result in failure"
+        // but exception like "Ivy settings file <file> does not exist" should result in failure
         result = "success"
       }
     } finally {

@@ -21,6 +21,7 @@ import java.io.{FileSystem => _, _}
 import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -30,7 +31,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -576,7 +576,7 @@ private[spark] class Client(
             jarsDir.listFiles().foreach { f =>
               if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
                 jarsStream.putNextEntry(new ZipEntry(f.getName))
-                Files.copy(f, jarsStream)
+                Files.copy(f.toPath, jarsStream)
                 jarsStream.closeEntry()
               }
             }
@@ -764,7 +764,7 @@ private[spark] class Client(
             if url.getProtocol == "file" } {
         val file = new File(url.getPath())
         confStream.putNextEntry(new ZipEntry(file.getName()))
-        Files.copy(file, confStream)
+        Files.copy(file.toPath, confStream)
         confStream.closeEntry()
       }
 
@@ -775,7 +775,7 @@ private[spark] class Client(
       hadoopConfFiles.foreach { case (name, file) =>
         if (file.canRead()) {
           confStream.putNextEntry(new ZipEntry(s"$LOCALIZED_HADOOP_CONF_DIR/$name"))
-          Files.copy(file, confStream)
+          Files.copy(file.toPath, confStream)
           confStream.closeEntry()
         }
       }
@@ -795,20 +795,22 @@ private[spark] class Client(
 
       // Upload user provided ivysettings.xml file to the distributed cache
       val ivySettings = sparkConf.getOption("spark.jars.ivySettings")
-      if (isClusterMode && ivySettings.isDefined) {
-        val ivySettingsFile = new File(ivySettings.get)
-        require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
-        require(ivySettingsFile.isFile(),
-          s"Ivy settings file $ivySettingsFile is not a normal file")
-        // Generate a file name that can be used for the ivySettings file, that does not conflict
-        // with any other conf file.
-        val amIvySettingsFileName = ivySettingsFile.getName() + "-" + UUID.randomUUID().toString
-        confStream.putNextEntry(new ZipEntry(amIvySettingsFileName))
-        Files.copy(ivySettingsFile, confStream)
-        confStream.closeEntry()
+      ivySettings match {
+        case Some(ivySettingsPath) if isClusterMode && !Utils.isLocalUri(ivySettingsPath) =>
+          val ivySettingsFile = new File(ivySettingsPath)
+          require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
+          require(ivySettingsFile.isFile(),
+            s"Ivy settings file $ivySettingsFile is not a normal file")
+          // Generate a file name that can be used for the ivySettings file, that does not conflict
+          // with any other conf file.
+          val amIvySettingsFileName = ivySettingsFile.getName() + "-" + UUID.randomUUID().toString
+          confStream.putNextEntry(new ZipEntry(amIvySettingsFileName))
+          Files.copy(ivySettingsFile.toPath, confStream)
+          confStream.closeEntry()
 
-        // Override the ivySettings file name with the name of the distributed file
-        props.setProperty("spark.jars.ivySettings", s"$LOCALIZED_CONF_DIR/$amIvySettingsFileName")
+          // Override the ivySettings file name with the name of the distributed file
+          props.setProperty("spark.jars.ivySettings", s"$LOCALIZED_CONF_DIR/$amIvySettingsFileName")
+        case _ => // do nothing
       }
 
 
