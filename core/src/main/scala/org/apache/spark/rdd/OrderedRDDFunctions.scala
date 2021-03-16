@@ -78,8 +78,8 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
       self.mapPartitions(iter => {
         val context = TaskContext.get()
         val sorter = new ExternalSorter[K, V, V](context, None, None, Some(ordering))
-        sorter.insertAll(iter)
-        new InterruptibleIterator(context, sorter.completionIterator.asInstanceOf[Iterator[(K, V)]])
+        new InterruptibleIterator(context,
+          sorter.insertAllAndUpdateMetrics(iter).asInstanceOf[Iterator[(K, V)]])
       }, preservesPartitioning = true)
     } else {
       new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)

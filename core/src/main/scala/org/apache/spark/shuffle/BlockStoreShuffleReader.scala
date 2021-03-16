@@ -125,8 +125,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
         // Create an ExternalSorter to sort the data.
         val sorter =
           new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = dep.serializer)
-        sorter.insertAll(aggregatedIter)
-        sorter.completionIterator
+        sorter.insertAllAndUpdateMetrics(aggregatedIter)
       case None =>
         aggregatedIter
     }

@@ -673,18 +673,18 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   /**
-   * Return an iterator over all the data written to this object, aggregated by our aggregator.
-   * On task completion (success, failure, or cancellation), it updates related task metrics,
-   * and releases resources by calling `stop()`.
+   * Insert all records, updates related task metrics, and return a completion iterator
+   * over all the data written to this object, aggregated by our aggregator.
+   * On task completion (success, failure, or cancellation), it releases resources by
+   * calling `stop()`.
    */
-  def completionIterator: Iterator[Product2[K, C]] = {
+  def insertAllAndUpdateMetrics(records: Iterator[Product2[K, V]]): Iterator[Product2[K, C]] = {
+    insertAll(records)
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
     // Use completion callback to stop sorter if task was finished/cancelled.
-    context.addTaskCompletionListener[Unit](_ => {
-      stop()
-    })
+    context.addTaskCompletionListener[Unit](_ => stop())
     CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](iterator, stop())
   }
 
