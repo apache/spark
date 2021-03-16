@@ -425,7 +425,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("(a + b).b", ('a + 'b).getField("b")) // This will fail analysis.
     assertEqual(
       "struct(a, b).b",
-      namedStruct(NamePlaceholder, 'a, NamePlaceholder, 'b).getField("b"))
+      namedStruct(Literal("a"), 'a, Literal("b"), 'b).getField("b"))
   }
 
   test("reference") {
