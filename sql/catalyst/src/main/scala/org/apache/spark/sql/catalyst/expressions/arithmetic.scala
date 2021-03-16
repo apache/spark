@@ -160,25 +160,15 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
     case _: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
 
-    case _: ByteType if failOnError =>
+    case ByteType | ShortType if failOnError =>
+      val javaBoxedType = CodeGenerator.boxedType(dataType)
+      val javaType = CodeGenerator.javaType(dataType)
       nullSafeCodeGen(ctx, ev, eval =>
         s"""
-          |if ($eval == ${Byte.MinValue}) {
-          |  throw new ArithmeticException("byte overflow");
+          |if ($eval == $javaBoxedType.MIN_VALUE) {
+          |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($eval);
           |} else if ($eval < 0) {
-          |  ${ev.value} = -$eval;
-          |} else {
-          |  ${ev.value} = $eval;
-          |}
-          |""".stripMargin)
-
-    case _: ShortType if failOnError =>
-      nullSafeCodeGen(ctx, ev, eval =>
-        s"""
-          |if ($eval == ${Short.MinValue}) {
-          |  throw new ArithmeticException("short overflow");
-          |} else if ($eval < 0) {
-          |  ${ev.value} = -$eval;
+          |  ${ev.value} = ($javaType)-$eval;
           |} else {
           |  ${ev.value} = $eval;
           |}
