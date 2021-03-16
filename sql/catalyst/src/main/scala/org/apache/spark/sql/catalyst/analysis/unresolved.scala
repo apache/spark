@@ -206,8 +206,13 @@ object UnresolvedAttribute {
       val char = name(i)
       if (inBacktick) {
         if (char == '`') {
-          inBacktick = false
-          if (i + 1 < name.length && name(i + 1) != '.') throw e
+          if (i + 1 < name.length && name(i + 1) == '`') {
+            tmp += '`'
+            i += 1
+          } else {
+            inBacktick = false
+            if (i + 1 < name.length && name(i + 1) != '.') throw e
+          }
         } else {
           tmp += char
         }
