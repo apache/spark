@@ -89,22 +89,26 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      assert(plainSchema(outputTypes) == actualDataTypes,
+      assert(plainSchemaSeq(outputTypes) == actualDataTypes,
         "Incompatible schema from pandas_udf: " +
           s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
       batch.rowIterator.asScala
     }
   }
 
-  private def plainSchema(schema: Seq[DataType]): Seq[DataType] =
-    schema.map(v => plainSchema(v, false)).toList
+  private def plainSchemaSeq(schema: Seq[DataType]): Seq[DataType] = {
+    schema.map(v => ArrowEvalPythonExec.plainSchema(v)).toList
+  }
 
+}
+
+object ArrowEvalPythonExec {
   /**
    * Erase User-Defined Types and returns the plain Spark StructType instead.
    * @note
    * PyArrow returns `ArrayType` with `containsNull=true`
    */
-  private def plainSchema(schema: DataType, useArrowContainsNull: Boolean = false): DataType = {
+  def plainSchema(schema: DataType, useArrowContainsNull: Boolean = false): DataType = {
     schema match {
       case dt: UserDefinedType[_] => plainSchema(dt.sqlType, useArrowContainsNull = true)
       case StructType(fields) => StructType(
@@ -119,5 +123,4 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       case _ => schema
     }
   }
-
 }
