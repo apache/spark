@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -163,7 +163,7 @@ To use a custom metrics.properties for the application master and executors, upd
     Please note that this feature can be used only with YARN 3.0+
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
-    Example: 
+    Example:
     To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu.amount</code>
   </td>
   <td>3.0.0</td>
@@ -185,10 +185,10 @@ To use a custom metrics.properties for the application master and executors, upd
     Please note that this feature can be used only with YARN 3.0+
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
-    Example: 
+    Example:
     To request GPU resources from YARN, use: <code>spark.yarn.driver.resource.yarn.io/gpu.amount</code>
   </td>
-  <td>3.0.0</td> 
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.executor.resource.{resource-type}.amount</code></td>
@@ -198,7 +198,7 @@ To use a custom metrics.properties for the application master and executors, upd
     Please note that this feature can be used only with YARN 3.0+
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
-    Example: 
+    Example:
     To request GPU resources from YARN, use: <code>spark.yarn.executor.resource.yarn.io/gpu.amount</code>
   </td>
   <td>3.0.0</td>
@@ -219,7 +219,7 @@ To use a custom metrics.properties for the application master and executors, upd
     Only used in <code>cluster</code> mode. Time for the YARN Application Master to wait for the
     SparkContext to be initialized.
   </td>
- <td>1.3.0</td> 
+ <td>1.3.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.submit.file.replication</code></td>
@@ -235,7 +235,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>
     Staging directory used while submitting applications.
   </td>
- <td>2.0.0</td> 
+ <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.preserve.staging.files</code></td>
@@ -243,7 +243,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>
     Set to <code>true</code> to preserve the staged files (Spark jar, app jar, distributed cache files) at the end of the job rather than delete them.
   </td>
-  <td>1.1.0</td> 
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.scheduler.heartbeat.interval-ms</code></td>
@@ -409,12 +409,12 @@ To use a custom metrics.properties for the application master and executors, upd
 <tr>
   <td><code>spark.yarn.populateHadoopClasspath</code></td>
   <td>
-    For <code>with-hadoop</code> Spark distribution, this is set to false; 
+    For <code>with-hadoop</code> Spark distribution, this is set to false;
     for <code>no-hadoop</code> distribution, this is set to true.
   </td>
   <td>
     Whether to populate Hadoop classpath from <code>yarn.application.classpath</code> and
-    <code>mapreduce.application.classpath</code> Note that if this is set to <code>false</code>, 
+    <code>mapreduce.application.classpath</code> Note that if this is set to <code>false</code>,
     it requires a <code>with-Hadoop</code> Spark distribution that bundles Hadoop runtime or
     user has to provide a Hadoop installation separately.
   </td>
@@ -427,7 +427,7 @@ To use a custom metrics.properties for the application master and executors, upd
   The maximum number of attempts that will be made to submit the application.
   It should be no larger than the global number of max attempts in the YARN configuration.
   </td>
-  <td>1.3.0</td> 
+  <td>1.3.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.am.attemptFailuresValidityInterval</code></td>
@@ -572,7 +572,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.metrics.namespace</code></td>
   <td>(none)</td>
   <td>
-  The root namespace for AM metrics reporting. 
+  The root namespace for AM metrics reporting.
   If it is not set then the YARN application ID is used.
   </td>
   <td>2.4.0</td>
@@ -773,7 +773,26 @@ The following extra configuration options are available when the shuffle service
     NodeManagers where the Spark Shuffle Service is not running.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.shuffle.service.metrics.namespace</code></td>
+  <td><code>sparkShuffleService</code></td>
+  <td>
+    The namespace to use when emitting shuffle service metrics into Hadoop metrics2 system of the
+    NodeManager.
+  </td>
+</tr>
 </table>
+
+Please note that the instructions above assume that the default shuffle service name,
+`spark_shuffle`, has been used. It is possible to use any name here, but the values used in the
+YARN NodeManager configurations must match the value of `spark.shuffle.service.name` in the
+Spark application.
+
+The shuffle service will, by default, take all of its configurations from the Hadoop Configuration
+used by the NodeManager (e.g. `yarn-site.xml`). However, it is also possible to configure the
+shuffle service independently using a file named `spark-shuffle-site.xml` which should be placed
+onto the classpath of the NodeManager. The shuffle service will treat this as a standard Hadoop
+Configuration resource and overlay it on top of the NodeManager's configuration.
 
 # Launching your application with Apache Oozie
 
@@ -823,3 +842,52 @@ do the following:
   to the list of filters in the <code>spark.ui.filters</code> configuration.
 
 Be aware that the history server information may not be up-to-date with the application's state.
+
+# Running multiple versions of the Spark Shuffle Service
+
+In some cases it may be desirable to run multiple instances of the Spark Shuffle Service which are
+using different versions of Spark. This can be helpful, for example, when running a YARN cluster
+with a mixed workload of applications running multiple Spark versions, since a given version of
+the shuffle service is not always compatible with other versions of Spark. YARN versions since 2.9.0
+support the ability to run shuffle services within an isolated classloader
+(see [YARN-4577](https://issues.apache.org/jira/browse/YARN-4577)), meaning multiple Spark versions
+can coexist within a single NodeManager. The
+`yarn.nodemanager.aux-services.<service-name>.classpath` and, starting from YARN 2.10.2/3.1.1/3.2.0,
+`yarn.nodemanager.aux-services.<service-name>.remote-classpath` options can be used to configure
+this. In addition to setting up separate classpaths, it's necessary to ensure the two versions
+advertise to different ports. This can be achieved using the `spark-shuffle-site.xml` file described
+above. For example, you may have configuration like:
+
+```properties
+  yarn.nodemanager.aux-services = spark_shuffle_x,spark_shuffle_y
+  yarn.nodemanager.aux-services.spark_shuffle_x.classpath = /path/to/spark-x-yarn-shuffle.jar,/path/to/spark-x-config
+  yarn.nodemanager.aux-services.spark_shuffle_y.classpath = /path/to/spark-y-yarn-shuffle.jar,/path/to/spark-y-config
+```
+
+The two `spark-*-config` directories each contain one file, `spark-shuffle-site.xml`. These are XML
+files in the [Hadoop Configuration format](https://hadoop.apache.org/docs/r3.2.0/api/org/apache/hadoop/conf/Configuration.html)
+which each contain a few configurations to adjust the port number and metrics name prefix used:
+```xml
+<configuration>
+  <property>
+    <name>spark.shuffle.service.port</name>
+    <value>7001</value>
+  </property>
+  <property>
+    <name>spark.yarn.shuffle.service.metrics.namespace</name>
+    <value>sparkShuffleServiceX</value>
+  </property>
+</configuration>
+```
+The values should both be different for the two different services.
+
+Then, in the configuration of the Spark applications, one should be configured with:
+```properties
+  spark.shuffle.service.name = spark_shuffle_x
+  spark.shuffle.service.port = 7001
+```
+and one should be configured with:
+```properties
+  spark.shuffle.service.name = spark_shuffle_y
+  spark.shuffle.service.port = <other value>
+```

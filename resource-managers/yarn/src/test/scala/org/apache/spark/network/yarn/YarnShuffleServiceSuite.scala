@@ -413,6 +413,16 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ))
   }
 
+  test("SPARK-34828: metrics should be registered with configured name") {
+    s1 = new YarnShuffleService
+    yarnConfig.set(YarnShuffleService.SPARK_SHUFFLE_SERVICE_METRICS_NAMESPACE_KEY, "fooMetrics")
+    s1.init(yarnConfig)
+
+    val metricsSystem = DefaultMetricsSystem.instance.asInstanceOf[MetricsSystemImpl]
+    assert(metricsSystem.getSource("sparkShuffleService") === null)
+    assert(metricsSystem.getSource("fooMetrics").isInstanceOf[YarnShuffleServiceMetrics])
+  }
+
   test("create default merged shuffle file manager instance") {
     val mockConf = mock(classOf[TransportConf])
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(

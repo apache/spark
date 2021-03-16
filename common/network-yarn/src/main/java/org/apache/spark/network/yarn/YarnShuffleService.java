@@ -19,6 +19,7 @@ package org.apache.spark.network.yarn;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -75,6 +76,15 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * is because an application running on the same Yarn cluster may choose to not use the external
  * shuffle service, in which case its setting of `spark.authenticate` should be independent of
  * the service's.
+ *
+ * The shuffle service will produce metrics via the YARN NodeManager's {@code metrics2} system
+ * under a namespace specified by the {@value SPARK_SHUFFLE_SERVICE_METRICS_NAMESPACE_KEY} config.
+ *
+ * By default, all configurations for the shuffle service will be taken directly from the
+ * Hadoop {@link Configuration} passed by the YARN NodeManager. It is also possible to configure
+ * the shuffle service by placing a resource named
+ * {@value SHUFFLE_SERVICE_CONF_OVERLAY_RESOURCE_NAME} into the classpath, which should be an
+ * XML file in the standard Hadoop Configuration resource format.
  */
 public class YarnShuffleService extends AuxiliaryService {
   private static final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
@@ -82,6 +92,14 @@ public class YarnShuffleService extends AuxiliaryService {
   // Port on which the shuffle server listens for fetch requests
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
   private static final int DEFAULT_SPARK_SHUFFLE_SERVICE_PORT = 7337;
+
+  /**
+   * The namespace to use for the metrics record which will contain all metrics produced by the
+   * shuffle service.
+   */
+  static final String SPARK_SHUFFLE_SERVICE_METRICS_NAMESPACE_KEY =
+      "spark.yarn.shuffle.service.metrics.namespace";
+  private static final String DEFAULT_SPARK_SHUFFLE_SERVICE_METRICS_NAME = "sparkShuffleService";
 
   // Whether the shuffle server should authenticate fetch requests
   private static final String SPARK_AUTHENTICATE_KEY = "spark.authenticate";
@@ -102,6 +120,13 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final String APP_CREDS_KEY_PREFIX = "AppCreds";
   private static final LevelDBProvider.StoreVersion CURRENT_VERSION = new LevelDBProvider
       .StoreVersion(1, 0);
+
+  /**
+   * The name of the resource to search for on the classpath to find a shuffle service-specific
+   * configuration overlay. If found, this will be parsed as a standard Hadoop
+   * {@link Configuration config} file and will override the configs passed from the NodeManager.
+   */
+  static final String SHUFFLE_SERVICE_CONF_OVERLAY_RESOURCE_NAME = "spark-shuffle-site.xml";
 
   // just for integration tests that want to look at this file -- in general not sensible as
   // a static
@@ -157,10 +182,18 @@ public class YarnShuffleService extends AuxiliaryService {
    * Start the shuffle server with the given configuration.
    */
   @Override
-  protected void serviceInit(Configuration conf) throws Exception {
-    _conf = conf;
+  protected void serviceInit(Configuration externalConf) throws Exception {
+    _conf = new Configuration(externalConf);
+    URL confOverlayUrl = Thread.currentThread().getContextClassLoader()
+        .getResource(SHUFFLE_SERVICE_CONF_OVERLAY_RESOURCE_NAME);
+    if (confOverlayUrl != null) {
+      logger.info("Initializing Spark YARN shuffle service with configuration overlay from {}",
+          confOverlayUrl);
+      _conf.addResource(confOverlayUrl);
+    }
+    super.serviceInit(_conf);
 
-    boolean stopOnFailure = conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
+    boolean stopOnFailure = _conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
 
     try {
       // In case this NM was killed while there were running spark applications, we need to restore
@@ -172,7 +205,7 @@ public class YarnShuffleService extends AuxiliaryService {
         registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME);
       }
 
-      TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
+      TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
       MergedShuffleFileManager shuffleMergeManager = newMergedShuffleFileManagerInstance(
         transportConf);
       blockHandler = new ExternalBlockHandler(
@@ -181,7 +214,7 @@ public class YarnShuffleService extends AuxiliaryService {
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
       List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
-      boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
+      boolean authEnabled = _conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
       if (authEnabled) {
         secretManager = new ShuffleSecretManager();
         if (_recoveryPath != null) {
@@ -190,7 +223,7 @@ public class YarnShuffleService extends AuxiliaryService {
         bootstraps.add(new AuthServerBootstrap(transportConf, secretManager));
       }
 
-      int port = conf.getInt(
+      int port = _conf.getInt(
         SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
       transportContext = new TransportContext(transportConf, blockHandler, true);
       shuffleServer = transportContext.createServer(port, bootstraps);
@@ -203,13 +236,16 @@ public class YarnShuffleService extends AuxiliaryService {
       blockHandler.getAllMetrics().getMetrics().put("numRegisteredConnections",
           shuffleServer.getRegisteredConnections());
       blockHandler.getAllMetrics().getMetrics().putAll(shuffleServer.getAllMetrics().getMetrics());
+      String metricsNamespace = _conf.get(SPARK_SHUFFLE_SERVICE_METRICS_NAMESPACE_KEY,
+          DEFAULT_SPARK_SHUFFLE_SERVICE_METRICS_NAME);
       YarnShuffleServiceMetrics serviceMetrics =
-          new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
+          new YarnShuffleServiceMetrics(metricsNamespace, blockHandler.getAllMetrics());
 
       MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
       metricsSystem.register(
-          "sparkShuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
-      logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
+          metricsNamespace, "Metrics on the Spark Shuffle Service", serviceMetrics);
+      logger.info("Registered metrics with Hadoop's DefaultMetricsSystem using namespace '{}'",
+          metricsNamespace);
 
       logger.info("Started YARN shuffle service for Spark on port {}. " +
         "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
