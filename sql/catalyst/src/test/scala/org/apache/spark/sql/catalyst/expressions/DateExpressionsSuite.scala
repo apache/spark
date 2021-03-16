@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.{ParseException, SimpleDateFormat}
-import java.time.{DateTimeException, Instant, LocalDate, Period, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, Period, ZoneId}
 import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -1537,5 +1538,44 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (ts: Expression, interval: Expression) => TimestampAddYMInterval(ts, interval, timeZoneId),
         TimestampType, YearMonthIntervalType)
     }
+  }
+
+  test("SPARK-34761: add a day-time interval to a timestamp") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    checkEvaluation(
+      TimestampAddDTInterval(
+        Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+        Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321))),
+      DateTimeUtils.fromJavaTimestamp(
+        new Timestamp(sdf.parse("2021-01-11 00:10:00.444").getTime)))
+
+    val e = intercept[Exception] {
+      checkEvaluation(
+        TimestampAddDTInterval(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+          Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))),
+        null)
+    }.getCause
+    assert(e.isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("long overflow"))
+
+    checkEvaluation(
+      TimestampAddDTInterval(
+        Literal.create(null, TimestampType),
+        Literal(Duration.ofDays(1))),
+      null)
+    checkEvaluation(
+      TimestampAddDTInterval(
+        Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+        Literal.create(null, DayTimeIntervalType)),
+      null)
+    checkEvaluation(
+      TimestampAddDTInterval(
+        Literal.create(null, TimestampType),
+        Literal.create(null, DayTimeIntervalType)),
+      null)
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (ts: Expression, interval: Expression) => TimestampAddDTInterval(ts, interval),
+      TimestampType, DayTimeIntervalType)
   }
 }
