@@ -36,7 +36,7 @@ function formatStatus(status, type, row) {
         }
         return "Active (Excluded in Stages: [" + row.excludedInStages.join(", ") + "])";
     }
-    return "Dead"
+    return "Dead :" + row.removeReason.join("")
 }
 
 function formatProcessStatus(activeStatus) {
