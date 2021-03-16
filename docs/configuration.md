@@ -114,7 +114,7 @@ in the `spark-defaults.conf` file. A few configuration keys have been renamed si
 versions of Spark; in such cases, the older key names are still accepted, but take lower
 precedence than any instance of the newer key.
 
-Note that Spark properties have different effective timing and they can be divided into two kinds:
+Note that Spark properties have different effective timing and they can be divided into three kinds:
 <table class="table">
 <tr><th>Effect Timing</th><th>Meaning</th><th>Examples</th></tr>
 <tr>
@@ -157,6 +157,19 @@ Note that Spark properties have different effective timing and they can be divid
        <li><code>spark.submit.deployMode</code></li>
        <li><code>spark.eventLog.enabled</code></li>
      </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>Spark Runtime</code></td>
+  <td>
+    Like <code>spark.task.maxFailures</code>, all other properties can be set either way when runtime.
+  </td>
+  <td>
+     The following is examples of such configurations:
+     <ul>
+       <li><code>spark.task.maxFailures</code></li>
+       <li><code>etc...</code></li>
+      </ul>
   </td>
 </tr>
 </table>
