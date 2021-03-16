@@ -191,9 +191,27 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (DateType, TimestampType) => Some(TimestampType)
 
       // When we reach here, input type is not acceptable for any types in this type collection,
-      // try to find the first one we can implicitly cast.
+      // first try to find the all the expected types we can implicitly cast:
+      //   1. if there is no convertible data types, return None;
+      //   2. if there is only one convertible data type, cast input as it;
+      //   3. otherwise if there are multiple convertible data types, find the narrowest common data
+      //      type among them. If there is no such narrowest common data type, return None.
       case (_, TypeCollection(types)) =>
-        types.flatMap(implicitCast(inType, _, isInputFoldable)).headOption
+        val convertibleTypes = types.collect {
+          case t: DataType if implicitCast(inType, t, isInputFoldable).isDefined =>
+            t
+        }
+        if (convertibleTypes.isEmpty) {
+          None
+        } else {
+          // find the narrowest common data type, which can be implicit cast to all other
+          // convertible types.
+          convertibleTypes.find { dt =>
+            convertibleTypes.forall { target =>
+              implicitCast(dt, target, isInputFoldable = false).isDefined
+            }
+          }
+        }
 
       // Implicit cast between array types.
       //

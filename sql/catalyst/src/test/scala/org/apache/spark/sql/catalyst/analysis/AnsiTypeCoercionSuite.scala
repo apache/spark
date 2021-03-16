@@ -366,7 +366,7 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     shouldNotCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType))
 
     shouldNotCastStringInput(TypeCollection(NumericType, BinaryType))
-    shouldCastStringLiteral(TypeCollection(NumericType, BinaryType), DoubleType)
+    shouldNotCastStringLiteral(TypeCollection(NumericType, BinaryType))
 
     shouldCast(
       ArrayType(StringType, false),
