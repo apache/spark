@@ -18,11 +18,14 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.ExampleBoxUDT
+import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types._
 
 class ArrowEvalPythonExecSuite extends SparkFunSuite {
+  import ArrowEvalPythonExec.plainSchema
+
   test("plainSchema: fixed point datatype") {
-    import ArrowEvalPythonExec.plainSchema
     Seq(
       BinaryType, BooleanType, ByteType, NullType,
       StringType, VarcharType(10), CharType(10),
@@ -35,6 +38,13 @@ class ArrowEvalPythonExecSuite extends SparkFunSuite {
     ).foreach { tpe =>
       assert(plainSchema(tpe) == tpe)
     }
+  }
+
+  test("plainSchema: UDT") {
+    assert (plainSchema(new ExamplePointUDT()) === ArrayType(DoubleType, true))
+
+    val exampleBoxUDT = new ExampleBoxUDT()
+    assert (plainSchema(exampleBoxUDT) === exampleBoxUDT.sqlType)
   }
 
   // StructType / ArrayType / MapType
