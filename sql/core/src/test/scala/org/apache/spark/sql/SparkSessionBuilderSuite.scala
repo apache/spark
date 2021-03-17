@@ -64,12 +64,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
     }
 
     var num = listenersNum()
-    // Before GC, the number of ExecutionListenerBus is (1 + 10)
-    assert(num === 11)
     eventually(timeout(10.seconds), interval(1.seconds)) {
       System.gc()
       num = listenersNum()
-      // After GC, the number of ExecutionListenerBus should be less than 11
+      // After GC, the number of ExecutionListenerBus should be less than 11 (we created 11
+      // SparkSessions in total).
       // Since GC can't 100% guarantee all out-of-referenced objects be cleaned at one time,
       // here, we check at least one listener is cleaned up to prove the mechanism works.
       assert(num < 11)
