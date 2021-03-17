@@ -252,7 +252,7 @@ def csv_dataset_example(spark):
     # +------------------+
 
     # Read a csv with delimiter, the default delimiter is ","
-    df2 = spark.read.options(delimiter=';').csv(path)
+    df2 = spark.read.option(delimiter=';').csv(path)
     df2.show()
     # +-----+---+---------+
     # |  _c0|_c1|      _c2|
@@ -263,7 +263,7 @@ def csv_dataset_example(spark):
     # +-----+---+---------+
 
     # Read a csv with delimiter and a header
-    df3 = spark.read.options(delimiter=';').options(header=True).csv(path)
+    df3 = spark.read.option("delimiter", ";").option("header", True).csv(path)
     df3.show()
     # +-----+---+---------+
     # | name|age|      job|
@@ -271,6 +271,9 @@ def csv_dataset_example(spark):
     # |Jorge| 30|Developer|
     # |  Bob| 32|Developer|
     # +-----+---+---------+
+
+    # You can also use options() to use multiple options
+    df3 = spark.read.options(delimiter=";", header=True).csv(path)
 
     df3.write.csv("output")
     # "output" is a folder which contains multiple csv files and a _SUCCESS file.

@@ -247,7 +247,7 @@ object SQLDataSourceExample {
     // +---------------+----+
     // $example off:json_dataset$
   }
-  
+
   private def runCsvDatasetExample(spark: SparkSession): Unit = {
     // $example on:csv_dataset$
     val path = "examples/src/main/resources/people.csv"
@@ -263,7 +263,7 @@ object SQLDataSourceExample {
     // +------------------+
 
     // Read a csv with delimiter, the default delimiter is ","
-    val df2 = spark.read.options(Map("delimiter"->";")).csv(path)
+    val df2 = spark.read.option("delimiter",";").csv(path)
     df2.show()
     // +-----+---+---------+
     // |  _c0|_c1|      _c2|
@@ -274,7 +274,7 @@ object SQLDataSourceExample {
     // +-----+---+---------+
 
     // Read a csv with delimiter and a header
-    val df3 = spark.read.options(Map("delimiter"->";","header"->"true")).csv(path)
+    val df3 = spark.read.option("delimiter", ";").option("header", "true").csv(path)
     df3.show()
     // +-----+---+---------+
     // | name|age|      job|
@@ -282,6 +282,9 @@ object SQLDataSourceExample {
     // |Jorge| 30|Developer|
     // |  Bob| 32|Developer|
     // +-----+---+---------+
+
+    // You can also use options() to use multiple options
+    val df4 = spark.read.options(Map("delimiter"->";", "header"->"true")).csv(path)
 
     df3.write.csv("output")
     // "output" is a folder which contains multiple csv files and a _SUCCESS file.
