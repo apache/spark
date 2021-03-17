@@ -79,3 +79,6 @@ else
   sed_i 's:build/sbt \-Pscala\-'$FROM_VERSION':build/sbt:' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
 fi
 sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
+
+# This is workaround for SPARK-34762
+rm -rf ~/.m2/repository/commons-cli
