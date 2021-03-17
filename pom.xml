@@ -195,7 +195,7 @@
     <htmlunit.version>2.40.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
-    <commons-cli.version>1.4</commons-cli.version>
+    <commons-cli.version>1.2</commons-cli.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
