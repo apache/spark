@@ -2452,6 +2452,17 @@ abstract class CSVSuite
       assert(result.sameElements(exceptResults))
     }
   }
+
+  test("SPARK-34768: counting a long record with ignoreTrailingWhiteSpace set to true") {
+    val bufSize = 128
+    val line = "X" * (bufSize - 1) + "| |"
+    withTempPath { path =>
+      Seq(line).toDF.write.text(path.getAbsolutePath)
+      assert(spark.read.format("csv")
+        .option("delimiter", "|")
+        .option("ignoreTrailingWhiteSpace", "true").load(path.getAbsolutePath).count() == 1)
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
