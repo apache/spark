@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.{DDLUtils, RunnableCommand}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.command.ViewHelper.createTemporaryViewRelation
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -90,12 +91,30 @@ case class CreateTempViewUsing(
       options = options)
 
     val catalog = sparkSession.sessionState.catalog
-    val viewDefinition = Dataset.ofRows(
+    val analyzedPlan = Dataset.ofRows(
       sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan
 
     if (global) {
+      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val viewIdent = TableIdentifier(tableIdent.table, Option(db))
+      val viewDefinition = createTemporaryViewRelation(
+        viewIdent,
+        sparkSession,
+        replace,
+        catalog.getRawGlobalTempView,
+        originalText = None,
+        analyzedPlan,
+        aliasedPlan = analyzedPlan)
       catalog.createGlobalTempView(tableIdent.table, viewDefinition, replace)
     } else {
+      val viewDefinition = createTemporaryViewRelation(
+        tableIdent,
+        sparkSession,
+        replace,
+        catalog.getRawTempView,
+        originalText = None,
+        analyzedPlan,
+        aliasedPlan = analyzedPlan)
       catalog.createTempView(tableIdent.table, viewDefinition, replace)
     }
 
