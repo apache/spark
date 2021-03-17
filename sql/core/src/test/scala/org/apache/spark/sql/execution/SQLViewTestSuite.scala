@@ -295,8 +295,6 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-34504: drop an invalid view") {
-    // TODO: fix dropping non-existing global temp views.
-    assume(viewTypeString != "GLOBAL TEMPORARY VIEW")
     withTable("t") {
       sql("CREATE TABLE t(s STRUCT<i: INT, j: INT>) USING json")
       val viewName = createView("v", "SELECT s.i FROM t")
