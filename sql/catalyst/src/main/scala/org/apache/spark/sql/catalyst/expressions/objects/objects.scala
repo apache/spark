@@ -332,7 +332,7 @@ case class Invoke(
       val invokeMethod = if (method.isDefined) {
         method.get
       } else {
-        obj.getClass.getDeclaredMethod(functionName, argClasses: _*)
+        obj.getClass.getMethod(functionName, argClasses: _*)
       }
       invoke(obj, invokeMethod, arguments, input, dataType)
     }
@@ -456,7 +456,6 @@ case class NewInstance(
     }
     outerPointer.map { p =>
       val outerObj = p()
-      val d = outerObj.getClass +: paramTypes
       val c = getConstructor(outerObj.getClass +: paramTypes)
       (args: Seq[AnyRef]) => {
         c(outerObj +: args)

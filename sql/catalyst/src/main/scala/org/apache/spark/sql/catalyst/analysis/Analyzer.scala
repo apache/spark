@@ -872,16 +872,16 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case u @ UnresolvedRelation(ident, _, isStreaming) =>
-        lookupTempView(ident, isStreaming, performCheck = true).getOrElse(u)
+        lookupAndResolveTempView(ident, isStreaming).getOrElse(u)
       case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _, _) =>
-        lookupTempView(ident, performCheck = true)
+        lookupAndResolveTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
         write.table match {
           case UnresolvedRelation(ident, _, false) =>
-            lookupTempView(ident, performCheck = true).map(EliminateSubqueryAliases(_)).map {
+            lookupAndResolveTempView(ident).map(EliminateSubqueryAliases(_)).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
               case _ => throw new AnalysisException("Cannot write into temp view " +
                 s"${ident.quoted} as it's not a data source v2 relation.")
@@ -905,10 +905,9 @@ class Analyzer(override val catalogManager: CatalogManager)
           .getOrElse(u)
     }
 
-    def lookupTempView(
+    private def lookupTempView(
         identifier: Seq[String],
-        isStreaming: Boolean = false,
-        performCheck: Boolean = false): Option[LogicalPlan] = {
+        isStreaming: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
       if (isResolvingView && !referredTempViewNames.contains(identifier)) return None
 
@@ -922,7 +921,13 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw new AnalysisException(s"${identifier.quoted} is not a temp view of streaming " +
           s"logical plan, please use batch API such as `DataFrameReader.table` to read it.")
       }
-      tmpView.map(ResolveRelations.resolveViews(_, performCheck))
+      tmpView
+    }
+
+    private def lookupAndResolveTempView(
+        identifier: Seq[String],
+        isStreaming: Boolean = false): Option[LogicalPlan] = {
+      lookupTempView(identifier, isStreaming).map(ResolveRelations.resolveViews)
     }
   }
 
@@ -1076,7 +1081,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
-    def resolveViews(plan: LogicalPlan, performCheck: Boolean = false): LogicalPlan = plan match {
+    def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
@@ -1097,16 +1102,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
         // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
         // inside a view maybe resolved incorrectly.
-        // But for commands like `DropViewCommand`, resolving view is unnecessary even though
-        // there is unresolved node. So use the `performCheck` flag to skip the analysis check
-        // for these commands.
-        // TODO(SPARK-34504): avoid unnecessary view resolving and remove the `performCheck` flag
-        if (performCheck) {
-          checkAnalysis(newChild)
-        }
+        checkAnalysis(newChild)
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
-        p.copy(child = resolveViews(view, performCheck))
+        p.copy(child = resolveViews(view))
       case _ => plan
     }
 
@@ -1144,7 +1143,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case u: UnresolvedRelation =>
         lookupRelation(u.multipartIdentifier, u.options, u.isStreaming)
-          .map(resolveViews(_, performCheck = true)).getOrElse(u)
+          .map(resolveViews).getOrElse(u)
 
       case u @ UnresolvedTable(identifier, cmd) =>
         lookupTableOrView(identifier).map {
@@ -3841,6 +3840,8 @@ object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
       val children = e.children.grouped(2).flatMap {
         case Seq(NamePlaceholder, e: NamedExpression) if e.resolved =>
           Seq(Literal(e.name), e)
+        case Seq(NamePlaceholder, e: ExtractValue) if e.resolved && e.name.isDefined =>
+          Seq(Literal(e.name.get), e)
         case kv =>
           kv
       }
