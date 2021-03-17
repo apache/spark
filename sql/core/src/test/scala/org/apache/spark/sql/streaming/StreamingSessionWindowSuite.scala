@@ -137,7 +137,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
   /**
    * Note: the watermark of batch N is valid on batch N + 1 start
    */
-  ignore("session window with watermark and single key in append model") {
+  test("session window with watermark and single key in append model") {
     val inputData = MemoryStream[(String, String, Int)]
     val aggregated =
       inputData.toDS().toDF("time", "key", "value")
@@ -156,7 +156,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
         ("2018-08-22 19:39:56", "a", 3),
         ("2018-08-22 19:39:56", "b", 2)), // Advance watermark to '2018-08-22 19:39:56' - 5 seconds
       CheckLastBatch(),
-      assertNumStateRows(2),
+      assertNumStateRows(5), // 2 keys in key state store + 3 session windows (a: 2, b: 1)
       assertEventStats { e =>
         assert(e.get("max") === formatTimestamp("2018-08-22 19:39:56"))
         assert(e.get("min") === formatTimestamp("2018-08-22 19:39:27"))
@@ -167,7 +167,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
       CheckLastBatch(
         // Evict windows whose window.end less than previous watermark
         ("2018-08-22 19:39:27", "2018-08-22 19:39:44", "a", 5)),
-      assertNumStateRows(2),
+      assertNumStateRows(4), // 2 keys in key state store + 2 session windows (a: 1, b: 1)
       assertEventStats { e =>
         assert(e.get("max") === formatTimestamp("2018-08-22 19:39:33"))
         assert(e.get("min") === formatTimestamp("2018-08-22 19:39:33"))
@@ -190,7 +190,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
       CheckLastBatch(
         ("2018-08-22 19:39:56", "2018-08-22 19:40:15", "a", 5),  // Evict windows whose window.end
         ("2018-08-22 19:39:56", "2018-08-22 19:40:06", "b", 2)), // less than previous watermark
-      assertNumStateRows(2), // have state of key 'a', 'b'
+      assertNumStateRows(4), // 2 keys in key state store + 2 session windows (a: 1, b: 1)
       assertEventStats { e =>
         assert(e.get("watermark") === formatTimestamp("2018-08-22 19:40:16"))
       },
@@ -198,7 +198,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
         // Advance watermark to '2018-08-22 19:40:40' - 5 seconds by other key 'c'
         ("2018-08-22 19:40:40", "c", 1)),
       CheckLastBatch(),
-      assertNumStateRows(3), // have state of key 'a', 'b', 'c'
+      assertNumStateRows(6), // 3 keys in key state store + 2 session windows (a: 1, b: 1, c: 1)
       assertEventStats { e =>
         assert(e.get("watermark") === formatTimestamp("2018-08-22 19:40:17"))
       },
@@ -208,7 +208,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
       CheckLastBatch(
         ("2018-08-22 19:40:21", "2018-08-22 19:40:31", "a", 2), // Evict windows whose window.end
         ("2018-08-22 19:40:22", "2018-08-22 19:40:32", "b", 2)), // less than previous watermark
-      assertNumStateRows(1), // have state of key 'c'
+      assertNumStateRows(2), // 1 key in key state store + 1 session windows (c: 1)
       assertEventStats { e =>
         assert(e.get("watermark") === formatTimestamp("2018-08-22 19:40:35"))
       },
@@ -216,7 +216,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
     )
   }
 
-  ignore("session window with watermark and single key in append model with unordered timestamp") {
+  test("session window with watermark and single key in append model with unordered timestamp") {
     val inputData = MemoryStream[(String, String, Int)]
     val aggregated =
       inputData.toDS().toDF("time", "key", "value")
@@ -234,7 +234,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
           ("2018-08-22 19:39:28", "a", 1),
           ("2018-08-22 19:39:27", "b", 2)),
       CheckLastBatch(),
-      assertNumStateRows(2),
+      assertNumStateRows(4), // 2 keys in key state store + 2 session windows (a: 1, b: 1)
       assertEventStats { e =>
         assert(e.get("max") === formatTimestamp("2018-08-22 19:39:28"))
         assert(e.get("min") === formatTimestamp("2018-08-22 19:39:27"))
@@ -243,7 +243,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
       AddData(inputData, ("2018-08-22 19:39:23", "a", 1)),
       AddData(inputData, ("2018-08-22 19:39:58", "c", 1)),
       CheckLastBatch(),
-      assertNumStateRows(3),
+      assertNumStateRows(6), // 3 keys in key state store + 3 session windows (a: 1, b: 1, c: 1)
       assertEventStats { e =>
         assert(e.get("max") === formatTimestamp("2018-08-22 19:39:58"))
         assert(e.get("min") === formatTimestamp("2018-08-22 19:39:23"))

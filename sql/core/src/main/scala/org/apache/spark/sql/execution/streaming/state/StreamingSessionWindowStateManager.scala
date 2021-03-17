@@ -35,6 +35,11 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
   def getStartTime(row: InternalRow): Long
 
   /**
+   * Returns all stored keys.
+   */
+  def getAllKeys(): Iterator[UnsafeRow]
+
+  /**
    * Returns a list of states for the key. These states are candidates for session window
    * merging.
    */
@@ -44,6 +49,11 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
    * Returns a list of start times for session windows belonging to the given key.
    */
   def getStartTimeList(key: UnsafeRow): Seq[Long]
+
+  /**
+   * Returns the state of given key and start time.
+   */
+  def getState(key: UnsafeRow, startTime: Long): UnsafeRow
 
   /**
    * Returns a list of states for all keys.
@@ -73,6 +83,18 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
    * Removes specified state for the given key and start time.
    */
   def removeState(key: UnsafeRow, startTime: Long): Unit
+
+  /**
+   * Removes given key from the state store. This method will remove all states associated
+   * with the given key if any.
+   */
+  def removeKey(key: UnsafeRow): Unit
+
+  /**
+   * Given a callback function used to update state store metrics, updates the metrics of all
+   * state stores.
+   */
+  def updateMetrics(updateFunc: StateStoreMetrics => Unit)
 
   def allStateStoreNames(): Seq[String]
 
@@ -179,6 +201,15 @@ class StreamingSessionWindowStateManagerImplV1(
    }.toSeq
   }
 
+  override def getState(key: UnsafeRow, startTime: Long): UnsafeRow = {
+    val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
+    keyWithStartTimeToValue.get(keyWithStartTime)
+  }
+
+  override def getAllKeys(): Iterator[UnsafeRow] = {
+    keyToStartTimes.iterator.map(_.key)
+  }
+
   override def putState(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit = {
     val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
     keyWithStartTimeToValue.put(keyWithStartTime, value)
@@ -204,6 +235,17 @@ class StreamingSessionWindowStateManagerImplV1(
   override def removeState(key: UnsafeRow, startTime: Long): Unit = {
     val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
     keyWithStartTimeToValue.remove(keyWithStartTime)
+  }
+
+  override def removeKey(key: UnsafeRow): Unit = {
+    val startTimeList = getStartTimeList(key)
+    keyToStartTimes.remove(key)
+    startTimeList.foreach(removeState(key, _))
+  }
+
+  override def updateMetrics(updateFunc: StateStoreMetrics => Unit): Unit = {
+    updateFunc(keyToStartTimes.metrics)
+    updateFunc(keyWithStartTimeToValue.metrics)
   }
 
   override def allStateStoreNames(): Seq[String] =
