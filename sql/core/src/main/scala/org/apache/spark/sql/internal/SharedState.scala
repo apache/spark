@@ -60,7 +60,7 @@ private[sql] class SharedState(
     val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
     // Extract entries from `SparkConf` and put them in the Hadoop conf.
     confClone.getAll.foreach { case (k, v) =>
-      hadoopConfClone.set(k, v)
+      if (v ne null) hadoopConfClone.set(k, v)
     }
     // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
     // `SharedState`, all `SparkSession` level configurations have higher priority to generate a
