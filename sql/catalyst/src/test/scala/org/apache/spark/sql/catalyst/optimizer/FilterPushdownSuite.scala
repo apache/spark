@@ -1384,4 +1384,14 @@ class FilterPushdownSuite extends PlanTest {
       condition = Some("x.a".attr === "z.a".attr)).analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-28220: Push down the foldable predicate to both sides of Join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery = x.join(y, condition = Some(false))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = x.where(false).join(y.where(false), condition = None).analyze
+    comparePlans(optimized, correctAnswer.analyze)
+  }
 }
