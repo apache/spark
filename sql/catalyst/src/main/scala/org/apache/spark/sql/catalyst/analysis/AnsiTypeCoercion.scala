@@ -158,7 +158,10 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case _ if expectedType.acceptsType(inType) => Some(inType)
 
       // Cast null type (usually from null literals) into target types
-      case (NullType, target) => Some(target.defaultConcreteType)
+      // By default, the result type is `target.defaultConcreteType`. When the target type is
+      // `TypeCollection`, there is another branch to find the "narrowest common data type" below.
+      case (NullType, target) if !target.isInstanceOf[TypeCollection] =>
+        Some(target.defaultConcreteType)
 
       // This type coercion system will allow implicit converting String type literals as other
       // primitive types, in case of breaking too many existing Spark SQL queries.

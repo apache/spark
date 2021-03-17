@@ -345,8 +345,6 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
   }
 
   test("eligible implicit type cast - TypeCollection") {
-    shouldCast(NullType, TypeCollection(StringType, BinaryType), StringType)
-
     shouldCast(StringType, TypeCollection(StringType, BinaryType), StringType)
     shouldCast(BinaryType, TypeCollection(StringType, BinaryType), BinaryType)
     shouldCast(StringType, TypeCollection(BinaryType, StringType), StringType)
@@ -356,17 +354,10 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     shouldCast(BinaryType, TypeCollection(BinaryType, IntegerType), BinaryType)
     shouldCast(BinaryType, TypeCollection(IntegerType, BinaryType), BinaryType)
 
-    shouldNotCast(IntegerType, TypeCollection(StringType, BinaryType))
-    shouldNotCast(IntegerType, TypeCollection(BinaryType, StringType))
-
     shouldCast(DecimalType.SYSTEM_DEFAULT,
       TypeCollection(IntegerType, DecimalType), DecimalType.SYSTEM_DEFAULT)
     shouldCast(DecimalType(10, 2), TypeCollection(IntegerType, DecimalType), DecimalType(10, 2))
     shouldCast(DecimalType(10, 2), TypeCollection(DecimalType, IntegerType), DecimalType(10, 2))
-    shouldNotCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType))
-
-    shouldNotCastStringInput(TypeCollection(NumericType, BinaryType))
-    shouldNotCastStringLiteral(TypeCollection(NumericType, BinaryType))
 
     shouldCast(
       ArrayType(StringType, false),
@@ -377,10 +368,26 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
       ArrayType(StringType, true),
       TypeCollection(ArrayType(StringType), StringType),
       ArrayType(StringType, true))
+
+    // When there are multiple convertible types in the `TypeCollection`, use the narrowest
+    // common data type among convertible types.
+    shouldCast(IntegerType, TypeCollection(BinaryType, FloatType, LongType), LongType)
+    shouldCast(IntegerType, TypeCollection(BinaryType, LongType, NumericType), IntegerType)
+    // If the result is Float type and Double type is also among the convertible target types,
+    // use Double Type instead of Float type.
+    shouldCast(LongType, TypeCollection(FloatType, DoubleType, StringType), DoubleType)
   }
 
   test("ineligible implicit type cast - TypeCollection") {
+    shouldNotCast(IntegerType, TypeCollection(StringType, BinaryType))
+    shouldNotCast(IntegerType, TypeCollection(BinaryType, StringType))
     shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
+    shouldNotCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType))
+    shouldNotCastStringInput(TypeCollection(NumericType, BinaryType))
+    // When there are multiple convertible types in the `TypeCollection` and there is no narrowest
+    // common data type among the convertible types.
+    shouldNotCastStringLiteral(TypeCollection(NumericType, BinaryType))
+    shouldNotCast(NullType, TypeCollection(IntegerType, StringType))
   }
 
   test("tightest common bound for types") {
