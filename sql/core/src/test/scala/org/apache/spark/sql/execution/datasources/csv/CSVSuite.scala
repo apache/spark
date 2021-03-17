@@ -2454,17 +2454,8 @@ abstract class CSVSuite
   }
 
   test("SPARK-34768: counting a long record with ignoreTrailingWhiteSpace set to true") {
-    val line = "XX   |XXX-XXXX            |XXXXXX              " +
-      "|XXXXXXXX|XXXXX               |XXXXXX              " +
-      "|X|XXXXXXX|XXXXXXXX|XXXX|XXXXXXXXXXXXXXX     |XXXXXXXXXXX" +
-      "|XXXXXX              |XXXXXXXXXXXXXXXXXXXXXX|XXXXXX              " +
-      "|XXXXXXXXXXXXXX|XXXXXX              |XXXXXXXXXXXXXXXXXXXXXX" +
-      "|XXXXXX              |XXXXXXXXXXXXXXXXXXXXXX|XXXXXX              " +
-      "|XXXXXXXXX|XXXXXX              |XXXXXXX|                    " +
-      "||                    ||                    " +
-      "||                    ||XXXX-XX-XX XX:XX:XX.XXXXXXX" +
-      "||XXXXX.XXXXXXXXXXXXXXX|XXXXX.XXXXXXXXXXXXXX" +
-      "|XXXXX.XXXXXXXXXXXXXXX|X|XXXXXX              |X"
+    val bufSize = 128
+    val line = "X" * (bufSize - 1) + "| |"
     withTempPath { path =>
       Seq(line).toDF.write.text(path.getAbsolutePath)
       assert(spark.read.format("csv")
