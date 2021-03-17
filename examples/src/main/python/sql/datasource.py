@@ -273,7 +273,7 @@ def csv_dataset_example(spark):
     # +-----+---+---------+
 
     # You can also use options() to use multiple options
-    df3 = spark.read.options(delimiter=";", header=True).csv(path)
+    df4 = spark.read.options(delimiter=";", header=True).csv(path)
 
     df3.write.csv("output")
     # "output" is a folder which contains multiple csv files and a _SUCCESS file.

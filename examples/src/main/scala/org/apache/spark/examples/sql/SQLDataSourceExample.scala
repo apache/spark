@@ -263,7 +263,7 @@ object SQLDataSourceExample {
     // +------------------+
 
     // Read a csv with delimiter, the default delimiter is ","
-    val df2 = spark.read.option("delimiter",";").csv(path)
+    val df2 = spark.read.option("delimiter", ";").csv(path)
     df2.show()
     // +-----+---+---------+
     // |  _c0|_c1|      _c2|

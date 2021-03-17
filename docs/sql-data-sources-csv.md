@@ -23,7 +23,7 @@ license: |
 
 <div data-lang="scala"  markdown="1">
 
-Spark SQL provides `spark.read.csv("file_name")` to read a CSV file into Spark DataFrame and `dataframe.write.csv("path")` to save or write to the CSV file. Spark supports reading pipe, comma, tab, or any other delimiter/seperator files.
+Spark SQL provides `spark.read.csv("file_name")` to read a CSV file into Spark DataFrame and `dataframe.write.csv("path")` to save or write to the CSV file. Function `option()` provides customized behavior during reading csv files. The customized behavior includes but not limit to configuring header, delimiter, charset. The detailed usage can be found in [spark-csv](https://github.com/databricks/spark-csv).
 
 {% include_example csv_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 
@@ -31,7 +31,7 @@ Spark SQL provides `spark.read.csv("file_name")` to read a CSV file into Spark D
 
 <div data-lang="python"  markdown="1">
 
-PySpark provides `spark.read.csv("file_name")` to read a CSV file into Spark DataFrame and `dataframe.write.csv("path")` to save or write to the CSV file. Spark supports reading pipe, comma, tab, or any other delimiter/seperator files.
+PySpark provides `spark.read.csv("file_name")` to read a CSV file into Spark DataFrame and `dataframe.write.csv("path")` to save or write to the CSV file. Function `option()` provides customized behavior during reading csv files. The customized behavior includes but not limit to configuring header, delimiter, charset. The detailed usage can be found in [spark-csv](https://github.com/databricks/spark-csv).
 
 {% include_example csv_dataset python/sql/datasource.py %}
 
