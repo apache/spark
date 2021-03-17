@@ -159,7 +159,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // Cast null type (usually from null literals) into target types
       // By default, the result type is `target.defaultConcreteType`. When the target type is
-      // `TypeCollection`, there is another branch to find the "narrowest common data type" below.
+      // `TypeCollection`, there is another branch to find the "closet convertible data type" below.
       case (NullType, target) if !target.isInstanceOf[TypeCollection] =>
         Some(target.defaultConcreteType)
 
@@ -197,8 +197,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // first try to find the all the expected types we can implicitly cast:
       //   1. if there is no convertible data types, return None;
       //   2. if there is only one convertible data type, cast input as it;
-      //   3. otherwise if there are multiple convertible data types, find the narrowest common data
-      //      type among them. If there is no such narrowest common data type, return None.
+      //   3. otherwise if there are multiple convertible data types, find the closet convertible
+      //      data type among them. If there is no such a data type, return None.
       case (_, TypeCollection(types)) =>
         // Since Spark contains special objects like `NumericType` and `DecimalType`, which accepts
         // multiple types and they are `AbstractDataType` instead of `DataType`, here we use the
@@ -207,20 +207,20 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         if (convertibleTypes.isEmpty) {
           None
         } else {
-          // find the narrowest common data type, which can be implicit cast to all other
+          // find the closet convertible data type, which can be implicit cast to all other
           // convertible types.
-          val narrowestCommonType = convertibleTypes.find { dt =>
+          val closestConvertibleType = convertibleTypes.find { dt =>
             convertibleTypes.forall { target =>
               implicitCast(dt, target, isInputFoldable = false).isDefined
             }
           }
-          // If the narrowest common type is Float type and the convertible types contains Double
-          // type, simply return Double type as the narrowest common type to avoid potential
+          // If the closet convertible type is Float type and the convertible types contains Double
+          // type, simply return Double type as the closet convertible type to avoid potential
           // precision loss on converting the Integral type as Float type.
-          if (narrowestCommonType.contains(FloatType) && convertibleTypes.contains(DoubleType)) {
+          if (closestConvertibleType.contains(FloatType) && convertibleTypes.contains(DoubleType)) {
             Some(DoubleType)
           } else {
-            narrowestCommonType
+            closestConvertibleType
           }
         }
 
