@@ -15,16 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.tags;
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.scalatest.TagAnnotation;
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.TruncatableTable
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+/**
+ * Physical plan node for table truncation.
+ */
+case class TruncateTableExec(
+    table: TruncatableTable,
+    refreshCache: () => Unit) extends V2CommandExec {
 
-@TagAnnotation
-@Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD, ElementType.TYPE})
-public @interface DedicatedJVMTest { }
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def run(): Seq[InternalRow] = {
+    if (table.truncateTable()) refreshCache()
+    Seq.empty
+  }
+}

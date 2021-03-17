@@ -230,4 +230,14 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       }
     }
   }
+
+  test("SPARK-33474: Support typed literals as partition spec values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
+      sql(s"ALTER TABLE $t ADD PARTITION(part = date'2020-01-01')")
+      checkPartitions(t, Map("part" -> "2020-01-01"))
+      sql(s"ALTER TABLE $t DROP PARTITION (part = date'2020-01-01')")
+      checkPartitions(t)
+    }
+  }
 }

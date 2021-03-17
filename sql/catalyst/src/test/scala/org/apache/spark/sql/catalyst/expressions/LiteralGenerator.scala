@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate, Period}
 import java.util.concurrent.TimeUnit
 
 import org.scalacheck.{Arbitrary, Gen}
@@ -163,6 +163,22 @@ object LiteralGenerator {
   lazy val limitedIntegerLiteralGen: Gen[Literal] =
     for { i <- Gen.choose(-100, 100) } yield Literal.create(i, IntegerType)
 
+  lazy val dayTimeIntervalLiteralGen: Gen[Literal] = {
+    for {
+      seconds <- Gen.choose(
+        Duration.ofDays(-106751990).getSeconds,
+        Duration.ofDays(106751990).getSeconds)
+      nanoAdjustment <- Gen.choose(-999999000, 999999000)
+    } yield {
+      Literal.create(Duration.ofSeconds(seconds, nanoAdjustment), DayTimeIntervalType)
+    }
+  }
+
+  lazy val yearMonthIntervalLiteralGen: Gen[Literal] = {
+    for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) }
+      yield Literal.create(Period.ofMonths(months), YearMonthIntervalType)
+  }
+
   def randomGen(dt: DataType): Gen[Literal] = {
     dt match {
       case ByteType => byteLiteralGen
@@ -178,6 +194,8 @@ object LiteralGenerator {
       case BinaryType => binaryLiteralGen
       case CalendarIntervalType => calendarIntervalLiterGen
       case DecimalType.Fixed(precision, scale) => decimalLiteralGen(precision, scale)
+      case DayTimeIntervalType => dayTimeIntervalLiteralGen
+      case YearMonthIntervalType => yearMonthIntervalLiteralGen
       case dt => throw new IllegalArgumentException(s"not supported type $dt")
     }
   }

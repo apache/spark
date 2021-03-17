@@ -158,6 +158,32 @@ trait PredicateHelper extends AliasHelper with Logging {
   }
 
   /**
+   * Builds a balanced output predicate in bottom up approach, by applying binary operator op
+   * pair by pair on input predicates exprs recursively.
+   * Example:  exprs = [a, b, c, d], op = And, returns (a And b) And (c And d)
+   * exprs = [a, b, c, d, e, f], op = And, returns ((a And b) And (c And d)) And (e And f)
+   */
+  protected def buildBalancedPredicate(
+      expressions: Seq[Expression], op: (Expression, Expression) => Expression): Expression = {
+    assert(expressions.nonEmpty)
+    var currentResult = expressions
+    while (currentResult.size != 1) {
+      var i = 0
+      val nextResult = new Array[Expression](currentResult.size / 2 + currentResult.size % 2)
+      while (i < currentResult.size) {
+        nextResult(i / 2) = if (i + 1 == currentResult.size) {
+          currentResult(i)
+        } else {
+          op(currentResult(i), currentResult(i + 1))
+        }
+        i += 2
+      }
+      currentResult = nextResult
+    }
+    currentResult.head
+  }
+
+  /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
    * can be used to determine when it is acceptable to move expression evaluation within a query
    * plan.

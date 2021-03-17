@@ -333,7 +333,7 @@ case class Invoke(
       val invokeMethod = if (method.isDefined) {
         method.get
       } else {
-        obj.getClass.getDeclaredMethod(functionName, argClasses: _*)
+        obj.getClass.getMethod(functionName, argClasses: _*)
       }
       invoke(obj, invokeMethod, arguments, input, dataType)
     }
@@ -444,7 +444,7 @@ case class NewInstance(
     // Note that static inner classes (e.g., inner classes within Scala objects) don't need
     // outer pointer registration.
     val needOuterPointer =
-      outerPointer.isEmpty && cls.isMemberClass && !Modifier.isStatic(cls.getModifiers)
+      outerPointer.isEmpty && Utils.isMemberClass(cls) && !Modifier.isStatic(cls.getModifiers)
     childrenResolved && !needOuterPointer
   }
 
@@ -457,7 +457,6 @@ case class NewInstance(
     }
     outerPointer.map { p =>
       val outerObj = p()
-      val d = outerObj.getClass +: paramTypes
       val c = getConstructor(outerObj.getClass +: paramTypes)
       (args: Seq[AnyRef]) => {
         c(outerObj +: args)
@@ -490,7 +489,7 @@ case class NewInstance(
       // that might be defined on the companion object.
       case 0 => s"$className$$.MODULE$$.apply($argString)"
       case _ => outer.map { gen =>
-        s"${gen.value}.new ${cls.getSimpleName}($argString)"
+        s"${gen.value}.new ${Utils.getSimpleName(cls)}($argString)"
       }.getOrElse {
         s"new $className($argString)"
       }

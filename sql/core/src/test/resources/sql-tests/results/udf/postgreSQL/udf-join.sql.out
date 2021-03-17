@@ -3263,7 +3263,7 @@ select * from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`y.f1`' given input columns: [j.f1, j.f1, x.q1, x.q2]; line 2 pos 72
+cannot resolve 'y.f1' given input columns: [j.f1, j.f1, x.q1, x.q2]; line 2 pos 72
 
 
 -- !query
@@ -3282,7 +3282,7 @@ select udf(t1.uunique1) from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`t1.uunique1`' given input columns: [t1.even, t2.even, t1.fivethous, t2.fivethous, t1.four, t2.four, t1.hundred, t2.hundred, t1.odd, t2.odd, t1.string4, t2.string4, t1.stringu1, t2.stringu1, t1.stringu2, t2.stringu2, t1.ten, t2.ten, t1.tenthous, t2.tenthous, t1.thousand, t2.thousand, t1.twenty, t2.twenty, t1.two, t2.two, t1.twothousand, t2.twothousand, t1.unique1, t2.unique1, t1.unique2, t2.unique2]; line 1 pos 11
+cannot resolve 't1.uunique1' given input columns: [t1.even, t2.even, t1.fivethous, t2.fivethous, t1.four, t2.four, t1.hundred, t2.hundred, t1.odd, t2.odd, t1.string4, t2.string4, t1.stringu1, t2.stringu1, t1.stringu2, t2.stringu2, t1.ten, t2.ten, t1.tenthous, t2.tenthous, t1.thousand, t2.thousand, t1.twenty, t2.twenty, t1.two, t2.two, t1.twothousand, t2.twothousand, t1.unique1, t2.unique1, t1.unique2, t2.unique2]; line 1 pos 11
 
 
 -- !query
@@ -3292,7 +3292,7 @@ select udf(udf(t2.uunique1)) from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`t2.uunique1`' given input columns: [t1.even, t2.even, t1.fivethous, t2.fivethous, t1.four, t2.four, t1.hundred, t2.hundred, t1.odd, t2.odd, t1.string4, t2.string4, t1.stringu1, t2.stringu1, t1.stringu2, t2.stringu2, t1.ten, t2.ten, t1.tenthous, t2.tenthous, t1.thousand, t2.thousand, t1.twenty, t2.twenty, t1.two, t2.two, t1.twothousand, t2.twothousand, t1.unique1, t2.unique1, t1.unique2, t2.unique2]; line 1 pos 15
+cannot resolve 't2.uunique1' given input columns: [t1.even, t2.even, t1.fivethous, t2.fivethous, t1.four, t2.four, t1.hundred, t2.hundred, t1.odd, t2.odd, t1.string4, t2.string4, t1.stringu1, t2.stringu1, t1.stringu2, t2.stringu2, t1.ten, t2.ten, t1.tenthous, t2.tenthous, t1.thousand, t2.thousand, t1.twenty, t2.twenty, t1.two, t2.two, t1.twothousand, t2.twothousand, t1.unique1, t2.unique1, t1.unique2, t2.unique2]; line 1 pos 15
 
 
 -- !query
@@ -3302,7 +3302,7 @@ select udf(uunique1) from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`uunique1`' given input columns: [t1.even, t2.even, t1.fivethous, t2.fivethous, t1.four, t2.four, t1.hundred, t2.hundred, t1.odd, t2.odd, t1.string4, t2.string4, t1.stringu1, t2.stringu1, t1.stringu2, t2.stringu2, t1.ten, t2.ten, t1.tenthous, t2.tenthous, t1.thousand, t2.thousand, t1.twenty, t2.twenty, t1.two, t2.two, t1.twothousand, t2.twothousand, t1.unique1, t2.unique1, t1.unique2, t2.unique2]; line 1 pos 11
+cannot resolve 'uunique1' given input columns: [t1.even, t2.even, t1.fivethous, t2.fivethous, t1.four, t2.four, t1.hundred, t2.hundred, t1.odd, t2.odd, t1.string4, t2.string4, t1.stringu1, t2.stringu1, t1.stringu2, t2.stringu2, t1.ten, t2.ten, t1.tenthous, t2.tenthous, t1.thousand, t2.thousand, t1.twenty, t2.twenty, t1.two, t2.two, t1.twothousand, t2.twothousand, t1.unique1, t2.unique1, t1.unique2, t2.unique2]; line 1 pos 11
 
 
 -- !query
@@ -3311,7 +3311,7 @@ select udf(udf(f1,g)) from int4_tbl a, (select udf(udf(f1)) as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`f1`' given input columns: []; line 1 pos 55
+cannot resolve 'f1' given input columns: []; line 1 pos 55
 
 
 -- !query
@@ -3320,7 +3320,7 @@ select udf(f1,g) from int4_tbl a, (select a.f1 as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`a.f1`' given input columns: []; line 1 pos 42
+cannot resolve 'a.f1' given input columns: []; line 1 pos 42
 
 
 -- !query
@@ -3329,7 +3329,7 @@ select udf(udf(f1,g)) from int4_tbl a cross join (select udf(f1) as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`f1`' given input columns: []; line 1 pos 61
+cannot resolve 'f1' given input columns: []; line 1 pos 61
 
 
 -- !query
@@ -3338,7 +3338,7 @@ select udf(f1,g) from int4_tbl a cross join (select udf(udf(a.f1)) as g) ss
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`a.f1`' given input columns: []; line 1 pos 60
+cannot resolve 'a.f1' given input columns: []; line 1 pos 60
 
 
 -- !query

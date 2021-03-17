@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
+import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
@@ -253,9 +253,8 @@ object SharedState extends Logging {
     val warehousePath = if (hiveWarehouseDir != null && sparkWarehouseOption.isEmpty) {
       // If hive.metastore.warehouse.dir is set and spark.sql.warehouse.dir is not set,
       // we will respect the value of hive.metastore.warehouse.dir.
-      sparkConf.set(WAREHOUSE_PATH.key, hiveWarehouseDir)
       logInfo(s"${WAREHOUSE_PATH.key} is not set, but $hiveWarehouseKey is set. Setting" +
-        s" ${WAREHOUSE_PATH.key} to the value of $hiveWarehouseKey ('$hiveWarehouseDir').")
+        s" ${WAREHOUSE_PATH.key} to the value of $hiveWarehouseKey.")
       hiveWarehouseDir
     } else {
       // If spark.sql.warehouse.dir is set, we will override hive.metastore.warehouse.dir using
@@ -264,12 +263,15 @@ object SharedState extends Logging {
       // we will set hive.metastore.warehouse.dir to the default value of spark.sql.warehouse.dir.
       val sparkWarehouseDir = sparkWarehouseOption.getOrElse(WAREHOUSE_PATH.defaultValueString)
       logInfo(s"Setting $hiveWarehouseKey ('$hiveWarehouseDir') to the value of " +
-        s"${WAREHOUSE_PATH.key} ('$sparkWarehouseDir').")
-      sparkConf.set(WAREHOUSE_PATH.key, sparkWarehouseDir)
-      hadoopConf.set(hiveWarehouseKey, sparkWarehouseDir)
+        s"${WAREHOUSE_PATH.key}.")
       sparkWarehouseDir
     }
-    logInfo(s"Warehouse path is '$warehousePath'.")
+
+    val tempPath = new Path(warehousePath)
+    val qualifiedWarehousePath = tempPath.getFileSystem(hadoopConf).makeQualified(tempPath).toString
+    sparkConf.set(WAREHOUSE_PATH.key, qualifiedWarehousePath)
+    hadoopConf.set(hiveWarehouseKey, qualifiedWarehousePath)
+    logInfo(s"Warehouse path is '$qualifiedWarehousePath'.")
     initialConfigs -- Seq(WAREHOUSE_PATH.key, hiveWarehouseKey)
   }
 }

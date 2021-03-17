@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -31,6 +33,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 
   protected def viewTypeString: String
   protected def formattedViewName(viewName: String): String
+  protected def tableIdentifier(viewName: String): TableIdentifier
 
   def createView(
       viewName: String,
@@ -278,22 +281,78 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-34613: Fix view does not capture disable hint config") {
+    withSQLConf(DISABLE_HINTS.key -> "true") {
+      val viewName = createView("v1", "SELECT /*+ repartition(1) */ 1")
+      withView(viewName) {
+        assert(
+          sql(s"SELECT * FROM $viewName").queryExecution.analyzed.collect {
+            case e: Repartition => e
+          }.isEmpty
+        )
+        checkViewOutput(viewName, Seq(Row(1)))
+      }
+    }
+  }
+
+  test("SPARK-34152: view's identifier should be correctly stored") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        val viewName = createView("v", "SELECT 1")
+        withView(viewName) {
+          val tblIdent = tableIdentifier("v")
+          val metadata = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(tblIdent)
+          assert(metadata.identifier == tblIdent)
+        }
+      }
+    }
+  }
+
+  test("SPARK-34504: drop an invalid view") {
+    withTable("t") {
+      sql("CREATE TABLE t(s STRUCT<i: INT, j: INT>) USING json")
+      val viewName = createView("v", "SELECT s.i FROM t")
+      withView(viewName) {
+        assert(spark.table(viewName).collect().isEmpty)
+
+        // re-create the table without nested field `i` which is referred by the view.
+        sql("DROP TABLE t")
+        sql("CREATE TABLE t(s STRUCT<j: INT>) USING json")
+        val e = intercept[AnalysisException](spark.table(viewName))
+        assert(e.message.contains("No such struct field i in j"))
+
+        // drop invalid view should be fine
+        sql(s"DROP VIEW $viewName")
+      }
+    }
+  }
 }
 
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = viewName
+  override protected def tableIdentifier(viewName: String): TableIdentifier = {
+    TableIdentifier(viewName)
+  }
 }
 
 class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
+  private def db: String = spark.sharedState.globalTempViewManager.database
   override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = {
-    val globalTempDB = spark.sharedState.globalTempViewManager.database
-    s"$globalTempDB.$viewName"
+    s"$db.$viewName"
+  }
+  override protected def tableIdentifier(viewName: String): TableIdentifier = {
+    TableIdentifier(viewName, Some(db))
   }
 }
 
 class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
+  private def db: String = "default"
   override protected def viewTypeString: String = "VIEW"
-  override protected def formattedViewName(viewName: String): String = s"default.$viewName"
+  override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
+  override protected def tableIdentifier(viewName: String): TableIdentifier = {
+    TableIdentifier(viewName, Some(db))
+  }
 }

@@ -2409,7 +2409,7 @@ abstract class CSVSuite
             val errorMsg = intercept[AnalysisException] {
               readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
             }.getMessage
-            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+            assert(errorMsg.contains("cannot resolve 'AAA'"))
           }
         }
       }

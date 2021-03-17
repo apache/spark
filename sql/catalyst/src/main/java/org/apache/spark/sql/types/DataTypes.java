@@ -95,6 +95,16 @@ public class DataTypes {
   public static final DataType NullType = NullType$.MODULE$;
 
   /**
+   * Gets the DayTimeIntervalType object.
+   */
+  public static final DataType DayTimeIntervalType = DayTimeIntervalType$.MODULE$;
+
+  /**
+   * Gets the YearMonthIntervalType object.
+   */
+  public static final DataType YearMonthIntervalType = YearMonthIntervalType$.MODULE$;
+
+  /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
    * The field of {@code containsNull} is set to {@code true}.
    */
