@@ -60,6 +60,11 @@ BASEDIR=$(dirname $0)/..
 find "$BASEDIR" -name 'pom.xml' -not -path '*target*' -print \
   -exec bash -c "sed_i 's/\(artifactId.*\)_'$FROM_VERSION'/\1_'$TO_VERSION'/g' {}" \;
 
+# dependency:get is workaround for SPARK-34762 to download the JAR file of commons-cli.
+# Without this, build with Scala 2.13 using SBT will fail because the help plugin used below downloads only the POM file.
+COMMONS_CLI_VERSION=`build/mvn help:evaluate -Dexpression=commons-cli.version -q -DforceStdout`
+build/mvn dependency:get -Dartifact=commons-cli:commons-cli:${COMMONS_CLI_VERSION} -q
+
 # Update <scala.version> in parent POM
 # First find the right full version from the profile's build
 SCALA_VERSION=`build/mvn help:evaluate -Pscala-${TO_VERSION} -Dexpression=scala.version -q -DforceStdout`
@@ -79,6 +84,3 @@ else
   sed_i 's:build/sbt \-Pscala\-'$FROM_VERSION':build/sbt:' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
 fi
 sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
-
-# This is workaround for SPARK-34762
-rm -rf ~/.m2/repository/commons-cli
