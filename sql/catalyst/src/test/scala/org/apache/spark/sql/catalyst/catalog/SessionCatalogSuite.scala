@@ -704,6 +704,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.createTempView("tbl3", tempTable, overrideIfExists = false)
       // tableExists should not check temp view.
       assert(!catalog.tableExists(TableIdentifier("tbl3")))
+
+      // If database doesn't exist, return false instead of failing.
+      assert(!catalog.tableExists(TableIdentifier("tbl1", Some("non-exist"))))
     }
   }
 
