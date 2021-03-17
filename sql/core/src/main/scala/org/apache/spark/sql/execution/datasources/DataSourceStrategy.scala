@@ -187,7 +187,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
 
       // Sanity check
       if (t.location.rootPaths.size != 1) {
-        throw QueryCompilationErrors.cannotWriteDataToRelationWithSinglePathError()
+        throw QueryCompilationErrors.cannotWriteDataToRelationsWithMultiplePathsError()
       }
 
       val outputPath = t.location.rootPaths.head

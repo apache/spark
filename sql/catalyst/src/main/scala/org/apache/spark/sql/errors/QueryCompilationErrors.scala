@@ -904,7 +904,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def cannotWriteDataToRelationWithSinglePathError(): Throwable = {
+  def cannotWriteDataToRelationsWithMultiplePathsError(): Throwable = {
     new AnalysisException("Can only write data to relations with a single path.")
   }
 
