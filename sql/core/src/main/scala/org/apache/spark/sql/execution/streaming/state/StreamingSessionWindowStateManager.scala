@@ -38,9 +38,35 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
    * Returns a list of states for the key. These states are candidates for session window
    * merging.
    */
-  def getCandidateStates(key: UnsafeRow): Seq[UnsafeRow]
+  def getStates(key: UnsafeRow): Seq[UnsafeRow]
 
-  def putCandidateStates(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit
+  /**
+   * Returns a list of start times for session windows belonging to the given key.
+   */
+  def getStartTimeList(key: UnsafeRow): Seq[Long]
+
+  /**
+   * Returns a list of states for all keys.
+   */
+  def getStates(): Seq[UnsafeRow]
+
+  /**
+   * Puts a state row into the state with given key and start time. Note that this method
+   * does not update the start time into the list of start times for the given key. To update
+   * the list, please call `putStartTimeList`.
+   */
+  def putState(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit
+
+  /**
+   * Puts a list of start times of session windows for given key into the state. The list
+   * of start times must be sorted.
+   */
+  def putStartTimeList(key: UnsafeRow, startTimes: Seq[Long]): Unit
+
+  /**
+   * Removes specified state for the given key and start time.
+   */
+  def removeState(key: UnsafeRow, startTime: Long): Unit
 
   def allStateStoreNames(): Seq[String]
 
@@ -128,19 +154,37 @@ class StreamingSessionWindowStateManagerImplV1(
 
   // TODO: We may be optimized to only retrieve the candidate states that are possibly
   // overlapping with the given key and start time.
-  override def getCandidateStates(key: UnsafeRow): Seq[UnsafeRow] = {
+  override def getStates(key: UnsafeRow): Seq[UnsafeRow] = {
     keyToStartTimes.get(key).map { candidataSt =>
       val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, candidataSt)
       keyWithStartTimeToValue.get(keyWithStartTime)
     }
   }
 
-  override def putCandidateStates(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit = {
-    val newStartTimes = (keyToStartTimes.get(key) ++ Seq(startTime)).sorted
-    keyToStartTimes.put(key, newStartTimes)
+  override def getStartTimeList(key: UnsafeRow): Seq[Long] = keyToStartTimes.get(key)
 
+  override def getStates(): Seq[UnsafeRow] = {
+   keyToStartTimes.iterator.flatMap { keyAndStartTimes =>
+     keyAndStartTimes.startTimes.map { startTime =>
+       val keyWithStartTime =
+         keyWithStartTimeToValue.genKeyWithStartTime(keyAndStartTimes.key, startTime)
+       keyWithStartTimeToValue.get(keyWithStartTime)
+     }
+   }.toSeq
+  }
+
+  override def putState(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit = {
     val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
     keyWithStartTimeToValue.put(keyWithStartTime, value)
+  }
+
+  override def putStartTimeList(key: UnsafeRow, startTimes: Seq[Long]): Unit = {
+    keyToStartTimes.put(key, startTimes)
+  }
+
+  override def removeState(key: UnsafeRow, startTime: Long): Unit = {
+    val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
+    keyWithStartTimeToValue.remove(keyWithStartTime)
   }
 
   override def allStateStoreNames(): Seq[String] =
@@ -227,6 +271,10 @@ class StreamingSessionWindowStateManagerImplV1(
 
     def put(keyWithStartTime: UnsafeRow, value: UnsafeRow): Unit = {
       stateStore.put(keyWithStartTime, value)
+    }
+
+    def remove(keyWithStartTime: UnsafeRow): Unit = {
+      stateStore.remove(keyWithStartTime)
     }
 
     /**

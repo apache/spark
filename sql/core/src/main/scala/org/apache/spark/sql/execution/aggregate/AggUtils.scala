@@ -352,6 +352,7 @@ object AggUtils {
     val saved = if (sessionWindowAgg) {
       SessionWindowStateStoreSaveExec(
         sessionSpecAttribute,
+        windowExpressions.head,
         stateInfo = None,
         outputMode = None,
         eventTimeWatermark = None,

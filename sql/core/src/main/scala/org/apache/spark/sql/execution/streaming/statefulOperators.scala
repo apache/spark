@@ -495,7 +495,7 @@ case class SessionWindowStateStoreRestoreExec(
         // for the key a of different window, we only got once
         // from statestore, otherwise will get error result
         if (preKey == null || key != preKey) {
-          savedState = stateStoreManager.getCandidateStates(key)
+          savedState = stateStoreManager.getStates(key)
 
           // must copy the key. The key is a UnsafeRow and pointer to some memory
           // when next `getKey` invoke the value of the memory will change, so the value of
@@ -537,11 +537,19 @@ case class SessionWindowStateStoreRestoreExec(
  */
 case class SessionWindowStateStoreSaveExec(
     keyExpressions: Seq[Attribute],
+    timeExpression: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  import StreamingSessionWindowHelper._
+
+  private val storeConf = new StateStoreConf(sqlContext.conf)
+  private val hadoopConfBcast = sparkContext.broadcast(
+    new SerializableConfiguration(SessionState.newHadoopConf(
+      sparkContext.hadoopConfiguration, sqlContext.conf)))
 
   private val childOutputSchema = child.output.toStructType
   private val stateValueSchema = new StructType().add("values", ArrayType(childOutputSchema))
@@ -555,110 +563,121 @@ case class SessionWindowStateStoreSaveExec(
     assert(keyExpressions.nonEmpty,
       "Grouping key must be specified when using sessionWindow")
 
-    child.execute().mapPartitionsWithStateStore(
+    val stateVersion = conf.getConf(SQLConf.STREAMING_SESSION_WINDOW_STATE_FORMAT_VERSION)
+    val stateStoreCoord = sqlContext.sessionState.streamingQueryManager.stateStoreCoordinator
+
+    child.execute().mapPartitionsWithStateStoreAwareRDD(
       getStateInfo,
-      keyExpressions.toStructType,
-      stateValueSchema,
-      indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
-        val numOutputRows = longMetric("numOutputRows")
-        val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
-        val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
-        val commitTimeMs = longMetric("commitTimeMs")
+      StreamingSessionWindowStateManager.allStateStoreNames(stateVersion),
+      stateStoreCoord) { case (partitionId, iter) =>
 
-        outputMode match {
-          // Update and output all rows in the StateStore.
-          case Some(Complete) =>
-            allUpdatesTimeMs += timeTakenMs {
-              putArrayToStore(iter, store, false)
+      val stateStoreManager = StreamingSessionWindowStateManager.createStateManager(
+        keyExpressions, timeExpression, child.output, child.output, stateInfo, storeConf,
+        hadoopConfBcast.value.value, partitionId, stateVersion)
+
+      val numOutputRows = longMetric("numOutputRows")
+      val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+      val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
+      val commitTimeMs = longMetric("commitTimeMs")
+
+      outputMode match {
+        // Update and output all rows in the StateStore.
+        case Some(Complete) =>
+          allUpdatesTimeMs += timeTakenMs {
+            putArrayToStore(iter, stateStoreManager, false)
+          }
+          allRemovalsTimeMs += 0
+          // setStoreMetrics(store)
+
+          val output = stateStoreManager.getStates()
+          numOutputRows += output.size
+
+          commitTimeMs += timeTakenMs {
+            stateStoreManager.commit()
+          }
+
+          output.toIterator
+
+        // Update and output only rows being evicted from the StateStore
+        // Assumption: watermark predicates must be non-empty if append mode is allowed
+        case Some(Append) =>
+          Iterator.empty
+          /*
+          allUpdatesTimeMs += timeTakenMs {
+            putArrayToStore(iter, stateStoreManager, true)
+          }
+
+          val removalStartTimeNs = System.nanoTime
+          val rangeIter = store.getRange(None, None)
+
+          new NextIterator[InternalRow] {
+            var curRowPair: UnsafeRowPair = null
+            var curArray: Array[InternalRow] = null
+            var arrayIter: Iterator[InternalRow] = null
+            var needRemove: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
+
+            def internalHasNext(): Boolean = {
+              while ((arrayIter == null || !arrayIter.hasNext) && rangeIter.hasNext) {
+                // if needRemove buffer is not empty, we need remove buffer's element
+                // from curArray and reset RowPair to statestore
+                getAndSaveRestArray()
+                curRowPair = rangeIter.next()
+                curArray = curRowPair.value.getArray(0).toArray(childOutputSchema)
+                arrayIter = curArray.toIterator
+              }
+              if (arrayIter == null || (!arrayIter.hasNext && !rangeIter.hasNext)) {
+                // no new element in rangeIter & arrayIter, reset value of RowPair
+                // if needRemoved buffer is not empty, save the rest array
+                getAndSaveRestArray()
+                false
+              } else {
+                true
+              }
             }
-            allRemovalsTimeMs += 0
-            commitTimeMs += timeTakenMs {
-              store.commit()
-            }
-            setStoreMetrics(store)
-            store.iterator().flatMap { rowPair =>
-              val output = rowPair.value.getArray(0).toArray[UnsafeRow](childOutputSchema)
-              numOutputRows += output.size
-              output.toIterator
-            }
 
-          // Update and output only rows being evicted from the StateStore
-          // Assumption: watermark predicates must be non-empty if append mode is allowed
-          case Some(Append) =>
-            allUpdatesTimeMs += timeTakenMs {
-              putArrayToStore(iter, store, true)
-            }
-
-            val removalStartTimeNs = System.nanoTime
-            val rangeIter = store.getRange(None, None)
-
-            new NextIterator[InternalRow] {
-              var curRowPair: UnsafeRowPair = null
-              var curArray: Array[InternalRow] = null
-              var arrayIter: Iterator[InternalRow] = null
-              var needRemove: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
-
-              def internalHasNext(): Boolean = {
-                while ((arrayIter == null || !arrayIter.hasNext) && rangeIter.hasNext) {
-                  // if needRemove buffer is not empty, we need remove buffer's element
-                  // from curArray and reset RowPair to statestore
-                  getAndSaveRestArray()
-                  curRowPair = rangeIter.next()
-                  curArray = curRowPair.value.getArray(0).toArray(childOutputSchema)
-                  arrayIter = curArray.toIterator
-                }
-                if (arrayIter == null || (!arrayIter.hasNext && !rangeIter.hasNext) ) {
-                  // no new element in rangeIter & arrayIter, reset value of RowPair
-                  // if needRemoved buffer is not empty, save the rest array
-                  getAndSaveRestArray()
-                  false
+            private def getAndSaveRestArray() {
+              if (curArray != null && needRemove.nonEmpty) {
+                val newArray = curArray.filter(!needRemove.contains(_))
+                if (!newArray.isEmpty) {
+                  store.put(curRowPair.key, convertArrayToSingle(newArray))
                 } else {
-                  true
+                  // no state yet, delete the key's state of state store
+                  store.remove(curRowPair.key)
                 }
-              }
-
-              private def getAndSaveRestArray() {
-                if (curArray != null && needRemove.nonEmpty) {
-                  val newArray = curArray.filter(!needRemove.contains(_))
-                  if (!newArray.isEmpty) {
-                    store.put(curRowPair.key, convertArrayToSingle(newArray))
-                  } else {
-                    // no state yet, delete the key's state of state store
-                    store.remove(curRowPair.key)
-                  }
-                  // clear removed buffer
-                  needRemove.clear
-                }
-              }
-
-              override protected def getNext(): InternalRow = {
-                var removedValueRow: InternalRow = null
-                while(internalHasNext() && removedValueRow == null) {
-                  val row = arrayIter.next
-                  if (watermarkPredicateForData.get.eval(row)) {
-                    removedValueRow = row
-                    needRemove += row.copy
-                  }
-                }
-
-                if (removedValueRow == null) {
-                  finished = true
-                  null
-                } else {
-                  removedValueRow
-                }
-              }
-
-              override protected def close(): Unit = {
-                allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
-                commitTimeMs += timeTakenMs { store.commit() }
-                setStoreMetrics(store)
+                // clear removed buffer
+                needRemove.clear
               }
             }
-          case _ => throw new UnsupportedOperationException(s"Invalid output mode: $outputMode")
-        }
+
+            override protected def getNext(): InternalRow = {
+              var removedValueRow: InternalRow = null
+              while (internalHasNext() && removedValueRow == null) {
+                val row = arrayIter.next
+                if (watermarkPredicateForData.get.eval(row)) {
+                  removedValueRow = row
+                  needRemove += row.copy
+                }
+              }
+
+              if (removedValueRow == null) {
+                finished = true
+                null
+              } else {
+                removedValueRow
+              }
+            }
+
+            override protected def close(): Unit = {
+              allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
+              commitTimeMs += timeTakenMs {
+                store.commit()
+              }
+              setStoreMetrics(store)
+            }
+          }
+           */
+        case _ => throw new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+      }
     }
   }
 
@@ -674,9 +693,10 @@ case class SessionWindowStateStoreSaveExec(
     }
   }
 
-  private def putArrayToStore(baseIter: Iterator[InternalRow], store: StateStore,
+  private def putArrayToStore(
+      baseIter: Iterator[InternalRow],
+      stateManager: StreamingSessionWindowStateManager,
       needFilter: Boolean) {
-    val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
     val numUpdatedStateRows = longMetric("numUpdatedStateRows")
     val iter = if (needFilter) {
       baseIter.filter(row => !watermarkPredicateForData.get.eval(row))
@@ -685,19 +705,28 @@ case class SessionWindowStateStoreSaveExec(
     }
 
     var preKey: UnsafeRow = null
-    val values = new ArrayBuffer[InternalRow]()
+    val values = new ArrayBuffer[UnsafeRow]()
     while (iter.hasNext) {
       val row = iter.next().asInstanceOf[UnsafeRow]
-      val key = getKey(row)
+      val key = stateManager.getKey(row)
       if (preKey == null || preKey == key) {
         // must copy the row, for this row is a reference in iterator and
         // will change when iter.next
         values += row.copy
       } else {
         if (needFilter) {
-          replaceModifyWindow(preKey, values, store)
+          // replaceModifyWindow(preKey, values, store)
         } else {
-          store.put(preKey, convertArrayToSingle(values.toArray))
+          val oldStartTimeList = stateManager.getStartTimeList(preKey)
+          val newStartTimeList = values.map(stateManager.getStartTime)
+          stateManager.putStartTimeList(preKey, newStartTimeList)
+
+          oldStartTimeList.foreach { oldStartTime =>
+            stateManager.removeState(preKey, oldStartTime)
+          }
+          values.foreach { value =>
+            stateManager.putState(preKey, stateManager.getStartTime(value), value)
+          }
         }
         numUpdatedStateRows += 1
 
@@ -710,9 +739,18 @@ case class SessionWindowStateStoreSaveExec(
 
     if (values.nonEmpty) {
       if (needFilter) {
-        replaceModifyWindow(preKey, values, store)
+        // replaceModifyWindow(preKey, values, store)
       } else {
-        store.put(preKey, convertArrayToSingle(values.toArray))
+        val oldStartTimeList = stateManager.getStartTimeList(preKey)
+        val newStartTimeList = values.map(stateManager.getStartTime)
+        stateManager.putStartTimeList(preKey, newStartTimeList)
+
+        oldStartTimeList.foreach { oldStartTime =>
+          stateManager.removeState(preKey, oldStartTime)
+        }
+        values.foreach { value =>
+          stateManager.putState(preKey, stateManager.getStartTime(value), value)
+        }
       }
       values.clear
     }

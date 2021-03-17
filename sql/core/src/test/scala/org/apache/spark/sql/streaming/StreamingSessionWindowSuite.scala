@@ -137,7 +137,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
   /**
    * Note: the watermark of batch N is valid on batch N + 1 start
    */
-  test("session window with watermark and single key in append model") {
+  ignore("session window with watermark and single key in append model") {
     val inputData = MemoryStream[(String, String, Int)]
     val aggregated =
       inputData.toDS().toDF("time", "key", "value")
@@ -216,7 +216,7 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
     )
   }
 
-  test("session window with watermark and single key in append model with unordered timestamp") {
+  ignore("session window with watermark and single key in append model with unordered timestamp") {
     val inputData = MemoryStream[(String, String, Int)]
     val aggregated =
       inputData.toDS().toDF("time", "key", "value")

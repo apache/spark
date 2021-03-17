@@ -79,20 +79,23 @@ class StreamingSessionWindowStateManagerSuite extends SparkFunSuite with BeforeA
       val stateManager = getStreamingSessionWindowStateManager(operatorStateInfo, 1)
 
       val keyRow = getKeyRow("a")
-      val emptyStates = stateManager.getCandidateStates(keyRow)
+      val emptyStates = stateManager.getStates(keyRow)
       assert(emptyStates.isEmpty)
 
 
       val valueRow1 = getValueRow(1)
-      stateManager.putCandidateStates(keyRow, 3, valueRow1)
+      stateManager.putState(keyRow, 3, valueRow1)
+      stateManager.putStartTimeList(keyRow, Seq(3))
 
-      val oneStates = stateManager.getCandidateStates(keyRow)
+      val oneStates = stateManager.getStates(keyRow)
       assert(oneStates.length == 1)
       assert(oneStates.head.equals(valueRow1))
 
       val valueRow2 = getValueRow(8)
-      stateManager.putCandidateStates(keyRow, 5, valueRow2)
-      val twoStates = stateManager.getCandidateStates(keyRow)
+      stateManager.putState(keyRow, 5, valueRow2)
+      stateManager.putStartTimeList(keyRow, Seq(3, 5))
+
+      val twoStates = stateManager.getStates(keyRow)
       assert(twoStates.length == 2)
       assert(twoStates.head.equals(valueRow1) && twoStates(1).equals(valueRow2))
     }
