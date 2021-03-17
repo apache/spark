@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
- * A statement for Stream writing. It contains all neccessary param and will be address in the
+ * A statement for Stream writing. It contains all neccessary param and will be resolved in the
  * rule [[ResolveStreamWrite]].
  *
  * @param userSpecifiedName  Query name optionally specified by the user.
@@ -39,7 +39,7 @@ import org.apache.spark.sql.streaming.OutputMode
  * @param outputMode  Output mode for the sink.
  * @param hadoopConf  The Hadoop Configuration to get a FileSystem instance
  * @param isContinuousTrigger  Whether the statement is triggered by a continous query or not.
- * @param queryPlan  The analyzed query plan from the streaming DataFrame.
+ * @param inputQuery  The analyzed query plan from the streaming DataFrame.
  */
 case class WriteToStreamStatement(
     userSpecifiedName: Option[String],
@@ -50,7 +50,7 @@ case class WriteToStreamStatement(
     outputMode: OutputMode,
     hadoopConf: Configuration,
     isContinuousTrigger: Boolean,
-    queryPlan: LogicalPlan) extends LogicalPlan {
+    inputQuery: LogicalPlan) extends LogicalPlan {
 
   override def isStreaming: Boolean = true
 

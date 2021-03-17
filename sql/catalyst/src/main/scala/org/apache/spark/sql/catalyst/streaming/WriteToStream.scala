@@ -31,12 +31,12 @@ case class WriteToStream(
     sink: Table,
     outputMode: OutputMode,
     deleteCheckpointOnStop: Boolean,
-    queryPlan: LogicalPlan) extends LogicalPlan {
+    inputQuery: LogicalPlan) extends LogicalPlan {
 
   override def isStreaming: Boolean = true
 
   override def output: Seq[Attribute] = Nil
 
-  override def children: Seq[LogicalPlan] = queryPlan :: Nil
+  override def children: Seq[LogicalPlan] = Nil
 }
 
