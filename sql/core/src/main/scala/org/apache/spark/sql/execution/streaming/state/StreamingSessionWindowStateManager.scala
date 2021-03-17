@@ -58,6 +58,12 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
   def putState(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit
 
   /**
+   * Puts a list of states for given key. This method will update the list of start times
+   * for the given key.
+   */
+  def putStates(key: UnsafeRow, values: Seq[UnsafeRow]): Unit
+
+  /**
    * Puts a list of start times of session windows for given key into the state. The list
    * of start times must be sorted.
    */
@@ -176,6 +182,19 @@ class StreamingSessionWindowStateManagerImplV1(
   override def putState(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit = {
     val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
     keyWithStartTimeToValue.put(keyWithStartTime, value)
+  }
+
+  override def putStates(key: UnsafeRow, values: Seq[UnsafeRow]): Unit = {
+    val oldStartTimeList = getStartTimeList(key)
+    val newStartTimeList = values.map(getStartTime)
+    putStartTimeList(key, newStartTimeList)
+
+    oldStartTimeList.foreach { oldStartTime =>
+      removeState(key, oldStartTime)
+    }
+    values.foreach { value =>
+      putState(key, getStartTime(value), value)
+    }
   }
 
   override def putStartTimeList(key: UnsafeRow, startTimes: Seq[Long]): Unit = {

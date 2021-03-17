@@ -584,7 +584,7 @@ case class SessionWindowStateStoreSaveExec(
         // Update and output all rows in the StateStore.
         case Some(Complete) =>
           allUpdatesTimeMs += timeTakenMs {
-            putArrayToStore(iter, stateStoreManager, false)
+            putToStore(iter, stateStoreManager, false)
           }
           allRemovalsTimeMs += 0
           // setStoreMetrics(store)
@@ -693,7 +693,7 @@ case class SessionWindowStateStoreSaveExec(
     }
   }
 
-  private def putArrayToStore(
+  private def putToStore(
       baseIter: Iterator[InternalRow],
       stateManager: StreamingSessionWindowStateManager,
       needFilter: Boolean) {
@@ -717,16 +717,7 @@ case class SessionWindowStateStoreSaveExec(
         if (needFilter) {
           // replaceModifyWindow(preKey, values, store)
         } else {
-          val oldStartTimeList = stateManager.getStartTimeList(preKey)
-          val newStartTimeList = values.map(stateManager.getStartTime)
-          stateManager.putStartTimeList(preKey, newStartTimeList)
-
-          oldStartTimeList.foreach { oldStartTime =>
-            stateManager.removeState(preKey, oldStartTime)
-          }
-          values.foreach { value =>
-            stateManager.putState(preKey, stateManager.getStartTime(value), value)
-          }
+          stateManager.putStates(preKey, values.toSeq)
         }
         numUpdatedStateRows += 1
 
@@ -741,16 +732,7 @@ case class SessionWindowStateStoreSaveExec(
       if (needFilter) {
         // replaceModifyWindow(preKey, values, store)
       } else {
-        val oldStartTimeList = stateManager.getStartTimeList(preKey)
-        val newStartTimeList = values.map(stateManager.getStartTime)
-        stateManager.putStartTimeList(preKey, newStartTimeList)
-
-        oldStartTimeList.foreach { oldStartTime =>
-          stateManager.removeState(preKey, oldStartTime)
-        }
-        values.foreach { value =>
-          stateManager.putState(preKey, stateManager.getStartTime(value), value)
-        }
+        stateManager.putStates(preKey, values.toSeq)
       }
       values.clear
     }
