@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 /**
  * Replaces logical [[WriteToStreamStatement]] operator with an [[WriteToStream]] operator.
  */
-object ResolveStreamWrite extends Rule[LogicalPlan] with SQLConfHelper {
+object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
     case WriteToStreamStatement(userSpecifiedName, userSpecifiedCheckpointLocation,
         useTempCheckpointLocation, recoverFromCheckpointLocation, sink, outputMode, hadoopConf,
