@@ -115,7 +115,7 @@ SELECT schema_of_csv(csvField) FROM csvTable
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'schema_of_csv(csvtable.`csvField`)' due to data type mismatch: The input csv should be a foldable string expression and not null; however, got csvtable.`csvField`.; line 1 pos 7
+cannot resolve 'schema_of_csv(csvtable.csvField)' due to data type mismatch: The input csv should be a foldable string expression and not null; however, got csvtable.csvField.; line 1 pos 7
 
 
 -- !query

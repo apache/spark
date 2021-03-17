@@ -1697,6 +1697,10 @@ class CastSuite extends CastSuiteBase {
   test("Cast from double II") {
     checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
   }
+
+  test("SPARK-34727: cast from float II") {
+    checkCast(16777215.0f, java.time.Instant.ofEpochSecond(16777215))
+  }
 }
 
 /**

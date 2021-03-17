@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.expressions.{BindReferences, BoundReference}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.InnerLike
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, InnerLike, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 
 /**
@@ -73,23 +73,27 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
     ctx.INPUT_ROW = buildRow
     buildPlan.output.zipWithIndex.map { case (a, i) =>
       val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
-      if (joinType.isInstanceOf[InnerLike]) {
-        ev
-      } else {
-        // the variables are needed even there is no matched rows
-        val isNull = ctx.freshName("isNull")
-        val value = ctx.freshName("value")
-        val javaType = CodeGenerator.javaType(a.dataType)
-        val code = code"""
-          |boolean $isNull = true;
-          |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
-          |if ($buildRow != null) {
-          |  ${ev.code}
-          |  $isNull = ${ev.isNull};
-          |  $value = ${ev.value};
-          |}
-        """.stripMargin
-        ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType))
+      joinType match {
+        case _: InnerLike | LeftSemi | LeftAnti | _: ExistenceJoin =>
+          ev
+        case LeftOuter | RightOuter =>
+          // the variables are needed even there is no matched rows
+          val isNull = ctx.freshName("isNull")
+          val value = ctx.freshName("value")
+          val javaType = CodeGenerator.javaType(a.dataType)
+          val code = code"""
+            |boolean $isNull = true;
+            |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
+            |if ($buildRow != null) {
+            |  ${ev.code}
+            |  $isNull = ${ev.isNull};
+            |  $value = ${ev.value};
+            |}
+          """.stripMargin
+          ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType))
+        case _ =>
+          throw new IllegalArgumentException(
+            s"JoinCodegenSupport.genBuildSideVars should not take $joinType as the JoinType")
       }
     }
   }
