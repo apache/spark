@@ -455,24 +455,25 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private def testMerge(originalCond: Expression, expectedCond: Expression): Unit = {
-    val func = (rel: LogicalPlan, expr: Expression) => {
-      val target = rel.as("target")
-      val source = rel.as("source")
-      val assignments = Seq(
-        Assignment(UnresolvedAttribute("i"), UnresolvedAttribute("source.i")),
-        Assignment(UnresolvedAttribute("b"), UnresolvedAttribute("source.b")),
-        Assignment(UnresolvedAttribute("a"), UnresolvedAttribute("source.a")),
-        Assignment(UnresolvedAttribute("m"), UnresolvedAttribute("source.m"))
+    val func = (target: LogicalPlan, source: LogicalPlan, expr: Expression) => {
+      val matchedAssignments = Seq(
+        Assignment('i, 'i),
+        Assignment('b, 'b),
+        Assignment('a, 'a),
+        Assignment('m, 'm)
       )
-      val cond = expr.transform {
-        case UnresolvedAttribute(nameParts) => new UnresolvedAttribute("source" +: nameParts)
-        case e => e
-      }
-      val matchedActions = UpdateAction(Some(cond), assignments) :: DeleteAction(Some(cond)) :: Nil
-      val notMatchedActions = InsertAction(Some(cond), assignments) :: Nil
-      MergeIntoTable(target, source, cond, matchedActions, notMatchedActions)
+      val notMatchedAssignments = Seq(
+        Assignment('i, 'd)
+      )
+      val matchedActions = UpdateAction(Some(expr), matchedAssignments) ::
+        DeleteAction(Some(expr)) :: Nil
+      val notMatchedActions = InsertAction(None, notMatchedAssignments) :: Nil
+      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
     }
-    test(func, originalCond, expectedCond)
+    val originalPlan = func(testRelation, anotherTestRelation, originalCond).analyze
+    val optimizedPlan = Optimize.execute(originalPlan)
+    val expectedPlan = func(testRelation, anotherTestRelation, expectedCond).analyze
+    comparePlans(optimizedPlan, expectedPlan)
   }
 
   private def testHigherOrderFunc(
