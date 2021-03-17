@@ -2469,7 +2469,6 @@ abstract class CSVSuite
       Seq(line).toDF.write.text(path.getAbsolutePath)
       assert(spark.read.format("csv")
         .option("delimiter", "|")
-        .option("inferSchema", "true")
         .option("ignoreTrailingWhiteSpace", "true").load(path.getAbsolutePath).count() == 1)
     }
   }
