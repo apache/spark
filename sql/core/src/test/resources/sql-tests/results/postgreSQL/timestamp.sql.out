@@ -259,7 +259,7 @@ SELECT '' AS `54`, d1 as `timestamp`,
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'year(spark_catalog.default.timestamp_tbl.`d1`)' due to data type mismatch: argument 1 requires date type, however, 'spark_catalog.default.timestamp_tbl.`d1`' is of timestamp type.; line 2 pos 4
+cannot resolve 'year(spark_catalog.default.timestamp_tbl.d1)' due to data type mismatch: argument 1 requires date type, however, 'spark_catalog.default.timestamp_tbl.d1' is of timestamp type.; line 2 pos 4
 
 
 -- !query

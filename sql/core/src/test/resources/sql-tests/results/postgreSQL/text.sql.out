@@ -165,7 +165,7 @@ select i, left('ahoj', i), right('ahoj', i) from range(-5, 6) t(i) order by i
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'substring('ahoj', 1, t.`i`)' due to data type mismatch: argument 3 requires int type, however, 't.`i`' is of bigint type.; line 1 pos 10
+cannot resolve 'substring('ahoj', 1, t.i)' due to data type mismatch: argument 3 requires int type, however, 't.i' is of bigint type.; line 1 pos 10
 
 
 -- !query
