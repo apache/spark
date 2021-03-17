@@ -1457,9 +1457,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     val (pushDownCandidates, nonDeterministic) = condition.partition(_.deterministic)
     val (leftEvaluateCondition, rest) =
       pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
-    val (rightEvaluateCondition, _) =
-        pushDownCandidates.partition(_.references.subsetOf(right.outputSet))
-    val commonCondition = rest.filterNot(e => rightEvaluateCondition.exists(_.semanticEquals(e)))
+    val rightEvaluateCondition = pushDownCandidates.filter(_.references.subsetOf(right.outputSet))
+    val commonCondition = rest.filterNot(_.references.subsetOf(right.outputSet))
 
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
   }
