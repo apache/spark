@@ -197,19 +197,27 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       //   3. otherwise if there are multiple convertible data types, find the narrowest common data
       //      type among them. If there is no such narrowest common data type, return None.
       case (_, TypeCollection(types)) =>
-        val convertibleTypes = types.collect {
-          case t: DataType if implicitCast(inType, t, isInputFoldable).isDefined =>
-            t
-        }
+        // Since Spark contains special objects like `NumericType` and `DecimalType`, which accepts
+        // multiple types and they are `AbstractDataType` instead of `DataType`, here we use the
+        // conversion result their representation.
+        val convertibleTypes = types.flatMap(implicitCast(inType, _, isInputFoldable))
         if (convertibleTypes.isEmpty) {
           None
         } else {
           // find the narrowest common data type, which can be implicit cast to all other
           // convertible types.
-          convertibleTypes.find { dt =>
+          val narrowestCommonType = convertibleTypes.find { dt =>
             convertibleTypes.forall { target =>
               implicitCast(dt, target, isInputFoldable = false).isDefined
             }
+          }
+          // If the narrowest common type is Float type and the convertible types contains Double
+          // type, simply return Double type as the narrowest common type to avoid potential
+          // precision loss on converting the Integral type as Float type.
+          if (narrowestCommonType.contains(FloatType) && convertibleTypes.contains(DoubleType)) {
+            Some(DoubleType)
+          } else {
+            narrowestCommonType
           }
         }
 
