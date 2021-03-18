@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
@@ -3799,23 +3801,26 @@ object functions {
     ArrayExcept(col1.expr, col2.expr)
   }
 
+  // counter to ensure lambdra variable names unique
+  private val lambdaVarNameCounter = new AtomicInteger(0)
+
   private def createLambda(f: Column => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val x = UnresolvedNamedLambdaVariable(Seq("x_" + lambdaVarNameCounter.incrementAndGet()))
     val function = f(Column(x)).expr
     LambdaFunction(function, Seq(x))
   }
 
   private def createLambda(f: (Column, Column) => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
-    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val x = UnresolvedNamedLambdaVariable(Seq("x_" + lambdaVarNameCounter.incrementAndGet()))
+    val y = UnresolvedNamedLambdaVariable(Seq("y_" + lambdaVarNameCounter.incrementAndGet()))
     val function = f(Column(x), Column(y)).expr
     LambdaFunction(function, Seq(x, y))
   }
 
   private def createLambda(f: (Column, Column, Column) => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
-    val y = UnresolvedNamedLambdaVariable(Seq("y"))
-    val z = UnresolvedNamedLambdaVariable(Seq("z"))
+    val x = UnresolvedNamedLambdaVariable(Seq("x_" + lambdaVarNameCounter.incrementAndGet()))
+    val y = UnresolvedNamedLambdaVariable(Seq("y_" + lambdaVarNameCounter.incrementAndGet()))
+    val z = UnresolvedNamedLambdaVariable(Seq("z_" + lambdaVarNameCounter.incrementAndGet()))
     val function = f(Column(x), Column(y), Column(z)).expr
     LambdaFunction(function, Seq(x, y, z))
   }
