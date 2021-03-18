@@ -25,7 +25,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 import org.apache.spark.internal.config.ConfigEntry
 
@@ -40,6 +40,8 @@ abstract class PodBuilderSuite extends SparkFunSuite {
   private val baseConf = new SparkConf(false)
     .set(Config.CONTAINER_IMAGE, "spark-executor:latest")
 
+  private val TEMPLATE_FILE = getClass.getClassLoader.getResource("template-file.yaml").getFile
+
   test("use empty initial pod if template is not specified") {
     val client = mock(classOf[KubernetesClient])
     buildPod(baseConf.clone(), client)
@@ -48,9 +50,29 @@ abstract class PodBuilderSuite extends SparkFunSuite {
 
   test("load pod template if specified") {
     val client = mockKubernetesClient()
-    val sparkConf = baseConf.clone().set(templateFileConf.key, "template-file.yaml")
+    val sparkConf = baseConf.clone().set(templateFileConf.key, TEMPLATE_FILE)
+    val env = mock(classOf[SparkEnv])
+    when(env.driverTmpDir).thenReturn(Some(new File(TEMPLATE_FILE).getParent))
+    SparkEnv.set(env)
     val pod = buildPod(sparkConf, client)
     verifyPod(pod)
+  }
+
+  test("load pod template if specified and exists in spark.files") {
+    val file = File.createTempFile("template", "yaml")
+    val client = mockKubernetesClient()
+    val sparkConf = baseConf.clone().set(templateFileConf.key, file.getName)
+    val env = mock(classOf[SparkEnv])
+    when(env.driverTmpDir).thenReturn(Some(file.getParent))
+    SparkEnv.set(env)
+    val pod = buildPod(sparkConf, client)
+    verifyPod(pod)
+
+    when(env.driverTmpDir).thenReturn(None)
+    val m = intercept[SparkException] {
+      buildPod(sparkConf, client)
+    }.getMessage
+    assert(m.contains("Could not load pod from template file."))
   }
 
   test("configure a custom test step") {
@@ -59,7 +81,10 @@ abstract class PodBuilderSuite extends SparkFunSuite {
       .set(userFeatureStepsConf.key,
         "org.apache.spark.deploy.k8s.TestStepTwo," +
         "org.apache.spark.deploy.k8s.TestStep")
-      .set(templateFileConf.key, "template-file.yaml")
+      .set(templateFileConf.key, TEMPLATE_FILE)
+    val env = mock(classOf[SparkEnv])
+    when(env.driverTmpDir).thenReturn(Some(new File(TEMPLATE_FILE).getParent))
+    SparkEnv.set(env)
     val pod = buildPod(sparkConf, client)
     verifyPod(pod)
     assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long"))

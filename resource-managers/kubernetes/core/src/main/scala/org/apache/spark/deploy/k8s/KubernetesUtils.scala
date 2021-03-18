@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkFiles}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
 import org.apache.spark.internal.Logging
@@ -84,7 +84,17 @@ private[spark] object KubernetesUtils extends Logging {
       templateFile: File,
       containerName: Option[String]): SparkPod = {
     try {
-      val pod = kubernetesClient.pods().load(templateFile).get()
+      val userFile = new File(SparkFiles.get(templateFile.getName))
+      val file = if (templateFile.exists()) {
+        templateFile
+      } else if (userFile.exists()) {
+        logInfo(s"Fallback to use ${userFile.getCanonicalPath}")
+        userFile
+      } else {
+        throw new SparkException(s"File Not Found: $templateFile. " +
+          "Please try to use `spark.files` for remote files.")
+      }
+      val pod = kubernetesClient.pods().load(file).get()
       selectSparkContainer(pod, containerName)
     } catch {
       case e: Exception =>
