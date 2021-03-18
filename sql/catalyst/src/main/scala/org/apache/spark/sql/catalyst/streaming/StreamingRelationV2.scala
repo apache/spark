@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableProvider}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 // We have to pack in the V1 data source as a shim, for the case when a source implements
@@ -46,7 +45,7 @@ case class StreamingRelationV2(
   override def toString: String = sourceName
 
   override def computeStats(): Statistics = Statistics(
-    sizeInBytes = BigInt(SQLConf.get.defaultSizeInBytes)
+    sizeInBytes = BigInt(conf.defaultSizeInBytes)
   )
 
   override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))
