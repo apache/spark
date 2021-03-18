@@ -290,9 +290,9 @@ select t1.max_unique2, g from (select max(unique2) as max_unique2 FROM tenk1) t1
 -- !query schema
 struct<max_unique2:int,g:int>
 -- !query output
-9999	3
-9999	2
 9999	1
+9999	2
+9999	3
 
 
 -- !query
