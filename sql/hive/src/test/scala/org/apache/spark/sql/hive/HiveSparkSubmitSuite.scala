@@ -338,6 +338,21 @@ class HiveSparkSubmitSuite
       unusedJar.toString)
     runSparkSubmit(argsForShowTables)
   }
+
+  test("SPARK-34772: RebaseDateTime loadRebaseRecords should use Spark classloader " +
+    "instead of context") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+
+    val args = Seq(
+      "--class", SPARK_34772.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-34772",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.sql.legacy.timeParserPolicy=LEGACY",
+      "--conf", "spark.sql.hive.metastore.version=1.2.1",
+      "--conf", "spark.sql.hive.metastore.jars=maven",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
 }
 
 object SetMetastoreURLTest extends Logging {
@@ -844,6 +859,18 @@ object SPARK_18989_DESC_TABLE {
       spark.sql("DESC base64_tbl")
     } finally {
       spark.sql("DROP TABLE IF EXISTS base64_tbl")
+    }
+  }
+}
+
+object SPARK_34772 {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    try {
+      spark.sql("CREATE TABLE t (c int) PARTITIONED BY (p date)")
+      spark.sql("SELECT * FROM t WHERE p='2021-01-01'").show()
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS t")
     }
   }
 }
