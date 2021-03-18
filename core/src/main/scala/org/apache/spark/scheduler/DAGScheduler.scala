@@ -890,10 +890,11 @@ private[spark] class DAGScheduler(
       timeout: Long,
       properties: Properties): PartialResult[R] = {
     val jobId = nextJobId.getAndIncrement()
+    val clonedProperties = Utils.cloneProperties(properties)
     if (rdd.partitions.isEmpty) {
       // Return immediately if the job is running 0 tasks
       val time = clock.getTimeMillis()
-      listenerBus.post(SparkListenerJobStart(jobId, time, Seq[StageInfo](), properties))
+      listenerBus.post(SparkListenerJobStart(jobId, time, Seq[StageInfo](), clonedProperties))
       listenerBus.post(SparkListenerJobEnd(jobId, time, JobSucceeded))
       return new PartialResult(evaluator.currentResult(), true)
     }
@@ -901,7 +902,7 @@ private[spark] class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, rdd.partitions.indices.toArray, callSite, listener,
-      Utils.cloneProperties(properties)))
+      clonedProperties))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -1162,7 +1163,8 @@ private[spark] class DAGScheduler(
     val stageIds = jobIdToStageIds(jobId).toArray
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
     listenerBus.post(
-      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
+      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos,
+        Utils.cloneProperties(properties)))
     submitStage(finalStage)
   }
 
@@ -1200,7 +1202,8 @@ private[spark] class DAGScheduler(
     val stageIds = jobIdToStageIds(jobId).toArray
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
     listenerBus.post(
-      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
+      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos,
+        Utils.cloneProperties(properties)))
     submitStage(finalStage)
 
     // If the whole stage has already finished, tell the listener and remove it
@@ -1333,7 +1336,8 @@ private[spark] class DAGScheduler(
     } catch {
       case NonFatal(e) =>
         stage.makeNewStageAttempt(partitionsToCompute.size)
-        listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
+        listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo,
+          Utils.cloneProperties(properties)))
         abortStage(stage, s"Task creation failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage
         return
@@ -1347,7 +1351,8 @@ private[spark] class DAGScheduler(
     if (partitionsToCompute.nonEmpty) {
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     }
-    listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
+    listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo,
+      Utils.cloneProperties(properties)))
 
     // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
     // Broadcasted binary for the task, used to dispatch tasks to executors. Note that we broadcast
