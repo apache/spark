@@ -1385,13 +1385,24 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-28220: Push down the foldable predicate to both sides of Join") {
+  test("SPARK-28220: Push down true join condition for inner join") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val originalQuery = x.join(y, condition = Some(true))
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = x.where(true).join(y.where(true), condition = None).analyze
-    comparePlans(optimized, correctAnswer.analyze)
+    val correctAnswer = x.join(y, condition = None).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-28220: Should not push down true join condition for left/right join") {
+    Seq(LeftOuter, RightOuter).foreach { joinType =>
+      val x = testRelation.subquery('x)
+      val y = testRelation.subquery('y)
+      val originalQuery = x.join(y, joinType = joinType, condition = Some(true))
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
   }
 }
