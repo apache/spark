@@ -162,9 +162,7 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala-2.12.version>2.12.10</scala-2.12.version>
-    <scala-2.13.version>2.13.5</scala-2.13.version>
-    <scala.version>${scala-2.12.version}</scala.version>
+    <scala.version>2.12.10</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.0.0</scalatest-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
@@ -3319,7 +3317,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>${scala-2.13.version}</scala.version>
+        <scala.version>2.13.5</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <dependencyManagement>
