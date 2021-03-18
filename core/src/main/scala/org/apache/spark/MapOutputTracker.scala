@@ -50,7 +50,10 @@ import org.apache.spark.util._
  *
  * All public methods of this class are thread-safe.
  */
-private class ShuffleStatus(numPartitions: Int, numReducers: Int) extends Logging {
+private class ShuffleStatus(
+    numPartitions: Int,
+    numReducers: Int,
+    isPushBasedShuffleEnabled: Boolean = false) extends Logging {
 
   private val (readLock, writeLock) = {
     val lock = new ReentrantReadWriteLock()
@@ -94,7 +97,11 @@ private class ShuffleStatus(numPartitions: Int, numReducers: Int) extends Loggin
    * provides a reducer oriented view of the shuffle status specifically for the results of
    * merging shuffle partition blocks into per-partition merged shuffle files.
    */
-  val mergeStatuses = new Array[MergeStatus](numReducers)
+  val mergeStatuses = if (isPushBasedShuffleEnabled) {
+    new Array[MergeStatus](numReducers)
+  } else {
+    Array.empty[MergeStatus]
+  }
 
   /**
    * The cached result of serializing the map statuses array. This cache is lazily populated when
@@ -182,7 +189,7 @@ private class ShuffleStatus(numPartitions: Int, numReducers: Int) extends Loggin
    * Register a merge result.
    */
   def addMergeResult(reduceId: Int, status: MergeStatus): Unit = withWriteLock {
-    if (mergeStatuses(reduceId) == null) {
+    if (mergeStatuses(reduceId) != status) {
       _numAvailableMergeResults += 1
       invalidateSerializedMergeOutputStatusCache()
     }
@@ -379,12 +386,11 @@ private[spark] case class GetMergeResultStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-/**
- * The boolean flag in the case class indicates whether the request is for map output or not.
- * If false, the request is for merge statuses instead.
- */
-private[spark] case class GetOutputStatusesMessage(shuffleId: Int,
-  fetchMapOutput: Boolean, context: RpcCallContext)
+private[spark] sealed trait MapOutputTrackerMasterMessage
+private[spark] case class GetMapStatusMessage(shuffleId: Int,
+  context: RpcCallContext) extends MapOutputTrackerMasterMessage
+private[spark] case class GetMergeStatusMessage(shuffleId: Int,
+  context: RpcCallContext) extends MapOutputTrackerMasterMessage
 
 /** RpcEndpoint class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterEndpoint(
@@ -397,12 +403,12 @@ private[spark] class MapOutputTrackerMasterEndpoint(
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
       logInfo(s"Asked to send map output locations for shuffle $shuffleId to $hostPort")
-      tracker.post(GetOutputStatusesMessage(shuffleId, fetchMapOutput = true, context))
+      tracker.post(GetMapStatusMessage(shuffleId, context))
 
     case GetMergeResultStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
       logInfo(s"Asked to send merge result locations for shuffle $shuffleId to $hostPort")
-      tracker.post(GetOutputStatusesMessage(shuffleId, fetchMapOutput = false, context))
+      tracker.post(GetMergeStatusMessage(shuffleId, context))
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
@@ -486,6 +492,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * partition. This method is to get the server URIs and output sizes for each shuffle block that
    * is merged in the specified merged shuffle block so fetch failure on a merged shuffle block can
    * fall back to fetching the unmerged blocks.
+   *
+   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+   *         and the second item is a sequence of (shuffle block ID, shuffle block size, map index)
+   *         tuples describing the shuffle blocks that are stored at that block manager.
    */
   def getMapSizesForMergeResult(
       shuffleId: Int,
@@ -496,6 +506,14 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * the server URIs and output sizes for each shuffle block that is merged in the specified merged
    * shuffle partition chunk so fetch failure on a merged shuffle block chunk can fall back to
    * fetching the unmerged blocks.
+   *
+   * chunkBitMap tracks the mapIds which are part of the current merged chunk, this way if there is
+   * a fetch failure on the merged chunk, it can fallback to fetching the corresponding original
+   * blocks part of this merged chunk.
+   *
+   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+   *         and the second item is a sequence of (shuffle block ID, shuffle block size, map index)
+   *         tuples describing the shuffle blocks that are stored at that block manager.
    */
   def getMapSizesForMergeResult(
       shuffleId: Int,
@@ -550,8 +568,9 @@ private[spark] class MapOutputTrackerMaster(
 
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
 
-  // requests for map/merge output statuses
-  private val outputStatusesRequests = new LinkedBlockingQueue[GetOutputStatusesMessage]
+  // requests for MapOutputTrackerMasterMessages
+  private val mapOutputTrackerMasterMessages =
+    new LinkedBlockingQueue[MapOutputTrackerMasterMessage]
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf)
 
@@ -576,8 +595,8 @@ private[spark] class MapOutputTrackerMaster(
     throw new IllegalArgumentException(msg)
   }
 
-  def post(message: GetOutputStatusesMessage): Unit = {
-    outputStatusesRequests.offer(message)
+  def post(message: MapOutputTrackerMasterMessage): Unit = {
+    mapOutputTrackerMasterMessages.offer(message)
   }
 
   /** Message loop used for dispatching messages. */
@@ -586,28 +605,31 @@ private[spark] class MapOutputTrackerMaster(
       try {
         while (true) {
           try {
-            val data = outputStatusesRequests.take()
+            val data = mapOutputTrackerMasterMessages.take()
             if (data == PoisonPill) {
               // Put PoisonPill back so that other MessageLoops can see it.
-              outputStatusesRequests.offer(PoisonPill)
+              mapOutputTrackerMasterMessages.offer(PoisonPill)
               return
             }
-            val context = data.context
-            val shuffleId = data.shuffleId
-            val hostPort = context.senderAddress.hostPort
-            val shuffleStatus = shuffleStatuses.get(shuffleId).head
-            if (data.fetchMapOutput) {
-              logDebug("Handling request to send map output locations for shuffle " + shuffleId +
-                " to " + hostPort)
-              context.reply(
-                shuffleStatus.serializedOutputStatus(broadcastManager, isLocal, minSizeForBroadcast,
-                  conf, isMapOutput = true))
-            } else {
-              logDebug("Handling request to send merge output locations for shuffle " + shuffleId +
-                " to " + hostPort)
-              context.reply(
-                shuffleStatus.serializedOutputStatus(broadcastManager, isLocal, minSizeForBroadcast,
-                  conf, isMapOutput = false))
+
+            data match {
+              case GetMapStatusMessage(shuffleId, context) =>
+                val hostPort = context.senderAddress.hostPort
+                val shuffleStatus = shuffleStatuses.get(shuffleId).head
+                logDebug("Handling request to send map output locations for shuffle " + shuffleId +
+                  " to " + hostPort)
+                context.reply(
+                  shuffleStatus.serializedOutputStatus(broadcastManager, isLocal,
+                    minSizeForBroadcast, conf, isMapOutput = true))
+
+              case GetMergeStatusMessage(shuffleId, context) =>
+                val hostPort = context.senderAddress.hostPort
+                val shuffleStatus = shuffleStatuses.get(shuffleId).head
+                logDebug("Handling request to send merge output locations for" +
+                  " shuffle " + shuffleId + " to " + hostPort)
+                context.reply(
+                  shuffleStatus.serializedOutputStatus(broadcastManager, isLocal,
+                    minSizeForBroadcast, conf, isMapOutput = false))
             }
           } catch {
             case NonFatal(e) => logError(e.getMessage, e)
@@ -620,15 +642,16 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** A poison endpoint that indicates MessageLoop should exit its message loop. */
-  private val PoisonPill = new GetOutputStatusesMessage(-99, true, null)
+  private val PoisonPill = GetMapStatusMessage(-99, null)
 
   // Used only in unit tests.
   private[spark] def getNumCachedSerializedBroadcast: Int = {
     shuffleStatuses.valuesIterator.count(_.hasCachedSerializedBroadcast)
   }
 
-  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int = 0): Unit = {
-    if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps, numReduces)).isDefined) {
+  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
+    if (shuffleStatuses.put(shuffleId,
+      new ShuffleStatus(numMaps, numReduces, pushBasedShuffleEnabled)).isDefined) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
   }
@@ -828,7 +851,7 @@ private[spark] class MapOutputTrackerMaster(
         shuffleStatus.withMergeStatuses { statuses =>
           val status = statuses(partitionId)
           val numMaps = dep.rdd.partitions.length
-          if (status != null && status.getMissingMaps(numMaps).length.toDouble / numMaps
+          if (status != null && status.getNumMissingMapOutputs(numMaps).toDouble / numMaps
             <= (1 - REDUCER_PREF_LOCS_FRACTION)) {
             Seq(status.location.host)
           } else {
@@ -996,7 +1019,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   override def stop(): Unit = {
-    outputStatusesRequests.offer(PoisonPill)
+    mapOutputTrackerMasterMessages.offer(PoisonPill)
     threadpool.shutdown()
     try {
       sendTracker(StopMapOutputTracker)
@@ -1068,11 +1091,11 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       // If the original MergeStatus is no longer available, we cannot identify the list of
       // unmerged blocks to fetch in this case. Throw MetadataFetchFailedException in this case.
       MapOutputTracker.validateStatus(mergeStatus, shuffleId, partitionId)
-      // User the MergeStatus's partition level bitmap since we are doing partition level fallback
+      // Use the MergeStatus's partition level bitmap since we are doing partition level fallback
       MapOutputTracker.getMapStatusesForMergeStatus(shuffleId, partitionId,
         mapOutputStatuses, mergeStatus.tracker)
     } catch {
-      // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
+      // We experienced a fetch failure so our mapStatuses cache is outdated; clear it
       case e: MetadataFetchFailedException =>
         mapStatuses.clear()
         mergeStatuses.clear()
@@ -1168,6 +1191,8 @@ private[spark] object MapOutputTracker extends Logging {
   val ENDPOINT_NAME = "MapOutputTracker"
   private val DIRECT = 0
   private val BROADCAST = 1
+
+  private val SHUFFLE_PUSH_MAP_ID = -1
 
   // Serialize an array of map/merge output locations into an efficient byte format so that we can
   // send it to reduce tasks. We do this by compressing the serialized bytes using Zstd. They will
@@ -1297,9 +1322,10 @@ private[spark] object MapOutputTracker extends Logging {
           val remainingMapStatuses = if (mergeStatus != null && mergeStatus.totalSize > 0) {
             // If MergeStatus is available for the given partition, add location of the
             // pre-merged shuffle partition for this partition ID. Here we create a
-            // ShuffleBlockId with mapId being -1 to indicate this is a merged shuffle block.
+            // ShuffleBlockId with mapId being SHUFFLE_PUSH_MAP_ID to indicate this is
+            // a merged shuffle block.
             splitsByAddress.getOrElseUpdate(mergeStatus.location, ListBuffer()) +=
-              ((ShuffleBlockId(shuffleId, -1, partId), mergeStatus.totalSize, -1))
+              ((ShuffleBlockId(shuffleId, SHUFFLE_PUSH_MAP_ID, partId), mergeStatus.totalSize, -1))
             // For the "holes" in this pre-merged shuffle partition, i.e., unmerged mapper
             // shuffle partition blocks, fetch the original map produced shuffle partition blocks
             mergeStatus.getMissingMaps(numMaps).map(mapStatuses.zipWithIndex)

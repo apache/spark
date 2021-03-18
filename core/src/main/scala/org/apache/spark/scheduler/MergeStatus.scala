@@ -64,6 +64,13 @@ private[spark] class MergeStatus(
     (0 until numMaps).filter(i => !mapTracker.contains(i))
   }
 
+  /**
+   * Get the number of missing map outputs for missing mapper partition blocks that are not merged.
+   */
+  def getNumMissingMapOutputs(numMaps: Int): Int = {
+    getMissingMaps(numMaps).length
+  }
+
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
     mapTracker.writeExternal(out)
@@ -79,6 +86,8 @@ private[spark] class MergeStatus(
 }
 
 private[spark] object MergeStatus {
+  // Dummy number of reduces for the tests where push based shuffle is not enabled
+  val SHUFFLE_PUSH_DUMMY_NUM_REDUCES = 1
 
   /**
    * Separate a MergeStatuses received from an ExternalShuffleService into individual

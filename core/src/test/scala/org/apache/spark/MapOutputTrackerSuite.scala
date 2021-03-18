@@ -27,6 +27,7 @@ import org.apache.spark.LocalSparkContext._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.{RPC_ASK_TIMEOUT, RPC_MESSAGE_MAX_SIZE}
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
@@ -59,7 +60,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
-    tracker.registerShuffle(10, 2)
+    tracker.registerShuffle(10, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
     assert(tracker.containsShuffle(10))
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
@@ -83,7 +84,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
-    tracker.registerShuffle(10, 2)
+    tracker.registerShuffle(10, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
     val compressedSize1000 = MapStatus.compressSize(1000L)
     val compressedSize10000 = MapStatus.compressSize(10000L)
     tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
@@ -106,7 +107,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
-    tracker.registerShuffle(10, 2)
+    tracker.registerShuffle(10, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
     val compressedSize1000 = MapStatus.compressSize(1000L)
     val compressedSize10000 = MapStatus.compressSize(10000L)
     tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
@@ -141,7 +142,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     mapWorkerTracker.trackerEndpoint =
       mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
-    masterTracker.registerShuffle(10, 1)
+    masterTracker.registerShuffle(10, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
     mapWorkerTracker.updateEpoch(masterTracker.getEpoch)
     // This is expected to fail because no outputs have been registered for the shuffle.
     intercept[FetchFailedException] { mapWorkerTracker.getMapSizesByExecutorId(10, 0) }
@@ -184,7 +185,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
 
     // Message size should be ~123B, and no exception should be thrown
-    masterTracker.registerShuffle(10, 1)
+    masterTracker.registerShuffle(10, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("88", "mph", 1000), Array.fill[Long](10)(0), 5))
     val senderAddress = RpcAddress("localhost", 12345)
@@ -218,7 +219,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     // on hostA with output size 2
     // on hostA with output size 2
     // on hostB with output size 3
-    tracker.registerShuffle(10, 3)
+    tracker.registerShuffle(10, 3, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
     tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
         Array(2L), 5))
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("a", "hostA", 1000),
@@ -261,7 +262,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       // Frame size should be ~1.1MB, and MapOutputTrackerMasterEndpoint should throw exception.
       // Note that the size is hand-selected here because map output statuses are compressed before
       // being sent.
-      masterTracker.registerShuffle(20, 100)
+      masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
           BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5))
@@ -307,7 +308,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
-    tracker.registerShuffle(10, 2)
+    tracker.registerShuffle(10, 2, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
 
     val size0 = MapStatus.decompressSize(MapStatus.compressSize(0L))
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
@@ -334,6 +335,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("SPARK-32921: master register and unregister merge result") {
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set(IS_TESTING, true)
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
@@ -356,8 +359,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("SPARK-32921: get map sizes with merged shuffle") {
-    conf.set("spark.shuffle.push.enabled", "true")
-    conf.set("spark.testing", "true")
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set(IS_TESTING, true)
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
@@ -398,8 +401,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("SPARK-32921: get map statuses from merged shuffle") {
-    conf.set("spark.shuffle.push.enabled", "true")
-    conf.set("spark.testing", "true")
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set(IS_TESTING, true)
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
@@ -443,8 +446,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("SPARK-32921: get map statuses for merged shuffle block chunks") {
-    conf.set("spark.shuffle.push.enabled", "true")
-    conf.set("spark.testing", "true")
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set(IS_TESTING, true)
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
