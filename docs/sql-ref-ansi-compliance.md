@@ -47,10 +47,20 @@ When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric
 SELECT 2147483647 + 1;
 java.lang.ArithmeticException: integer overflow
 
+SELECT abs(-2147483648);
+java.lang.ArithmeticException: integer overflow
+
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
 +----------------+
 |(2147483647 + 1)|
++----------------+
+|     -2147483648|
++----------------+
+
+SELECT abs(-2147483648);
++----------------+
+|abs(-2147483648)|
 +----------------+
 |     -2147483648|
 +----------------+

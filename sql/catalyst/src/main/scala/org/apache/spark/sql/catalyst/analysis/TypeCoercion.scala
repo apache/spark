@@ -1081,7 +1081,7 @@ object TypeCoercion extends TypeCoercionBase {
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
-      case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
+      case Abs(e @ StringType(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
       case s @ StddevPop(e @ StringType(), _) =>
