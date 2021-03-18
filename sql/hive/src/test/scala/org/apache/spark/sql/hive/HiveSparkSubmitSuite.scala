@@ -343,15 +343,22 @@ class HiveSparkSubmitSuite
     "instead of context") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
-    val args = Seq(
-      "--class", SPARK_34772.getClass.getName.stripSuffix("$"),
-      "--name", "SPARK-34772",
-      "--master", "local-cluster[2,1,1024]",
-      "--conf", "spark.sql.legacy.timeParserPolicy=LEGACY",
-      "--conf", "spark.sql.hive.metastore.version=1.2.1",
-      "--conf", "spark.sql.hive.metastore.jars=maven",
-      unusedJar.toString)
-    runSparkSubmit(args)
+    // We need specify the metastore database location in case of conflict with other hive version
+    withTempDir { file =>
+      file.delete()
+      val metastore = s"jdbc:derby:;databaseName=${file.getAbsolutePath};create=true"
+
+      val args = Seq(
+        "--class", SPARK_34772.getClass.getName.stripSuffix("$"),
+        "--name", "SPARK-34772",
+        "--master", "local-cluster[2,1,1024]",
+        "--conf", "spark.sql.legacy.timeParserPolicy=LEGACY",
+        "--conf", "spark.sql.hive.metastore.version=1.2.1",
+        "--conf", "spark.sql.hive.metastore.jars=maven",
+        "--conf", s"spark.hadoop.javax.jdo.option.ConnectionURL=$metastore",
+        unusedJar.toString)
+      runSparkSubmit(args)
+    }
   }
 }
 
