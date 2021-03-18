@@ -799,8 +799,8 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"$className is not a valid Spark SQL Data Source.")
   }
 
-  def cannotSaveIntervalIntoExternalStorageError(): Throwable = {
-    new AnalysisException("Cannot save interval data type into external storage.")
+  def cannotSaveIntervalIntoExternalStorageError(typeName: String): Throwable = {
+    new AnalysisException(s"Cannot save the '$typeName' data type into external storage.")
   }
 
   def cannotResolveAttributeError(name: String, data: LogicalPlan): Throwable = {
