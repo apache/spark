@@ -79,12 +79,25 @@ private[spark] object KubernetesUtils extends Logging {
     opt2.foreach { _ => require(opt1.isEmpty, errMessage) }
   }
 
+  def getLocalTemplateFile(path: String, conf: SparkConf): File = {
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val fs = getHadoopFileSystem(Utils.resolveURI(path), hadoopConf)
+    if (fs.getScheme.equals("file")) {
+      new File(path)
+    } else {
+      val tmpFile = Utils.createTempDir().getAbsolutePath + File.separator + "template.yml"
+      fs.copyToLocalFile(new Path(path), new Path(tmpFile))
+      new File(tmpFile)
+    }
+  }
+
   def loadPodFromTemplate(
       kubernetesClient: KubernetesClient,
-      templateFile: File,
-      containerName: Option[String]): SparkPod = {
+      templateFile: String,
+      containerName: Option[String],
+      conf: SparkConf): SparkPod = {
     try {
-      val pod = kubernetesClient.pods().load(templateFile).get()
+      val pod = kubernetesClient.pods().load(getLocalTemplateFile(templateFile, conf)).get()
       selectSparkContainer(pod, containerName)
     } catch {
       case e: Exception =>

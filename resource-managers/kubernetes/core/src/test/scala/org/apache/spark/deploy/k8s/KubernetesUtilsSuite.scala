@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class KubernetesUtilsSuite extends SparkFunSuite {
   private val HOST = "test-host"
@@ -64,5 +64,15 @@ class KubernetesUtilsSuite extends SparkFunSuite {
       KubernetesUtils.selectSparkContainer(noContainersPod, Option.empty)
     assert(sparkPodWithNoContainerName.pod.getSpec.getHostname == HOST)
     assert(sparkPodWithNoContainerName.container.getName == null)
+  }
+
+  test("SPARK-34783 Support remote template files") {
+    Seq(
+      getClass.getClassLoader.getResource("template-file.yaml").getFile,
+      "https://raw.githubusercontent.com/apache/spark/master/resource-managers/kubernetes/" +
+        "integration-tests/src/test/resources/driver-template.yml"
+    ).foreach { file =>
+      assert(KubernetesUtils.getLocalTemplateFile(file, new SparkConf(false)).exists())
+    }
   }
 }
