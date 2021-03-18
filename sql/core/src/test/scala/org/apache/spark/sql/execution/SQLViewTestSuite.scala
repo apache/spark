@@ -308,6 +308,25 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-34504: drop an invalid view") {
+    withTable("t") {
+      sql("CREATE TABLE t(s STRUCT<i: INT, j: INT>) USING json")
+      val viewName = createView("v", "SELECT s.i FROM t")
+      withView(viewName) {
+        assert(spark.table(viewName).collect().isEmpty)
+
+        // re-create the table without nested field `i` which is referred by the view.
+        sql("DROP TABLE t")
+        sql("CREATE TABLE t(s STRUCT<j: INT>) USING json")
+        val e = intercept[AnalysisException](spark.table(viewName))
+        assert(e.message.contains("No such struct field i in j"))
+
+        // drop invalid view should be fine
+        sql(s"DROP VIEW $viewName")
+      }
+    }
+  }
 }
 
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
