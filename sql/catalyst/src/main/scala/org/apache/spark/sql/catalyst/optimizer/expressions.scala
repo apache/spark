@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -264,7 +263,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
           && !v.isInstanceOf[CreateNamedStruct]
           && !newList.head.isInstanceOf[CreateNamedStruct]) {
           EqualTo(v, newList.head)
-        } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
+        } else if (newList.length > conf.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
         } else if (newList.length < list.length) {
@@ -739,9 +738,9 @@ object NullPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
-        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case e @ AggregateExpression(Count(exprs), _, _, _, _) if exprs.forall(isNullLiteral) =>
-        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case ae @ AggregateExpression(Count(exprs), _, false, _, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))

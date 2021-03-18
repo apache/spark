@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.{DDLUtils, RunnableCommand}
 import org.apache.spark.sql.execution.command.ViewHelper.createTemporaryViewRelation
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -75,7 +75,7 @@ case class CreateTempViewUsing(
       userSpecifiedSchema.map(_ + " ").getOrElse("") +
       s"replace:$replace " +
       s"provider:$provider " +
-      SQLConf.get.redactOptions(options)
+      conf.redactOptions(options)
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

@@ -1715,7 +1715,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case h: UnresolvedHaving => h
 
       case q: LogicalPlan =>
-        logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
+        logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
         q.mapExpressions(resolveExpressionByPlanChildren(_, q))
     }
 
@@ -3579,7 +3579,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           child
 
         case UpCast(child, target: AtomicType, _)
-            if SQLConf.get.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
+            if conf.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
               child.dataType == StringType =>
           Cast(child, target.asNullable)
 

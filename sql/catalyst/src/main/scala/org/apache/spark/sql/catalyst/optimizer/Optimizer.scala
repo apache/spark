@@ -1004,7 +1004,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   with PredicateHelper with ConstraintHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.constraintPropagationEnabled) {
+    if (conf.constraintPropagationEnabled) {
       inferFilters(plan)
     } else {
       plan
@@ -1613,7 +1613,7 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan =
-    if (SQLConf.get.crossJoinEnabled) {
+    if (conf.crossJoinEnabled) {
       plan
     } else plan transform {
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _)
@@ -1655,7 +1655,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
             we.copy(windowFunction = ae.copy(aggregateFunction = Average(UnscaledValue(e))))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4), Option(SQLConf.get.sessionLocalTimeZone))
+            DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
 
         case _ => we
       }
@@ -1667,7 +1667,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
           val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4), Option(SQLConf.get.sessionLocalTimeZone))
+            DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
 
         case _ => ae
       }
