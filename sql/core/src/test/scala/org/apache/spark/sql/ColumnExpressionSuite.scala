@@ -2533,25 +2533,28 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       outstandingZoneIds.foreach { zid =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
           Seq(
-            ("1900-01-01T00:00:00.123456000Z", Duration.ofDays(0)) ->
-              "1900-01-01T00:00:00.123456000Z",
-            ("1970-01-01T00:00:00.1Z", Duration.ofDays(-1)) -> "1969-12-31T00:00:00.1Z",
-            ("2021-03-14T01:02:03Z", Duration.ofDays(1)) -> "2021-03-15T01:02:03Z",
-            ("2020-12-31T23:59:59.999Z", Duration.ofDays(2 * 30).plusMillis(1)) ->
-              "2021-03-02T00:00:00Z",
-            ("2020-03-16T00:00:00.000001Z", Duration.of(-1, ChronoUnit.MICROS)) ->
-              "2020-03-16T00:00:00Z",
-            ("2020-02-29T12:13:14Z", Duration.ofDays(365)) -> "2021-02-28T12:13:14Z",
-            ("1582-10-04T01:02:03.04Z", Duration.ofDays(10).plusMillis(60)) ->
-              "1582-10-14T01:02:03.1Z"
-          ).foreach { case ((instantStr, duration), expected) =>
-            val ts = Instant.parse(instantStr)
-            val result = Instant.parse(expected)
+            (LocalDateTime.of(1900, 1, 1, 0, 0, 0, 123456000), Duration.ofDays(0)) ->
+              LocalDateTime.of(1900, 1, 1, 0, 0, 0, 123456000),
+            (LocalDateTime.of(1970, 1, 1, 0, 0, 0, 100000000), Duration.ofDays(-1)) ->
+              LocalDateTime.of(1969, 12, 31, 0, 0, 0, 100000000),
+            (LocalDateTime.of(2021, 3, 14, 1, 2, 3), Duration.ofDays(1)) ->
+              LocalDateTime.of(2021, 3, 15, 1, 2, 3),
+            (LocalDateTime.of(2020, 12, 31, 23, 59, 59, 999000000),
+              Duration.ofDays(2 * 30).plusMillis(1)) -> LocalDateTime.of(2021, 3, 2, 0, 0, 0),
+            (LocalDateTime.of(2020, 3, 16, 0, 0, 0, 1000), Duration.of(-1, ChronoUnit.MICROS)) ->
+              LocalDateTime.of(2020, 3, 16, 0, 0, 0),
+            (LocalDateTime.of(2020, 2, 29, 12, 13, 14), Duration.ofDays(365)) ->
+              LocalDateTime.of(2021, 2, 28, 12, 13, 14),
+            (LocalDateTime.of(1582, 10, 4, 1, 2, 3, 40000000),
+              Duration.ofDays(10).plusMillis(60)) ->
+              LocalDateTime.of(1582, 10, 14, 1, 2, 3, 100000000)
+          ).foreach { case ((ldt, duration), expected) =>
+            val ts = ldt.atZone(zid).toInstant
+            val result = expected.atZone(zid).toInstant
             val df = Seq((ts, duration, result)).toDF("ts", "interval", "result")
             checkAnswer(
               df.select($"ts" + $"interval", $"interval" + $"ts", $"result" - $"interval"),
               Row(result, result, ts))
-
           }
         }
       }

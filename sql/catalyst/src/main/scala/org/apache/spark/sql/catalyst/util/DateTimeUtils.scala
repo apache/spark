@@ -591,6 +591,16 @@ object DateTimeUtils {
     instantToMicros(microsToInstant(micros).atZone(zoneId).plusMonths(months).toInstant)
   }
 
+  def timestampAddDayTime(micros: Long, dayTime: Long, zoneId: ZoneId): Long = {
+    val days = dayTime / MICROS_PER_DAY
+    val microseconds = dayTime - days * MICROS_PER_DAY
+    val resultTimestamp = microsToInstant(micros)
+      .atZone(zoneId)
+      .plusDays(days)
+      .plus(microseconds, ChronoUnit.MICROS)
+    instantToMicros(resultTimestamp.toInstant)
+  }
+
   /**
    * Adds a full interval (months, days, microseconds) a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.

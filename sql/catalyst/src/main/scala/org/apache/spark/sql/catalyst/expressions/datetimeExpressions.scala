@@ -1264,25 +1264,33 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TimestampType, TypeCollection(CalendarIntervalType, DayTimeIntervalType))
 
   override def dataType: DataType = TimestampType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(start: Any, interval: Any): Any = {
-    val itvl = interval.asInstanceOf[CalendarInterval]
-    DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], itvl.months, itvl.days, itvl.microseconds, zoneId)
+  override def nullSafeEval(start: Any, interval: Any): Any = right.dataType match {
+    case DayTimeIntervalType =>
+      timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneId)
+    case CalendarIntervalType =>
+      val i = interval.asInstanceOf[CalendarInterval]
+      timestampAddInterval(start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, $i.months, $i.days, $i.microseconds, $zid)"""
-    })
+    interval.dataType match {
+      case DayTimeIntervalType =>
+        defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampAddDayTime($sd, $dt, $zid)""")
+      case CalendarIntervalType =>
+        defineCodeGen(ctx, ev, (sd, i) => {
+          s"""$dtu.timestampAddInterval($sd, $i.months, $i.days, $i.microseconds, $zid)"""
+        })
+    }
   }
 }
 
@@ -1552,32 +1560,6 @@ case class TimestampAddYMInterval(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (micros, months) => {
       s"""$dtu.timestampAddMonths($micros, $months, $zid)"""
-    })
-  }
-}
-
-// Adds a day-time interval to a timestamp
-case class TimestampAddDTInterval(timestamp: Expression, interval: Expression)
-  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
-
-  override def left: Expression = timestamp
-  override def right: Expression = interval
-
-  override def toString: String = s"$left + $right"
-  override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, DayTimeIntervalType)
-
-  override def dataType: DataType = TimestampType
-
-  override def nullSafeEval(timestamp: Any, interval: Any): Any = {
-    Math.addExact(
-      timestamp.asInstanceOf[TimestampType.InternalType],
-      interval.asInstanceOf[DayTimeIntervalType.InternalType])
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (timestamp, interval) => {
-      s"""java.lang.Math.addExact($timestamp, $interval)"""
     })
   }
 }

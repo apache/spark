@@ -1542,40 +1542,49 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-34761: add a day-time interval to a timestamp") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    checkEvaluation(
-      TimestampAddDTInterval(
-        Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
-        Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321))),
-      DateTimeUtils.fromJavaTimestamp(
-        new Timestamp(sdf.parse("2021-01-11 00:10:00.444").getTime)))
-
-    val e = intercept[Exception] {
+    for (zid <- outstandingZoneIds) {
+      val timeZoneId = Option(zid.getId)
+      sdf.setTimeZone(TimeZone.getTimeZone(zid))
       checkEvaluation(
-        TimestampAddDTInterval(
+        TimeAdd(
           Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
-          Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS))),
-        null)
-    }.getCause
-    assert(e.isInstanceOf[ArithmeticException])
-    assert(e.getMessage.contains("long overflow"))
+          Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2021-01-11 00:10:00.444").getTime)))
 
-    checkEvaluation(
-      TimestampAddDTInterval(
-        Literal.create(null, TimestampType),
-        Literal(Duration.ofDays(1))),
-      null)
-    checkEvaluation(
-      TimestampAddDTInterval(
-        Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
-        Literal.create(null, DayTimeIntervalType)),
-      null)
-    checkEvaluation(
-      TimestampAddDTInterval(
-        Literal.create(null, TimestampType),
-        Literal.create(null, DayTimeIntervalType)),
-      null)
-    checkConsistencyBetweenInterpretedAndCodegen(
-      (ts: Expression, interval: Expression) => TimestampAddDTInterval(ts, interval),
-      TimestampType, DayTimeIntervalType)
+      val e = intercept[Exception] {
+        checkEvaluation(
+          TimeAdd(
+            Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+            Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+            timeZoneId),
+          null)
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal(Duration.ofDays(1)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+          Literal.create(null, DayTimeIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal.create(null, DayTimeIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, interval: Expression) => TimeAdd(ts, interval, timeZoneId),
+        TimestampType, DayTimeIntervalType)
+    }
   }
 }
