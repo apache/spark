@@ -861,10 +861,7 @@ object SPARK_18989_CREATE_TABLE {
 
 object SPARK_18989_DESC_TABLE {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder()
-      .config(UI_ENABLED.key, "false")
-      .enableHiveSupport()
-      .getOrCreate()
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
     try {
       spark.sql("DESC base64_tbl")
     } finally {
@@ -875,7 +872,10 @@ object SPARK_18989_DESC_TABLE {
 
 object SPARK_34772 {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    val spark = SparkSession.builder()
+      .config(UI_ENABLED.key, "false")
+      .enableHiveSupport()
+      .getOrCreate()
     try {
       spark.sql("CREATE TABLE t (c int) PARTITIONED BY (p date)")
       spark.sql("SELECT * FROM t WHERE p='2021-01-01'").collect()
