@@ -1281,7 +1281,7 @@ class AdaptiveQueryExecSuite
         // left anti join and empty right side
         ("SELECT * FROM testData LEFT ANTI JOIN emptyTestData", true),
         // left anti join, empty right side and non-empty join condition
-        ("SELECT * FROM testData t1 LEFT ANTI JOIN emptyTestData t2 ON t1.key = t2.key", true),
+        ("SELECT * FROM testData t1 LEFT ANTI JOIN emptyTestData t2 ON t1.key = t2.key", true)
       ).foreach { case (query, isEliminated) =>
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
         assert(findTopLevelBaseJoin(plan).size == 1)
