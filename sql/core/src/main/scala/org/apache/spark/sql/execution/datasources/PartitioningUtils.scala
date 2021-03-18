@@ -29,12 +29,12 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -199,8 +199,8 @@ object PartitioningUtils {
             } catch {
               case NonFatal(_) =>
                 if (validatePartitionColumns) {
-                  throw new RuntimeException(s"Failed to cast value `${typedValue.value}` to " +
-                    s"`${typedValue.dataType}` for partition column `$columnName`")
+                  throw QueryExecutionErrors.failedToCastValueToDataTypeForPartitionColumnError(
+                    typedValue.value, typedValue.dataType, columnName)
                 } else null
             }
           }
@@ -527,7 +527,7 @@ object PartitioningUtils {
       }.getOrElse {
         Cast(Cast(Literal(value), DateType, Some(zoneId.getId)), TimestampType).eval()
       }
-    case dt => throw new IllegalArgumentException(s"Unexpected type $dt")
+    case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
   }
 
   def validatePartitionColumn(
@@ -541,12 +541,12 @@ object PartitioningUtils {
     partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
       field => field.dataType match {
         case _: AtomicType => // OK
-        case _ => throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
+        case _ => throw QueryCompilationErrors.cannotUseDataTypeForPartitionColumnError(field)
       }
     }
 
     if (partitionColumns.nonEmpty && partitionColumns.size == schema.fields.length) {
-      throw new AnalysisException(s"Cannot use all columns for partition columns")
+      throw QueryCompilationErrors.cannotUseAllColumnsForPartitionColumnsError()
     }
   }
 
@@ -558,7 +558,7 @@ object PartitioningUtils {
     StructType(partitionColumns.map { col =>
       schema.find(f => equality(f.name, col)).getOrElse {
         val schemaCatalog = schema.catalogString
-        throw new AnalysisException(s"Partition column `$col` not found in schema $schemaCatalog")
+        throw QueryCompilationErrors.partitionColumnNotFoundInSchemaError(col, schemaCatalog)
       }
     }).asNullable
   }

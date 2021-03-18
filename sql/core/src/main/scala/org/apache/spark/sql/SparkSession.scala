@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.UUID
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -101,6 +102,8 @@ class SparkSession private(
         sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
         new SparkSessionExtensions), Map.empty)
   }
+
+  private[sql] val sessionUUID: String = UUID.randomUUID.toString
 
   sparkContext.assertNotStopped()
 

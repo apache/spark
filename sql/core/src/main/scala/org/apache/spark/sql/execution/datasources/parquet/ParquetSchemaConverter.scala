@@ -26,6 +26,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -98,13 +99,13 @@ class ParquetToSparkSchemaConverter(
       if (typeAnnotation == null) s"$typeName" else s"$typeName ($typeAnnotation)"
 
     def typeNotSupported() =
-      throw new AnalysisException(s"Parquet type not supported: $typeString")
+      throw QueryCompilationErrors.parquetTypeUnsupportedError(typeString)
 
     def typeNotImplemented() =
-      throw new AnalysisException(s"Parquet type not yet supported: $typeString")
+      throw QueryCompilationErrors.parquetTypeUnsupportedYetError(typeString)
 
     def illegalType() =
-      throw new AnalysisException(s"Illegal Parquet type: $typeString")
+      throw QueryCompilationErrors.illegalParquetTypeError(typeString)
 
     // When maxPrecision = -1, we skip precision range check, and always respect the precision
     // specified in field.getDecimalMetadata.  This is useful when interpreting decimal types stored
@@ -258,7 +259,7 @@ class ParquetToSparkSchemaConverter(
           valueContainsNull = valueOptional)
 
       case _ =>
-        throw new AnalysisException(s"Unrecognized Parquet type: $field")
+        throw QueryCompilationErrors.unrecognizedParquetTypeError(field.toString)
     }
   }
 
@@ -571,7 +572,7 @@ class SparkToParquetSchemaConverter(
         convertField(field.copy(dataType = udt.sqlType))
 
       case _ =>
-        throw new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
+        throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)
     }
   }
 }
