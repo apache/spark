@@ -16,14 +16,18 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.util.DependencyUtils.downloadFile
+import org.apache.spark.util.Utils
 
 private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
@@ -74,9 +78,10 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (hasTemplate) {
       val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
-      val podTemplateString = Files.toString(
-        KubernetesUtils.getLocalTemplateFile(podTemplateFile, conf.sparkConf),
-        StandardCharsets.UTF_8)
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf.sparkConf)
+      val file = downloadFile(podTemplateFile, Utils.createTempDir(), conf.sparkConf, hadoopConf)
+          .stripPrefix("file:").stripPrefix("local:")
+      val podTemplateString = Files.toString(new File(file), StandardCharsets.UTF_8)
       Seq(new ConfigMapBuilder()
           .withNewMetadata()
             .withName(configmapName)

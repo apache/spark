@@ -35,6 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.DependencyUtils.downloadFile
 import org.apache.spark.util.Utils.getHadoopFileSystem
 
 private[spark] object KubernetesUtils extends Logging {
@@ -79,25 +80,16 @@ private[spark] object KubernetesUtils extends Logging {
     opt2.foreach { _ => require(opt1.isEmpty, errMessage) }
   }
 
-  def getLocalTemplateFile(path: String, conf: SparkConf): File = {
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    val fs = getHadoopFileSystem(Utils.resolveURI(path), hadoopConf)
-    if (fs.getScheme.equals("file")) {
-      new File(path)
-    } else {
-      val tmpFile = Utils.createTempDir().getAbsolutePath + File.separator + "template.yml"
-      fs.copyToLocalFile(new Path(path), new Path(tmpFile))
-      new File(tmpFile)
-    }
-  }
-
   def loadPodFromTemplate(
       kubernetesClient: KubernetesClient,
-      templateFile: String,
+      templateFileName: String,
       containerName: Option[String],
       conf: SparkConf): SparkPod = {
     try {
-      val pod = kubernetesClient.pods().load(getLocalTemplateFile(templateFile, conf)).get()
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+      val localFile = downloadFile(templateFileName, Utils.createTempDir(), conf, hadoopConf)
+      val templateFile = new File(localFile.stripPrefix("file:").stripPrefix("local:"))
+      val pod = kubernetesClient.pods().load(templateFile).get()
       selectSparkContainer(pod, containerName)
     } catch {
       case e: Exception =>
