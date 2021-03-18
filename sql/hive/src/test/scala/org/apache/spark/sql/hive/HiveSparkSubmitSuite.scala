@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveContext}
-import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_TIME_PARSER_POLICY, SHUFFLE_PARTITIONS}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
@@ -352,9 +352,9 @@ class HiveSparkSubmitSuite
         "--class", SPARK_34772.getClass.getName.stripSuffix("$"),
         "--name", "SPARK-34772",
         "--master", "local-cluster[2,1,1024]",
-        "--conf", "spark.sql.legacy.timeParserPolicy=LEGACY",
-        "--conf", "spark.sql.hive.metastore.version=1.2.1",
-        "--conf", "spark.sql.hive.metastore.jars=maven",
+        "--conf", s"${LEGACY_TIME_PARSER_POLICY.key}=LEGACY",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
         "--conf", s"spark.hadoop.javax.jdo.option.ConnectionURL=$metastore",
         unusedJar.toString)
       runSparkSubmit(args)
@@ -861,7 +861,10 @@ object SPARK_18989_CREATE_TABLE {
 
 object SPARK_18989_DESC_TABLE {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    val spark = SparkSession.builder()
+      .config(UI_ENABLED.key, "false")
+      .enableHiveSupport()
+      .getOrCreate()
     try {
       spark.sql("DESC base64_tbl")
     } finally {
@@ -875,7 +878,7 @@ object SPARK_34772 {
     val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
     try {
       spark.sql("CREATE TABLE t (c int) PARTITIONED BY (p date)")
-      spark.sql("SELECT * FROM t WHERE p='2021-01-01'").show()
+      spark.sql("SELECT * FROM t WHERE p='2021-01-01'").collect()
     } finally {
       spark.sql("DROP TABLE IF EXISTS t")
     }
