@@ -32,7 +32,7 @@ import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
@@ -895,6 +895,16 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(a2.asScala == Map(1 -> 2, 2 -> 4))
       assert(a4.asScala == Map())
       assert(a5.asScala == Map(3 -> 6, 4 -> 8, 5 -> 10))
+
+      def toScalaMap(mapData: MapData): Map[Int, Int] = {
+        val keys = mapData.keyArray().toSeq[Int](IntegerType)
+        val values = mapData.valueArray().toSeq[Int](IntegerType)
+        (keys zip values).toMap
+      }
+      assert(toScalaMap(column.getMap(0).copy()) === Map(0 -> 0))
+      assert(toScalaMap(column.getMap(1).copy()) === Map(1 -> 2, 2 -> 4))
+      assert(toScalaMap(column.getMap(3).copy()) === Map())
+      assert(toScalaMap(column.getMap(4).copy()) === Map(3 -> 6, 4 -> 8, 5 -> 10))
 
       column.close()
     }

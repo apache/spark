@@ -21,8 +21,10 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Period;
 import java.util.*;
 import javax.annotation.Nonnull;
 
@@ -35,7 +37,6 @@ import scala.Tuple5;
 
 import com.google.common.base.Objects;
 import org.junit.*;
-import org.junit.rules.ExpectedException;
 
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -409,6 +410,22 @@ public class JavaDatasetSuite implements Serializable {
     List<Tuple2<LocalDate, Instant>> data =
       Arrays.asList(new Tuple2<>(LocalDate.ofEpochDay(0), Instant.ofEpochSecond(0)));
     Dataset<Tuple2<LocalDate, Instant>> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testDurationEncoder() {
+    Encoder<Duration> encoder = Encoders.DURATION();
+    List<Duration> data = Arrays.asList(Duration.ofDays(0));
+    Dataset<Duration> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testPeriodEncoder() {
+    Encoder<Period> encoder = Encoders.PERIOD();
+    List<Period> data = Arrays.asList(Period.ofYears(10));
+    Dataset<Period> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 
@@ -893,9 +910,6 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  @Rule
-  public transient ExpectedException nullabilityCheck = ExpectedException.none();
-
   @Test
   public void testRuntimeNullabilityCheck() {
     OuterScopes.addOuterScope(this);
@@ -937,9 +951,6 @@ public class JavaDatasetSuite implements Serializable {
       Assert.assertEquals(Collections.singletonList(nestedSmallBean), ds.collectAsList());
     }
 
-    nullabilityCheck.expect(RuntimeException.class);
-    nullabilityCheck.expectMessage("Null value appeared in non-nullable field");
-
     {
       Row row = new GenericRow(new Object[] {
           new GenericRow(new Object[] {
@@ -950,7 +961,8 @@ public class JavaDatasetSuite implements Serializable {
       Dataset<Row> df = spark.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
-      ds.collect();
+      Assert.assertThrows("Null value appeared in non-nullable field", RuntimeException.class,
+        ds::collect);
     }
   }
 

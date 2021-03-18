@@ -867,21 +867,21 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
           val expected1 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map.empty, false)
+            TableIdentifier(tblName, Some("default")), Map.empty, false, parsed1.output)
           val expected2 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map.empty, true)
+            TableIdentifier(tblName, Some("default")), Map.empty, true, parsed2.output)
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -891,11 +891,11 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
           val expected3 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map("a" -> "1"), false)
+            TableIdentifier(tblName, Some("default")), Map("a" -> "1"), false, parsed3.output)
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
-            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended) =>
+            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _) =>
               assert(!isExtended)
               assert(partitionSpec == Map("a" -> "1"))
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
@@ -1198,7 +1198,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case AppendData(r: DataSourceV2Relation, _, _, _, _) =>
           assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case DescribeRelation(r: ResolvedTable, _, _) =>
+        case DescribeRelation(r: ResolvedTable, _, _, _) =>
           assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _, _) =>

@@ -33,6 +33,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
@@ -1101,7 +1102,7 @@ class JDBCSuite extends QueryTest
            | password '$password')
          """.stripMargin)
 
-      val show = ShowCreateTableCommand(TableIdentifier(tableName))
+      val show = ShowCreateTableCommand(TableIdentifier(tableName), ShowCreateTable.getoutputAttrs)
       spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
         assert(!r.toString.contains(password))
         assert(r.toString.contains(dbTable))

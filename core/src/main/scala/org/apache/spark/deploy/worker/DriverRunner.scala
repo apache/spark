@@ -196,9 +196,9 @@ private[deploy] class DriverRunner(
     val reverseProxy = conf.get(UI_REVERSE_PROXY)
     val workerUrlRef = UIUtils.makeHref(reverseProxy, driverId, workerWebUiUrl)
     builder.environment.put("SPARK_DRIVER_LOG_URL_STDOUT",
-      s"$workerUrlRef/logPage?driverId=$driverId&logType=stdout")
+      s"$workerUrlRef/logPage/?driverId=$driverId&logType=stdout")
     builder.environment.put("SPARK_DRIVER_LOG_URL_STDERR",
-      s"$workerUrlRef/logPage?driverId=$driverId&logType=stderr")
+      s"$workerUrlRef/logPage/?driverId=$driverId&logType=stderr")
 
     runDriver(builder, driverDir, driverDesc.supervise)
   }

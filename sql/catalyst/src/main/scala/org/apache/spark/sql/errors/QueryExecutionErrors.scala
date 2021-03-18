@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.errors
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 import java.net.URISyntaxException
+import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.DateTimeException
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
-import org.apache.spark.sql.types.{DataType, Decimal}
+import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -190,6 +191,10 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"Unexpected data type ${dataType.catalogString}")
   }
 
+  def typeUnsupportedError(dataType: DataType): Throwable = {
+    new IllegalArgumentException(s"Unexpected type $dataType")
+  }
+
   def negativeValueUnexpectedError(frequencyExpression : Expression): Throwable = {
     new SparkException(s"Negative values found in ${frequencyExpression.sql}")
   }
@@ -321,5 +326,234 @@ object QueryExecutionErrors {
 
   def compilerError(e: CompileException): Throwable = {
     new CompileException(failedToCompileMsg(e), e.getLocation)
+  }
+
+  def dataPathNotSpecifiedError(): Throwable = {
+    new IllegalArgumentException("'path' is not specified")
+  }
+
+  def createStreamingSourceNotSpecifySchemaError(): Throwable = {
+    new IllegalArgumentException(
+      s"""
+         |Schema must be specified when creating a streaming source DataFrame. If some
+         |files already exist in the directory, then depending on the file format you
+         |may be able to create a static DataFrame on that directory with
+         |'spark.read.load(directory)' and infer schema from it.
+       """.stripMargin)
+  }
+
+  def streamedOperatorUnsupportedByDataSourceError(
+      className: String, operator: String): Throwable = {
+    new UnsupportedOperationException(
+      s"Data source $className does not support streamed $operator")
+  }
+
+  def multiplePathsSpecifiedError(allPaths: Seq[String]): Throwable = {
+    new IllegalArgumentException("Expected exactly one path to be specified, but " +
+      s"got: ${allPaths.mkString(", ")}")
+  }
+
+  def failedToFindDataSourceError(provider: String, error: Throwable): Throwable = {
+    new ClassNotFoundException(
+      s"""
+         |Failed to find data source: $provider. Please find packages at
+         |http://spark.apache.org/third-party-projects.html
+       """.stripMargin, error)
+  }
+
+  def removedClassInSpark2Error(className: String, e: Throwable): Throwable = {
+    new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
+      "Please check if your library is compatible with Spark 2.0", e)
+  }
+
+  def incompatibleDataSourceRegisterError(e: Throwable): Throwable = {
+    new ClassNotFoundException(
+      s"""
+         |Detected an incompatible DataSourceRegister. Please remove the incompatible
+         |library from classpath or upgrade it. Error: ${e.getMessage}
+       """.stripMargin, e)
+  }
+
+  def unrecognizedFileFormatError(format: String): Throwable = {
+    new IllegalStateException(s"unrecognized format $format")
+  }
+
+  def sparkUpgradeInReadingDatesError(
+      format: String, config: String, option: String): SparkUpgradeException = {
+    new SparkUpgradeException("3.0",
+      s"""
+         |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z from $format
+         |files can be ambiguous, as the files may be written by Spark 2.x or legacy versions of
+         |Hive, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic
+         |Gregorian calendar. See more details in SPARK-31404. You can set the SQL config
+         |'$config' or the datasource option '$option' to 'LEGACY' to rebase the datetime values
+         |w.r.t. the calendar difference during reading. To read the datetime values as it is,
+         |set the SQL config '$config' or the datasource option '$option' to 'CORRECTED'.
+       """.stripMargin, null)
+  }
+
+  def sparkUpgradeInWritingDatesError(format: String, config: String): SparkUpgradeException = {
+    new SparkUpgradeException("3.0",
+      s"""
+         |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z into $format
+         |files can be dangerous, as the files may be read by Spark 2.x or legacy versions of Hive
+         |later, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic
+         |Gregorian calendar. See more details in SPARK-31404. You can set $config to 'LEGACY' to
+         |rebase the datetime values w.r.t. the calendar difference during writing, to get maximum
+         |interoperability. Or set $config to 'CORRECTED' to write the datetime values as it is,
+         |if you are 100% sure that the written files will only be read by Spark 3.0+ or other
+         |systems that use Proleptic Gregorian calendar.
+       """.stripMargin, null)
+  }
+
+  def buildReaderUnsupportedForFileFormatError(format: String): Throwable = {
+    new UnsupportedOperationException(s"buildReader is not supported for $format")
+  }
+
+  def jobAbortedError(cause: Throwable): Throwable = {
+    new SparkException("Job aborted.", cause)
+  }
+
+  def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
+    new SparkException("Task failed while writing rows.", cause)
+  }
+
+  def readCurrentFileNotFoundError(e: FileNotFoundException): Throwable = {
+    new FileNotFoundException(
+      s"""
+         |${e.getMessage}\n
+         |It is possible the underlying files have been updated. You can explicitly invalidate
+         |the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by
+         |recreating the Dataset/DataFrame involved.
+       """.stripMargin)
+  }
+
+  def unsupportedSaveModeError(saveMode: String, pathExists: Boolean): Throwable = {
+    new IllegalStateException(s"unsupported save mode $saveMode ($pathExists)")
+  }
+
+  def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {
+    new IOException(s"Unable to clear output directory $staticPrefixPath prior to writing to it")
+  }
+
+  def cannotClearPartitionDirectoryError(path: Path): Throwable = {
+    new IOException(s"Unable to clear partition directory $path prior to writing to it")
+  }
+
+  def failedToCastValueToDataTypeForPartitionColumnError(
+      value: String, dataType: DataType, columnName: String): Throwable = {
+    new RuntimeException(s"Failed to cast value `$value` to " +
+      s"`$dataType` for partition column `$columnName`")
+  }
+
+  def endOfStreamError(): Throwable = {
+    new NoSuchElementException("End of stream")
+  }
+
+  def writeUnsupportedForBinaryFileDataSourceError(): Throwable = {
+    new UnsupportedOperationException("Write is not supported for binary file data source")
+  }
+
+  def fileLengthExceedsMaxLengthError(status: FileStatus, maxLength: Int): Throwable = {
+    new SparkException(
+      s"The length of ${status.getPath} is ${status.getLen}, " +
+        s"which exceeds the max length allowed: ${maxLength}.")
+  }
+
+  def unsupportedFieldNameError(fieldName: String): Throwable = {
+    new RuntimeException(s"Unsupported field name: ${fieldName}")
+  }
+
+  def cannotSpecifyBothJdbcTableNameAndQueryError(
+      jdbcTableName: String, jdbcQueryString: String): Throwable = {
+    new IllegalArgumentException(
+      s"Both '$jdbcTableName' and '$jdbcQueryString' can not be specified at the same time.")
+  }
+
+  def missingJdbcTableNameAndQueryError(
+      jdbcTableName: String, jdbcQueryString: String): Throwable = {
+    new IllegalArgumentException(
+      s"Option '$jdbcTableName' or '$jdbcQueryString' is required."
+    )
+  }
+
+  def emptyOptionError(optionName: String): Throwable = {
+    new IllegalArgumentException(s"Option `$optionName` can not be empty.")
+  }
+
+  def invalidJdbcTxnIsolationLevelError(jdbcTxnIsolationLevel: String, value: String): Throwable = {
+    new IllegalArgumentException(
+      s"Invalid value `$value` for parameter `$jdbcTxnIsolationLevel`. This can be " +
+        "`NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`.")
+  }
+
+  def cannotGetJdbcTypeError(dt: DataType): Throwable = {
+    new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}")
+  }
+
+  def unrecognizedSqlTypeError(sqlType: Int): Throwable = {
+    new SQLException(s"Unrecognized SQL type $sqlType")
+  }
+
+  def unsupportedJdbcTypeError(content: String): Throwable = {
+    new SQLException(s"Unsupported type $content")
+  }
+
+  def unsupportedArrayElementTypeBasedOnBinaryError(dt: DataType): Throwable = {
+    new IllegalArgumentException(s"Unsupported array element " +
+      s"type ${dt.catalogString} based on binary")
+  }
+
+  def nestedArraysUnsupportedError(): Throwable = {
+    new IllegalArgumentException("Nested arrays unsupported")
+  }
+
+  def cannotTranslateNonNullValueForFieldError(pos: Int): Throwable = {
+    new IllegalArgumentException(s"Can't translate non-null value for field $pos")
+  }
+
+  def invalidJdbcNumPartitionsError(n: Int, jdbcNumPartitions: String): Throwable = {
+    new IllegalArgumentException(
+      s"Invalid value `$n` for parameter `$jdbcNumPartitions` in table writing " +
+        "via JDBC. The minimum value is 1.")
+  }
+
+  def transactionUnsupportedByJdbcServerError(): Throwable = {
+    new SQLFeatureNotSupportedException("The target JDBC server does not support " +
+      "transaction and can only support ALTER TABLE with a single action.")
+  }
+
+  def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
+    new UnsupportedOperationException(s"$dataType is not supported yet.")
+  }
+
+  def unsupportedOperationForDataTypeError(dataType: DataType): Throwable = {
+    new UnsupportedOperationException(s"DataType: ${dataType.catalogString}")
+  }
+
+  def inputFilterNotFullyConvertibleError(owner: String): Throwable = {
+    new SparkException(s"The input filter of $owner should be fully convertible.")
+  }
+
+  def cannotReadFooterForFileError(file: Path, e: IOException): Throwable = {
+    new SparkException(s"Could not read footer for file: $file", e)
+  }
+
+  def cannotReadFooterForFileError(file: FileStatus, e: RuntimeException): Throwable = {
+    new IOException(s"Could not read footer for file: $file", e)
+  }
+
+  def foundDuplicateFieldInCaseInsensitiveModeError(
+      requiredFieldName: String, matchedOrcFields: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Found duplicate field(s) "$requiredFieldName": $matchedOrcFields
+         |in case-insensitive mode
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def failedToMergeIncompatibleSchemasError(
+      left: StructType, right: StructType, e: Throwable): Throwable = {
+    new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
   }
 }

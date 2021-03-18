@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAnd
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -90,6 +90,46 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }.size === 2)
     checkAnswer(twoJoinsDF,
       Seq(Row(0, 0, 0), Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
+  }
+
+  test("Inner/Cross BroadcastNestedLoopJoinExec should be included in WholeStageCodegen") {
+    val df1 = spark.range(4).select($"id".as("k1"))
+    val df2 = spark.range(3).select($"id".as("k2"))
+    val df3 = spark.range(2).select($"id".as("k3"))
+
+    Seq(true, false).foreach { codegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
+        // test broadcast nested loop join without condition
+        val oneJoinDF = df1.join(df2)
+        var hasJoinInCodegen = oneJoinDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_ : BroadcastNestedLoopJoinExec) => true
+        }.size === 1
+        assert(hasJoinInCodegen == codegenEnabled)
+        checkAnswer(oneJoinDF,
+          Seq(Row(0, 0), Row(0, 1), Row(0, 2), Row(1, 0), Row(1, 1), Row(1, 2),
+            Row(2, 0), Row(2, 1), Row(2, 2), Row(3, 0), Row(3, 1), Row(3, 2)))
+
+        // test broadcast nested loop join with condition
+        val oneJoinDFWithCondition = df1.join(df2, $"k1" + 1 =!= $"k2")
+        hasJoinInCodegen = oneJoinDFWithCondition.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_ : BroadcastNestedLoopJoinExec) => true
+        }.size === 1
+        assert(hasJoinInCodegen == codegenEnabled)
+        checkAnswer(oneJoinDFWithCondition,
+          Seq(Row(0, 0), Row(0, 2), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1),
+            Row(2, 2), Row(3, 0), Row(3, 1), Row(3, 2)))
+
+        // test two broadcast nested loop joins
+        val twoJoinsDF = df1.join(df2, $"k1" < $"k2").crossJoin(df3)
+        hasJoinInCodegen = twoJoinsDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(BroadcastNestedLoopJoinExec(
+            _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
+        }.size === 1
+        assert(hasJoinInCodegen == codegenEnabled)
+        checkAnswer(twoJoinsDF,
+          Seq(Row(0, 1, 0), Row(0, 2, 0), Row(1, 2, 0), Row(0, 1, 1), Row(0, 2, 1), Row(1, 2, 1)))
+      }
+    }
   }
 
   test("Sort should be included in WholeStageCodegen") {

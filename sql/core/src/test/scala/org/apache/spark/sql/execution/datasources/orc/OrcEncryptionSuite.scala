@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.util.Random
+
+import org.apache.orc.impl.HadoopShimsFactory
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.tags.DedicatedJVMTest
 
-@DedicatedJVMTest
 class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
   import testImplicits._
 
@@ -30,6 +32,11 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
     Row(null, "841626795E7D351555B835A002E3BF10669DE9B81C95A3D59E10865AC37EA7C3", "Dongjoon Hyun")
 
   test("Write and read an encrypted file") {
+    val conf = spark.sessionState.newHadoopConf()
+    val provider = HadoopShimsFactory.get.getHadoopKeyProvider(conf, new Random)
+    assume(!provider.getKeyNames.isEmpty,
+      s"$provider doesn't has the test keys. ORC shim is created with old Hadoop libraries")
+
     val df = originalData.toDF("ssn", "email", "name")
 
     withTempPath { dir =>
@@ -53,9 +60,14 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
   }
 
   test("Write and read an encrypted table") {
+    val conf = spark.sessionState.newHadoopConf()
+    val provider = HadoopShimsFactory.get.getHadoopKeyProvider(conf, new Random)
+    assume(!provider.getKeyNames.isEmpty,
+      s"$provider doesn't has the test keys. ORC shim is created with old Hadoop libraries")
+
     val df = originalData.toDF("ssn", "email", "name")
 
-    withTempPath { dir =>
+    withTempDir { dir =>
       val path = dir.getAbsolutePath
       withTable("encrypted") {
         sql(

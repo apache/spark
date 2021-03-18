@@ -1383,6 +1383,52 @@ abstract class DynamicPartitionPruningSuiteBase
       checkAnswer(df, Nil)
     }
   }
+
+  test("SPARK-34436: DPP support LIKE ANY/ALL expression") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT date_id, product_id FROM fact_sk f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id WHERE s.country LIKE ANY ('%D%E%', '%A%B%')
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+
+      checkAnswer(df,
+        Row(1030, 2) ::
+        Row(1040, 2) ::
+        Row(1050, 2) ::
+        Row(1060, 2) :: Nil
+      )
+    }
+  }
+
+  test("SPARK-34595: DPP support RLIKE expression") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT date_id, product_id FROM fact_sk f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id WHERE s.country RLIKE '[DE|US]'
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+
+      checkAnswer(df,
+        Row(1030, 2) ::
+        Row(1040, 2) ::
+        Row(1050, 2) ::
+        Row(1060, 2) ::
+        Row(1070, 2) ::
+        Row(1080, 3) ::
+        Row(1090, 3) ::
+        Row(1100, 3) ::
+        Row(1110, 3) ::
+        Row(1120, 4) :: Nil
+      )
+    }
+  }
 }
 
 class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase
