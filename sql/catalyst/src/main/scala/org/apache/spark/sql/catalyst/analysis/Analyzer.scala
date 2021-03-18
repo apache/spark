@@ -1669,6 +1669,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         // implementation and should be resolved based on the table schema.
         o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
 
+      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _) if !m.duplicateResolved =>
+        m.copy(sourceTable = dedupRight(targetTable, sourceTable))
+
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
 
