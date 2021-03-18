@@ -155,6 +155,12 @@ class PropagateEmptyRelationSuite extends PlanTest {
     }
   }
 
+  test("SPARK-28220: Propagate empty relation through Join if condition is FalseLiteral") {
+    val query = testRelation1.join(testRelation2, Inner, condition = Some(Literal.FalseLiteral))
+    val optimized = Optimize.execute(query.analyze)
+    comparePlans(optimized, LocalRelation('a.int, 'b.int).analyze)
+  }
+
   test("propagate empty relation through UnaryNode") {
     val query = testRelation1
       .where(false)

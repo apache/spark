@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.rules._
  *    - Join with one or two empty children (including Intersect/Except).
  * 2. Unary-node Logical Plans
  *    - Project/Filter/Sample/Join/Limit/Repartition with all empty children.
+ *    - Join with false condition.
  *    - Aggregate with all empty children and at least one grouping expression.
  *    - Generate(Explode) with all empty children. Others like Hive UDTF may return results.
  */
@@ -71,10 +73,11 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
     // Joins on empty LocalRelations generated from streaming sources are not eliminated
     // as stateful streaming joins need to perform other state management operations other than
     // just processing the input data.
-    case p @ Join(_, _, joinType, _, _)
+    case p @ Join(_, _, joinType, conditionOpt, _)
         if !p.children.exists(_.isStreaming) =>
-      val isLeftEmpty = isEmptyLocalRelation(p.left)
-      val isRightEmpty = isEmptyLocalRelation(p.right)
+      val isFalseCondition = conditionOpt.exists(_.semanticEquals(FalseLiteral))
+      val isLeftEmpty = isEmptyLocalRelation(p.left) || isFalseCondition
+      val isRightEmpty = isEmptyLocalRelation(p.right) || isFalseCondition
       if (isLeftEmpty || isRightEmpty) {
         joinType match {
           case _: InnerLike => empty(p)
