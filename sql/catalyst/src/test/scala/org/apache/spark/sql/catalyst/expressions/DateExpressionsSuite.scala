@@ -1552,6 +1552,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2021-01-11 00:10:00.444").getTime)))
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:10:00.123").getTime)),
+          Literal(Duration.ofDays(-10).minusMinutes(9).minusMillis(120)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2020-12-22 00:01:00.003").getTime)))
 
       val e = intercept[Exception] {
         checkEvaluation(
