@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
@@ -86,7 +85,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
       partScan: LogicalRelation): LogicalPlan = {
-    val reuseEnabled = SQLConf.get.exchangeReuseEnabled
+    val reuseEnabled = conf.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
     lazy val hasBenefit = pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan)
     if (reuseEnabled || hasBenefit) {
@@ -97,7 +96,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
           filteringPlan,
           joinKeys,
           index,
-          SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit),
+          conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit),
         pruningPlan)
     } else {
       // abort dynamic partition pruning
@@ -125,12 +124,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
 
     // the default filtering ratio when CBO stats are missing, but there is a
     // predicate that is likely to be selective
-    val fallbackRatio = SQLConf.get.dynamicPartitionPruningFallbackFilterRatio
+    val fallbackRatio = conf.dynamicPartitionPruningFallbackFilterRatio
     // the filtering ratio based on the type of the join condition and on the column statistics
     val filterRatio = (partExpr.references.toList, otherExpr.references.toList) match {
       // filter out expressions with more than one attribute on any side of the operator
       case (leftAttr :: Nil, rightAttr :: Nil)
-        if SQLConf.get.dynamicPartitionPruningUseStats =>
+        if conf.dynamicPartitionPruningUseStats =>
           // get the CBO stats for each attribute in the join condition
           val partDistinctCount = distinctCounts(leftAttr, partPlan)
           val otherDistinctCount = distinctCounts(rightAttr, otherPlan)
@@ -253,7 +252,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // Do not rewrite subqueries.
     case s: Subquery if s.correlated => plan
-    case _ if !SQLConf.get.dynamicPartitionPruningEnabled => plan
+    case _ if !conf.dynamicPartitionPruningEnabled => plan
     case _ => prune(plan)
   }
 }

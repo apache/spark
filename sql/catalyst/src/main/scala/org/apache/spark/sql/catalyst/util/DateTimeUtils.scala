@@ -578,6 +578,20 @@ object DateTimeUtils {
   }
 
   /**
+   * Adds months to a timestamp at the given time zone. It converts the input timestamp to a local
+   * timestamp at the given time zone, adds months, and converts the resulted local timestamp
+   * back to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.
+   *
+   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z
+   * @param months The amount of months to add. It can be positive or negative.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   */
+  def timestampAddMonths(micros: Long, months: Int, zoneId: ZoneId): Long = {
+    instantToMicros(microsToInstant(micros).atZone(zoneId).plusMonths(months).toInstant)
+  }
+
+  /**
    * Adds a full interval (months, days, microseconds) a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.

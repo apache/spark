@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.HiveSerDe
 
 
 /**
@@ -198,8 +198,8 @@ case class RelationConversions(
 
   private def isConvertible(tableMeta: CatalogTable): Boolean = {
     val serde = tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
-      serde.contains("orc") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+      serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 
   private val metastoreCatalog = sessionCatalog.metastoreCatalog
@@ -210,7 +210,7 @@ case class RelationConversions(
       case InsertIntoStatement(
           r: HiveTableRelation, partition, cols, query, overwrite, ifPartitionNotExists)
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
-            (!r.isPartitioned || SQLConf.get.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE))
+            (!r.isPartitioned || conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE))
             && isConvertible(r) =>
         InsertIntoStatement(metastoreCatalog.convert(r), partition, cols,
           query, overwrite, ifPartitionNotExists)
@@ -224,7 +224,7 @@ case class RelationConversions(
       case CreateTable(tableDesc, mode, Some(query))
           if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
             tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
-            SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
+            conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
         // validation is required to be done here before relation conversion.
         DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
         // This is for CREATE TABLE .. STORED AS PARQUET/ORC AS SELECT null
