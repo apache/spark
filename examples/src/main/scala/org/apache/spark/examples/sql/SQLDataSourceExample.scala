@@ -286,8 +286,8 @@ object SQLDataSourceExample {
     // You can also use options() to use multiple options
     val df4 = spark.read.options(Map("delimiter"->";", "header"->"true")).csv(path)
 
-    df3.write.csv("output")
     // "output" is a folder which contains multiple csv files and a _SUCCESS file.
+    df3.write.csv("output")
 
     // $example off:csv_dataset$
   }
