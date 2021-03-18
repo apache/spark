@@ -135,7 +135,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val warehousePath = SharedState.resolveWarehousePath(sparkConf, conf)
     val qualified = SharedState.qualifyWarehousePath(conf, warehousePath)
-    SharedState.setWarehousePath(sparkConf, conf, qualified)
+    SharedState.setWarehousePathConf(sparkConf, conf, qualified)
     SessionState.start(sessionState)
 
     // Clean up after we exit
