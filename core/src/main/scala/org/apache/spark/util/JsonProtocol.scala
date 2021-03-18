@@ -472,7 +472,7 @@ private[spark] object JsonProtocol {
     ("Reason" -> reason) ~ json
   }
 
-  def blockManagerIdToJson(blockManagerId: BlockManagerId): JValue = {
+  def blockManagerIdToJson(blockManagerId: Location): JValue = {
     ("Executor ID" -> blockManagerId.executorId) ~
     ("Host" -> blockManagerId.host) ~
     ("Port" -> blockManagerId.port)

@@ -17,12 +17,14 @@
 
 package org.apache.spark.storage
 
-import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
+import java.io.{IOException, ObjectInput, ObjectOutput}
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.scheduler.Location
+import org.apache.spark.storage.BlockManagerId.getCachedBlockManagerId
 import org.apache.spark.util.Utils
 
 /**
@@ -40,27 +42,27 @@ class BlockManagerId private (
     private var host_ : String,
     private var port_ : Int,
     private var topologyInfo_ : Option[String])
-  extends Externalizable {
+  extends Location {
 
   private def this() = this(null, null, 0, None)  // For deserialization only
 
-  def executorId: String = executorId_
+  override def executorId: String = executorId_
 
   if (null != host_) {
     Utils.checkHost(host_)
     assert (port_ > 0)
   }
 
-  def hostPort: String = {
+  override def hostPort: String = {
     // DEBUG code
     Utils.checkHost(host)
     assert (port > 0)
     host + ":" + port
   }
 
-  def host: String = host_
+  override def host: String = host_
 
-  def port: Int = port_
+  override def port: Int = port_
 
   def topologyInfo: Option[String] = topologyInfo_
 
@@ -83,6 +85,7 @@ class BlockManagerId private (
     port_ = in.readInt()
     val isTopologyInfoAvailable = in.readBoolean()
     topologyInfo_ = if (isTopologyInfoAvailable) Option(in.readUTF()) else None
+    getCachedBlockManagerId(this)
   }
 
   @throws(classOf[IOException])
@@ -129,7 +132,7 @@ private[spark] object BlockManagerId {
   def apply(in: ObjectInput): BlockManagerId = {
     val obj = new BlockManagerId()
     obj.readExternal(in)
-    getCachedBlockManagerId(obj)
+    obj
   }
 
   /**

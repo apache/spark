@@ -28,6 +28,13 @@ import org.apache.spark.internal.config
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
+trait Location extends Externalizable {
+  def host: String
+  def port: Int
+  def hostPort: String
+  def executorId: String = "unknown"
+}
+
 /**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
  * task has shuffle files stored on as well as the sizes of outputs for each reducer, for passing
@@ -35,9 +42,9 @@ import org.apache.spark.util.Utils
  */
 private[spark] sealed trait MapStatus {
   /** Location where this task output is. */
-  def location: BlockManagerId
+  def location: Location
 
-  def updateLocation(newLoc: BlockManagerId): Unit
+  def updateLocation(newLoc: Location): Unit
 
   /**
    * Estimated size for the reduce block, in bytes.
@@ -66,7 +73,7 @@ private[spark] object MapStatus {
     .getOrElse(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS.defaultValue.get)
 
   def apply(
-      loc: BlockManagerId,
+      loc: Location,
       uncompressedSizes: Array[Long],
       mapTaskId: Long): MapStatus = {
     if (uncompressedSizes.length > minPartitionsToUseHighlyCompressMapStatus) {
@@ -115,7 +122,7 @@ private[spark] object MapStatus {
  * @param _mapTaskId unique task id for the task
  */
 private[spark] class CompressedMapStatus(
-    private[this] var loc: BlockManagerId,
+    private[this] var loc: Location,
     private[this] var compressedSizes: Array[Byte],
     private[this] var _mapTaskId: Long)
   extends MapStatus with Externalizable {
@@ -123,13 +130,13 @@ private[spark] class CompressedMapStatus(
   // For deserialization only
   protected def this() = this(null, null.asInstanceOf[Array[Byte]], -1)
 
-  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long) = {
+  def this(loc: Location, uncompressedSizes: Array[Long], mapTaskId: Long) = {
     this(loc, uncompressedSizes.map(MapStatus.compressSize), mapTaskId)
   }
 
-  override def location: BlockManagerId = loc
+  override def location: Location = loc
 
-  override def updateLocation(newLoc: BlockManagerId): Unit = {
+  override def updateLocation(newLoc: Location): Unit = {
     loc = newLoc
   }
 
@@ -168,7 +175,7 @@ private[spark] class CompressedMapStatus(
  * @param _mapTaskId unique task id for the task
  */
 private[spark] class HighlyCompressedMapStatus private (
-    private[this] var loc: BlockManagerId,
+    private[this] var loc: Location,
     private[this] var numNonEmptyBlocks: Int,
     private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long,
@@ -183,9 +190,9 @@ private[spark] class HighlyCompressedMapStatus private (
 
   protected def this() = this(null, -1, null, -1, null, -1)  // For deserialization only
 
-  override def location: BlockManagerId = loc
+  override def location: Location = loc
 
-  override def updateLocation(newLoc: BlockManagerId): Unit = {
+  override def updateLocation(newLoc: Location): Unit = {
     loc = newLoc
   }
 
@@ -216,7 +223,10 @@ private[spark] class HighlyCompressedMapStatus private (
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    loc = BlockManagerId(in)
+    // TODO(wuyi): config
+    val location = "org.apache.spark.storage.BlockManagerId"
+    loc = Utils.classForName(location).newInstance().asInstanceOf[Location]
+    loc.readExternal(in)
     numNonEmptyBlocks = -1 // SPARK-32436 Scala 2.13 doesn't initialize this during deserialization
     emptyBlocks = new RoaringBitmap()
     emptyBlocks.deserialize(in)
@@ -235,7 +245,7 @@ private[spark] class HighlyCompressedMapStatus private (
 
 private[spark] object HighlyCompressedMapStatus {
   def apply(
-      loc: BlockManagerId,
+      loc: Location,
       uncompressedSizes: Array[Long],
       mapTaskId: Long): HighlyCompressedMapStatus = {
     // We must keep track of which blocks are empty so that we don't report a zero-sized
