@@ -64,7 +64,8 @@ find "$BASEDIR" -name 'pom.xml' -not -path '*target*' -print \
 # First find the right full version from the profile's build
 # NOTE: We used to fetch the value of scala.version before but sed is used now. This is a workaround for SPARK-34762.
 ESCAPED_TO_VERSION=$(echo $TO_VERSION | sed -n "s/\./\\\\./gp")
-SCALA_VERSION=$(sed -n "s;^.*<scala-$ESCAPED_TO_VERSION\.version>\(.*\)</scala-$ESCAPED_TO_VERSION\.version>.*$;\1;p" pom.xml)
+SCALA_VERSION=$(sed -n "/<id>scala-$ESCAPED_TO_VERSION<\/id>/,/<\/profile>/ \
+  s;^.*<scala\.version>\(.*\)</scala\.version>.*$;\1;p" pom.xml)
 sed_i '1,/<scala\.version>[0-9]*\.[0-9]*\.[0-9]*</s/<scala\.version>[0-9]*\.[0-9]*\.[0-9]*</<scala.version>'$SCALA_VERSION'</' \
   "$BASEDIR/pom.xml"
 
