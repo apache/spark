@@ -60,14 +60,11 @@ BASEDIR=$(dirname $0)/..
 find "$BASEDIR" -name 'pom.xml' -not -path '*target*' -print \
   -exec bash -c "sed_i 's/\(artifactId.*\)_'$FROM_VERSION'/\1_'$TO_VERSION'/g' {}" \;
 
-# dependency:get is workaround for SPARK-34762 to download the JAR file of commons-cli.
-# Without this, build with Scala 2.13 using SBT will fail because the help plugin used below downloads only the POM file.
-COMMONS_CLI_VERSION=`build/mvn help:evaluate -Dexpression=commons-cli.version -q -DforceStdout`
-build/mvn dependency:get -Dartifact=commons-cli:commons-cli:${COMMONS_CLI_VERSION} -q
-
 # Update <scala.version> in parent POM
 # First find the right full version from the profile's build
-SCALA_VERSION=`build/mvn help:evaluate -Pscala-${TO_VERSION} -Dexpression=scala.version -q -DforceStdout`
+# NOTE: We used to fetch the value of scala.version before but sed is used now. This is a workaround for SPARK-34762.
+ESCAPED_TO_VERSION=$(echo $TO_VERSION | sed -n "s/\./\\\\./gp")
+SCALA_VERSION=$(sed -n "s;^.*<scala-$ESCAPED_TO_VERSION\.version>\(.*\)</scala-$ESCAPED_TO_VERSION\.version>.*$;\1;p" pom.xml)
 sed_i '1,/<scala\.version>[0-9]*\.[0-9]*\.[0-9]*</s/<scala\.version>[0-9]*\.[0-9]*\.[0-9]*</<scala.version>'$SCALA_VERSION'</' \
   "$BASEDIR/pom.xml"
 
