@@ -18,13 +18,12 @@
 package org.apache.spark.sql.catalyst.streaming
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
- * Used to create a [[StreamExecution]]. The inputQuery is already a resolved plan from DataFrame,
- * It's not a child plan because we want to avoid repeated analysis.
+ * Used to create a [[StreamExecution]].
  */
 case class WriteToStream(
     name: String,
@@ -32,10 +31,12 @@ case class WriteToStream(
     sink: Table,
     outputMode: OutputMode,
     deleteCheckpointOnStop: Boolean,
-    inputQuery: LogicalPlan) extends LeafNode {
+    inputQuery: LogicalPlan) extends LogicalPlan {
 
   override def isStreaming: Boolean = true
 
   override def output: Seq[Attribute] = Nil
+
+  override def children: Seq[LogicalPlan] = inputQuery :: Nil
 }
 
