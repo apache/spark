@@ -37,7 +37,7 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ ROW FORMAT row_format ]
     [ STORED AS file_format ]
     [ LOCATION path ]
-    [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+    [ TBLPROPERTIES [ ( key1=val1, key2=val2, ... ) | ( key1 val1, key2 val2, ... ) ] ]
     [ AS select_statement ]
 
 row_format:    
