@@ -88,7 +88,7 @@ private[spark] object KubernetesUtils extends Logging {
     try {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       val localFile = downloadFile(templateFileName, Utils.createTempDir(), conf, hadoopConf)
-      val templateFile = new File(localFile.stripPrefix("file:").stripPrefix("local:"))
+      val templateFile = new File(new java.net.URI(localFile).getPath)
       val pod = kubernetesClient.pods().load(templateFile).get()
       selectSparkContainer(pod, containerName)
     } catch {
