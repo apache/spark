@@ -32,7 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SparkPlan
@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, Tex
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{CalendarIntervalType, DataType, DayTimeIntervalType, StructField, StructType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
 
@@ -575,13 +575,9 @@ case class DataSource(
   }
 
   private def disallowWritingIntervals(dataTypes: Seq[DataType]): Unit = {
-    def isInterval(dataType: DataType): Boolean = dataType match {
-      case CalendarIntervalType | DayTimeIntervalType | YearMonthIntervalType => true
-      case _ => false
-    }
-    if (dataTypes.exists(_.existsRecursively(isInterval))) {
+    dataTypes.foreach(TypeUtils.invokeOnceForInterval(_) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
-    }
+    })
   }
 }
 
