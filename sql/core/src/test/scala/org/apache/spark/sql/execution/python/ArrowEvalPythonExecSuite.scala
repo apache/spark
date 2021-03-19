@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 class ArrowEvalPythonExecSuite extends SparkFunSuite {
   import ArrowEvalPythonExec.plainSchema
 
-  test("plainSchema: fixed point datatype") {
+  test("plainSchema: fixed point data type") {
     Seq(
       BinaryType, BooleanType, ByteType, NullType,
       StringType, VarcharType(10), CharType(10),
@@ -36,7 +36,7 @@ class ArrowEvalPythonExecSuite extends SparkFunSuite {
       DataTypes.YearMonthIntervalType,
       DataTypes.createDecimalType()
     ).foreach { tpe =>
-      assert(plainSchema(tpe) == tpe)
+      assert(plainSchema(tpe) === tpe)
     }
   }
 
@@ -47,5 +47,23 @@ class ArrowEvalPythonExecSuite extends SparkFunSuite {
     assert (plainSchema(exampleBoxUDT) === exampleBoxUDT.sqlType)
   }
 
-  // StructType / ArrayType / MapType
+  test("plainSchema: complex data type") {
+    val plainStructType = StructType(Array(StructField(name = "id", LongType)))
+    assert(plainSchema(plainStructType) === plainStructType)
+    val arrStructType = StructType(Array(StructField(name = "id_arr", ArrayType(LongType, false))))
+    assert(plainSchema(arrStructType) === arrStructType)
+    val udtStructType = StructType(Array(StructField(name = "udt", new ExamplePointUDT())))
+    val udtStructType2 = StructType(Array(StructField(name = "udt", ArrayType(DoubleType, true))))
+    assert(plainSchema(udtStructType) === udtStructType2)
+
+    val plainArrayType = ArrayType(LongType, false)
+    assert(plainSchema(plainArrayType) === plainArrayType)
+    val udtArrayType = ArrayType(new ExamplePointUDT(), false)
+    assert(plainSchema(udtArrayType) === ArrayType(ArrayType(DoubleType, true), false))
+
+    val plainMapType = MapType(LongType, LongType, true)
+    assert(plainSchema(plainMapType) === plainMapType)
+    val udtMapType = MapType(LongType, new ExamplePointUDT(), false)
+    assert(plainSchema(udtMapType) === MapType(LongType, ArrayType(DoubleType, true), false))
+  }
 }
