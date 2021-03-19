@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -4063,6 +4063,38 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           checkAnswer(joinWithEmptyRightDf, expectedAnswer)
         }
       }
+    }
+  }
+
+  test("SPARK-34575 Push down limit through window when partitionSpec is empty") {
+    withTable("t1") {
+      val numRows = 10
+      spark.range(numRows)
+        .selectExpr("if (id % 2 = 0, null, id) AS a", s"$numRows - id AS b")
+        .write
+        .saveAsTable("t1")
+
+      val df1 = spark.sql(
+        """
+          |SELECT a, b, ROW_NUMBER() OVER(ORDER BY a, b) AS rn
+          |FROM t1 LIMIT 3
+          |""".stripMargin)
+      val pushedLocalLimits1 = df1.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: Sort) => l
+      }
+      assert(pushedLocalLimits1.length === 1)
+      checkAnswer(df1, Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3)))
+
+      val df2 = spark.sql(
+        """
+          |SELECT b, RANK() OVER(ORDER BY a, b) AS rk, DENSE_RANK(b) OVER(ORDER BY a, b) AS s
+          |FROM t1 LIMIT 2
+          |""".stripMargin)
+      val pushedLocalLimits2 = df2.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: Sort) => l
+      }
+      assert(pushedLocalLimits2.length === 1)
+      checkAnswer(df2, Seq(Row(2, 1, 1), Row(4, 2, 2)))
     }
   }
 }

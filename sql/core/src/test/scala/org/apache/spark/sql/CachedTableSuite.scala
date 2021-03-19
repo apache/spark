@@ -1538,8 +1538,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
       sql(s"CREATE $tempViewStr ${ident.table} USING parquet OPTIONS (path '$path1')")
 
-      spark.sharedState.cacheManager.clearCache()
-
       sql(s"CACHE TABLE $viewName")
       assert(spark.catalog.isCached(viewName))
 
@@ -1550,7 +1548,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       // Replacing with a different relation. The cache should be cleared.
       sql(s"CREATE OR REPLACE $tempViewStr ${ident.table} USING parquet OPTIONS (path '$path2')")
       assert(!spark.catalog.isCached(viewName))
-      assert(spark.sharedState.cacheManager.isEmpty)
+
+      // Validate that the cache is cleared by creating a temp view with the same relation.
+      sql(s"CREATE OR REPLACE $tempViewStr ${ident.table} USING parquet OPTIONS (path '$path1')")
+      assert(!spark.catalog.isCached(viewName))
     }
   }
 }
