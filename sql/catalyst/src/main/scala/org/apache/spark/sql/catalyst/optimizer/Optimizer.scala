@@ -1470,12 +1470,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def pushDownJoinConditions(conditions: Seq[Expression], plan: LogicalPlan) = {
-    // Push down true condition is useless.
-    if (conditions.exists(_.semanticEquals(TrueLiteral))) {
-      plan
-    } else {
-      conditions.reduceLeftOption(And).map(Filter(_, plan)).getOrElse(plan)
-    }
+    conditions
+      .filterNot(_.semanticEquals(TrueLiteral)) // Push down true condition is useless.
+      .reduceLeftOption(And).map(Filter(_, plan)).getOrElse(plan)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
