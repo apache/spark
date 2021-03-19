@@ -45,7 +45,8 @@ public class ExpressionInfo {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ExpressionInfo that = (ExpressionInfo) o;
-        return name.equals(that.name) &&
+        return className.equals(that.className) &&
+                name.equals(that.name) &&
                 arguments.equals(that.arguments) &&
                 examples.equals(that.examples) &&
                 note.equals(that.note) &&
