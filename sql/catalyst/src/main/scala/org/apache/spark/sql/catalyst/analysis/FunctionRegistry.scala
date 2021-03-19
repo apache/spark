@@ -107,7 +107,7 @@ class SimpleFunctionRegistry extends FunctionRegistry with Logging {
     val normalizedName = normalizeFuncName(name)
     val newFunction = (info, builder)
     functionBuilders.put(normalizedName, newFunction) match {
-      case Some(previousFunction) if testFunctionEquality(previousFunction._1, newFunction._1) =>
+      case Some(previousFunction) if !testFunctionEquality(previousFunction._1, newFunction._1) =>
         logWarning(s"The function $normalizedName replaced a previously registered function.")
       case _ =>
     }
