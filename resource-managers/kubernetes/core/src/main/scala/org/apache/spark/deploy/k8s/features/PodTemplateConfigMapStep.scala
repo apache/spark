@@ -79,8 +79,8 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
     if (hasTemplate) {
       val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf.sparkConf)
-      val file = downloadFile(podTemplateFile, Utils.createTempDir(), conf.sparkConf, hadoopConf)
-          .stripPrefix("file:").stripPrefix("local:")
+      val uri = downloadFile(podTemplateFile, Utils.createTempDir(), conf.sparkConf, hadoopConf)
+      val file = new java.net.URI(uri).getPath
       val podTemplateString = Files.toString(new File(file), StandardCharsets.UTF_8)
       Seq(new ConfigMapBuilder()
           .withNewMetadata()
