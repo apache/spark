@@ -22,6 +22,7 @@ import java.lang.{Long => JLong}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.runtime.universe.TypeTag
@@ -42,6 +43,7 @@ import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCod
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2380,6 +2382,67 @@ class DataFrameSuite extends QueryTest
       val aggPlusFilter2 = df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === 0)
       checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
     }
+  }
+
+  test("SPARK-34806: observation on datasets") {
+    val namedObservation = spark.observation(
+      "named",
+      min($"id").as("min_val"),
+      max($"id").as("max_val"),
+      sum($"id").as("sum_val"),
+      count(when($"id" % 2 === 0, 1)).as("num_even")
+    )
+    val unnamedObservation = spark.observation(
+      name = "other_event",
+      avg($"id").cast("int").as("avg_val")
+    )
+
+    try {
+      val df = spark.range(100)
+        .transform(namedObservation.on)
+        .transform(unnamedObservation.on)
+
+      def checkMetrics(namedMetric: Row, unnamedMetric: Row): Unit = {
+        assert(namedMetric === Row(0L, 99L, 4950L, 50L))
+        assert(unnamedMetric === Row(49))
+      }
+
+      // Before first run observation times out
+      assert(namedObservation.waitCompleted(100, TimeUnit.MILLISECONDS) === false)
+      assert(unnamedObservation.waitCompleted(100, TimeUnit.MILLISECONDS) === false)
+
+      // First run
+      df.collect()
+      assert(namedObservation.waitCompleted(1, TimeUnit.SECONDS))
+      assert(unnamedObservation.waitCompleted(1, TimeUnit.SECONDS))
+      checkMetrics(namedObservation.get, unnamedObservation.get)
+      namedObservation.reset()
+      unnamedObservation.reset()
+
+      // Second run should produce the same result as the first run.
+      df.collect()
+      assert(namedObservation.waitCompleted(1, TimeUnit.SECONDS))
+      assert(unnamedObservation.waitCompleted(1, TimeUnit.SECONDS))
+      checkMetrics(namedObservation.get, unnamedObservation.get)
+      checkMetrics(
+        namedObservation.option(100, TimeUnit.MILLISECONDS).get,
+        unnamedObservation.option(100, TimeUnit.MILLISECONDS).get
+      )
+      namedObservation.reset()
+      unnamedObservation.reset()
+
+      // After reset, option times out
+      assert(namedObservation.option(100, TimeUnit.MILLISECONDS).isEmpty)
+      assert(unnamedObservation.option(100, TimeUnit.MILLISECONDS).isEmpty)
+    } finally {
+      namedObservation.close()
+      unnamedObservation.close()
+    }
+
+    // streaming datasets are not supported
+    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
+    val streamObservation = spark.observation(avg($"value").cast("int").as("avg_val"))
+    assertThrows[IllegalArgumentException] { streamObservation.on(streamDf) }
   }
 
   test("SPARK-25159: json schema inference should only trigger one job") {

@@ -684,6 +684,12 @@ class SparkSession private(
     ret
   }
 
+  def observation(expr: Column, exprs: Column*): Observation =
+    observation(UUID.randomUUID().toString, expr, exprs: _*)
+
+  def observation(name: String, expr: Column, exprs: Column*): Observation =
+    Observation(name, expr, exprs: _*)(this)
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
