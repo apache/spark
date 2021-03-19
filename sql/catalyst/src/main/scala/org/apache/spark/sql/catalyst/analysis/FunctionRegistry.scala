@@ -108,14 +108,12 @@ class SimpleFunctionRegistry extends FunctionRegistry with Logging {
     val newFunction = (info, builder)
     functionBuilders.put(normalizedName, newFunction) match {
       case Some(previousFunction) if testFunctionEquality(previousFunction._1, newFunction._1) =>
-        logError("this")
         logWarning(s"The function $normalizedName replaced a previously registered function.")
       case _ =>
     }
   }
 
-  private [catalyst] def testFunctionEquality(previousFunction: ExpressionInfo,
-                                              newFunction: ExpressionInfo): Boolean = {
+  private [catalyst] def testFunctionEquality(previousFunction: ExpressionInfo, newFunction: ExpressionInfo): Boolean = {
     previousFunction.equals(newFunction)
   }
 
