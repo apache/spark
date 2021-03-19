@@ -36,18 +36,16 @@ import org.apache.spark.util.Utils
  */
 object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-    case WriteToStreamStatement(userSpecifiedName, userSpecifiedCheckpointLocation,
-        useTempCheckpointLocation, recoverFromCheckpointLocation, sink, outputMode, hadoopConf,
-        isContinuousTrigger, queryPlan) =>
+    case s: WriteToStreamStatement =>
       var deleteCheckpointOnStop = false
-      val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
+      val checkpointLocation = s.userSpecifiedCheckpointLocation.map { userSpecified =>
         new Path(userSpecified).toString
       }.orElse {
         conf.checkpointLocation.map { location =>
-          new Path(location, userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toString
+          new Path(location, s.userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toString
         }
       }.getOrElse {
-        if (useTempCheckpointLocation) {
+        if (s.useTempCheckpointLocation) {
           deleteCheckpointOnStop = true
           val tempDir = Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
           logWarning("Temporary checkpoint location created which is deleted normally when" +
@@ -64,9 +62,9 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
       }
 
       // If offsets have already been created, we trying to resume a query.
-      if (!recoverFromCheckpointLocation) {
+      if (!s.recoverFromCheckpointLocation) {
         val checkpointPath = new Path(checkpointLocation, "offsets")
-        val fs = checkpointPath.getFileSystem(hadoopConf)
+        val fs = checkpointPath.getFileSystem(s.hadoopConf)
         if (fs.exists(checkpointPath)) {
           throw new AnalysisException(
             s"This query does not support recovering from checkpoint location. " +
@@ -80,20 +78,20 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
       }
 
       if (conf.isUnsupportedOperationCheckEnabled) {
-        if (sink.isInstanceOf[SupportsWrite] && isContinuousTrigger) {
-          UnsupportedOperationChecker.checkForContinuous(queryPlan, outputMode)
+        if (s.sink.isInstanceOf[SupportsWrite] && s.isContinuousTrigger) {
+          UnsupportedOperationChecker.checkForContinuous(s.inputQuery, s.outputMode)
         } else {
-          UnsupportedOperationChecker.checkForStreaming(queryPlan, outputMode)
+          UnsupportedOperationChecker.checkForStreaming(s.inputQuery, s.outputMode)
         }
       }
 
       WriteToStream(
-        userSpecifiedName.orNull,
+        s.userSpecifiedName.orNull,
         checkpointLocation,
-        sink,
-        outputMode,
+        s.sink,
+        s.outputMode,
         deleteCheckpointOnStop,
-        queryPlan)
+        s.inputQuery)
   }
 }
 
