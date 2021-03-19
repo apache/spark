@@ -1136,7 +1136,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn("vector", create_vector(col("id")))
             .withColumn("box", create_boxes(col("id")))
         )
-        df.show()
         self.assertEqual([
             Row(id=0, vector=ExamplePoint(0, 1), box=ExampleBox(0, 1, 2, 3)),
             Row(id=1, vector=ExamplePoint(1, 2), box=ExampleBox(1, 2, 3, 4))
@@ -1159,7 +1158,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         df = self.spark.range(1, 3)
         df = df.withColumn("nested", array_of_udt_structs(df.id))
-        df.show()
         self.assertEqual([
             Row(id=1, nested=Row(
                 vec=[ExamplePoint(1, 1), ExamplePoint(2, 2)],
@@ -1191,7 +1189,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn("points", array_of_points(df.id))
             .withColumn("boxes", array_of_boxes(df.id))
         )
-        df.show()
         self.assertEqual([
             Row(
                 id=1,
