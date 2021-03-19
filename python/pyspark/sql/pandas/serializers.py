@@ -155,11 +155,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal, \
             _convert_dict_to_map_items
         from pandas.api.types import is_categorical_dtype
-        # Make input conform to [(series1, type1), (series2, type2), ...]
-        if not isinstance(series, (list, tuple)) or \
-                (len(series) == 2 and isinstance(series[1], (pa.DataType, DataType))):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         def create_array(s, dt: DataType, t: pa.DataType):
             if isinstance(dt, UserDefinedType):
@@ -194,6 +189,12 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 else:
                     raise e
             return array
+
+        # Make input conform to [(series1, type1), (series2, type2), ...]
+        if not isinstance(series, (list, tuple)) or \
+                (len(series) == 2 and isinstance(series[1], (pa.DataType, DataType))):
+            series = [series]
+        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         arrs = []
         for s, dt in series:
