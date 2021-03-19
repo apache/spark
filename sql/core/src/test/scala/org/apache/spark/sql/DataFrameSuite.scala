@@ -2755,6 +2755,12 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df2.select(df2("`d.e``f`.`a``b.c`")), Row("col1"))
     checkAnswer(df2.select(col("`d.e``f`.`a``b.c`")), Row("col1"))
     checkAnswer(df2.select($"`d.e``f`.`a``b.c`"), Row("col1"))
+
+    val df3 = df1.as("*-#&% ?")
+    checkAnswer(df3.selectExpr("`*-#&% ?`.`a``b.c`"), Row("col1"))
+    checkAnswer(df3.select(df3("*-#&% ?.`a``b.c`")), Row("col1"))
+    checkAnswer(df3.select(col("*-#&% ?.`a``b.c`")), Row("col1"))
+    checkAnswer(df3.select($"*-#&% ?.`a``b.c`"), Row("col1"))
   }
 
   test("SPARK-34776: Nested column pruning should not prune Window produced attributes") {
