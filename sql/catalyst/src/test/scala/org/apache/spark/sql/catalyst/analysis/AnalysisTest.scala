@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.types.StructType
 
 trait AnalysisTest extends PlanTest {
 
@@ -40,12 +41,7 @@ trait AnalysisTest extends PlanTest {
       plan: LogicalPlan,
       overrideIfExists: Boolean): Unit = {
     val identifier = TableIdentifier(name)
-    val metadata = CatalogTable(
-      identifier = identifier,
-      tableType = CatalogTableType.VIEW,
-      storage = CatalogStorageFormat.empty,
-      schema = plan.schema,
-      properties = Map((VIEW_STORING_ANALYZED_PLAN, "true")))
+    val metadata = createTempViewMetadata(identifier, plan.schema)
     val viewDefinition = TemporaryViewRelation(metadata, Some(plan))
     catalog.createTempView(name, viewDefinition, overrideIfExists)
   }
@@ -57,14 +53,20 @@ trait AnalysisTest extends PlanTest {
       overrideIfExists: Boolean): Unit = {
     val globalDb = Some(SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE))
     val identifier = TableIdentifier(name, globalDb)
-    val metadata = CatalogTable(
+    val metadata = createTempViewMetadata(identifier, plan.schema)
+    val viewDefinition = TemporaryViewRelation(metadata, Some(plan))
+    catalog.createGlobalTempView(name, viewDefinition, overrideIfExists)
+  }
+
+  private def createTempViewMetadata(
+      identifier: TableIdentifier,
+      schema: StructType): CatalogTable = {
+    CatalogTable(
       identifier = identifier,
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
-      schema = plan.schema,
+      schema = schema,
       properties = Map((VIEW_STORING_ANALYZED_PLAN, "true")))
-    val viewDefinition = TemporaryViewRelation(metadata, Some(plan))
-    catalog.createGlobalTempView(name, viewDefinition, overrideIfExists)
   }
 
   protected def getAnalyzer: Analyzer = {

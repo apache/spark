@@ -85,8 +85,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
-  private def getTempViewRawPlan(plan: Option[View]): Option[LogicalPlan] = plan match {
-    case Some(v) if v.isTempViewStoringAnalyzedPlan => Some(v.child)
+  private def getTempViewRawPlan(plan: Option[LogicalPlan]): Option[LogicalPlan] = plan match {
+    case Some(v: View) if v.isTempViewStoringAnalyzedPlan =>
+      Some(v.child)
     case other => other
   }
 
@@ -633,7 +634,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       // Otherwise, we'll first look up a temporary table with the same name
       val tbl1 = catalog.lookupRelation(TableIdentifier("tbl1")).asInstanceOf[SubqueryAlias]
       assert(tbl1.identifier == AliasIdentifier("tbl1"))
-      assert(tbl1.child == tempTable1)
+      assert(getTempViewRawPlan(Some(tbl1.child)).get == tempTable1)
       // Then, if that does not exist, look up the relation in the current database
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
       assert(catalog.lookupRelation(TableIdentifier("tbl1")).children.head
