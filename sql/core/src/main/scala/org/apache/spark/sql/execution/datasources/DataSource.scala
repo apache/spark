@@ -575,10 +575,12 @@ case class DataSource(
   }
 
   private def disallowWritingIntervals(dataTypes: Seq[DataType]): Unit = {
-    dataTypes.foreach {
-      case i @ (CalendarIntervalType | DayTimeIntervalType | YearMonthIntervalType) =>
-        throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError(i.typeName)
-      case _ =>
+    def isInterval(dataType: DataType): Boolean = dataType match {
+      case CalendarIntervalType | DayTimeIntervalType | YearMonthIntervalType => true
+      case _ => false
+    }
+    if (dataTypes.exists(_.existsRecursively(isInterval))) {
+      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     }
   }
 }
