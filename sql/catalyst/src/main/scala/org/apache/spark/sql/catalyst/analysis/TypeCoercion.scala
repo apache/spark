@@ -272,7 +272,7 @@ abstract class TypeCoercionBase {
     private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
       val casted = plan.output.zip(targetTypes).map {
         case (e, dt) if e.dataType != dt =>
-          Alias(Cast(e, dt, Some(SQLConf.get.sessionLocalTimeZone)), e.name)()
+          Alias(Cast(e, dt, Some(conf.sessionLocalTimeZone)), e.name)()
         case (e, _) => e
       }
       Project(casted, plan)
@@ -1182,7 +1182,7 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
             case Some(newType) if a.dataType == newType.dataType => a
             case Some(newType) =>
               logDebug(s"Promoting $a from ${a.dataType} to ${newType.dataType} in " +
-                s" ${q.simpleString(SQLConf.get.maxToStringFields)}")
+                s" ${q.simpleString(conf.maxToStringFields)}")
               newType
           }
       }
