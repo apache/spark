@@ -592,6 +592,8 @@ case class Window(
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
 
+  override def producedAttributes: AttributeSet = windowOutputSet
+
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 }
 
