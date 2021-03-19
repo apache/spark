@@ -53,6 +53,7 @@ import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Deploy.SPARK_SUBMIT_PLUGIN
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util._
@@ -634,16 +635,18 @@ private[spark] class SparkSubmit extends Logging {
         ALL_DEPLOY_MODES, confKey = CORES_MAX.key),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES | OTHER,
         ALL_DEPLOY_MODES, confKey = FILES.key),
-      OptionAssigner(args.jars, LOCAL, CLIENT, confKey = JARS.key),
+      OptionAssigner(args.archives, LOCAL | STANDALONE | MESOS | KUBERNETES | OTHER,
+        ALL_DEPLOY_MODES, confKey = ARCHIVES.key),
+      OptionAssigner(args.jars, LOCAL | OTHER, CLIENT, confKey = JARS.key),
       OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES | OTHER, ALL_DEPLOY_MODES,
         confKey = JARS.key),
       OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES | OTHER, CLUSTER,
         confKey = DRIVER_MEMORY.key),
       OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES | OTHER, CLUSTER,
         confKey = DRIVER_CORES.key),
-      OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.supervise.toString, STANDALONE | MESOS | OTHER, CLUSTER,
         confKey = DRIVER_SUPERVISE.key),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, confKey = "spark.jars.ivy"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE | OTHER, CLUSTER, confKey = "spark.jars.ivy"),
 
       // An internal option used only for spark-shell to add user jars to repl's classloader,
       // previously it uses "spark.jars" or "spark.yarn.dist.jars" which now may be pointed to
@@ -849,6 +852,13 @@ private[spark] class SparkSubmit extends Logging {
     }
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
+    if (sparkConf.get(SPARK_SUBMIT_PLUGIN).nonEmpty) {
+      // user has provided the SparkSubmit plugin
+      val plugin = getSubmitPlugin(sparkConf.get(SPARK_SUBMIT_PLUGIN).get, sparkConf)
+      return plugin.prepareSubmitEnvironment(
+        args, sparkConf, childArgs, childClasspath, childMainClass)
+    }
+
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
@@ -873,6 +883,26 @@ private[spark] class SparkSubmit extends Logging {
       }
     Thread.currentThread.setContextClassLoader(loader)
     loader
+  }
+
+  private def getSubmitPlugin(
+      pluginClassName: String, sparkConf: SparkConf): SparkSubmitPlugin = {
+    val loader = getSubmitClassLoader(sparkConf)
+    var pluginClass: Class[_] = null
+
+    try {
+      pluginClass = Utils.classForName(pluginClassName)
+    } catch {
+      case e: ClassNotFoundException =>
+        logError(s"Failed to load SparkSubmit plugin class: $pluginClassName.")
+        throw SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+      case e: NoClassDefFoundError =>
+        logError(s"Failed to load SparkSubmit plugin class $pluginClassName: ${e.getMessage()}")
+        throw SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+    }
+
+    assert(classOf[SparkSubmitPlugin].isAssignableFrom(pluginClass))
+    pluginClass.getConstructor().newInstance().asInstanceOf[SparkSubmitPlugin]
   }
 
   /**

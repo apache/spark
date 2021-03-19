@@ -1537,6 +1537,18 @@ class SparkSubmitSuite
       unusedJar.toString)
     runSparkSubmit(args)
   }
+
+  test("spark submit with user defined ExternalClusterManager and SparkSubmitPlugin") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class",
+      ExternalClusterManagerWithSubmitPluginApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "myclusterManager",
+      "--conf", s"spark.deploy.sparkSubmitPlugin=${classOf[UserDefinedSparkSubmitPlugin].getName}",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
@@ -1619,21 +1631,6 @@ object SimpleApplicationTest {
   }
 }
 
-object ExternalClusterManagerApplicationTest {
-  def main(args: Array[String]): Unit = {
-    val conf = new SparkConf()
-    val sc = new SparkContext(conf)
-    if (!sc.schedulerBackend.isInstanceOf[DummySchedulerBackend]) {
-      throw new SparkException(s"wrong scheduler backend: ${sc.schedulerBackend}")
-    }
-
-    if (!sc.taskScheduler.isInstanceOf[DummyTaskScheduler]) {
-      throw new SparkException(s"wrong task scheduler: ${sc.taskScheduler}")
-    }
-    sc.stop()
-  }
-}
-
 object UserClasspathFirstTest {
   def main(args: Array[String]): Unit = {
     val ccl = Thread.currentThread().getContextClassLoader()
@@ -1688,4 +1685,53 @@ class TestSparkApplication extends SparkApplication with Matchers {
     throw new SparkException(args(0))
   }
 
+}
+
+object ExternalClusterManagerApplicationTest {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf()
+    val sc = new SparkContext(conf)
+    if (!sc.schedulerBackend.isInstanceOf[DummySchedulerBackend]) {
+      throw new SparkException(s"wrong scheduler backend: ${sc.schedulerBackend}")
+    }
+
+    if (!sc.taskScheduler.isInstanceOf[DummyTaskScheduler]) {
+      throw new SparkException(s"wrong task scheduler: ${sc.taskScheduler}")
+    }
+    sc.stop()
+  }
+}
+
+class UserDefinedSparkSubmitPlugin extends SparkSubmitPlugin {
+  override def prepareSubmitEnvironment(
+      args: SparkSubmitArguments,
+      sparkConf: SparkConf,
+      childProcessArgs: Seq[String],
+      childProcessClassPaths: Seq[String],
+      childProcessMainClass: String): (Seq[String], Seq[String], SparkConf, String) = {
+
+    sparkConf.set("spark.deploy.sparkSubmitPluginTest", "test")
+    (childProcessArgs, childProcessClassPaths, sparkConf, childProcessMainClass)
+  }
+}
+
+object ExternalClusterManagerWithSubmitPluginApplicationTest {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf()
+    val sc = new SparkContext(conf)
+    if (!sc.schedulerBackend.isInstanceOf[DummySchedulerBackend]) {
+      throw new SparkException(s"wrong scheduler backend: ${sc.schedulerBackend}")
+    }
+
+    if (!sc.taskScheduler.isInstanceOf[DummyTaskScheduler]) {
+      throw new SparkException(s"wrong task scheduler: ${sc.taskScheduler}")
+    }
+
+    val testValue = conf.getOption("spark.deploy.sparkSubmitPluginTest")
+    if (testValue.isEmpty || testValue.get != "test") {
+      throw new SparkException(s"user provided SparkSubmitPlugin has not worked")
+    }
+
+    sc.stop()
+  }
 }

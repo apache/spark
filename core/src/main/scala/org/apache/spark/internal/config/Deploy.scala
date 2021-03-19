@@ -75,5 +75,8 @@ private[spark] object Deploy {
     .intConf
     .createWithDefault(Int.MaxValue)
 
-
+  val SPARK_SUBMIT_PLUGIN = ConfigBuilder("spark.deploy.sparkSubmitPlugin")
+    .version("3.2.0")
+    .stringConf
+    .createOptional
 }
