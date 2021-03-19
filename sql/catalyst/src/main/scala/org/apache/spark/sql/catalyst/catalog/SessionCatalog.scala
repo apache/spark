@@ -819,12 +819,9 @@ class SessionCatalog(
     }
   }
 
-  private def getTempViewPlan(viewInfo: TemporaryViewRelation): View = {
-    if (viewInfo.plan.isEmpty) {
-      fromCatalogTable(viewInfo.tableMeta, isTempView = true)
-    } else {
-      View(desc = viewInfo.tableMeta, isTempView = true, child = viewInfo.plan.get)
-    }
+  private def getTempViewPlan(viewInfo: TemporaryViewRelation): View = viewInfo.plan match {
+    case Some(p) => View(desc = viewInfo.tableMeta, isTempView = true, child = p)
+    case None => fromCatalogTable(viewInfo.tableMeta, isTempView = true)
   }
 
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
