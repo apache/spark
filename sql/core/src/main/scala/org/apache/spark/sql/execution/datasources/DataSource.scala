@@ -510,7 +510,7 @@ case class DataSource(
       physicalPlan: SparkPlan,
       metrics: Map[String, SQLMetric]): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
-    checkAllowedTypesInWrite(outputColumns.map(_.dataType))
+    disallowWritingIntervals(outputColumns.map(_.dataType))
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(
@@ -544,7 +544,7 @@ case class DataSource(
    * Returns a logical plan to write the given [[LogicalPlan]] out to this [[DataSource]].
    */
   def planForWriting(mode: SaveMode, data: LogicalPlan): LogicalPlan = {
-    checkAllowedTypesInWrite(data.schema.map(_.dataType))
+    disallowWritingIntervals(data.schema.map(_.dataType))
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
@@ -574,7 +574,7 @@ case class DataSource(
       checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths)
   }
 
-  private def checkAllowedTypesInWrite(dataTypes: Seq[DataType]): Unit = {
+  private def disallowWritingIntervals(dataTypes: Seq[DataType]): Unit = {
     dataTypes.foreach {
       case i @ (CalendarIntervalType | DayTimeIntervalType | YearMonthIntervalType) =>
         throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError(i.typeName)
