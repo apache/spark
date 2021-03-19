@@ -272,7 +272,7 @@ abstract class TypeCoercionBase {
     private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
       val casted = plan.output.zip(targetTypes).map {
         case (e, dt) if e.dataType != dt =>
-          Alias(Cast(e, dt, Some(SQLConf.get.sessionLocalTimeZone)), e.name)()
+          Alias(Cast(e, dt, Some(conf.sessionLocalTimeZone)), e.name)()
         case (e, _) => e
       }
       Project(casted, plan)
@@ -1081,7 +1081,7 @@ object TypeCoercion extends TypeCoercionBase {
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
-      case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
+      case Abs(e @ StringType(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
       case s @ StddevPop(e @ StringType(), _) =>
@@ -1182,7 +1182,7 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
             case Some(newType) if a.dataType == newType.dataType => a
             case Some(newType) =>
               logDebug(s"Promoting $a from ${a.dataType} to ${newType.dataType} in " +
-                s" ${q.simpleString(SQLConf.get.maxToStringFields)}")
+                s" ${q.simpleString(conf.maxToStringFields)}")
               newType
           }
       }

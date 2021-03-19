@@ -404,6 +404,7 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction]) extends Command with SupportsSubquery {
   override def children: Seq[LogicalPlan] = Seq(targetTable, sourceTable)
+  def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 }
 
 sealed abstract class MergeAction extends Expression with Unevaluable {

@@ -26,13 +26,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.orc.{OrcConf, OrcFile, Reader, TypeDescription, Writer}
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -76,7 +77,7 @@ object OrcUtils extends Logging {
           logWarning(s"Skipped the footer in the corrupted file: $file", e)
           None
         } else {
-          throw new SparkException(s"Could not read footer for file: $file", e)
+          throw QueryExecutionErrors.cannotReadFooterForFileError(file, e)
         }
     }
   }
@@ -189,8 +190,8 @@ object OrcUtils extends Logging {
                   // Need to fail if there is ambiguity, i.e. more than one field is matched.
                   val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
                   reader.close()
-                  throw new RuntimeException(s"""Found duplicate field(s) "$requiredFieldName": """
-                    + s"$matchedOrcFieldsString in case-insensitive mode")
+                  throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
+                    requiredFieldName, matchedOrcFieldsString)
                 } else {
                   idx
                 }

@@ -50,6 +50,85 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(df.collect() === Array(Row(9, 4.5)))
   }
 
+  testWithWholeStageCodegenOnAndOff("GenerateExec should be" +
+    " included in WholeStageCodegen") { codegenEnabled =>
+    import testImplicits._
+    val arrayData = Seq(("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown")))
+    val df = arrayData.toDF("name", "knownLanguages", "properties")
+
+    // Array - explode
+    var expDF = df.select($"name", explode($"knownLanguages"), $"properties")
+    var plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ => !codegenEnabled.toBoolean
+    }.isDefined)
+    checkAnswer(expDF, Array(Row("James", "Java", Map("hair" -> "black", "eye" -> "brown")),
+      Row("James", "Scala", Map("hair" -> "black", "eye" -> "brown"))))
+
+    // Map - explode
+    expDF = df.select($"name", $"knownLanguages", explode($"properties"))
+    plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ => !codegenEnabled.toBoolean
+    }.isDefined)
+    checkAnswer(expDF,
+      Array(Row("James", List("Java", "Scala"), "hair", "black"),
+        Row("James", List("Java", "Scala"), "eye", "brown")))
+
+    // Array - posexplode
+    expDF = df.select($"name", posexplode($"knownLanguages"))
+    plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ => !codegenEnabled.toBoolean
+    }.isDefined)
+    checkAnswer(expDF,
+      Array(Row("James", 0, "Java"), Row("James", 1, "Scala")))
+
+    // Map - posexplode
+    expDF = df.select($"name", posexplode($"properties"))
+    plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ => !codegenEnabled.toBoolean
+    }.isDefined)
+    checkAnswer(expDF,
+      Array(Row("James", 0, "hair", "black"), Row("James", 1, "eye", "brown")))
+
+    // Array - explode , selecting all columns
+    expDF = df.select($"*", explode($"knownLanguages"))
+    plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ => !codegenEnabled.toBoolean
+    }.isDefined)
+    checkAnswer(expDF,
+      Array(Row("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown"), "Java"),
+        Row("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown"), "Scala")))
+
+    // Map - explode, selecting all columns
+    expDF = df.select($"*", explode($"properties"))
+    plan = expDF.queryExecution.executedPlan
+    assert(plan.find {
+      case stage: WholeStageCodegenExec =>
+        stage.find(_.isInstanceOf[GenerateExec]).isDefined
+      case _ => !codegenEnabled.toBoolean
+    }.isDefined)
+    checkAnswer(expDF,
+      Array(
+        Row("James", List("Java", "Scala"),
+          Map("hair" -> "black", "eye" -> "brown"), "hair", "black"),
+        Row("James", List("Java", "Scala"),
+          Map("hair" -> "black", "eye" -> "brown"), "eye", "brown")))
+  }
+
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
     val df = spark.range(3).groupBy(col("id") * 2).count().orderBy(col("id") * 2)
     val plan = df.queryExecution.executedPlan
