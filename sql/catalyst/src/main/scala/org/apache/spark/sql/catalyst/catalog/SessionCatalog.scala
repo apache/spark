@@ -885,7 +885,7 @@ class SessionCatalog(
     isTempView(nameParts.asTableIdentifier)
   }
 
-  def lookupTempView(name: TableIdentifier): Option[LogicalPlan] = {
+  def lookupTempView(name: TableIdentifier): Option[View] = {
     val tableName = formatTableName(name.table)
     if (name.database.isEmpty) {
       tempViews.get(tableName).map(getTempViewPlan)
