@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCod
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -2735,6 +2736,24 @@ class DataFrameSuite extends QueryTest
 
     val col2 = df.colRegex("test\n_table.`tes.*\n.*mn`")
     checkAnswer(df.select(col2), Row(1) :: Row(2) :: Row(3) :: Nil)
+  }
+
+  test("SPARK-34776: Nested column pruning should not prune Window produced attributes") {
+    val df = Seq(
+      ("t1", "123", "bob"),
+      ("t1", "456", "bob"),
+      ("t2", "123", "sam")
+    ).toDF("type", "value", "name")
+
+    val test = df.select(
+      $"*",
+      struct(count($"*").over(Window.partitionBy($"type", $"value", $"name"))
+        .as("count"), $"name").as("name_count")
+    ).select(
+      $"*",
+      max($"name_count").over(Window.partitionBy($"type", $"value")).as("best_name")
+    )
+    checkAnswer(test.select($"best_name.name"), Row("bob") :: Row("bob") :: Row("sam") :: Nil)
   }
 }
 
