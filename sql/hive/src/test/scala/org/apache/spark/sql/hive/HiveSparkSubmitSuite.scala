@@ -343,7 +343,8 @@ class HiveSparkSubmitSuite
     "instead of context") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
-    // We need specify the metastore database location in case of conflict with other hive version
+    // We need to specify the metastore database location in case of conflict with other hive
+    // versions.
     withTempDir { file =>
       file.delete()
       val metastore = s"jdbc:derby:;databaseName=${file.getAbsolutePath};create=true"
