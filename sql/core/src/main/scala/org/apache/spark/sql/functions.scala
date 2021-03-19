@@ -3801,7 +3801,7 @@ object functions {
     ArrayExcept(col1.expr, col2.expr)
   }
 
-  // counter to ensure lambdra variable names unique
+  // counter to ensure lambda variable names are unique
   private val lambdaVarNameCounter = new AtomicInteger(0)
 
   private def createLambda(f: Column => Column) = {
