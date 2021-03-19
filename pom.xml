@@ -2860,6 +2860,13 @@
     <!-- Exists for backwards compatibility; profile doesn't do anything -->
     <profile>
       <id>scala-2.11</id>
+      <properties>
+        <!-- 
+         SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
+         property correctly. 
+        -->
+        <scala.version>2.11.12</scala.version>
+      </properties>
     </profile>
 
     <profile>
