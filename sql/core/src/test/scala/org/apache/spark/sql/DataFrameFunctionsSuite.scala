@@ -2261,6 +2261,32 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(ex3.getMessage.contains("cannot resolve 'a'"))
   }
 
+  test("nested transform (DSL)") {
+    val df = Seq(
+        (Seq(1, 2, 3), Seq("a", "b", "c"))
+    ).toDF("numbers", "letters")
+
+    checkAnswer(
+        df.select(
+          flatten(
+            transform(
+              $"numbers",
+              (number: Column) => transform(
+                $"letters",
+                (letter: Column) => struct(
+                  number.as("number"),
+                  letter.as("letter")
+                )
+              )
+            )
+          ).as("zipped")
+        ),
+        Seq(Row(Seq(Row(1, "a"), Row(1, "b"), Row(1, "c"), Row(2, "a"), Row(2, "b"),
+            Row(2, "c"), Row(3, "a"), Row(3, "b"), Row(3, "c")
+        )))
+    )
+  }
+
   test("map_filter") {
     val dfInts = Seq(
       Map(1 -> 10, 2 -> 20, 3 -> 30),
