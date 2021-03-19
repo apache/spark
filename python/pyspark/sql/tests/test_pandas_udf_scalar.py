@@ -1109,7 +1109,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
             self.assertEqual(expected, df1.collect())
 
-    # SPARK-34600
+    # SPARK-34799
     def test_user_defined_types_with_udf(self):
         """PandasUDF returns single UDT out.
         """
@@ -1142,7 +1142,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             Row(id=1, vector=ExamplePoint(1, 2), box=ExampleBox(1, 2, 3, 4))
         ], df.collect())
 
-    # SPARK-34600
+    # SPARK-34799
     def test_user_defined_types_in_struct(self):
         @pandas_udf(StructType([
             StructField("vec", ArrayType(ExamplePointUDT())),
@@ -1169,7 +1169,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 box=[ExampleBox(2, 2, 2, 2), ExampleBox(3, 3, 3, 3)]))
         ], df.collect())
 
-    # SPARK-34600
+    # SPARK-34799
     def test_user_defined_types_in_array(self):
         @pandas_udf(ArrayType(ExamplePointUDT()))
         def array_of_points(series: pd.Series) -> pd.Series:
