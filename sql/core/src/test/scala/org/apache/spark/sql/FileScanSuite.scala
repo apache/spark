@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.datasources.v2.text.TextScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 trait FileScanSuiteBase extends SharedSparkSession {
@@ -71,23 +71,12 @@ trait FileScanSuiteBase extends SharedSparkSession {
       Seq[Expression]) => FileScan
 
   def run(scanBuilders: Seq[(String, ScanBuilder, Seq[String])]): Unit = {
-    val dataSchema = StructType(Seq(
-      StructField("data", IntegerType, false),
-      StructField("partition", IntegerType, false),
-      StructField("other", IntegerType, false)))
-    val dataSchemaNotEqual = StructType(Seq(
-      StructField("data", IntegerType, false),
-      StructField("partition", IntegerType, false),
-      StructField("other", IntegerType, false),
-      StructField("new", IntegerType, false)))
-    val readDataSchema = StructType(Seq(StructField("data", IntegerType, false)))
-    val readDataSchemaNotEqual = StructType(Seq(
-      StructField("data", IntegerType, false),
-      StructField("other", IntegerType, false)))
-    val readPartitionSchema = StructType(Seq(StructField("partition", IntegerType, false)))
-    val readPartitionSchemaNotEqual = StructType(Seq(
-      StructField("partition", IntegerType, false),
-      StructField("other", IntegerType, false)))
+    val dataSchema = StructType.fromDDL("data INT, partition INT, other INT")
+    val dataSchemaNotEqual = StructType.fromDDL("data INT, partition INT, other INT, new INT")
+    val readDataSchema = StructType.fromDDL("data INT")
+    val readDataSchemaNotEqual = StructType.fromDDL("data INT, other INT")
+    val readPartitionSchema = StructType.fromDDL("partition INT")
+    val readPartitionSchemaNotEqual = StructType.fromDDL("partition INT, other INT")
     val pushedFilters =
       Array[Filter](sources.And(sources.IsNull("data"), sources.LessThan("data", 0)))
     val pushedFiltersNotEqual =
