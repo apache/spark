@@ -164,13 +164,10 @@ object LiteralGenerator {
     for { i <- Gen.choose(-100, 100) } yield Literal.create(i, IntegerType)
 
   lazy val dayTimeIntervalLiteralGen: Gen[Literal] = {
-    for {
-      seconds <- Gen.choose(
-        Duration.ofDays(-106751990).getSeconds,
-        Duration.ofDays(106751990).getSeconds)
-      nanoAdjustment <- Gen.choose(-999999000, 999999000)
-    } yield {
-      Literal.create(Duration.ofSeconds(seconds, nanoAdjustment), DayTimeIntervalType)
+    calendarIntervalLiterGen.map { calendarIntervalLiteral =>
+      Literal.create(
+        calendarIntervalLiteral.value.asInstanceOf[CalendarInterval].extractAsDuration(),
+        DayTimeIntervalType)
     }
   }
 
