@@ -203,6 +203,20 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
+  private def checkCompilationError[T : ExpressionEncoder](
+      input: T,
+      testName: String): Unit = {
+    testAndVerifyNotLeakingReflectionObjects(s"compilation error: $testName: $input") {
+      val encoder = implicitly[ExpressionEncoder[T]]
+      val row = encoder.toRow(input)
+      val boundEncoder = encoder.resolveAndBind()
+      val errMsg = intercept[RuntimeException] {
+        boundEncoder.fromRow(row)
+      }.getCause.getMessage
+      assert(errMsg.contains("failed to compile: "))
+    }
+  }
+
   // holder class to trigger Class.getSimpleName issue
   object MalformedClassObject extends Serializable {
     case class MalformedNameExample(x: Int)
@@ -210,9 +224,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   {
     OuterScopes.addOuterScope(MalformedClassObject)
-    encodeDecodeTest(
+    checkCompilationError(
       MalformedClassObject.MalformedNameExample(42),
-      "nested Scala class should work")
+      "nested Scala class")
   }
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
