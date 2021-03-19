@@ -561,6 +561,37 @@ object Range {
   }
 }
 
+@ExpressionDescription(
+  usage = """
+    _FUNC_(start: long, end: long, step: long, numPartitions: integer)
+    _FUNC_(start: long, end: long, step: long)
+    _FUNC_(start: long, end: long)
+    _FUNC_(end: long)""",
+  examples = """
+    Examples:
+      > SELECT * FROM _FUNC_(1);
+        +---+
+        | id|
+        +---+
+        |  0|
+        +---+
+      > SELECT * FROM _FUNC_(0, 2);
+        +---+
+        |id |
+        +---+
+        |0  |
+        |1  |
+        +---+
+      > SELECT _FUNC_(0, 4, 2);
+        +---+
+        |id |
+        +---+
+        |0  |
+        |2  |
+        +---+
+  """,
+  since = "2.0.0",
+  group = "table_funcs")
 case class Range(
     start: Long,
     end: Long,
@@ -571,6 +602,18 @@ case class Range(
   extends LeafNode with MultiInstanceRelation {
 
   require(step != 0, s"step ($step) cannot be 0")
+
+  def this(start: Long, end: Long, step: Long, numSlices: Int) =
+    this(start, end, step, Some(numSlices),
+      StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes, false)
+
+  def this(start: Long, end: Long, step: Long) =
+    this(start, end, step, None,
+      StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes, false)
+
+  def this(start: Long, end: Long) = this(start, end, 1)
+
+  def this(end: Long) = this(0, end)
 
   val numElements: BigInt = {
     val safeStart = BigInt(start)

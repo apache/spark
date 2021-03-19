@@ -750,109 +750,68 @@ object TableFunctionRegistry {
 
   type TableFunctionBuilder = Seq[Expression] => LogicalPlan
 
-  /**
-   * A TVF maps argument lists to resolver functions that accept those arguments. Using a map
-   * here allows for function overloading.
-   */
-  private type TVF = Map[ArgumentList, Seq[Any] => LogicalPlan]
-
-  /**
-   * List of argument names and their types, used to declare a function.
-   */
-  private case class ArgumentList(args: (String, DataType)*) {
-    /**
-     * Try to cast the expressions to satisfy the expected types of this argument list. If there
-     * are any types that cannot be casted, then None is returned.
-     */
-    def implicitCast(values: Seq[Expression]): Option[Seq[Expression]] = {
-      if (args.length == values.length) {
-        val casted = values.zip(args).map { case (value, (_, expectedType)) =>
-          TypeCoercion.implicitCast(value, expectedType)
-        }
-        if (casted.forall(_.isDefined)) {
-          return Some(casted.map(_.get))
-        }
-      }
-      None
-    }
-
-    override def toString: String = {
-      args.map { a =>
-        s"${a._1}: ${a._2.typeName}"
-      }.mkString(", ")
-    }
-  }
-
-  /**
-   * TVF builder.
-   */
-  private def tvf(args: (String, DataType)*)(pf: PartialFunction[Seq[Any], LogicalPlan])
-      : (ArgumentList, Seq[Any] => LogicalPlan) = {
-    (ArgumentList(args: _*),
-      pf orElse {
-        case arguments =>
-          // This is caught again by the apply function and rethrow with richer information about
-          // position, etc, for a better error message.
-          throw new AnalysisException(
-            "Invalid arguments for resolved function: " + arguments.mkString(", "))
-      })
-  }
-
-  private def logicalPlan[T <: LogicalPlan : ClassTag](name: String, function: TVF)
-      : (String, (ExpressionInfo, TableFunctionBuilder)) = {
-    val argLists = function.keys.map(_.toString).toSeq.sorted.map(x => s"$name($x)").mkString("\n")
+  private def logicalPlan[T <: LogicalPlan](name: String)
+      (implicit tag: ClassTag[T]): (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val constructors = tag.runtimeClass.getConstructors
+    val info = expressionInfo[T](name)
     val builder = (expressions: Seq[Expression]) => {
       val argTypes = expressions.map(_.dataType.typeName).mkString(", ")
-      function.flatMap { case (argList, resolver) =>
-        argList.implicitCast(expressions) match {
-          case Some(casted) =>
-            try {
-              Some(resolver(casted.map(_.eval())))
-            } catch {
-              case _: AnalysisException =>
-                throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
-                  name, argLists, argTypes)
-            }
-          case _ => None
+      try {
+        val constructor = constructors.find(_.getParameterCount == expressions.size).get
+        val casted = expressions.zip(constructor.getParameterTypes).flatMap {
+          case (expr, paramType) =>
+            implicitCast(expr, paramType).map(_.eval().asInstanceOf[Object])
         }
-      }.headOption.getOrElse {
-        throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
-          name, argLists, argTypes)
+        constructor.newInstance(casted: _*).asInstanceOf[LogicalPlan]
+      } catch {
+        case _: Exception =>
+          throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
+            name, argTypes, info.getUsage)
       }
     }
-    val clazz = scala.reflect.classTag[T].runtimeClass
-    val info = new ExpressionInfo(clazz.getCanonicalName, null, name, argLists,
-      "", "", "", "", "", "")
     (name, (info, builder))
   }
 
-  private val range: TVF = Map(
-    /* range(end) */
-    tvf("end" -> LongType) { case Seq(end: Long) =>
-      Range(0, end, 1, None)
-    },
-
-    /* range(start, end) */
-    tvf("start" -> LongType, "end" -> LongType) { case Seq(start: Long, end: Long) =>
-      Range(start, end, 1, None)
-    },
-
-    /* range(start, end, step) */
-    tvf("start" -> LongType, "end" -> LongType, "step" -> LongType) {
-      case Seq(start: Long, end: Long, step: Long) =>
-        Range(start, end, step, None)
-    },
-
-    /* range(start, end, step, numPartitions) */
-    tvf("start" -> LongType, "end" -> LongType, "step" -> LongType,
-      "numPartitions" -> IntegerType) {
-      case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
-        Range(start, end, step, Some(numPartitions))
+  /**
+   * Implicitly cast the expression to the parameter type. Currently only Int and Long
+   * are supported. Please update this method when adding new table-valued functions.
+   */
+  private def implicitCast(
+      expression: Expression,
+      parameterType: Class[_]): Option[Expression] = {
+    parameterType.getSimpleName.toLowerCase(Locale.ROOT) match {
+      case "int" => TypeCoercion.implicitCast(expression, IntegerType)
+      case "long" => TypeCoercion.implicitCast(expression, LongType)
+      case _ => None
     }
-  )
+  }
+
+  /**
+   * Creates an [[ExpressionInfo]] for the function as defined by LogicalPlan T
+   * using the given name.
+   */
+  private def expressionInfo[T <: LogicalPlan : ClassTag](name: String): ExpressionInfo = {
+    val clazz = scala.reflect.classTag[T].runtimeClass
+    val df = clazz.getAnnotation(classOf[ExpressionDescription])
+    if (df != null) {
+      new ExpressionInfo(
+        clazz.getCanonicalName,
+        null,
+        name,
+        df.usage(),
+        df.arguments(),
+        df.examples(),
+        df.note(),
+        df.group(),
+        df.since(),
+        df.deprecated())
+    } else {
+      new ExpressionInfo(clazz.getCanonicalName, name)
+    }
+  }
 
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
-    logicalPlan[Range]("range", range)
+    logicalPlan[Range]("range")
   )
 
   val builtin: SimpleTableFunctionRegistry = {

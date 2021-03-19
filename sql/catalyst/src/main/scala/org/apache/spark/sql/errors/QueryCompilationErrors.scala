@@ -957,7 +957,6 @@ private[spark] object QueryCompilationErrors {
       "partitioning use REPARTITION_BY_RANGE instead.")
   }
 
-<<<<<<< HEAD
   def partitionColumnNotSpecifiedError(format: String, partitionColumn: String): Throwable = {
     new AnalysisException(s"Failed to resolve the schema for $format for " +
       s"the partition column: $partitionColumn. It must be specified manually.")
@@ -1301,8 +1300,8 @@ private[spark] object QueryCompilationErrors {
   }
 
   def cannotApplyTableValuedFunctionError(
-      name: String, argLists: String, argTypes: String): Throwable = {
-    new AnalysisException(s"error: table-valued function $name with alternatives:\n$argLists\n" +
-      s"cannot be applied to: ($argTypes)")
+      name: String, arguments: String, usage: String): Throwable = {
+    new AnalysisException(s"Table-valued function $name cannot with alternatives: $usage\n" +
+      s"cannot be applied to: ($arguments)")
   }
 }

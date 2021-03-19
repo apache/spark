@@ -19,5 +19,8 @@ select * from range(1, 1, 1, 1, 1);
 -- range call with null
 select * from range(1, null);
 
+-- range call with incompatible type
+select * from range("a");
+
 -- range call with a mixed-case function name
 select * from RaNgE(2);
