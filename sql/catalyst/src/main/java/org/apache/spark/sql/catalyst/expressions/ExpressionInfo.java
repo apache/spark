@@ -21,6 +21,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -38,6 +39,25 @@ public class ExpressionInfo {
     private String group;
     private String since;
     private String deprecated;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ExpressionInfo that = (ExpressionInfo) o;
+        return name.equals(that.name) &&
+                arguments.equals(that.arguments) &&
+                examples.equals(that.examples) &&
+                note.equals(that.note) &&
+                group.equals(that.group) &&
+                since.equals(that.since) &&
+                deprecated.equals(that.deprecated);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(className, usage, name, extended, db, arguments, examples, note, group, since, deprecated);
+    }
 
     private static final Set<String> validGroups =
         new HashSet<>(Arrays.asList("agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs",
