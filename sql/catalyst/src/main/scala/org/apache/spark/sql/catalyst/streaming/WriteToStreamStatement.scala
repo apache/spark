@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.streaming
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.streaming.OutputMode
 
@@ -38,8 +38,9 @@ import org.apache.spark.sql.streaming.OutputMode
  * @param sink  Sink to write the streaming outputs.
  * @param outputMode  Output mode for the sink.
  * @param hadoopConf  The Hadoop Configuration to get a FileSystem instance
- * @param isContinuousTrigger  Whether the statement is triggered by a continous query or not.
- * @param inputQuery  The analyzed query plan from the streaming DataFrame.
+ * @param isContinuousTrigger  Whether the statement is triggered by a continuous query or not.
+ * @param inputQuery  The analyzed query plan from the streaming DataFrame. It's not a child plan
+ *                    because we want to avoid repeated analysis.
  */
 case class WriteToStreamStatement(
     userSpecifiedName: Option[String],
@@ -50,12 +51,10 @@ case class WriteToStreamStatement(
     outputMode: OutputMode,
     hadoopConf: Configuration,
     isContinuousTrigger: Boolean,
-    inputQuery: LogicalPlan) extends LogicalPlan {
+    inputQuery: LogicalPlan) extends LeafNode {
 
   override def isStreaming: Boolean = true
 
   override def output: Seq[Attribute] = Nil
-
-  override def children: Seq[LogicalPlan] = Seq.empty
 }
 
