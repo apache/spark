@@ -460,8 +460,8 @@ class SessionCatalog(
    * Return whether a table/view with the specified name exists. If no database is specified, check
    * with current database.
    */
-  def tableExists(name: TableIdentifier): Boolean = synchronized {
-    val db = formatDatabaseName(name.database.getOrElse(currentDb))
+  def tableExists(name: TableIdentifier): Boolean = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     externalCatalog.tableExists(db, table)
   }
