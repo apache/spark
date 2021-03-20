@@ -1536,7 +1536,7 @@ class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Has
 @inherit_doc
 class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     """
-    Imputation estimator for completing missing values, either using the mean or the median
+    Imputation estimator for completing missing values, using the mean, median or mode
     of the columns in which the missing values are located. The input columns should be of
     numeric type. Currently Imputer does not support categorical features and
     possibly creates incorrect values for a categorical feature.
