@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalLimit, Project, RepartitionByExpression, Sort, Window}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -4114,6 +4114,28 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |LIMIT 3
           """.stripMargin)
       }
+    }
+  }
+
+  test("SPARK-34807: Push down filter through window after TransposeWindow") {
+    withTempView("t1") {
+      spark.range(10).selectExpr("id AS a", "id AS b", "id AS c", "id AS d").createTempView("t1")
+      val df = spark.sql(
+        """
+          |SELECT *
+          |  FROM (
+          |    SELECT b,
+          |      sum(d) OVER (PARTITION BY a, b),
+          |      rank() OVER (PARTITION BY a ORDER BY c)
+          |    FROM t1
+          |  ) v1
+          |WHERE b = 2
+          |""".stripMargin)
+      val pushedFilter = df.queryExecution.optimizedPlan.collect {
+        case l @ Window(_, _, _, Project(_, _: Filter)) => l
+      }
+      assert(pushedFilter.length === 1)
+      checkAnswer(df, Seq(Row(2, 2, 1)))
     }
   }
 }

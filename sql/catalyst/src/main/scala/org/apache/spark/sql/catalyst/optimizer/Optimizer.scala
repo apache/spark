@@ -70,6 +70,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
   def defaultBatches: Seq[Batch] = {
     val operatorOptimizationRuleSet =
       Seq(
+        TransposeWindow,
         // Operator push down
         PushProjectionThroughUnion,
         ReorderJoin,
@@ -90,7 +91,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CombineUnions,
         // Constant folding and strength reduction
         OptimizeRepartition,
-        TransposeWindow,
         NullPropagation,
         ConstantPropagation,
         FoldablePropagation,
