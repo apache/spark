@@ -36,14 +36,13 @@ private[spark] trait SparkSubmitPlugin {
    *        (2) a list of classpath entries for the child process
    *        (3) the updated SparkConf
    *        (4) the main class for the child
-   *
    */
   def prepareSubmitEnvironment(
       args: SparkSubmitArguments,
       sparkConf: SparkConf,
       childProcessArgs: Seq[String],
       childProcessClassPaths: Seq[String],
-      childProcessMainClass: String,
-  ) : (Seq[String], Seq[String], SparkConf, String)
+      childProcessMainClass: String
+  ): (Seq[String], Seq[String], SparkConf, String)
 
 }
