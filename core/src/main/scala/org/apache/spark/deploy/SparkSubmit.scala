@@ -856,7 +856,7 @@ private[spark] class SparkSubmit extends Logging {
       // user has provided the SparkSubmit plugin
       val plugin = getSubmitPlugin(sparkConf.get(SPARK_SUBMIT_PLUGIN).get, sparkConf)
       return plugin.prepareSubmitEnvironment(
-        args, sparkConf, childArgs, childClasspath, childMainClass)
+        args, sparkConf, childArgs.toSeq, childClasspath.toSeq, childMainClass)
     }
 
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
