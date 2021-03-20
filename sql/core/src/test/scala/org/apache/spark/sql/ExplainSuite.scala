@@ -411,7 +411,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
              |Output \\[2\\]: \\[value#x, id#x\\]
              |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
              |Format: $fmt
-             |Location: InMemoryFileIndex\\[.*\\]
+             |Location: InMemoryFileIndex\\([0-9]+ paths\\)\\[.*\\]
              |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
              ${pushFilterMaps.get(fmt).get}
              |ReadSchema: struct\\<value:int\\>

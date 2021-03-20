@@ -105,16 +105,16 @@ private[hive] class SparkGetColumnsOperation(
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (databasePattern.matcher(globalTempViewDb).matches()) {
         catalog.globalTempViewManager.listViewNames(tablePattern).foreach { globalTempView =>
-          catalog.getGlobalTempView(globalTempView).foreach { plan =>
-            addToRowSet(columnPattern, globalTempViewDb, globalTempView, plan.schema)
+          catalog.getRawGlobalTempView(globalTempView).map(catalog.getTempViewSchema).foreach {
+            schema => addToRowSet(columnPattern, globalTempViewDb, globalTempView, schema)
           }
         }
       }
 
       // Temporary views
       catalog.listLocalTempViews(tablePattern).foreach { localTempView =>
-        catalog.getTempView(localTempView.table).foreach { plan =>
-          addToRowSet(columnPattern, null, localTempView.table, plan.schema)
+        catalog.getRawTempView(localTempView.table).map(catalog.getTempViewSchema).foreach {
+          schema => addToRowSet(columnPattern, null, localTempView.table, schema)
         }
       }
       setState(OperationState.FINISHED)

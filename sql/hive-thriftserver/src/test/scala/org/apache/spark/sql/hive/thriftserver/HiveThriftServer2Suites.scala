@@ -389,11 +389,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
           statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
         }
 
-        // The cached temporary table also shouldn't be used during query optimization
+        // The cached temporary table can be used indirectly if the query matches.
         val plan = statement.executeQuery("explain select key from test_map ORDER BY key DESC")
         plan.next()
         plan.next()
-        assert(!plan.getString(1).contains("Scan In-memory table test_table"))
+        assert(plan.getString(1).contains("Scan In-memory table test_table"))
 
         val rs = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
         val buf = new collection.mutable.ArrayBuffer[Int]()
@@ -547,7 +547,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.8"))
+      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some(HiveUtils.builtinHiveVersion))
     }
   }
 
@@ -560,7 +560,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.8"))
+      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some(HiveUtils.builtinHiveVersion))
     }
   }
 

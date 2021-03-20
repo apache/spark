@@ -204,7 +204,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     }
     withTempPath { path =>
       // Write and read timestamp in the LEGACY mode to make timestamp conversions more expensive
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
+      withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
         spark.range(rowsNum).select(columns(): _*)
           .write
           .format("avro")
@@ -218,21 +218,21 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase("w/o filters", numIters) { _ =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
+        withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
           readback.noop()
         }
       }
 
       def withFilter(configEnabled: Boolean): Unit = {
         withSQLConf(
-          SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY",
+          SQLConf.AVRO_REBASE_MODE_IN_READ.key -> "LEGACY",
           SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
           readback.filter($"key" === 0).noop()
         }
       }
 
       benchmark.addCase("pushdown disabled", numIters) { _ =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
+        withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
           withFilter(configEnabled = false)
         }
       }

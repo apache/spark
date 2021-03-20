@@ -56,8 +56,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 @Unstable
 abstract class BaseSessionStateBuilder(
     val session: SparkSession,
-    val parentState: Option[SessionState],
-    val options: Map[String, String]) {
+    val parentState: Option[SessionState]) {
   type NewBuilder = (SparkSession, Option[SessionState]) => BaseSessionStateBuilder
 
   /**
@@ -170,8 +169,7 @@ abstract class BaseSessionStateBuilder(
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        new ResolveSessionCatalog(
-          catalogManager, catalog.isTempView, catalog.isTempFunction) +:
+        new ResolveSessionCatalog(catalogManager) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
