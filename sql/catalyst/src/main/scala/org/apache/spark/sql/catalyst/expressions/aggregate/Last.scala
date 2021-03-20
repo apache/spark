@@ -44,8 +44,8 @@ import org.apache.spark.sql.types._
        5
   """,
   note = """
-    The function can be non-deterministic because its results depend on the order of input rows
-    which are usually non-deterministic after a shuffle.
+    The function is non-deterministic because its results depends on the order of the rows
+    which may be non-deterministic after a shuffle.
   """,
   group = "agg_funcs",
   since = "2.0.0")
@@ -61,6 +61,8 @@ case class Last(child: Expression, ignoreNulls: Boolean)
   override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = true
+
+  override lazy val deterministic: Boolean = true
 
   // Return data type.
   override def dataType: DataType = child.dataType

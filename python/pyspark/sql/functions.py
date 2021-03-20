@@ -673,8 +673,8 @@ def collect_list(col):
 
     Notes
     -----
-    The function can be non-deterministic because its results depend on the order of
-    input rows which are usually non-deterministic after a shuffle.
+    The function is non-deterministic because the order of collected results depends
+    on the order of the rows which may be non-deterministic after a shuffle.
 
     Examples
     --------
@@ -693,8 +693,8 @@ def collect_set(col):
 
     Notes
     -----
-    The function can be non-deterministic because its results depend on the order of
-    input rows which are usually non-deterministic after a shuffle.
+    The function is non-deterministic because the order of collected results depends
+    on the order of the rows which may be non-deterministic after a shuffle.
 
     Examples
     --------
@@ -1018,8 +1018,8 @@ def first(col, ignorenulls=False):
 
     Notes
     -----
-    The function can be non-deterministic because its results depend on the order of
-    input rows which are usually non-deterministic after a shuffle.
+    The function is non-deterministic because its results depends on the order of the
+    rows which may be non-deterministic after a shuffle.
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
@@ -1126,8 +1126,8 @@ def last(col, ignorenulls=False):
 
     Notes
     -----
-    The function can be non-deterministic because its results depend on the order of
-    input rows which are usually non-deterministic after a shuffle.
+    The function is non-deterministic because its results depends on the order of the
+    rows which may be non-deterministic after a shuffle.
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)
