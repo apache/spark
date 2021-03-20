@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, ResolvedPartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -57,6 +57,11 @@ trait V2WriteCommand extends Command {
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
   def withNewTable(newTable: NamedRelation): V2WriteCommand
+}
+
+trait V2PartitionCommand extends Command {
+  def table: LogicalPlan
+  def allowPartialPartitionSpec: Boolean = false
 }
 
 /**
@@ -291,21 +296,25 @@ case class DropNamespace(
  */
 case class DescribeNamespace(
     namespace: LogicalPlan,
-    extended: Boolean) extends Command {
+    extended: Boolean,
+    override val output: Seq[Attribute] = DescribeNamespace.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
 
-  override def output: Seq[Attribute] = Seq(
-    AttributeReference("name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("value", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "value of the column").build())())
+}
+
+object DescribeNamespace {
+  def getOutputAttrs: Seq[Attribute] = Seq(
+    AttributeReference("info_name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the namespace info").build())(),
+    AttributeReference("info_value", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "value of the namespace info").build())())
 }
 
 /**
  * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES)
  * command.
  */
-case class AlterNamespaceSetProperties(
+case class SetNamespaceProperties(
     namespace: LogicalPlan,
     properties: Map[String, String]) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
@@ -314,7 +323,7 @@ case class AlterNamespaceSetProperties(
 /**
  * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command.
  */
-case class AlterNamespaceSetLocation(
+case class SetNamespaceLocation(
     namespace: LogicalPlan,
     location: String) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
@@ -325,11 +334,15 @@ case class AlterNamespaceSetLocation(
  */
 case class ShowNamespaces(
     namespace: LogicalPlan,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowNamespaces.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("namespace", StringType, nullable = false)())
+object ShowNamespaces {
+  def getOutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("namespace", StringType, nullable = false)())
+  }
 }
 
 /**
@@ -338,9 +351,13 @@ case class ShowNamespaces(
 case class DescribeRelation(
     relation: LogicalPlan,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends Command {
+    isExtended: Boolean,
+    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
-  override def output: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+}
+
+object DescribeRelation {
+  def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
 }
 
 /**
@@ -348,10 +365,14 @@ case class DescribeRelation(
  */
 case class DescribeColumn(
     relation: LogicalPlan,
-    colNameParts: Seq[String],
-    isExtended: Boolean) extends Command {
+    column: Expression,
+    isExtended: Boolean,
+    override val output: Seq[Attribute] = DescribeColumn.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
-  override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
+}
+
+object DescribeColumn {
+  def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
 }
 
 /**
@@ -383,12 +404,13 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction]) extends Command with SupportsSubquery {
   override def children: Seq[LogicalPlan] = Seq(targetTable, sourceTable)
+  def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 }
 
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException("nullable")
   override def children: Seq[Expression] = condition.toSeq
 }
 
@@ -408,7 +430,7 @@ case class InsertAction(
 
 case class Assignment(key: Expression, value: Expression) extends Expression with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException("nullable")
   override def children: Seq[Expression] = key ::  value :: Nil
 }
 
@@ -484,12 +506,16 @@ case class RenameTable(
  */
 case class ShowTables(
     namespace: LogicalPlan,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowTables.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
-  override val output: Seq[Attribute] = Seq(
+object ShowTables {
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
-    AttributeReference("tableName", StringType, nullable = false)())
+    AttributeReference("tableName", StringType, nullable = false)(),
+    AttributeReference("isTemporary", BooleanType, nullable = false)())
 }
 
 /**
@@ -498,10 +524,13 @@ case class ShowTables(
 case class ShowTableExtended(
     namespace: LogicalPlan,
     pattern: String,
-    partitionSpec: Option[PartitionSpec]) extends Command {
+    partitionSpec: Option[PartitionSpec],
+    override val output: Seq[Attribute] = ShowTableExtended.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = namespace :: Nil
+}
 
-  override val output: Seq[Attribute] = Seq(
+object ShowTableExtended {
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
@@ -516,12 +545,16 @@ case class ShowTableExtended(
  */
 case class ShowViews(
     namespace: LogicalPlan,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowViews.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
-  override val output: Seq[Attribute] = Seq(
+object ShowViews {
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
-    AttributeReference("viewName", StringType, nullable = false)())
+    AttributeReference("viewName", StringType, nullable = false)(),
+    AttributeReference("isTemporary", BooleanType, nullable = false)())
 }
 
 /**
@@ -553,10 +586,13 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command 
  */
 case class ShowTableProperties(
     table: LogicalPlan,
-    propertyKey: Option[String]) extends Command {
+    propertyKey: Option[String],
+    override val output: Seq[Attribute] = ShowTableProperties.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = table :: Nil
+}
 
-  override val output: Seq[Attribute] = Seq(
+object ShowTableProperties {
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("key", StringType, nullable = false)(),
     AttributeReference("value", StringType, nullable = false)())
 }
@@ -620,8 +656,15 @@ case class ShowFunctions(
     child: Option[LogicalPlan],
     userScope: Boolean,
     systemScope: Boolean,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = child.toSeq
+}
+
+object ShowFunctions {
+  def getOutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("function", StringType, nullable = false)())
+  }
 }
 
 /**
@@ -632,6 +675,15 @@ case class AnalyzeTable(
     partitionSpec: Map[String, Option[String]],
     noScan: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ANALYZE TABLES command.
+ */
+case class AnalyzeTables(
+    namespace: LogicalPlan,
+    noScan: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
 }
 
 /**
@@ -655,14 +707,11 @@ case class AnalyzeColumn(
  *                 PARTITION spec1 [LOCATION 'loc1'][, PARTITION spec2 [LOCATION 'loc2'], ...];
  * }}}
  */
-case class AlterTableAddPartition(
-    child: LogicalPlan,
+case class AddPartitions(
+    table: LogicalPlan,
     parts: Seq[PartitionSpec],
-    ifNotExists: Boolean) extends Command {
-  override lazy val resolved: Boolean =
-    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
-
-  override def children: Seq[LogicalPlan] = child :: Nil
+    ifNotExists: Boolean) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
@@ -677,34 +726,28 @@ case class AlterTableAddPartition(
  *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
  * }}}
  */
-case class AlterTableDropPartition(
-    child: LogicalPlan,
+case class DropPartitions(
+    table: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifExists: Boolean,
-    purge: Boolean) extends Command {
-  override lazy val resolved: Boolean =
-    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
-
-  override def children: Seq[LogicalPlan] = child :: Nil
+    purge: Boolean) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
  * The logical plan of the ALTER TABLE ... RENAME TO PARTITION command.
  */
-case class AlterTableRenamePartition(
-    child: LogicalPlan,
+case class RenamePartitions(
+    table: LogicalPlan,
     from: PartitionSpec,
-    to: TablePartitionSpec) extends Command {
-  override lazy val resolved: Boolean =
-    childrenResolved && from.isInstanceOf[ResolvedPartitionSpec]
-
-  override def children: Seq[LogicalPlan] = child :: Nil
+    to: PartitionSpec) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
  * The logical plan of the ALTER TABLE ... RECOVER PARTITIONS command.
  */
-case class AlterTableRecoverPartitions(child: LogicalPlan) extends Command {
+case class RecoverPartitions(child: LogicalPlan) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
@@ -723,8 +766,17 @@ case class LoadData(
 /**
  * The logical plan of the SHOW CREATE TABLE command.
  */
-case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends Command {
+case class ShowCreateTable(
+    child: LogicalPlan,
+    asSerde: Boolean = false,
+    override val output: Seq[Attribute] = ShowCreateTable.getoutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+object ShowCreateTable {
+  def getoutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("createtab_stmt", StringType, nullable = false)())
+  }
 }
 
 /**
@@ -732,32 +784,50 @@ case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends
  */
 case class ShowColumns(
     child: LogicalPlan,
-    namespace: Option[Seq[String]]) extends Command {
+    namespace: Option[Seq[String]],
+    override val output: Seq[Attribute] = ShowColumns.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+object ShowColumns {
+  def getOutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("col_name", StringType, nullable = false)())
+  }
 }
 
 /**
  * The logical plan of the TRUNCATE TABLE command.
  */
-case class TruncateTable(
-    child: LogicalPlan,
-    partitionSpec: Option[TablePartitionSpec]) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
+case class TruncateTable(table: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the TRUNCATE TABLE ... PARTITION command.
+ */
+case class TruncatePartition(
+    table: LogicalPlan,
+    partitionSpec: PartitionSpec) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
+  override def allowPartialPartitionSpec: Boolean = true
 }
 
 /**
  * The logical plan of the SHOW PARTITIONS command.
  */
 case class ShowPartitions(
-    child: LogicalPlan,
-    pattern: Option[PartitionSpec]) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
+    table: LogicalPlan,
+    pattern: Option[PartitionSpec],
+    override val output: Seq[Attribute] = ShowPartitions.getOutputAttrs)
+  extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
+  override def allowPartialPartitionSpec: Boolean = true
+}
 
-  override lazy val resolved: Boolean =
-    childrenResolved && pattern.forall(_.isInstanceOf[ResolvedPartitionSpec])
-
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("partition", StringType, nullable = false)())
+object ShowPartitions {
+  def getOutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("partition", StringType, nullable = false)())
+  }
 }
 
 /**
@@ -772,7 +842,10 @@ case class DropView(
 /**
  * The logical plan of the MSCK REPAIR TABLE command.
  */
-case class RepairTable(child: LogicalPlan) extends Command {
+case class RepairTable(
+    child: LogicalPlan,
+    enableAddPartitions: Boolean,
+    enableDropPartitions: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
@@ -783,13 +856,13 @@ case class AlterViewAs(
     child: LogicalPlan,
     originalText: String,
     query: LogicalPlan) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
+  override def children: Seq[LogicalPlan] = child :: query :: Nil
 }
 
 /**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
-case class AlterViewSetProperties(
+case class SetViewProperties(
     child: LogicalPlan,
     properties: Map[String, String]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
@@ -798,7 +871,7 @@ case class AlterViewSetProperties(
 /**
  * The logical plan of the ALTER VIEW ... UNSET TBLPROPERTIES command.
  */
-case class AlterViewUnsetProperties(
+case class UnsetViewProperties(
     child: LogicalPlan,
     propertyKeys: Seq[String],
     ifExists: Boolean) extends Command {
@@ -808,7 +881,7 @@ case class AlterViewUnsetProperties(
 /**
  * The logical plan of the ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] command.
  */
-case class AlterTableSerDeProperties(
+case class SetTableSerDeProperties(
     child: LogicalPlan,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
@@ -831,6 +904,7 @@ case class CacheTable(
 case class CacheTableAsSelect(
     tempViewName: String,
     plan: LogicalPlan,
+    originalText: String,
     isLazy: Boolean,
     options: Map[String, String]) extends Command
 
@@ -841,3 +915,32 @@ case class UncacheTable(
     table: LogicalPlan,
     ifExists: Boolean,
     isTempView: Boolean = false) extends Command
+
+/**
+ * The logical plan of the ALTER TABLE ... SET LOCATION command.
+ */
+case class SetTableLocation(
+    table: LogicalPlan,
+    partitionSpec: Option[TablePartitionSpec],
+    location: String) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... SET TBLPROPERTIES command.
+ */
+case class SetTableProperties(
+    table: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command.
+ */
+case class UnsetTableProperties(
+    table: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}

@@ -44,7 +44,7 @@ import org.apache.ivy.core.report.ResolveReport
 import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
-import org.apache.ivy.plugins.matcher.GlobPatternMatcher
+import org.apache.ivy.plugins.matcher.{GlobPatternMatcher, PatternMatcher}
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
@@ -240,7 +240,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     // Set the deploy mode; default is client mode
-    var deployMode: Int = args.deployMode match {
+    val deployMode: Int = args.deployMode match {
       case "client" | null => CLIENT
       case "cluster" => CLUSTER
       case _ =>
@@ -374,13 +374,13 @@ private[spark] class SparkSubmit extends Logging {
     var localPyFiles: String = null
     if (deployMode == CLIENT) {
       localPrimaryResource = Option(args.primaryResource).map {
-        downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr)
+        downloadFile(_, targetDir, sparkConf, hadoopConf)
       }.orNull
       localJars = Option(args.jars).map {
-        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf)
       }.orNull
       localPyFiles = Option(args.pyFiles).map {
-        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf)
       }.orNull
 
       if (isKubernetesClusterModeDriver) {
@@ -389,14 +389,14 @@ private[spark] class SparkSubmit extends Logging {
         // Explicitly download the related files here
         args.jars = localJars
         val filesLocalFiles = Option(args.files).map {
-          downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+          downloadFileList(_, targetDir, sparkConf, hadoopConf)
         }.orNull
         val archiveLocalFiles = Option(args.archives).map { uris =>
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
           val localArchives = downloadFileList(
             resolvedUris.map(
               UriBuilder.fromUri(_).fragment(null).build().toString).mkString(","),
-            targetDir, sparkConf, hadoopConf, secMgr)
+            targetDir, sparkConf, hadoopConf)
 
           // SPARK-33748: this mimics the behaviour of Yarn cluster mode. If the driver is running
           // in cluster mode, the archives should be available in the driver's current working
@@ -447,7 +447,7 @@ private[spark] class SparkSubmit extends Logging {
             if (file.exists()) {
               file.toURI.toString
             } else {
-              downloadFile(resource, targetDir, sparkConf, hadoopConf, secMgr)
+              downloadFile(resource, targetDir, sparkConf, hadoopConf)
             }
           case _ => uri.toString
         }
@@ -1089,7 +1089,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[spark] object SparkSubmitUtils {
+private[spark] object SparkSubmitUtils extends Logging {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream
@@ -1153,6 +1153,8 @@ private[spark] object SparkSubmitUtils {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
     cr.setName("spark-list")
+    cr.setChangingMatcher(PatternMatcher.REGEXP)
+    cr.setChangingPattern(".*-SNAPSHOT")
 
     val localM2 = new IBiblioResolver
     localM2.setM2compatible(true)
@@ -1194,18 +1196,25 @@ private[spark] object SparkSubmitUtils {
   }
 
   /**
-   * Output a comma-delimited list of paths for the downloaded jars to be added to the classpath
+   * Output a list of paths for the downloaded jars to be added to the classpath
    * (will append to jars in SparkSubmit).
    * @param artifacts Sequence of dependencies that were resolved and retrieved
-   * @param cacheDirectory directory where jars are cached
-   * @return a comma-delimited list of paths for the dependencies
+   * @param cacheDirectory Directory where jars are cached
+   * @return List of paths for the dependencies
    */
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): Seq[String] = {
-    artifacts.map { artifactInfo =>
-      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
-      val extraAttrs = artifactInfo.asInstanceOf[Artifact].getExtraAttributes
+    artifacts.map(_.asInstanceOf[Artifact]).filter { artifactInfo =>
+      if (artifactInfo.getExt == "jar") {
+        true
+      } else {
+        logInfo(s"Skipping non-jar dependency ${artifactInfo.getId}")
+        false
+      }
+    }.map { artifactInfo =>
+      val artifact = artifactInfo.getModuleRevisionId
+      val extraAttrs = artifactInfo.getExtraAttributes
       val classifier = if (extraAttrs.containsKey("classifier")) {
         "-" + extraAttrs.get("classifier")
       } else {
@@ -1305,6 +1314,8 @@ private[spark] object SparkSubmitUtils {
     remoteRepos.filterNot(_.trim.isEmpty).map(_.split(",")).foreach { repositoryList =>
       val cr = new ChainResolver
       cr.setName("user-list")
+      cr.setChangingMatcher(PatternMatcher.REGEXP)
+      cr.setChangingPattern(".*-SNAPSHOT")
 
       // add current default resolver, if any
       Option(ivySettings.getDefaultResolver).foreach(cr.add)

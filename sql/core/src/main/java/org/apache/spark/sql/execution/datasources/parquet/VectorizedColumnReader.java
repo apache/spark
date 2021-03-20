@@ -31,6 +31,7 @@ import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
+import org.apache.parquet.schema.DecimalMetadata;
 import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 
@@ -39,10 +40,14 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
+import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT32;
+import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.createRLEIterator;
 
@@ -105,6 +110,29 @@ public class VectorizedColumnReader {
   private static final ZoneId UTC = ZoneOffset.UTC;
   private final String datetimeRebaseMode;
   private final String int96RebaseMode;
+
+  private boolean isDecimalTypeMatched(DataType dt) {
+    DecimalType d = (DecimalType) dt;
+    DecimalMetadata dm = descriptor.getPrimitiveType().getDecimalMetadata();
+    // It's OK if the required decimal precision is larger than or equal to the physical decimal
+    // precision in the Parquet metadata, as long as the decimal scale is the same.
+    return dm != null && dm.getPrecision() <= d.precision() && dm.getScale() == d.scale();
+  }
+
+  private boolean canReadAsIntDecimal(DataType dt) {
+    if (!DecimalType.is32BitDecimalType(dt)) return false;
+    return isDecimalTypeMatched(dt);
+  }
+
+  private boolean canReadAsLongDecimal(DataType dt) {
+    if (!DecimalType.is64BitDecimalType(dt)) return false;
+    return isDecimalTypeMatched(dt);
+  }
+
+  private boolean canReadAsBinaryDecimal(DataType dt) {
+    if (!DecimalType.isByteArrayDecimalType(dt)) return false;
+    return isDecimalTypeMatched(dt);
+  }
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
@@ -250,7 +278,17 @@ public class VectorizedColumnReader {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
-          column.setDictionary(new ParquetDictionary(dictionary));
+          PrimitiveType primitiveType = descriptor.getPrimitiveType();
+          if (primitiveType.getOriginalType() == OriginalType.DECIMAL &&
+              primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+              primitiveType.getPrimitiveTypeName() == INT64) {
+            // We need to make sure that we initialize the right type for the dictionary otherwise
+            // WritableColumnVector will throw an exception when trying to decode to an Int when the
+            // dictionary is in fact initialized as Long
+            column.setDictionary(new ParquetDictionary(dictionary, true));
+          } else {
+            column.setDictionary(new ParquetDictionary(dictionary, false));
+          }
         } else {
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
         }
@@ -325,7 +363,7 @@ public class VectorizedColumnReader {
     switch (descriptor.getPrimitiveType().getPrimitiveTypeName()) {
       case INT32:
         if (column.dataType() == DataTypes.IntegerType ||
-            DecimalType.is32BitDecimalType(column.dataType()) ||
+            canReadAsIntDecimal(column.dataType()) ||
             (column.dataType() == DataTypes.DateType && "CORRECTED".equals(datetimeRebaseMode))) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
@@ -359,7 +397,7 @@ public class VectorizedColumnReader {
 
       case INT64:
         if (column.dataType() == DataTypes.LongType ||
-            DecimalType.is64BitDecimalType(column.dataType()) ||
+            canReadAsLongDecimal(column.dataType()) ||
             (originalType == OriginalType.TIMESTAMP_MICROS &&
               "CORRECTED".equals(datetimeRebaseMode))) {
           for (int i = rowId; i < rowId + num; ++i) {
@@ -474,21 +512,21 @@ public class VectorizedColumnReader {
         break;
       case FIXED_LEN_BYTE_ARRAY:
         // DecimalType written in the legacy mode
-        if (DecimalType.is32BitDecimalType(column.dataType())) {
+        if (canReadAsIntDecimal(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
               column.putInt(i, (int) ParquetRowConverter.binaryToUnscaledLong(v));
             }
           }
-        } else if (DecimalType.is64BitDecimalType(column.dataType())) {
+        } else if (canReadAsLongDecimal(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
               column.putLong(i, ParquetRowConverter.binaryToUnscaledLong(v));
             }
           }
-        } else if (DecimalType.isByteArrayDecimalType(column.dataType())) {
+        } else if (canReadAsBinaryDecimal(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
@@ -524,7 +562,7 @@ public class VectorizedColumnReader {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.IntegerType ||
-        DecimalType.is32BitDecimalType(column.dataType())) {
+        canReadAsIntDecimal(column.dataType())) {
       defColumn.readIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.ByteType) {
@@ -550,13 +588,14 @@ public class VectorizedColumnReader {
   private void readLongBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     if (column.dataType() == DataTypes.LongType ||
-        DecimalType.is64BitDecimalType(column.dataType())) {
+        canReadAsLongDecimal(column.dataType())) {
       defColumn.readLongs(
-        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn,
+        DecimalType.is32BitDecimalType(column.dataType()));
     } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
       if ("CORRECTED".equals(datetimeRebaseMode)) {
         defColumn.readLongs(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, false);
       } else {
         boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
         defColumn.readLongsWithRebase(
@@ -614,7 +653,7 @@ public class VectorizedColumnReader {
     // TODO: implement remaining type conversions
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
     if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType
-            || DecimalType.isByteArrayDecimalType(column.dataType())) {
+            || canReadAsBinaryDecimal(column.dataType())) {
       defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
     } else if (column.dataType() == DataTypes.TimestampType) {
       final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
@@ -680,7 +719,7 @@ public class VectorizedColumnReader {
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
-    if (DecimalType.is32BitDecimalType(column.dataType())) {
+    if (canReadAsIntDecimal(column.dataType())) {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putInt(rowId + i,
@@ -689,7 +728,7 @@ public class VectorizedColumnReader {
           column.putNull(rowId + i);
         }
       }
-    } else if (DecimalType.is64BitDecimalType(column.dataType())) {
+    } else if (canReadAsLongDecimal(column.dataType())) {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
@@ -698,7 +737,7 @@ public class VectorizedColumnReader {
           column.putNull(rowId + i);
         }
       }
-    } else if (DecimalType.isByteArrayDecimalType(column.dataType())) {
+    } else if (canReadAsBinaryDecimal(column.dataType())) {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putByteArray(rowId + i, data.readBinary(arrayLen).getBytes());

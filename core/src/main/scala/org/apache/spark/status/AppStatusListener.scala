@@ -366,10 +366,12 @@ private[spark] class AppStatusListener(
 
     // Implicitly exclude every available executor for the stage associated with this node
     Option(liveStages.get((stageId, stageAttemptId))).foreach { stage =>
-      val executorIds = liveExecutors.values.filter(_.host == hostId).map(_.executorId).toSeq
+      val executorIds = liveExecutors.values.filter(exec => exec.host == hostId
+        && exec.executorId != SparkContext.DRIVER_IDENTIFIER).map(_.executorId).toSeq
       setStageExcludedStatus(stage, now, executorIds: _*)
     }
-    liveExecutors.values.filter(_.hostname == hostId).foreach { exec =>
+    liveExecutors.values.filter(exec => exec.hostname == hostId
+      && exec.executorId != SparkContext.DRIVER_IDENTIFIER).foreach { exec =>
       addExcludedStageTo(exec, stageId, now)
     }
   }
@@ -416,7 +418,7 @@ private[spark] class AppStatusListener(
 
     // Implicitly (un)exclude every executor associated with the node.
     liveExecutors.values.foreach { exec =>
-      if (exec.hostname == host) {
+      if (exec.hostname == host && exec.executorId != SparkContext.DRIVER_IDENTIFIER) {
         updateExecExclusionStatus(exec, excluded, now)
       }
     }
@@ -757,6 +759,7 @@ private[spark] class AppStatusListener(
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
       exec.totalDuration += event.taskInfo.duration
+      exec.peakExecutorMetrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
 
       // Note: For resubmitted tasks, we continue to use the metrics that belong to the
       // first attempt of this task. This may not be 100% accurate because the first attempt

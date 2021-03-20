@@ -18,11 +18,13 @@
 package org.apache.spark.deploy
 
 import java.io.{File, OutputStream, PrintStream}
+import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.Files
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
@@ -245,8 +247,8 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
          |</ivysettings>
          |""".stripMargin
 
-    val settingsFile = new File(tempIvyPath, "ivysettings.xml")
-    Files.write(settingsText, settingsFile, StandardCharsets.UTF_8)
+    val settingsFile = Paths.get(tempIvyPath, "ivysettings.xml")
+    Files.write(settingsFile, settingsText.getBytes(StandardCharsets.UTF_8))
     val settings = SparkSubmitUtils.loadIvySettings(settingsFile.toString, None, None)
     settings.setDefaultIvyUserDir(new File(tempIvyPath))  // NOTE - can't set this through file
 
@@ -275,6 +277,49 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       val r = """.*org.apache.spark-spark-submit-parent-.*""".r
       assert(!ivySettings.getDefaultCache.listFiles.map(_.getName)
         .exists(r.findFirstIn(_).isDefined), "resolution files should be cleaned")
+    }
+  }
+
+  test("SPARK-34624: should ignore non-jar dependencies") {
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = "my.great.dep:mydep:0.1"
+
+    IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
+      // IvyTestUtils.withRepository does not have an easy way for creating non-jar dependencies
+      // So we let it create the jar dependency in `mylib-0.1.pom`, and then modify the pom
+      // to change the type of the transitive to `pom`
+      val mainPom = Paths.get(URI.create(repo)).resolve("my/great/lib/mylib/0.1/mylib-0.1.pom")
+      val lines = Files.lines(mainPom).iterator.asScala
+        .map(l => if (l.trim == "<artifactId>mydep</artifactId>") s"$l<type>pom</type>" else l)
+        .toList
+      Files.write(mainPom, lines.asJava)
+
+      val ivySettings = SparkSubmitUtils.buildIvySettings(Some(repo), Some(tempIvyPath))
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString,
+        ivySettings,
+        transitive = true,
+        isTest = true)
+      assert(!jarPath.exists(_.indexOf("mydep") >= 0), "should not find pom dependency." +
+        s" Resolved jars are: $jarPath")
+    }
+  }
+
+  test("SPARK-34757: should ignore cache for SNAPSHOT dependencies") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1-SNAPSHOT")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val ivySettings = SparkSubmitUtils.buildIvySettings(Some(repo), Some(tempIvyPath))
+      // set isTest to false since we need to check the resolved jar file
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString, ivySettings, transitive = true, isTest = false)
+      val modifiedTimestamp = Files.getLastModifiedTime(Paths.get(jarPath.head))
+      // update the artifact and resolve again
+      IvyTestUtils.createLocalRepositoryForTests(main, None, Some(new File(new URI(repo))))
+      SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString, ivySettings, transitive = true, isTest = false)
+      // check that the artifact is updated
+      assert(
+        modifiedTimestamp.compareTo(Files.getLastModifiedTime(Paths.get(jarPath.head))) != 0)
     }
   }
 }

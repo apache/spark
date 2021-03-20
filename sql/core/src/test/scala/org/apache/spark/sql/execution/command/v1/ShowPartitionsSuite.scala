@@ -69,6 +69,18 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
     }
   }
+
+  test("SPARK-33591: null as a partition value") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+      checkAnswer(sql(s"SHOW PARTITIONS $t"), Row("p1=__HIVE_DEFAULT_PARTITION__"))
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t PARTITION (p1 = null)"),
+        Row("p1=__HIVE_DEFAULT_PARTITION__"))
+    }
+  }
 }
 
 /**
@@ -105,22 +117,13 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
     }
   }
 
-  test("null and empty string as partition values") {
-    import testImplicits._
-    withTable("t") {
-      val df = Seq((0, ""), (1, null)).toDF("a", "part")
-      df.write
-        .partitionBy("part")
-        .format("parquet")
-        .mode(SaveMode.Overwrite)
-        .saveAsTable("t")
-
+  test("SPARK-33904: null and empty string as partition values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createNullPartTable(t, "parquet")
       runShowPartitionsSql(
-        "SHOW PARTITIONS t",
+        s"SHOW PARTITIONS $t",
         Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
-      checkAnswer(spark.table("t"),
-        Row(0, null) ::
-        Row(1, null) :: Nil)
+      checkAnswer(spark.table(t), Row(0, null) :: Row(1, null) :: Nil)
     }
   }
 }

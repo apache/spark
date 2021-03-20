@@ -6,10 +6,11 @@ previous Python implementation of the Pickler class. Because this functionality
 is only available for Python versions 3.8+, a lot of backward-compatibility
 code is also removed.
 
-Note that the C Pickler subclassing API is CPython-specific. Therefore, some
+Note that the C Pickler sublassing API is CPython-specific. Therefore, some
 guards present in cloudpickle.py that were written to handle PyPy specificities
 are not present in cloudpickle_fast.py
 """
+import _collections_abc
 import abc
 import copyreg
 import io
@@ -33,8 +34,8 @@ from .cloudpickle import (
     _typevar_reduce, _get_bases, _make_cell, _make_empty_cell, CellType,
     _is_parametrized_type_hint, PYPY, cell_set,
     parametrized_type_hint_getinitargs, _create_parametrized_type_hint,
-    builtin_code_type
-
+    builtin_code_type,
+    _make_dict_keys, _make_dict_values, _make_dict_items,
 )
 
 
@@ -179,7 +180,7 @@ def _class_getstate(obj):
     clsdict.pop('__weakref__', None)
 
     if issubclass(type(obj), abc.ABCMeta):
-        # If obj is an instance of an ABCMeta subclass, don't pickle the
+        # If obj is an instance of an ABCMeta subclass, dont pickle the
         # cache/negative caches populated during isinstance/issubclass
         # checks, but pickle the list of registered subclasses of obj.
         clsdict.pop('_abc_cache', None)
@@ -400,6 +401,24 @@ def _class_reduce(obj):
     return NotImplemented
 
 
+def _dict_keys_reduce(obj):
+    # Safer not to ship the full dict as sending the rest might
+    # be unintended and could potentially cause leaking of
+    # sensitive information
+    return _make_dict_keys, (list(obj), )
+
+
+def _dict_values_reduce(obj):
+    # Safer not to ship the full dict as sending the rest might
+    # be unintended and could potentially cause leaking of
+    # sensitive information
+    return _make_dict_values, (list(obj), )
+
+
+def _dict_items_reduce(obj):
+    return _make_dict_items, (dict(obj), )
+
+
 # COLLECTIONS OF OBJECTS STATE SETTERS
 # ------------------------------------
 # state setters are called at unpickling time, once the object is created and
@@ -407,7 +426,7 @@ def _class_reduce(obj):
 
 
 def _function_setstate(obj, state):
-    """Update the state of a dynamic function.
+    """Update the state of a dynaamic function.
 
     As __closure__ and __globals__ are readonly attributes of a function, we
     cannot rely on the native setstate routine of pickle.load_build, that calls
@@ -473,6 +492,10 @@ class CloudPickler(Pickler):
     _dispatch_table[types.MappingProxyType] = _mappingproxy_reduce
     _dispatch_table[weakref.WeakSet] = _weakset_reduce
     _dispatch_table[typing.TypeVar] = _typevar_reduce
+    _dispatch_table[_collections_abc.dict_keys] = _dict_keys_reduce
+    _dispatch_table[_collections_abc.dict_values] = _dict_values_reduce
+    _dispatch_table[_collections_abc.dict_items] = _dict_items_reduce
+
 
     dispatch_table = ChainMap(_dispatch_table, copyreg.dispatch_table)
 
@@ -556,7 +579,7 @@ class CloudPickler(Pickler):
         # `dispatch` attribute.  Earlier versions of the protocol 5 CloudPickler
         # used `CloudPickler.dispatch` as a class-level attribute storing all
         # reducers implemented by cloudpickle, but the attribute name was not a
-        # great choice given the meaning of `CloudPickler.dispatch` when
+        # great choice given the meaning of `Cloudpickler.dispatch` when
         # `CloudPickler` extends the pure-python pickler.
         dispatch = dispatch_table
 
@@ -630,7 +653,7 @@ class CloudPickler(Pickler):
                 return self._function_reduce(obj)
             else:
                 # fallback to save_global, including the Pickler's
-                # dispatch_table
+                # distpatch_table
                 return NotImplemented
 
     else:

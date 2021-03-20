@@ -1040,10 +1040,15 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.compression.codec</code></td>
-  <td></td>
+  <td>zstd</td>
   <td>
-    The codec to compress logged events. If this is not given,
-    <code>spark.io.compression.codec</code> will be used.
+    The codec to compress logged events. By default, Spark provides four codecs:
+    <code>lz4</code>, <code>lzf</code>, <code>snappy</code>, and <code>zstd</code>.
+    You can also use fully qualified class names to specify the codec, e.g.
+    <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    <code>org.apache.spark.io.LZFCompressionCodec</code>,
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>,
+    and <code>org.apache.spark.io.ZStdCompressionCodec</code>.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -2307,6 +2312,15 @@ Apart from these, the following properties are also available, and may be useful
     Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
   <td>0.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.speculation.min.threshold</code></td>
+  <td>100ms</td>
+  <td>
+    Minimum amount of time a task runs before being considered for speculation.
+    This can be used to avoid launching speculative copies of tasks that are very short.
+  </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.speculation.task.duration.threshold</code></td>

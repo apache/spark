@@ -127,7 +127,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
     var tableComment: String = ""
     var tableProperties: String = ""
     if (!properties.isEmpty) {
-      properties.asScala.map {
+      properties.asScala.foreach {
         case (k, v) => k match {
           case TableCatalog.PROP_COMMENT => tableComment = v
           case TableCatalog.PROP_PROVIDER =>
@@ -226,7 +226,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
     case Array(db) if !namespaceExists(namespace) =>
       var comment = ""
       if (!metadata.isEmpty) {
-        metadata.asScala.map {
+        metadata.asScala.foreach {
           case (k, v) => k match {
             case SupportsNamespaces.PROP_COMMENT => comment = v
             case SupportsNamespaces.PROP_OWNER => // ignore

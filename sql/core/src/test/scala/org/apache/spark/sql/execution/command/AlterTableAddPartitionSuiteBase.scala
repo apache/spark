@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -38,8 +37,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD PARTITION"
-
-  protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 
   test("one partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
@@ -182,6 +179,14 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
         " PARTITION (id=2) LOCATION 'loc1'")
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+    }
+  }
+
+  test("SPARK-33474: Support typed literals as partition spec values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
+      sql(s"ALTER TABLE $t ADD PARTITION(part = date'2020-01-01')")
+      checkPartitions(t, Map("part" ->"2020-01-01"))
     }
   }
 }

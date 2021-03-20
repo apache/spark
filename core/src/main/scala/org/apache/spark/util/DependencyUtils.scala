@@ -24,7 +24,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 
@@ -59,8 +59,9 @@ private[spark] object DependencyUtils extends Logging {
    * @param uri Ivy URI need to be downloaded.
    * @return Tuple value of parameter `transitive` and `exclude` value.
    *
-   *         1. transitive: whether to download dependency jar of Ivy URI, default value is false
-   *            and this parameter value is case-sensitive. Invalid value will be treat as false.
+   *         1. transitive: whether to download dependency jar of Ivy URI, default value is true
+   *            and this parameter value is case-insensitive. This mimics Hive's behaviour for
+   *            parsing the transitive parameter. Invalid value will be treat as false.
    *            Example: Input:  exclude=org.mortbay.jetty:jetty&transitive=true
    *            Output:  true
    *
@@ -72,7 +73,7 @@ private[spark] object DependencyUtils extends Logging {
   private def parseQueryParams(uri: URI): (Boolean, String) = {
     val uriQuery = uri.getQuery
     if (uriQuery == null) {
-      (false, "")
+      (true, "")
     } else {
       val mapTokens = uriQuery.split("&").map(_.split("="))
       if (mapTokens.exists(isInvalidQueryString)) {
@@ -81,14 +82,15 @@ private[spark] object DependencyUtils extends Logging {
       }
       val groupedParams = mapTokens.map(kv => (kv(0), kv(1))).groupBy(_._1)
 
-      // Parse transitive parameters (e.g., transitive=true) in an Ivy URI, default value is false
+      // Parse transitive parameters (e.g., transitive=true) in an Ivy URI, default value is true
       val transitiveParams = groupedParams.get("transitive")
       if (transitiveParams.map(_.size).getOrElse(0) > 1) {
         logWarning("It's best to specify `transitive` parameter in ivy URI query only once." +
           " If there are multiple `transitive` parameter, we will select the last one")
       }
       val transitive =
-        transitiveParams.flatMap(_.takeRight(1).map(_._2 == "true").headOption).getOrElse(false)
+        transitiveParams.flatMap(_.takeRight(1).map(_._2.equalsIgnoreCase("true")).headOption)
+          .getOrElse(true)
 
       // Parse an excluded list (e.g., exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http)
       // in an Ivy URI. When download Ivy URI jar, Spark won't download transitive jar
@@ -125,11 +127,11 @@ private[spark] object DependencyUtils extends Logging {
    *              `parameter=value&parameter=value...`
    *            Note that currently Ivy URI query part support two parameters:
    *             1. transitive: whether to download dependent jars related to your Ivy URI.
-   *                transitive=false or `transitive=true`, if not set, the default value is false.
+   *                transitive=false or `transitive=true`, if not set, the default value is true.
    *             2. exclude: exclusion list when download Ivy URI jar and dependency jars.
    *                The `exclude` parameter content is a ',' separated `group:module` pair string :
    *                `exclude=group:module,group:module...`
-   * @return Comma separated string list of jars downloaded.
+   * @return List of jars downloaded.
    */
   def resolveMavenDependencies(uri: URI): Seq[String] = {
     val ivyProperties = DependencyUtils.getIvyProperties()
@@ -187,8 +189,7 @@ private[spark] object DependencyUtils extends Logging {
       jars: String,
       userJar: String,
       sparkConf: SparkConf,
-      hadoopConf: Configuration,
-      secMgr: SecurityManager): String = {
+      hadoopConf: Configuration): String = {
     val targetDir = Utils.createTempDir()
     val userJarName = userJar.split(File.separatorChar).last
     Option(jars)
@@ -199,7 +200,7 @@ private[spark] object DependencyUtils extends Logging {
           .mkString(",")
       }
       .filterNot(_ == "")
-      .map(downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr))
+      .map(downloadFileList(_, targetDir, sparkConf, hadoopConf))
       .orNull
   }
 
@@ -219,18 +220,16 @@ private[spark] object DependencyUtils extends Logging {
    * @param targetDir A temporary directory for which downloaded files.
    * @param sparkConf Spark configuration.
    * @param hadoopConf Hadoop configuration.
-   * @param secMgr Spark security manager.
    * @return A comma separated local files list.
    */
   def downloadFileList(
       fileList: String,
       targetDir: File,
       sparkConf: SparkConf,
-      hadoopConf: Configuration,
-      secMgr: SecurityManager): String = {
+      hadoopConf: Configuration): String = {
     require(fileList != null, "fileList cannot be null.")
     Utils.stringToSeq(fileList)
-      .map(downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr))
+      .map(downloadFile(_, targetDir, sparkConf, hadoopConf))
       .mkString(",")
   }
 
@@ -242,15 +241,13 @@ private[spark] object DependencyUtils extends Logging {
    * @param targetDir A temporary directory for which downloaded files.
    * @param sparkConf Spark configuration.
    * @param hadoopConf Hadoop configuration.
-   * @param secMgr Spark security manager.
    * @return Path to the local file.
    */
   def downloadFile(
       path: String,
       targetDir: File,
       sparkConf: SparkConf,
-      hadoopConf: Configuration,
-      secMgr: SecurityManager): String = {
+      hadoopConf: Configuration): String = {
     require(path != null, "path cannot be null.")
     val uri = Utils.resolveURI(path)
 
@@ -263,8 +260,7 @@ private[spark] object DependencyUtils extends Logging {
         new File(targetDir, file.getName).toURI.toString
       case _ =>
         val fname = new Path(uri).getName()
-        val localFile = Utils.doFetchFile(uri.toString(), targetDir, fname, sparkConf, secMgr,
-          hadoopConf)
+        val localFile = Utils.doFetchFile(uri.toString(), targetDir, fname, sparkConf, hadoopConf)
         localFile.toURI().toString()
     }
   }

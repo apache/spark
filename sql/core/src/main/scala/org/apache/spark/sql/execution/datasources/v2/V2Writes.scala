@@ -40,7 +40,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
     case a @ AppendData(r: DataSourceV2Relation, query, options, _, None) =>
       val writeBuilder = newWriteBuilder(r.table, query, options)
       val write = writeBuilder.build()
-      a.copy(write = Some(write))
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      a.copy(write = Some(write), query = newQuery)
 
     case o @ OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, options, _, None) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
@@ -63,7 +64,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
           throw new SparkException(s"Table does not support overwrite by expression: $table")
       }
 
-      o.copy(write = Some(write))
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      o.copy(write = Some(write), query = newQuery)
 
     case o @ OverwritePartitionsDynamic(r: DataSourceV2Relation, query, options, _, None) =>
       val table = r.table
@@ -74,7 +76,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         case _ =>
           throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
       }
-      o.copy(write = Some(write))
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      o.copy(write = Some(write), query = newQuery)
   }
 
   private def isTruncate(filters: Array[Filter]): Boolean = {

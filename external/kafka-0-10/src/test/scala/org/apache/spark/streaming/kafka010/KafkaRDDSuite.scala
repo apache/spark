@@ -236,7 +236,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     // this is the "lots of messages" case
     kafkaTestUtils.sendMessages(topic, sent)
-    var sentCount = sent.values.sum
+    val sentCount = sent.values.sum
 
     val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams,
       Array(OffsetRange(topic, 0, 0, sentCount)), preferredHosts)

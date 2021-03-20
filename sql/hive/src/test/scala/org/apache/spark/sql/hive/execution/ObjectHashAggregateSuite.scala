@@ -219,7 +219,7 @@ class ObjectHashAggregateSuite
     val withPartialSafe = max($"c2")
 
     // A Spark SQL native distinct aggregate function
-    val withDistinct = countDistinct($"c3")
+    val withDistinct = count_distinct($"c3")
 
     val allAggs = Seq(
       "typed" -> typed,

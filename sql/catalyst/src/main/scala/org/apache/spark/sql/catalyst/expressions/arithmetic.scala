@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -60,7 +61,7 @@ case class UnaryMinus(
         s"""
            |$javaType $originValue = ($javaType)($eval);
            |if ($originValue == $javaBoxedType.MIN_VALUE) {
-           |  throw new ArithmeticException("- " + $originValue + " caused overflow.");
+           |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($originValue);
            |}
            |${ev.value} = ($javaType)(-($originValue));
            """.stripMargin
@@ -82,12 +83,19 @@ case class UnaryMinus(
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       val method = if (failOnError) "negateExact" else "negate"
       defineCodeGen(ctx, ev, c => s"$iu.$method($c)")
+    case DayTimeIntervalType | YearMonthIntervalType =>
+      nullSafeCodeGen(ctx, ev, eval => {
+        val mathClass = classOf[Math].getName
+        s"${ev.value} = $mathClass.negateExact($eval);"
+      })
   }
 
   protected override def nullSafeEval(input: Any): Any = dataType match {
     case CalendarIntervalType if failOnError =>
       IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
     case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType => Math.negateExact(input.asInstanceOf[Long])
+    case YearMonthIntervalType => Math.negateExact(input.asInstanceOf[Int])
     case _ => numeric.negate(input)
   }
 
@@ -137,18 +145,39 @@ case class UnaryPositive(child: Expression)
   """,
   since = "1.2.0",
   group = "math_funcs")
-case class Abs(child: Expression)
+case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+
+  def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   override def dataType: DataType = child.dataType
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
+
+    case ByteType | ShortType if failOnError =>
+      val javaBoxedType = CodeGenerator.boxedType(dataType)
+      val javaType = CodeGenerator.javaType(dataType)
+      nullSafeCodeGen(ctx, ev, eval =>
+        s"""
+          |if ($eval == $javaBoxedType.MIN_VALUE) {
+          |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($eval);
+          |} else if ($eval < 0) {
+          |  ${ev.value} = ($javaType)-$eval;
+          |} else {
+          |  ${ev.value} = $eval;
+          |}
+          |""".stripMargin)
+
+    case IntegerType | LongType if failOnError =>
+      defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
+
+
     case dt: NumericType =>
       defineCodeGen(ctx, ev, c => s"(${CodeGenerator.javaType(dt)})(java.lang.Math.abs($c))")
   }
@@ -184,6 +213,12 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
+    case DayTimeIntervalType | YearMonthIntervalType =>
+      assert(exactMathMethod.isDefined,
+        s"The expression '$nodeName' must override the exactMathMethod() method " +
+        "if it is supposed to operate over interval types.")
+      val mathClass = classOf[Math].getName
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathClass.${exactMathMethod.get}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
@@ -192,7 +227,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
           val javaType = CodeGenerator.boxedType(dataType)
           s"""
              |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
-             |  throw new ArithmeticException($eval1 + " $symbol " + $eval2 + " caused overflow.");
+             |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(
+             |  $eval1, "$symbol", $eval2);
              |}
            """.stripMargin
         } else {
@@ -265,6 +301,10 @@ case class Add(
     case CalendarIntervalType =>
       IntervalUtils.add(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType =>
+      Math.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+    case YearMonthIntervalType =>
+      Math.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.plus(input1, input2)
   }
 
@@ -304,6 +344,10 @@ case class Subtract(
     case CalendarIntervalType =>
       IntervalUtils.subtract(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType =>
+      Math.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+    case YearMonthIntervalType =>
+      Math.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.minus(input1, input2)
   }
 
@@ -362,7 +406,7 @@ trait DivModLike extends BinaryArithmetic {
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw new ArithmeticException("divide by zero")
+          throw QueryExecutionErrors.divideByZeroError
         }
         evalOperation(input1, input2)
       }
@@ -392,7 +436,7 @@ trait DivModLike extends BinaryArithmetic {
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        "throw new ArithmeticException(\"divide by zero\");"
+        s"throw QueryExecutionErrors.divideByZeroError();"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -409,7 +453,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
       } else {
         ""
       }
@@ -611,7 +655,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw new ArithmeticException("divide by zero")
+          throw QueryExecutionErrors.divideByZeroError
         }
         input1 match {
           case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
@@ -672,7 +716,7 @@ case class Pmod(
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        "throw new ArithmeticException(\"divide by zero\");"
+        s"throw QueryExecutionErrors.divideByZeroError();"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -689,7 +733,7 @@ case class Pmod(
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
       } else {
         ""
       }

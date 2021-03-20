@@ -294,7 +294,7 @@ struct<i:int,f:double>
 SELECT COALESCE(a.f, b.i, b.j)
   FROM CASE_TBL a, CASE2_TBL b
 -- !query schema
-struct<coalesce(f, CAST(i AS DOUBLE), CAST(j AS DOUBLE)):double>
+struct<coalesce(f, i, j):double>
 -- !query output
 -30.3
 -30.3
@@ -388,7 +388,7 @@ SELECT CASE
   WHEN 'it was bar!' THEN 'bar recognized'
   ELSE 'unrecognized' END
 -- !query schema
-struct<CASE WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(null)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was foo!) THEN foo recognized WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(null)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was bar!) THEN bar recognized ELSE unrecognized END:string>
+struct<CASE WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(NULL)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was foo!) THEN foo recognized WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(NULL)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was bar!) THEN bar recognized ELSE unrecognized END:string>
 -- !query output
 bar recognized
 

@@ -22,11 +22,11 @@ import scala.concurrent.duration._
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Command, Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Project, Range, SubqueryAlias, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -84,6 +84,12 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.reset()
     }
   }
+
+  private def getTempViewRawPlan(plan: Option[LogicalPlan]): Option[LogicalPlan] = plan match {
+    case Some(v: View) if v.isTempViewStoringAnalyzedPlan => Some(v.child)
+    case other => other
+  }
+
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -301,16 +307,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val tempTable2 = Range(1, 20, 2, 10)
       catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
       catalog.createTempView("tbl2", tempTable2, overrideIfExists = false)
-      assert(catalog.getTempView("tbl1") == Option(tempTable1))
-      assert(catalog.getTempView("tbl2") == Option(tempTable2))
-      assert(catalog.getTempView("tbl3").isEmpty)
+      assert(getTempViewRawPlan(catalog.getTempView("tbl1")) == Option(tempTable1))
+      assert(getTempViewRawPlan(catalog.getTempView("tbl2")) == Option(tempTable2))
+      assert(getTempViewRawPlan(catalog.getTempView("tbl3")).isEmpty)
       // Temporary view already exists
       intercept[TempTableAlreadyExistsException] {
         catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
       }
       // Temporary view already exists but we override it
       catalog.createTempView("tbl1", tempTable2, overrideIfExists = true)
-      assert(catalog.getTempView("tbl1") == Option(tempTable2))
+      assert(getTempViewRawPlan(catalog.getTempView("tbl1")) == Option(tempTable2))
     }
   }
 
@@ -352,7 +358,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val tempTable = Range(1, 10, 2, 10)
       catalog.createTempView("tbl1", tempTable, overrideIfExists = false)
       catalog.setCurrentDatabase("db2")
-      assert(catalog.getTempView("tbl1") == Some(tempTable))
+      assert(getTempViewRawPlan(catalog.getTempView("tbl1")) == Some(tempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
       // If database is not specified, temp table should be dropped first
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
@@ -366,7 +372,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
       catalog.dropTable(TableIdentifier("tbl1", Some("db2")), ignoreIfNotExists = false,
         purge = false)
-      assert(catalog.getTempView("tbl1") == Some(tempTable))
+      assert(getTempViewRawPlan(catalog.getTempView("tbl1")) == Some(tempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl2"))
     }
   }
@@ -419,16 +425,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val tempTable = Range(1, 10, 2, 10)
       catalog.createTempView("tbl1", tempTable, overrideIfExists = false)
       catalog.setCurrentDatabase("db2")
-      assert(catalog.getTempView("tbl1") == Option(tempTable))
+      assert(getTempViewRawPlan(catalog.getTempView("tbl1")) == Option(tempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
       // If database is not specified, temp table should be renamed first
       catalog.renameTable(TableIdentifier("tbl1"), TableIdentifier("tbl3"))
       assert(catalog.getTempView("tbl1").isEmpty)
-      assert(catalog.getTempView("tbl3") == Option(tempTable))
+      assert(getTempViewRawPlan(catalog.getTempView("tbl3")) == Option(tempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
       // If database is specified, temp tables are never renamed
       catalog.renameTable(TableIdentifier("tbl2", Some("db2")), TableIdentifier("tbl4"))
-      assert(catalog.getTempView("tbl3") == Option(tempTable))
+      assert(getTempViewRawPlan(catalog.getTempView("tbl3")) == Option(tempTable))
       assert(catalog.getTempView("tbl4").isEmpty)
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl4"))
     }
@@ -625,13 +631,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.lookupRelation(TableIdentifier("tbl1", Some("db2"))).children.head
         .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
       // Otherwise, we'll first look up a temporary table with the same name
-      assert(catalog.lookupRelation(TableIdentifier("tbl1"))
-        == SubqueryAlias("tbl1", tempTable1))
+      val tbl1 = catalog.lookupRelation(TableIdentifier("tbl1")).asInstanceOf[SubqueryAlias]
+      assert(tbl1.identifier == AliasIdentifier("tbl1"))
+      assert(getTempViewRawPlan(Some(tbl1.child)).get == tempTable1)
       // Then, if that does not exist, look up the relation in the current database
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
       assert(catalog.lookupRelation(TableIdentifier("tbl1")).children.head
         .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
     }
+  }
+
+  private def getViewPlan(metadata: CatalogTable): LogicalPlan = {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    val projectList = metadata.schema.map { field =>
+      UpCast(field.name.attr, field.dataType).as(field.name)
+    }
+    Project(projectList, CatalystSqlParser.parsePlan(metadata.viewText.get))
   }
 
   test("look up view relation") {
@@ -646,8 +661,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
       // Look up a view.
       catalog.setCurrentDatabase("default")
-      val view = View(desc = metadata, isTempView = false, output = metadata.schema.toAttributes,
-        child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+      val view = View(desc = metadata, isTempView = false, child = getViewPlan(metadata))
       comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view1"), view))
       // Look up a view using current database of the session catalog.
@@ -666,8 +680,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(metadata.viewText.isDefined)
       assert(metadata.viewCatalogAndNamespace == Seq(CatalogManager.SESSION_CATALOG_NAME, "db2"))
 
-      val view = View(desc = metadata, isTempView = false, output = metadata.schema.toAttributes,
-        child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+      val view = View(desc = metadata, isTempView = false, child = getViewPlan(metadata))
       comparePlans(catalog.lookupRelation(TableIdentifier("view2", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view2"), view))
     }
@@ -691,6 +704,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.createTempView("tbl3", tempTable, overrideIfExists = false)
       // tableExists should not check temp view.
       assert(!catalog.tableExists(TableIdentifier("tbl3")))
+
+      // If database doesn't exist, return false instead of failing.
+      assert(!catalog.tableExists(TableIdentifier("tbl1", Some("non-exist"))))
     }
   }
 
@@ -1575,11 +1591,11 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       original.copyStateTo(clone)
 
       assert(original ne clone)
-      assert(clone.getTempView("copytest1") == Some(tempTable1))
+      assert(getTempViewRawPlan(clone.getTempView("copytest1")) == Some(tempTable1))
 
       // check if clone and original independent
       clone.dropTable(TableIdentifier("copytest1"), ignoreIfNotExists = false, purge = false)
-      assert(original.getTempView("copytest1") == Some(tempTable1))
+      assert(getTempViewRawPlan(original.getTempView("copytest1")) == Some(tempTable1))
 
       val tempTable2 = Range(1, 20, 2, 10)
       original.createTempView("copytest2", tempTable2, overrideIfExists = false)
@@ -1678,6 +1694,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         // And the cache is gone.
         assert(catalog.getCachedTable(table) === null)
       }
+    }
+  }
+
+  test("SPARK-34197: refreshTable should not invalidate the relation cache for temporary views") {
+    withBasicCatalog { catalog =>
+      catalog.createTempView("tbl1", Range(1, 10, 1, 10), false)
+      val qualifiedName1 = QualifiedTableName("default", "tbl1")
+      catalog.cacheTable(qualifiedName1, Range(1, 10, 1, 10))
+      catalog.refreshTable(TableIdentifier("tbl1"))
+      assert(catalog.getCachedTable(qualifiedName1) != null)
+
+      catalog.createGlobalTempView("tbl2", Range(2, 10, 1, 10), false)
+      val qualifiedName2 = QualifiedTableName(catalog.globalTempViewManager.database, "tbl2")
+      catalog.cacheTable(qualifiedName2, Range(2, 10, 1, 10))
+      catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempViewManager.database)))
+      assert(catalog.getCachedTable(qualifiedName2) != null)
     }
   }
 }

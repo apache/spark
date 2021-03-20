@@ -54,13 +54,14 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, Utils}
+import org.apache.spark.util.{CircularBuffer, ShutdownHookManager, Utils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -153,6 +154,25 @@ private[hive] class HiveClientImpl(
       }
     }
   }
+
+  private def closeState(): Unit = {
+    // These temp files are registered in o.a.h.u.ShutdownHookManager too during state start.
+    // The state.close() will delete them if they are not null and try remove them from the
+    // o.a.h.u.ShutdownHookManager which causes undesirable IllegalStateException.
+    // We delete them ahead with a high priority hook here and set them to null to bypass the
+    // deletion in state.close().
+    if (state.getTmpOutputFile != null) {
+      state.getTmpOutputFile.delete()
+      state.setTmpOutputFile(null)
+    }
+    if (state.getTmpErrOutputFile != null) {
+      state.getTmpErrOutputFile.delete()
+      state.setTmpErrOutputFile(null)
+    }
+    state.close()
+  }
+
+  ShutdownHookManager.addShutdownHook(() => closeState())
 
   // Log the default warehouse location.
   logInfo(
@@ -988,7 +1008,11 @@ private[hive] class HiveClientImpl(
 private[hive] object HiveClientImpl extends Logging {
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
-    val typeString = HiveVoidType.replaceVoidType(c.dataType).catalogString
+    // For Hive Serde, we still need to to restore the raw type for char and varchar type.
+    // When reading data in parquet, orc, or avro file format with string type for char,
+    // the tailing spaces may lost if we are not going to pad it.
+    val typeString = CharVarcharUtils.getRawTypeString(c.metadata)
+      .getOrElse(HiveVoidType.replaceVoidType(c.dataType).catalogString)
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
@@ -1268,7 +1292,7 @@ private[hive] object HiveClientImpl extends Logging {
   }
 }
 
-case object HiveVoidType extends DataType {
+private[hive] case object HiveVoidType extends DataType {
   override def defaultSize: Int = 1
   override def asNullable: DataType = HiveVoidType
   override def simpleString: String = "void"
