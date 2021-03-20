@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.Alias
+import java.util.Locale
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -60,15 +63,44 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
     // The child has the different output attributes with the View operator. Adds a Project over
     // the child of the view.
     case v @ View(desc, output, child) if child.resolved && output != child.output =>
+      // Use the stored view query output column names to find the matching attributes. The column
+      // names may have duplication, e.g. `CREATE VIEW v(x, y) AS SELECT 1 col, 2 col`. We need to
+      // make sure the that matching attributes have the same number of duplications, and pick the
+      // corresponding attribute by ordinal.
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
       val queryOutput = if (queryColumnNames.nonEmpty) {
-        // Find the attribute that has the expected attribute name from an attribute list, the names
-        // are compared using conf.resolver.
-        // `CheckAnalysis` already guarantees the expected attribute can be found for sure.
-        desc.viewQueryColumnNames.map { colName =>
-          child.output.find(attr => resolver(attr.name, colName)).get
+        val normalizeColName: String => String = if (conf.caseSensitiveAnalysis) {
+          identity
+        } else {
+          _.toLowerCase(Locale.ROOT)
         }
+        val nameToCounts = scala.collection.mutable.HashMap.empty[String, Int]
+        val nameToMatchedCols = scala.collection.mutable.HashMap.empty[String, Seq[Attribute]]
+
+        val outputAttrs = queryColumnNames.map { colName =>
+          val normalized = normalizeColName(colName)
+          val count = nameToCounts.getOrElse(normalized, 0)
+          val matchedCols = nameToMatchedCols.getOrElseUpdate(
+            normalized, child.output.filter(attr => resolver(attr.name, colName)))
+          if (matchedCols.length - 1 < count) {
+            throw new AnalysisException(s"The SQL query of view ${desc.identifier} has an " +
+              s"incompatible schema change and column $colName cannot be resolved. Expect " +
+              s"more attributes named $colName in ${child.output.mkString("[", ",", "]")}")
+          }
+          nameToCounts(normalized) = count + 1
+          matchedCols(count)
+        }
+
+        nameToCounts.foreach { case (colName, count) =>
+          if (count > 1 && nameToMatchedCols(colName).length != count) {
+            throw new AnalysisException(s"The SQL query of view ${desc.identifier} has an " +
+              s"incompatible schema change and column $colName cannot be resolved. Expect " +
+              s"less attributes named $colName in ${child.output.mkString("[", ",", "]")}")
+          }
+        }
+
+        outputAttrs
       } else {
         // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
         // output is the same with the view output.
