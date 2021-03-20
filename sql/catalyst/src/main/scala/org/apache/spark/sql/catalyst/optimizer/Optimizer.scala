@@ -190,7 +190,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceDeduplicateWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
-      RemoveRepetitionFromGroupExpressions) :: Nil ++
+      RemoveRepetitionFromGroupExpressions,
+      RemoveOuterJoin) :: Nil ++
     operatorOptimizationBatch) :+
     // This batch rewrites plans after the operator optimization and
     // before any batches that depend on stats.
@@ -1995,6 +1996,20 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       } else {
         a.copy(groupingExpressions = newGrouping)
       }
+  }
+}
+
+/**
+ * Removes outer join if it only has distinct on streamed side.
+ */
+object RemoveOuterJoin extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
+        if a.isEquallyDistinct && a.references.subsetOf(AttributeSet(left.output)) =>
+      a.copy(child = p.copy(child = left))
+    case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
+        if a.isEquallyDistinct && a.references.subsetOf(AttributeSet(right.output)) =>
+      a.copy(child = p.copy(child = right))
   }
 }
 
