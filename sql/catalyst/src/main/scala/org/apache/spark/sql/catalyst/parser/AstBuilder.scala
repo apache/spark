@@ -993,7 +993,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       // scalastyle:off caselocale
       Some(ctx.tblName.getText.toLowerCase),
       // scalastyle:on caselocale
-      ctx.colName.asScala.map(_.getText).map(name => UnresolvedAttribute.quoted(name)).toSeq,
+      ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.quoted).toSeq,
       query)
   }
 
