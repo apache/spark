@@ -15,4 +15,4 @@ LIMIT 100
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-870
+0

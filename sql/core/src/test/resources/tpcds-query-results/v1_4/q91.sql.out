@@ -27,4 +27,4 @@ ORDER BY sum(cr_net_loss) DESC
 -- !query schema
 struct<Call_Center:string,Call_Center_Name:string,Manager:string,Returns_Loss:decimal(17,2)>
 -- !query output
-
+AAAAAAAACAAAAAAA	Mid Atlantic                                      	Felipe Perkins                          	109.74

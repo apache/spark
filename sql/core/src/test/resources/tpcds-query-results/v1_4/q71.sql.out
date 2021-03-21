@@ -48,4 +48,1021 @@ ORDER BY ext_price DESC, brand_id
 -- !query schema
 struct<brand_id:int,brand:string,t_hour:int,t_minute:int,ext_price:decimal(17,2)>
 -- !query output
-
+10002012	importounivamalg #x                              	17	1	8360.00
+10002012	importounivamalg #x                              	17	51	3766.14
+10002012	importounivamalg #x                              	18	0	3063.20
+10002012	importounivamalg #x                              	18	10	3870.00
+10002012	importounivamalg #x                              	18	16	6634.95
+10002012	importounivamalg #x                              	18	3	6471.90
+10002012	importounivamalg #x                              	18	4	963.80
+10002012	importounivamalg #x                              	19	19	3925.48
+10003004	exportiunivamalg #x                               	17	27	9719.37
+10003004	exportiunivamalg #x                               	18	18	5692.22
+10003004	exportiunivamalg #x                               	19	43	4701.06
+10003004	exportiunivamalg #x                               	19	46	2423.18
+10003004	exportiunivamalg #x                               	7	34	3756.20
+10003004	exportiunivamalg #x                               	9	23	1272.43
+10003016	exportiunivamalg #x                              	17	55	5519.20
+10003016	exportiunivamalg #x                              	18	20	471.66
+10003016	exportiunivamalg #x                              	19	34	641.39
+10003016	exportiunivamalg #x                              	19	4	137.40
+10003016	exportiunivamalg #x                              	19	43	7272.65
+10004001	edu packunivamalg #x                              	17	26	1081.80
+10004001	edu packunivamalg #x                              	18	13	3864.00
+10004001	edu packunivamalg #x                              	18	49	2031.20
+10004001	edu packunivamalg #x                              	18	58	1212.96
+10004001	edu packunivamalg #x                              	19	56	13160.28
+10004001	edu packunivamalg #x                              	8	39	2472.93
+10004001	edu packunivamalg #x                              	9	20	5002.40
+10004004	edu packunivamalg #x                              	19	3	344.64
+10004004	edu packunivamalg #x                              	19	59	861.10
+10009015	maxiunivamalg #x                                 	17	29	1104.61
+10009015	maxiunivamalg #x                                 	18	2	1150.73
+10009015	maxiunivamalg #x                                 	19	55	1476.75
+10009015	maxiunivamalg #x                                 	7	51	3912.99
+10009015	maxiunivamalg #x                                 	8	32	6322.29
+10009015	maxiunivamalg #x                                 	9	58	402.38
+1001001	amalgamalg #x                                     	17	19	1877.46
+1001001	amalgamalg #x                                     	17	48	10597.73
+1001001	amalgamalg #x                                     	17	56	1250.08
+1001001	amalgamalg #x                                     	17	59	1813.11
+1001001	amalgamalg #x                                     	18	49	3045.12
+1001001	amalgamalg #x                                     	19	13	549.43
+1001001	amalgamalg #x                                     	19	3	8431.69
+1001001	amalgamalg #x                                     	19	44	3818.40
+1001001	amalgamalg #x                                     	19	53	2149.70
+1001001	amalgamalg #x                                     	19	54	234.00
+1001001	amalgamalg #x                                     	7	31	682.08
+1001001	amalgamalg #x                                     	8	16	253.34
+1001001	amalgamalg #x                                     	9	14	1745.24
+1001001	amalgamalg #x                                     	9	18	2793.44
+1001001	amalgamalg #x                                     	9	41	148.05
+10010013	univamalgamalg #x                                	17	7	5590.62
+10010013	univamalgamalg #x                                	18	32	630.00
+10010013	univamalgamalg #x                                	18	51	1677.20
+10010013	univamalgamalg #x                                	7	11	5799.04
+10010013	univamalgamalg #x                                	8	30	2513.25
+10010013	univamalgamalg #x                                	9	26	54.80
+1001002	amalgamalg #x                                     	17	26	190.50
+1001002	amalgamalg #x                                     	17	55	1505.25
+1001002	amalgamalg #x                                     	18	11	2491.16
+1001002	amalgamalg #x                                     	18	25	3408.48
+1001002	amalgamalg #x                                     	18	37	3522.98
+1001002	amalgamalg #x                                     	18	45	622.21
+1001002	amalgamalg #x                                     	19	15	12395.76
+1001002	amalgamalg #x                                     	19	31	4758.75
+1001002	amalgamalg #x                                     	19	41	41.52
+1001002	amalgamalg #x                                     	19	48	203.28
+1001002	amalgamalg #x                                     	19	54	634.68
+1001002	amalgamalg #x                                     	19	59	3542.94
+1001002	amalgamalg #x                                     	8	38	388.35
+1001002	amalgamalg #x                                     	9	28	12.47
+1001002	amalgamalg #x                                     	9	46	1114.40
+1001002	amalgamalg #x                                     	9	48	1624.59
+10012004	importoamalgamalg #x                              	17	24	450.90
+10012004	importoamalgamalg #x                              	18	33	717.21
+10012004	importoamalgamalg #x                              	19	4	20.91
+10012004	importoamalgamalg #x                              	6	49	6234.24
+10012004	importoamalgamalg #x                              	8	8	503.10
+10012011	importoamalgamalg #x                             	17	31	1173.28
+10012011	importoamalgamalg #x                             	17	9	2589.95
+10012011	importoamalgamalg #x                             	18	17	5384.79
+10012011	importoamalgamalg #x                             	18	29	4531.45
+10012011	importoamalgamalg #x                             	19	25	48.45
+10012011	importoamalgamalg #x                             	19	27	6218.47
+10012011	importoamalgamalg #x                             	8	53	486.50
+10012011	importoamalgamalg #x                             	9	19	541.25
+10012017	importoamalgamalg #x                             	17	16	1565.38
+10012017	importoamalgamalg #x                             	17	19	625.56
+10012017	importoamalgamalg #x                             	17	29	76.50
+10012017	importoamalgamalg #x                             	17	7	1107.54
+10012017	importoamalgamalg #x                             	18	26	3027.72
+10012017	importoamalgamalg #x                             	18	54	5415.90
+10012017	importoamalgamalg #x                             	19	11	595.65
+10012017	importoamalgamalg #x                             	8	4	558.69
+10012017	importoamalgamalg #x                             	8	53	4045.00
+10013013	exportiamalgamalg #x                             	17	44	814.80
+10013013	exportiamalgamalg #x                             	18	27	34.23
+10013013	exportiamalgamalg #x                             	19	39	81.96
+10013013	exportiamalgamalg #x                             	7	33	2103.93
+10013013	exportiamalgamalg #x                             	7	42	879.36
+10013013	exportiamalgamalg #x                             	8	0	2831.12
+10013015	exportiamalgamalg #x                             	17	14	1192.50
+10013015	exportiamalgamalg #x                             	8	30	1057.80
+10013015	exportiamalgamalg #x                             	9	18	8828.12
+10015004	scholaramalgamalg #x                              	17	46	9033.72
+10015004	scholaramalgamalg #x                              	17	58	7966.40
+10015004	scholaramalgamalg #x                              	19	42	525.80
+10015004	scholaramalgamalg #x                              	9	2	1736.72
+10015013	scholaramalgamalg #x                             	17	10	64.26
+10015013	scholaramalgamalg #x                             	18	20	574.24
+10015013	scholaramalgamalg #x                             	19	51	1553.20
+10015013	scholaramalgamalg #x                             	8	18	51.48
+10015013	scholaramalgamalg #x                             	8	25	2746.86
+10015013	scholaramalgamalg #x                             	8	32	438.48
+10015013	scholaramalgamalg #x                             	9	34	1257.30
+1002001	importoamalg #x                                   	17	22	6511.08
+1002001	importoamalg #x                                   	17	32	876.30
+1002001	importoamalg #x                                   	17	46	3195.24
+1002001	importoamalg #x                                   	18	10	68.37
+1002001	importoamalg #x                                   	18	21	45.32
+1002001	importoamalg #x                                   	18	59	464.52
+1002001	importoamalg #x                                   	19	14	2513.30
+1002001	importoamalg #x                                   	19	20	554.88
+1002001	importoamalg #x                                   	19	21	2579.48
+1002001	importoamalg #x                                   	19	26	977.60
+1002001	importoamalg #x                                   	19	40	901.60
+1002001	importoamalg #x                                   	19	46	583.47
+1002001	importoamalg #x                                   	19	53	22.28
+1002001	importoamalg #x                                   	6	6	6334.24
+1002001	importoamalg #x                                   	8	1	64.48
+1002001	importoamalg #x                                   	8	24	418.92
+1002001	importoamalg #x                                   	9	28	1904.10
+1002001	importoamalg #x                                   	9	56	6.44
+1002002	importoamalg #x                                   	17	0	4183.34
+1002002	importoamalg #x                                   	17	33	416.67
+1002002	importoamalg #x                                   	17	4	330.01
+1002002	importoamalg #x                                   	17	44	1415.25
+1002002	importoamalg #x                                   	18	15	5240.76
+1002002	importoamalg #x                                   	18	27	1343.93
+1002002	importoamalg #x                                   	18	29	250.80
+1002002	importoamalg #x                                   	18	31	489.72
+1002002	importoamalg #x                                   	18	42	1852.20
+1002002	importoamalg #x                                   	18	51	6924.69
+1002002	importoamalg #x                                   	19	16	1182.37
+1002002	importoamalg #x                                   	19	21	628.67
+1002002	importoamalg #x                                   	19	42	1178.88
+1002002	importoamalg #x                                   	19	52	109.44
+1002002	importoamalg #x                                   	19	57	2451.06
+1002002	importoamalg #x                                   	8	13	13246.16
+1002002	importoamalg #x                                   	8	37	3220.80
+1002002	importoamalg #x                                   	9	27	1040.43
+1002002	importoamalg #x                                   	9	36	2668.77
+1002002	importoamalg #x                                   	9	42	1893.54
+1002002	importoamalg #x                                   	9	48	3374.00
+1002002	importoamalg #x                                   	9	56	1600.82
+1002002	importoamalg #x                                   	9	9	2926.95
+1003001	exportiamalg #x                                   	17	37	2779.50
+1003001	exportiamalg #x                                   	17	40	953.55
+1003001	exportiamalg #x                                   	17	41	2751.84
+1003001	exportiamalg #x                                   	18	21	2028.31
+1003001	exportiamalg #x                                   	18	3	1704.75
+1003001	exportiamalg #x                                   	19	10	3110.49
+1003001	exportiamalg #x                                   	19	19	2355.12
+1003001	exportiamalg #x                                   	19	4	4483.98
+1003001	exportiamalg #x                                   	19	50	1455.83
+1003001	exportiamalg #x                                   	19	52	15.81
+1003001	exportiamalg #x                                   	6	10	386.40
+1003001	exportiamalg #x                                   	6	53	528.90
+1003001	exportiamalg #x                                   	7	23	2784.84
+1003001	exportiamalg #x                                   	7	57	5617.50
+1003001	exportiamalg #x                                   	8	35	3007.26
+1003001	exportiamalg #x                                   	8	5	2360.81
+1003001	exportiamalg #x                                   	9	26	2633.15
+1003001	exportiamalg #x                                   	9	36	1007.81
+1003001	exportiamalg #x                                   	9	44	73.92
+1003001	exportiamalg #x                                   	9	58	2871.44
+1003002	exportiamalg #x                                   	17	41	2197.60
+1003002	exportiamalg #x                                   	17	59	2670.50
+1003002	exportiamalg #x                                   	18	0	374.99
+1003002	exportiamalg #x                                   	18	21	2783.00
+1003002	exportiamalg #x                                   	18	35	7620.51
+1003002	exportiamalg #x                                   	18	52	6013.26
+1003002	exportiamalg #x                                   	18	53	4374.72
+1003002	exportiamalg #x                                   	19	10	46.80
+1003002	exportiamalg #x                                   	19	33	839.90
+1003002	exportiamalg #x                                   	19	42	304.64
+1003002	exportiamalg #x                                   	19	58	3423.80
+1003002	exportiamalg #x                                   	7	40	1418.18
+1003002	exportiamalg #x                                   	7	42	127.68
+1003002	exportiamalg #x                                   	8	19	681.56
+1003002	exportiamalg #x                                   	8	25	2957.35
+1003002	exportiamalg #x                                   	8	56	3097.12
+1003002	exportiamalg #x                                   	8	58	10023.00
+1003002	exportiamalg #x                                   	9	38	4428.98
+1003002	exportiamalg #x                                   	9	41	7345.80
+1003002	exportiamalg #x                                   	9	49	4255.80
+1004001	edu packamalg #x                                  	17	26	194.18
+1004001	edu packamalg #x                                  	17	57	5860.74
+1004001	edu packamalg #x                                  	19	2	1148.16
+1004001	edu packamalg #x                                  	19	26	1439.04
+1004001	edu packamalg #x                                  	19	42	1878.76
+1004001	edu packamalg #x                                  	8	16	1629.81
+1004002	edu packamalg #x                                  	17	11	1340.64
+1004002	edu packamalg #x                                  	17	16	4061.68
+1004002	edu packamalg #x                                  	17	2	6118.65
+1004002	edu packamalg #x                                  	17	32	6524.70
+1004002	edu packamalg #x                                  	17	39	580.32
+1004002	edu packamalg #x                                  	18	24	2551.16
+1004002	edu packamalg #x                                  	18	32	1742.52
+1004002	edu packamalg #x                                  	19	0	1261.65
+1004002	edu packamalg #x                                  	19	25	1117.39
+1004002	edu packamalg #x                                  	19	26	9298.01
+1004002	edu packamalg #x                                  	19	5	736.92
+1004002	edu packamalg #x                                  	19	9	242.25
+1004002	edu packamalg #x                                  	7	0	4599.14
+1004002	edu packamalg #x                                  	7	2	210.14
+1004002	edu packamalg #x                                  	7	41	81.59
+1004002	edu packamalg #x                                  	8	13	1922.68
+1004002	edu packamalg #x                                  	8	26	608.52
+1004002	edu packamalg #x                                  	8	49	264.60
+1004002	edu packamalg #x                                  	9	12	103.87
+1004002	edu packamalg #x                                  	9	53	5382.72
+1004002	edu packamalg #x                                  	9	55	4427.52
+2001001	amalgimporto #x                                   	17	28	1135.06
+2001001	amalgimporto #x                                   	18	47	142.29
+2001001	amalgimporto #x                                   	19	48	72.03
+2001001	amalgimporto #x                                   	6	40	5295.40
+2001002	amalgimporto #x                                   	17	11	1951.95
+2001002	amalgimporto #x                                   	17	12	2396.61
+2001002	amalgimporto #x                                   	17	22	1269.07
+2001002	amalgimporto #x                                   	17	27	1955.20
+2001002	amalgimporto #x                                   	17	32	15801.28
+2001002	amalgimporto #x                                   	17	34	8160.75
+2001002	amalgimporto #x                                   	17	56	820.26
+2001002	amalgimporto #x                                   	18	1	65.00
+2001002	amalgimporto #x                                   	18	20	276.77
+2001002	amalgimporto #x                                   	18	21	1659.84
+2001002	amalgimporto #x                                   	18	24	2749.95
+2001002	amalgimporto #x                                   	18	31	108.78
+2001002	amalgimporto #x                                   	18	4	229.32
+2001002	amalgimporto #x                                   	18	48	1511.30
+2001002	amalgimporto #x                                   	18	49	333.66
+2001002	amalgimporto #x                                   	19	19	33.20
+2001002	amalgimporto #x                                   	19	25	253.50
+2001002	amalgimporto #x                                   	19	45	76.36
+2001002	amalgimporto #x                                   	19	47	2894.46
+2001002	amalgimporto #x                                   	19	6	14.72
+2001002	amalgimporto #x                                   	19	9	4681.05
+2001002	amalgimporto #x                                   	7	46	1213.44
+2001002	amalgimporto #x                                   	7	8	1414.14
+2001002	amalgimporto #x                                   	8	51	3725.90
+2001002	amalgimporto #x                                   	8	54	688.71
+2001002	amalgimporto #x                                   	9	27	213.64
+2001002	amalgimporto #x                                   	9	3	1157.20
+2001002	amalgimporto #x                                   	9	36	2715.18
+2002001	importoimporto #x                                 	17	0	86.10
+2002001	importoimporto #x                                 	17	24	12932.04
+2002001	importoimporto #x                                 	17	38	116.16
+2002001	importoimporto #x                                 	17	4	1649.28
+2002001	importoimporto #x                                 	17	40	126.49
+2002001	importoimporto #x                                 	17	51	222.80
+2002001	importoimporto #x                                 	18	1	273.60
+2002001	importoimporto #x                                 	18	33	232.56
+2002001	importoimporto #x                                 	18	34	177.79
+2002001	importoimporto #x                                 	19	10	818.40
+2002001	importoimporto #x                                 	19	15	107.64
+2002001	importoimporto #x                                 	19	31	709.32
+2002001	importoimporto #x                                 	19	47	2338.56
+2002001	importoimporto #x                                 	6	34	9043.24
+2002001	importoimporto #x                                 	7	32	1023.75
+2002001	importoimporto #x                                 	8	8	2420.34
+2002001	importoimporto #x                                 	9	20	943.56
+2002001	importoimporto #x                                 	9	32	735.13
+2002001	importoimporto #x                                 	9	43	1715.64
+2002001	importoimporto #x                                 	9	58	NULL
+2003001	exportiimporto #x                                 	17	18	15.17
+2003001	exportiimporto #x                                 	18	28	5107.41
+2003001	exportiimporto #x                                 	18	54	864.36
+2003001	exportiimporto #x                                 	19	11	184.90
+2003001	exportiimporto #x                                 	19	58	2528.40
+2003001	exportiimporto #x                                 	8	42	7326.20
+2003001	exportiimporto #x                                 	9	17	7900.62
+2003001	exportiimporto #x                                 	9	23	1310.16
+2003001	exportiimporto #x                                 	9	32	4723.95
+2003001	exportiimporto #x                                 	9	59	8113.05
+2003002	exportiimporto #x                                 	18	18	414.12
+2003002	exportiimporto #x                                 	18	26	7621.35
+2003002	exportiimporto #x                                 	18	9	1874.40
+2003002	exportiimporto #x                                 	19	52	568.92
+2003002	exportiimporto #x                                 	6	17	842.40
+2003002	exportiimporto #x                                 	6	53	10190.88
+2003002	exportiimporto #x                                 	8	25	650.25
+2003002	exportiimporto #x                                 	9	27	NULL
+2003002	exportiimporto #x                                 	9	31	8513.40
+2003002	exportiimporto #x                                 	9	41	2471.90
+2003002	exportiimporto #x                                 	9	49	137.40
+2004001	edu packimporto #x                                	17	3	7568.00
+2004001	edu packimporto #x                                	17	48	241.50
+2004001	edu packimporto #x                                	18	4	3757.34
+2004001	edu packimporto #x                                	18	42	172.48
+2004001	edu packimporto #x                                	19	10	202.12
+2004001	edu packimporto #x                                	19	27	1490.13
+2004001	edu packimporto #x                                	19	33	4138.56
+2004001	edu packimporto #x                                	19	4	3051.40
+2004001	edu packimporto #x                                	19	45	70.40
+2004001	edu packimporto #x                                	19	50	1934.46
+2004002	edu packimporto #x                                	17	2	6744.98
+2004002	edu packimporto #x                                	17	46	3144.40
+2004002	edu packimporto #x                                	17	59	1676.84
+2004002	edu packimporto #x                                	18	28	1052.64
+2004002	edu packimporto #x                                	18	37	56.75
+2004002	edu packimporto #x                                	18	46	3194.31
+2004002	edu packimporto #x                                	18	57	646.34
+2004002	edu packimporto #x                                	19	14	8165.73
+2004002	edu packimporto #x                                	19	16	581.28
+2004002	edu packimporto #x                                	19	20	553.76
+2004002	edu packimporto #x                                	19	26	2776.36
+2004002	edu packimporto #x                                	7	56	4267.90
+2004002	edu packimporto #x                                	8	39	51.68
+2004002	edu packimporto #x                                	9	24	304.36
+2004002	edu packimporto #x                                	9	28	1353.15
+2004002	edu packimporto #x                                	9	3	1475.84
+2004002	edu packimporto #x                                	9	41	5165.58
+2004002	edu packimporto #x                                	9	46	716.38
+2004002	edu packimporto #x                                	9	7	NULL
+3001001	amalgexporti #x                                   	17	10	3217.50
+3001001	amalgexporti #x                                   	17	18	3.96
+3001001	amalgexporti #x                                   	17	25	15765.36
+3001001	amalgexporti #x                                   	17	33	191.98
+3001001	amalgexporti #x                                   	17	38	72.96
+3001001	amalgexporti #x                                   	19	1	7502.67
+3001001	amalgexporti #x                                   	19	57	247.68
+3001001	amalgexporti #x                                   	7	26	7840.00
+3001001	amalgexporti #x                                   	8	38	3125.32
+3001001	amalgexporti #x                                   	9	41	1211.50
+3002001	importoexporti #x                                 	17	0	38.34
+3002001	importoexporti #x                                 	17	1	108.45
+3002001	importoexporti #x                                 	17	13	2741.54
+3002001	importoexporti #x                                 	17	14	1644.96
+3002001	importoexporti #x                                 	17	33	369.75
+3002001	importoexporti #x                                 	17	40	1379.04
+3002001	importoexporti #x                                 	17	5	4561.20
+3002001	importoexporti #x                                 	17	51	2181.96
+3002001	importoexporti #x                                 	18	20	2694.50
+3002001	importoexporti #x                                 	18	21	2403.96
+3002001	importoexporti #x                                 	18	3	6203.20
+3002001	importoexporti #x                                 	18	31	319.90
+3002001	importoexporti #x                                 	18	37	589.28
+3002001	importoexporti #x                                 	18	39	1094.10
+3002001	importoexporti #x                                 	18	50	5950.48
+3002001	importoexporti #x                                 	19	27	738.14
+3002001	importoexporti #x                                 	19	3	7400.40
+3002001	importoexporti #x                                 	19	35	397.71
+3002001	importoexporti #x                                 	19	4	8664.04
+3002001	importoexporti #x                                 	19	43	10914.60
+3002001	importoexporti #x                                 	19	45	8497.28
+3002001	importoexporti #x                                 	19	49	826.74
+3002001	importoexporti #x                                 	6	40	5245.80
+3002001	importoexporti #x                                 	6	50	95.22
+3002001	importoexporti #x                                 	8	1	186.93
+3002001	importoexporti #x                                 	8	5	454.77
+3002001	importoexporti #x                                 	8	52	1770.00
+3002001	importoexporti #x                                 	9	26	209.95
+3002001	importoexporti #x                                 	9	41	755.15
+3002001	importoexporti #x                                 	9	59	6964.25
+3002002	importoexporti #x                                 	17	15	2902.20
+3002002	importoexporti #x                                 	17	18	3304.55
+3002002	importoexporti #x                                 	17	45	1301.90
+3002002	importoexporti #x                                 	18	21	490.82
+3002002	importoexporti #x                                 	18	24	935.00
+3002002	importoexporti #x                                 	18	52	4436.80
+3002002	importoexporti #x                                 	19	13	6487.20
+3002002	importoexporti #x                                 	19	19	748.41
+3002002	importoexporti #x                                 	6	41	1760.58
+3002002	importoexporti #x                                 	8	35	421.26
+3002002	importoexporti #x                                 	8	51	4938.16
+3002002	importoexporti #x                                 	8	58	2399.13
+3002002	importoexporti #x                                 	9	12	378.08
+3002002	importoexporti #x                                 	9	28	414.12
+3002002	importoexporti #x                                 	9	53	27.74
+3003001	exportiexporti #x                                 	17	21	9190.80
+3003001	exportiexporti #x                                 	17	28	389.88
+3003001	exportiexporti #x                                 	17	42	42.08
+3003001	exportiexporti #x                                 	17	56	5104.62
+3003001	exportiexporti #x                                 	17	6	196.38
+3003001	exportiexporti #x                                 	17	9	6450.60
+3003001	exportiexporti #x                                 	18	15	0.00
+3003001	exportiexporti #x                                 	18	33	1386.35
+3003001	exportiexporti #x                                 	19	16	101.58
+3003001	exportiexporti #x                                 	19	20	13.26
+3003001	exportiexporti #x                                 	19	24	10307.88
+3003001	exportiexporti #x                                 	19	25	2713.30
+3003001	exportiexporti #x                                 	19	37	16531.50
+3003001	exportiexporti #x                                 	19	38	5990.76
+3003001	exportiexporti #x                                 	19	40	4711.07
+3003001	exportiexporti #x                                 	19	49	7845.76
+3003001	exportiexporti #x                                 	19	53	2118.88
+3003001	exportiexporti #x                                 	7	23	203.61
+3003001	exportiexporti #x                                 	7	29	2408.70
+3003001	exportiexporti #x                                 	8	19	1301.37
+3003001	exportiexporti #x                                 	8	32	5008.64
+3003001	exportiexporti #x                                 	8	48	1167.05
+3003001	exportiexporti #x                                 	8	58	302.40
+3003001	exportiexporti #x                                 	8	9	2206.47
+3003001	exportiexporti #x                                 	9	1	156.98
+3003001	exportiexporti #x                                 	9	14	1139.60
+3003001	exportiexporti #x                                 	9	22	1982.73
+3003001	exportiexporti #x                                 	9	48	258.39
+3003001	exportiexporti #x                                 	9	6	151.92
+3003002	exportiexporti #x                                 	17	21	221.20
+3003002	exportiexporti #x                                 	18	26	1248.48
+3003002	exportiexporti #x                                 	18	29	665.01
+3003002	exportiexporti #x                                 	18	8	2844.00
+3003002	exportiexporti #x                                 	19	24	410.00
+3003002	exportiexporti #x                                 	19	36	154.38
+3003002	exportiexporti #x                                 	19	37	38.80
+3003002	exportiexporti #x                                 	19	5	5201.25
+3003002	exportiexporti #x                                 	6	35	0.00
+3003002	exportiexporti #x                                 	7	31	7195.50
+3003002	exportiexporti #x                                 	7	37	313.24
+3003002	exportiexporti #x                                 	9	20	367.90
+3003002	exportiexporti #x                                 	9	27	234.60
+3003002	exportiexporti #x                                 	9	42	1217.28
+3004001	edu packexporti #x                                	17	1	100.80
+3004001	edu packexporti #x                                	17	46	2375.45
+3004001	edu packexporti #x                                	17	51	539.95
+3004001	edu packexporti #x                                	18	0	7698.24
+3004001	edu packexporti #x                                	18	16	106.60
+3004001	edu packexporti #x                                	18	21	1270.66
+3004001	edu packexporti #x                                	18	4	633.06
+3004001	edu packexporti #x                                	18	49	1433.88
+3004001	edu packexporti #x                                	19	14	3127.20
+3004001	edu packexporti #x                                	19	17	763.00
+3004001	edu packexporti #x                                	19	47	10.00
+3004001	edu packexporti #x                                	19	9	2261.52
+3004001	edu packexporti #x                                	7	45	17.11
+3004001	edu packexporti #x                                	7	50	3029.00
+3004001	edu packexporti #x                                	7	56	3218.22
+3004001	edu packexporti #x                                	9	31	1541.43
+3004001	edu packexporti #x                                	9	36	5218.56
+3004001	edu packexporti #x                                	9	40	91.77
+4001001	amalgedu pack #x                                  	17	15	1488.84
+4001001	amalgedu pack #x                                  	17	26	469.58
+4001001	amalgedu pack #x                                  	17	28	1643.76
+4001001	amalgedu pack #x                                  	17	38	796.38
+4001001	amalgedu pack #x                                  	17	54	22.38
+4001001	amalgedu pack #x                                  	17	55	3890.08
+4001001	amalgedu pack #x                                  	17	7	777.12
+4001001	amalgedu pack #x                                  	17	8	4586.22
+4001001	amalgedu pack #x                                  	19	13	1708.26
+4001001	amalgedu pack #x                                  	19	43	2067.52
+4001001	amalgedu pack #x                                  	19	45	227.84
+4001001	amalgedu pack #x                                  	19	58	844.90
+4001001	amalgedu pack #x                                  	19	59	9881.19
+4001001	amalgedu pack #x                                  	19	9	2512.00
+4001001	amalgedu pack #x                                  	6	45	1639.44
+4001001	amalgedu pack #x                                  	7	58	135.78
+4001001	amalgedu pack #x                                  	9	12	2930.95
+4001001	amalgedu pack #x                                  	9	29	34.76
+4001001	amalgedu pack #x                                  	9	3	2738.34
+4001001	amalgedu pack #x                                  	9	48	211.32
+4001002	amalgedu pack #x                                  	17	14	886.48
+4001002	amalgedu pack #x                                  	17	53	198.33
+4001002	amalgedu pack #x                                  	17	55	1880.97
+4001002	amalgedu pack #x                                  	17	57	792.74
+4001002	amalgedu pack #x                                  	17	6	724.80
+4001002	amalgedu pack #x                                  	19	19	2018.40
+4001002	amalgedu pack #x                                  	19	51	1706.46
+4001002	amalgedu pack #x                                  	6	3	2012.80
+4001002	amalgedu pack #x                                  	7	40	1431.54
+4001002	amalgedu pack #x                                  	7	45	63.47
+4001002	amalgedu pack #x                                  	7	6	253.80
+4001002	amalgedu pack #x                                  	8	50	341.33
+4002001	importoedu pack #x                                	18	51	2567.40
+4003001	exportiedu pack #x                                	17	4	6.84
+4003001	exportiedu pack #x                                	17	43	3598.98
+4003001	exportiedu pack #x                                	17	45	182.28
+4003001	exportiedu pack #x                                	18	33	0.00
+4003001	exportiedu pack #x                                	18	35	745.20
+4003001	exportiedu pack #x                                	18	37	260.23
+4003001	exportiedu pack #x                                	19	20	231.99
+4003001	exportiedu pack #x                                	19	39	13.49
+4003001	exportiedu pack #x                                	6	50	1129.20
+4003001	exportiedu pack #x                                	8	1	202.30
+4003001	exportiedu pack #x                                	8	3	1514.43
+4003001	exportiedu pack #x                                	8	33	3358.72
+4003001	exportiedu pack #x                                	8	34	14784.50
+4003001	exportiedu pack #x                                	9	12	62.26
+4003001	exportiedu pack #x                                	9	31	424.26
+4003001	exportiedu pack #x                                	9	38	2631.20
+4003001	exportiedu pack #x                                	9	42	3952.59
+4003001	exportiedu pack #x                                	9	47	98.25
+4003001	exportiedu pack #x                                	9	51	4781.14
+4003001	exportiedu pack #x                                	9	54	5994.50
+4004001	edu packedu pack #x                               	17	15	4028.96
+4004001	edu packedu pack #x                               	17	18	1644.00
+4004001	edu packedu pack #x                               	17	30	517.65
+4004001	edu packedu pack #x                               	17	35	524.59
+4004001	edu packedu pack #x                               	17	37	1430.37
+4004001	edu packedu pack #x                               	17	5	2386.20
+4004001	edu packedu pack #x                               	18	22	26.00
+4004001	edu packedu pack #x                               	18	30	17.50
+4004001	edu packedu pack #x                               	18	50	8728.56
+4004001	edu packedu pack #x                               	18	52	122.67
+4004001	edu packedu pack #x                               	19	11	300.48
+4004001	edu packedu pack #x                               	19	13	80.24
+4004001	edu packedu pack #x                               	19	48	276.92
+4004001	edu packedu pack #x                               	19	50	610.50
+4004001	edu packedu pack #x                               	7	34	62.68
+4004001	edu packedu pack #x                               	8	22	4316.62
+4004001	edu packedu pack #x                               	9	11	1930.50
+4004001	edu packedu pack #x                               	9	23	16687.92
+4004001	edu packedu pack #x                               	9	25	2215.21
+4004001	edu packedu pack #x                               	9	32	154.79
+4004001	edu packedu pack #x                               	9	37	449.90
+4004001	edu packedu pack #x                               	9	41	7.14
+4004001	edu packedu pack #x                               	9	54	2787.20
+4004002	edu packedu pack #x                               	17	2	3400.05
+4004002	edu packedu pack #x                               	17	3	6447.42
+4004002	edu packedu pack #x                               	17	57	0.00
+4004002	edu packedu pack #x                               	18	18	943.66
+4004002	edu packedu pack #x                               	18	23	2483.01
+4004002	edu packedu pack #x                               	19	7	1264.56
+4004002	edu packedu pack #x                               	9	34	951.00
+5001001	amalgscholar #x                                   	17	1	384.75
+5001001	amalgscholar #x                                   	17	10	118.36
+5001001	amalgscholar #x                                   	17	19	323.90
+5001001	amalgscholar #x                                   	17	43	2731.37
+5001001	amalgscholar #x                                   	17	44	9369.40
+5001001	amalgscholar #x                                   	17	52	2707.54
+5001001	amalgscholar #x                                   	17	54	3180.02
+5001001	amalgscholar #x                                   	17	56	4638.84
+5001001	amalgscholar #x                                   	18	23	909.48
+5001001	amalgscholar #x                                   	18	27	3326.04
+5001001	amalgscholar #x                                   	18	35	1713.96
+5001001	amalgscholar #x                                   	18	40	405.15
+5001001	amalgscholar #x                                   	19	12	3735.76
+5001001	amalgscholar #x                                   	19	18	818.09
+5001001	amalgscholar #x                                   	19	19	3617.97
+5001001	amalgscholar #x                                   	19	21	1643.22
+5001001	amalgscholar #x                                   	19	27	85.65
+5001001	amalgscholar #x                                   	19	51	778.40
+5001001	amalgscholar #x                                   	19	54	920.16
+5001001	amalgscholar #x                                   	19	57	6841.12
+5001001	amalgscholar #x                                   	8	31	1205.50
+5001001	amalgscholar #x                                   	8	41	0.30
+5001001	amalgscholar #x                                   	9	28	12171.40
+5001001	amalgscholar #x                                   	9	38	126.56
+5001002	amalgscholar #x                                   	17	44	255.00
+5001002	amalgscholar #x                                   	18	15	6118.20
+5001002	amalgscholar #x                                   	18	35	1654.44
+5001002	amalgscholar #x                                   	19	24	762.96
+5001002	amalgscholar #x                                   	19	42	2444.80
+5001002	amalgscholar #x                                   	19	51	1360.00
+5001002	amalgscholar #x                                   	8	25	0.00
+5001002	amalgscholar #x                                   	8	59	633.36
+5001002	amalgscholar #x                                   	9	39	378.56
+5001002	amalgscholar #x                                   	9	46	78.68
+5002001	importoscholar #x                                 	17	38	2822.47
+5002001	importoscholar #x                                 	17	58	38.27
+5002001	importoscholar #x                                 	18	2	5471.54
+5002001	importoscholar #x                                 	18	32	4324.52
+5002001	importoscholar #x                                 	18	38	257.53
+5002001	importoscholar #x                                 	18	53	365.10
+5002001	importoscholar #x                                 	19	31	91.20
+5002001	importoscholar #x                                 	19	32	615.12
+5002001	importoscholar #x                                 	19	33	1434.24
+5002001	importoscholar #x                                 	19	55	1563.38
+5002001	importoscholar #x                                 	19	59	7964.88
+5002001	importoscholar #x                                 	19	9	4787.43
+5002001	importoscholar #x                                 	6	7	1789.20
+5002001	importoscholar #x                                 	8	1	377.57
+5002001	importoscholar #x                                 	8	24	1725.50
+5002001	importoscholar #x                                 	8	48	1123.47
+5002001	importoscholar #x                                 	8	52	141.15
+5002001	importoscholar #x                                 	9	22	8143.74
+5002002	importoscholar #x                                 	17	27	227.52
+5002002	importoscholar #x                                 	17	30	1404.00
+5002002	importoscholar #x                                 	17	38	3709.44
+5002002	importoscholar #x                                 	17	49	1980.88
+5002002	importoscholar #x                                 	17	51	252.56
+5002002	importoscholar #x                                 	17	52	1345.02
+5002002	importoscholar #x                                 	18	14	1817.00
+5002002	importoscholar #x                                 	18	26	755.09
+5002002	importoscholar #x                                 	18	27	986.24
+5002002	importoscholar #x                                 	18	40	1159.40
+5002002	importoscholar #x                                 	19	0	558.98
+5002002	importoscholar #x                                 	19	10	55.68
+5002002	importoscholar #x                                 	19	15	4754.40
+5002002	importoscholar #x                                 	19	18	2016.96
+5002002	importoscholar #x                                 	19	19	7349.90
+5002002	importoscholar #x                                 	19	27	745.92
+5002002	importoscholar #x                                 	19	31	6745.90
+5002002	importoscholar #x                                 	6	23	3383.10
+5002002	importoscholar #x                                 	6	3	4774.25
+5002002	importoscholar #x                                 	6	34	416.52
+5002002	importoscholar #x                                 	9	16	13.13
+5002002	importoscholar #x                                 	9	7	328.26
+5003001	exportischolar #x                                 	17	11	1328.00
+5003001	exportischolar #x                                 	17	14	5214.72
+5003001	exportischolar #x                                 	17	25	46.72
+5003001	exportischolar #x                                 	17	28	7029.12
+5003001	exportischolar #x                                 	17	32	1714.80
+5003001	exportischolar #x                                 	17	36	0.00
+5003001	exportischolar #x                                 	17	4	21.70
+5003001	exportischolar #x                                 	17	45	12101.22
+5003001	exportischolar #x                                 	17	46	17.63
+5003001	exportischolar #x                                 	17	59	1466.25
+5003001	exportischolar #x                                 	17	9	87.10
+5003001	exportischolar #x                                 	18	1	4889.22
+5003001	exportischolar #x                                 	18	10	1461.98
+5003001	exportischolar #x                                 	18	14	1210.20
+5003001	exportischolar #x                                 	18	17	4099.20
+5003001	exportischolar #x                                 	18	31	4452.80
+5003001	exportischolar #x                                 	18	43	374.68
+5003001	exportischolar #x                                 	19	10	1403.22
+5003001	exportischolar #x                                 	19	2	4412.78
+5003001	exportischolar #x                                 	19	27	231.84
+5003001	exportischolar #x                                 	19	28	147.14
+5003001	exportischolar #x                                 	19	29	407.34
+5003001	exportischolar #x                                 	19	35	11523.60
+5003001	exportischolar #x                                 	19	58	2294.62
+5003001	exportischolar #x                                 	6	18	901.42
+5003001	exportischolar #x                                 	7	44	5589.90
+5003001	exportischolar #x                                 	8	1	116.10
+5003001	exportischolar #x                                 	8	25	1446.36
+5003001	exportischolar #x                                 	8	50	2555.28
+5003001	exportischolar #x                                 	8	59	2144.73
+5003001	exportischolar #x                                 	9	24	6694.80
+5003001	exportischolar #x                                 	9	26	1482.30
+5003001	exportischolar #x                                 	9	28	4064.76
+5003001	exportischolar #x                                 	9	29	1150.77
+5003001	exportischolar #x                                 	9	3	26.76
+5003001	exportischolar #x                                 	9	43	129.24
+5003001	exportischolar #x                                 	9	46	1361.57
+5003001	exportischolar #x                                 	9	53	6525.33
+5003002	exportischolar #x                                 	17	2	1540.54
+5003002	exportischolar #x                                 	17	23	520.96
+5003002	exportischolar #x                                 	17	26	320.31
+5003002	exportischolar #x                                 	17	37	2388.24
+5003002	exportischolar #x                                 	19	10	790.72
+5003002	exportischolar #x                                 	19	6	1150.92
+5003002	exportischolar #x                                 	8	21	43.89
+5003002	exportischolar #x                                 	8	54	9007.28
+5003002	exportischolar #x                                 	9	14	920.46
+5003002	exportischolar #x                                 	9	20	NULL
+5003002	exportischolar #x                                 	9	29	2378.69
+5003002	exportischolar #x                                 	9	47	3222.66
+5003002	exportischolar #x                                 	9	57	650.43
+5004001	edu packscholar #x                                	18	27	31.02
+5004001	edu packscholar #x                                	18	30	225.21
+5004001	edu packscholar #x                                	6	36	1646.50
+5004001	edu packscholar #x                                	8	19	6527.50
+5004001	edu packscholar #x                                	8	30	420.28
+5004002	edu packscholar #x                                	17	10	1016.60
+5004002	edu packscholar #x                                	17	22	39.36
+5004002	edu packscholar #x                                	18	15	379.68
+5004002	edu packscholar #x                                	18	35	1462.00
+5004002	edu packscholar #x                                	18	47	1481.61
+5004002	edu packscholar #x                                	18	50	3863.88
+5004002	edu packscholar #x                                	18	7	2049.67
+5004002	edu packscholar #x                                	19	2	2061.30
+5004002	edu packscholar #x                                	19	24	1514.74
+5004002	edu packscholar #x                                	19	31	20021.76
+6002003	importocorp #x                                    	17	20	1327.58
+6002003	importocorp #x                                    	17	39	1840.98
+6002003	importocorp #x                                    	17	53	140.40
+6002003	importocorp #x                                    	19	26	2152.17
+6002003	importocorp #x                                    	19	52	12649.84
+6002003	importocorp #x                                    	7	2	744.12
+6002005	importocorp #x                                    	17	22	4011.30
+6002005	importocorp #x                                    	18	4	904.12
+6002005	importocorp #x                                    	19	0	2454.03
+6002005	importocorp #x                                    	19	43	7341.75
+6002005	importocorp #x                                    	7	54	11026.50
+6002005	importocorp #x                                    	8	27	2351.04
+6002005	importocorp #x                                    	9	41	99.00
+6003008	exporticorp #x                                    	17	16	218.16
+6003008	exporticorp #x                                    	17	56	31.08
+6003008	exporticorp #x                                    	18	36	22.08
+6003008	exporticorp #x                                    	18	38	4955.40
+6003008	exporticorp #x                                    	18	47	244.44
+6003008	exporticorp #x                                    	18	8	5.15
+6003008	exporticorp #x                                    	6	32	182.90
+6003008	exporticorp #x                                    	9	18	4794.00
+6005001	scholarcorp #x                                    	17	13	10941.60
+6005001	scholarcorp #x                                    	17	14	1488.52
+6005001	scholarcorp #x                                    	17	43	256.48
+6005001	scholarcorp #x                                    	17	45	2522.52
+6005001	scholarcorp #x                                    	17	55	4367.72
+6005001	scholarcorp #x                                    	18	43	2174.48
+6005001	scholarcorp #x                                    	19	16	991.98
+6005001	scholarcorp #x                                    	19	55	4137.88
+6005001	scholarcorp #x                                    	6	58	12395.37
+6005001	scholarcorp #x                                    	7	39	10787.84
+6005001	scholarcorp #x                                    	8	14	3096.90
+6005001	scholarcorp #x                                    	9	25	2143.10
+6005001	scholarcorp #x                                    	9	44	7129.00
+6005001	scholarcorp #x                                    	9	9	597.30
+6006007	corpcorp #x                                       	18	53	375.36
+6006007	corpcorp #x                                       	18	59	1210.32
+6006007	corpcorp #x                                       	19	54	1055.43
+6006007	corpcorp #x                                       	6	1	5578.24
+6006007	corpcorp #x                                       	7	24	2158.40
+6007003	brandcorp #x                                      	17	26	588.80
+6007003	brandcorp #x                                      	17	33	1995.20
+6007003	brandcorp #x                                      	17	49	2522.15
+6007003	brandcorp #x                                      	17	51	1707.48
+6007003	brandcorp #x                                      	19	33	4146.75
+6007003	brandcorp #x                                      	6	9	8053.44
+6007003	brandcorp #x                                      	9	4	2335.10
+6008002	namelesscorp #x                                   	17	31	176.19
+6008002	namelesscorp #x                                   	18	38	3841.04
+6008002	namelesscorp #x                                   	18	48	2683.20
+6008002	namelesscorp #x                                   	19	53	127.32
+6008002	namelesscorp #x                                   	8	59	471.68
+6008002	namelesscorp #x                                   	9	3	578.97
+6008005	namelesscorp #x                                   	17	47	12252.44
+6008005	namelesscorp #x                                   	18	27	4498.44
+6008005	namelesscorp #x                                   	18	51	216.69
+6008005	namelesscorp #x                                   	19	2	10.59
+6008005	namelesscorp #x                                   	9	1	2902.58
+6008005	namelesscorp #x                                   	9	19	3.22
+6008007	namelesscorp #x                                   	17	2	1905.12
+6008007	namelesscorp #x                                   	17	20	810.46
+6008007	namelesscorp #x                                   	18	0	2190.24
+6008007	namelesscorp #x                                   	18	16	3395.62
+6008007	namelesscorp #x                                   	18	47	6953.36
+6008007	namelesscorp #x                                   	19	15	7.36
+6008007	namelesscorp #x                                   	19	54	1058.93
+6009003	maxicorp #x                                       	17	44	457.74
+6009003	maxicorp #x                                       	17	6	3596.58
+6009003	maxicorp #x                                       	19	38	2763.09
+6009003	maxicorp #x                                       	6	4	87.00
+6010005	univbrand #x                                      	17	24	1102.20
+6010005	univbrand #x                                      	17	3	208.32
+6010005	univbrand #x                                      	19	23	4606.83
+6010005	univbrand #x                                      	7	17	598.91
+6010005	univbrand #x                                      	8	18	197.37
+6010005	univbrand #x                                      	8	8	15.47
+6010005	univbrand #x                                      	9	27	4172.35
+6010005	univbrand #x                                      	9	8	339.83
+6011001	amalgbrand #x                                     	19	21	1098.30
+6011001	amalgbrand #x                                     	6	46	752.80
+6011001	amalgbrand #x                                     	7	21	2458.17
+6011001	amalgbrand #x                                     	8	42	15.81
+6011001	amalgbrand #x                                     	8	8	386.54
+6011001	amalgbrand #x                                     	9	18	7129.56
+6011005	amalgbrand #x                                     	17	13	7649.00
+6011005	amalgbrand #x                                     	17	31	1071.00
+6011005	amalgbrand #x                                     	18	33	1435.50
+6011005	amalgbrand #x                                     	18	40	41.54
+6011005	amalgbrand #x                                     	19	3	594.59
+6011005	amalgbrand #x                                     	9	53	1997.52
+6011008	amalgbrand #x                                     	17	4	445.12
+6011008	amalgbrand #x                                     	18	29	83.68
+6011008	amalgbrand #x                                     	18	5	2505.00
+6011008	amalgbrand #x                                     	8	13	315.10
+6011008	amalgbrand #x                                     	8	28	1995.60
+6011008	amalgbrand #x                                     	9	14	178.22
+6011008	amalgbrand #x                                     	9	33	1278.35
+6011008	amalgbrand #x                                     	9	39	1341.93
+6011008	amalgbrand #x                                     	9	50	42.50
+6012005	importobrand #x                                   	17	30	6063.57
+6012005	importobrand #x                                   	19	25	299.52
+6012005	importobrand #x                                   	7	20	2412.30
+6012008	importobrand #x                                   	19	13	3101.32
+6012008	importobrand #x                                   	19	41	16055.65
+6012008	importobrand #x                                   	8	33	2495.65
+6012008	importobrand #x                                   	9	0	0.00
+6012008	importobrand #x                                   	9	10	1327.19
+6012008	importobrand #x                                   	9	53	7286.37
+6015006	scholarbrand #x                                   	17	2	37.29
+6015006	scholarbrand #x                                   	18	23	6755.76
+6015006	scholarbrand #x                                   	19	0	1010.91
+6015006	scholarbrand #x                                   	19	26	211.85
+6015006	scholarbrand #x                                   	19	50	548.68
+6015006	scholarbrand #x                                   	19	58	5080.60
+6015006	scholarbrand #x                                   	6	14	212.28
+6016003	corpbrand #x                                      	17	33	4592.04
+6016003	corpbrand #x                                      	17	58	12.40
+6016003	corpbrand #x                                      	17	8	2.65
+6016003	corpbrand #x                                      	19	19	2421.65
+6016003	corpbrand #x                                      	19	31	3094.50
+6016003	corpbrand #x                                      	19	50	39.20
+6016003	corpbrand #x                                      	19	57	12.48
+6016003	corpbrand #x                                      	19	59	23.73
+6016003	corpbrand #x                                      	7	0	63.20
+6016003	corpbrand #x                                      	8	35	9497.90
+6016003	corpbrand #x                                      	8	54	1733.08
+6016003	corpbrand #x                                      	8	6	11902.80
+6016003	corpbrand #x                                      	9	41	4100.88
+6016003	corpbrand #x                                      	9	9	3262.08
+7001005	amalgbrand #x                                     	8	12	6940.96
+7001005	amalgbrand #x                                     	8	59	8656.83
+7004007	edu packbrand #x                                  	17	57	1713.28
+7004007	edu packbrand #x                                  	17	8	53.20
+7004007	edu packbrand #x                                  	18	15	563.80
+7004007	edu packbrand #x                                  	7	19	3943.82
+7004007	edu packbrand #x                                  	9	23	6173.10
+7004009	edu packbrand #x                                  	17	25	208.25
+7004009	edu packbrand #x                                  	17	42	193.39
+7004009	edu packbrand #x                                  	19	36	221.85
+7004009	edu packbrand #x                                  	6	11	847.26
+7004009	edu packbrand #x                                  	9	36	858.73
+7004009	edu packbrand #x                                  	9	8	789.88
+7007004	brandbrand #x                                     	9	31	1954.11
+7008009	namelessbrand #x                                  	17	29	514.25
+7008009	namelessbrand #x                                  	17	43	75.36
+7008009	namelessbrand #x                                  	17	52	3146.96
+7008009	namelessbrand #x                                  	19	27	1726.56
+7008009	namelessbrand #x                                  	19	39	2132.41
+7008009	namelessbrand #x                                  	19	45	1037.51
+7009010	maxibrand #x                                     	9	38	66.30
+7010003	univnameless #x                                   	17	11	387.00
+7010003	univnameless #x                                   	18	12	811.50
+7010003	univnameless #x                                   	18	35	2234.40
+7010003	univnameless #x                                   	18	37	883.34
+7010003	univnameless #x                                   	19	20	1926.24
+7010003	univnameless #x                                   	19	28	672.51
+7010003	univnameless #x                                   	19	4	5952.32
+7010003	univnameless #x                                   	19	49	1319.57
+7010003	univnameless #x                                   	7	5	2485.08
+7010003	univnameless #x                                   	7	58	1735.12
+7010004	univnameless #x                                   	17	26	129.50
+7010004	univnameless #x                                   	17	44	2509.78
+7010004	univnameless #x                                   	17	51	12082.56
+7010004	univnameless #x                                   	18	21	41.46
+7010004	univnameless #x                                   	18	7	3301.28
+7010004	univnameless #x                                   	19	23	208.20
+7010004	univnameless #x                                   	19	4	3093.35
+7010004	univnameless #x                                   	19	51	30.16
+7010004	univnameless #x                                   	8	21	2502.36
+7010004	univnameless #x                                   	9	16	3126.90
+7010009	univnameless #x                                   	17	37	841.96
+7010009	univnameless #x                                   	17	54	69.56
+7010009	univnameless #x                                   	18	26	3215.11
+7010009	univnameless #x                                   	18	48	2609.88
+7010009	univnameless #x                                   	8	48	95.36
+7010009	univnameless #x                                   	9	22	155.40
+7010009	univnameless #x                                   	9	5	7459.82
+7012003	importonameless #x                                	18	18	1807.85
+7012003	importonameless #x                                	8	51	826.89
+7012003	importonameless #x                                	9	2	258.24
+7012003	importonameless #x                                	9	22	1399.96
+7012003	importonameless #x                                	9	29	3573.75
+7012010	importonameless #x                               	18	37	33.83
+7012010	importonameless #x                               	18	40	10119.62
+7012010	importonameless #x                               	18	50	0.00
+7012010	importonameless #x                               	19	35	1114.76
+7012010	importonameless #x                               	19	42	8888.32
+7012010	importonameless #x                               	7	19	1016.80
+7012010	importonameless #x                               	7	2	17142.78
+7013007	exportinameless #x                                	18	20	9426.12
+7013007	exportinameless #x                                	18	47	4323.55
+7013007	exportinameless #x                                	19	42	4252.78
+7013007	exportinameless #x                                	19	49	7855.88
+7014001	edu packnameless #x                               	17	56	9606.96
+7014001	edu packnameless #x                               	18	38	312.80
+7014001	edu packnameless #x                               	6	35	4646.40
+7015007	scholarnameless #x                                	17	55	3734.28
+7015007	scholarnameless #x                                	17	8	10338.06
+7015007	scholarnameless #x                                	18	44	357.84
+7015007	scholarnameless #x                                	18	47	9254.90
+7015007	scholarnameless #x                                	9	48	3249.72
+7016001	corpnameless #x                                   	17	32	5382.09
+7016001	corpnameless #x                                   	18	53	32.24
+7016001	corpnameless #x                                   	19	5	1806.68
+7016001	corpnameless #x                                   	19	50	817.11
+7016001	corpnameless #x                                   	9	37	93.22
+7016001	corpnameless #x                                   	9	8	9319.91
+7016007	corpnameless #x                                   	17	28	924.66
+7016007	corpnameless #x                                   	17	42	1470.52
+7016007	corpnameless #x                                   	17	56	2817.48
+7016007	corpnameless #x                                   	18	45	992.74
+7016007	corpnameless #x                                   	19	16	892.64
+7016007	corpnameless #x                                   	19	53	3701.95
+7016007	corpnameless #x                                   	9	54	810.24
+8002009	importonameless #x                                	18	12	2266.60
+8002009	importonameless #x                                	18	28	7891.65
+8002009	importonameless #x                                	19	33	5633.00
+8002009	importonameless #x                                	19	8	29.84
+8002009	importonameless #x                                	6	46	522.06
+8002009	importonameless #x                                	8	46	371.42
+8002009	importonameless #x                                	9	18	3686.90
+8002009	importonameless #x                                	9	23	983.40
+8002009	importonameless #x                                	9	37	2079.84
+8003010	exportinameless #x                               	17	28	2084.72
+8003010	exportinameless #x                               	17	42	2082.86
+8003010	exportinameless #x                               	17	7	85.50
+8003010	exportinameless #x                               	18	27	2507.44
+8003010	exportinameless #x                               	19	26	387.92
+8003010	exportinameless #x                               	19	57	263.19
+8003010	exportinameless #x                               	7	24	931.32
+8003010	exportinameless #x                               	9	0	1123.08
+8004003	edu packnameless #x                               	17	23	4282.17
+8004003	edu packnameless #x                               	18	21	558.90
+8004003	edu packnameless #x                               	18	44	3232.48
+8004003	edu packnameless #x                               	18	52	2495.22
+8004003	edu packnameless #x                               	19	58	1905.78
+8004003	edu packnameless #x                               	8	11	87.12
+8004003	edu packnameless #x                               	8	39	90.64
+8004003	edu packnameless #x                               	9	44	2314.40
+8004009	edu packnameless #x                               	17	8	829.76
+8004009	edu packnameless #x                               	19	44	2421.51
+8004009	edu packnameless #x                               	8	59	110.90
+8005005	scholarnameless #x                                	17	19	63.70
+8005005	scholarnameless #x                                	17	31	1800.48
+8005005	scholarnameless #x                                	19	51	10488.40
+8005005	scholarnameless #x                                	19	55	2606.45
+8005005	scholarnameless #x                                	6	50	2972.97
+8005005	scholarnameless #x                                	9	15	29.20
+8005008	scholarnameless #x                                	18	20	220.83
+8005008	scholarnameless #x                                	8	19	111.68
+8011009	amalgmaxi #x                                      	19	15	14.04
+8011009	amalgmaxi #x                                      	19	26	328.35
+8011009	amalgmaxi #x                                      	19	35	3485.72
+8011009	amalgmaxi #x                                      	19	42	951.60
+8011009	amalgmaxi #x                                      	19	5	2457.99
+8011009	amalgmaxi #x                                      	8	23	12.88
+8013007	exportimaxi #x                                    	17	49	318.20
+8013007	exportimaxi #x                                    	18	32	7629.60
+8013007	exportimaxi #x                                    	18	51	1537.90
+8013007	exportimaxi #x                                    	19	3	4989.95
+8013007	exportimaxi #x                                    	7	11	2180.76
+8013009	exportimaxi #x                                    	19	25	174.96
+8013009	exportimaxi #x                                    	19	26	10683.66
+8013009	exportimaxi #x                                    	19	31	168.82
+8013009	exportimaxi #x                                    	9	53	5808.00
+8014005	edu packmaxi #x                                   	17	11	695.64
+8014005	edu packmaxi #x                                   	17	2	352.36
+8014005	edu packmaxi #x                                   	17	40	3049.76
+8014005	edu packmaxi #x                                   	18	14	37.80
+8014005	edu packmaxi #x                                   	18	24	943.00
+8014005	edu packmaxi #x                                   	18	43	3649.00
+8014005	edu packmaxi #x                                   	19	38	4893.48
+8014005	edu packmaxi #x                                   	9	22	850.23
+8014005	edu packmaxi #x                                   	9	34	1058.00
+8016004	corpmaxi #x                                       	17	32	1127.61
+8016004	corpmaxi #x                                       	17	34	8241.06
+8016004	corpmaxi #x                                       	18	43	2482.62
+8016004	corpmaxi #x                                       	18	55	7186.20
+8016004	corpmaxi #x                                       	19	8	4979.25
+8016004	corpmaxi #x                                       	7	53	470.55
+9008002	namelessmaxi #x                                   	17	28	215.76
+9008002	namelessmaxi #x                                   	17	33	5547.78
+9008002	namelessmaxi #x                                   	17	4	660.04
+9008002	namelessmaxi #x                                   	17	41	6207.45
+9008002	namelessmaxi #x                                   	17	52	3635.28
+9008002	namelessmaxi #x                                   	18	6	327.95
+9008002	namelessmaxi #x                                   	19	23	12759.38
+9008002	namelessmaxi #x                                   	9	51	458.82
+9008005	namelessmaxi #x                                   	17	4	1621.62
+9008005	namelessmaxi #x                                   	17	42	567.64
+9008005	namelessmaxi #x                                   	6	9	5382.09
+9008005	namelessmaxi #x                                   	9	52	756.42
+9012003	importounivamalg #x                               	17	2	3568.96
+9012003	importounivamalg #x                               	8	13	64.64
+9012003	importounivamalg #x                               	8	30	5922.09
+9012003	importounivamalg #x                               	8	59	829.20
+9012003	importounivamalg #x                               	9	18	2732.40
+9012005	importounivamalg #x                               	17	45	821.48
+9012005	importounivamalg #x                               	18	34	2864.88
+9012005	importounivamalg #x                               	18	4	205.70
+9012005	importounivamalg #x                               	19	25	176.67
+9012005	importounivamalg #x                               	19	59	4581.56
+9012005	importounivamalg #x                               	6	45	91.35
+9012005	importounivamalg #x                               	7	0	1230.20
+9012005	importounivamalg #x                               	8	3	339.57
+9012005	importounivamalg #x                               	8	34	504.60
+9012005	importounivamalg #x                               	9	12	0.00
+9012008	importounivamalg #x                               	18	11	4354.35
+9012008	importounivamalg #x                               	18	22	1873.02
+9012008	importounivamalg #x                               	18	56	3735.84
+9012008	importounivamalg #x                               	7	51	715.44
+9012008	importounivamalg #x                               	9	43	803.64
+9013009	exportiunivamalg #x                               	17	24	478.00
+9013009	exportiunivamalg #x                               	17	42	4321.92
+9013009	exportiunivamalg #x                               	18	43	1722.16
+9013009	exportiunivamalg #x                               	18	51	1590.00
+9013009	exportiunivamalg #x                               	19	55	1906.92
+9013009	exportiunivamalg #x                               	7	31	5155.29
+9013009	exportiunivamalg #x                               	9	16	34.78
+9013009	exportiunivamalg #x                               	9	36	1737.57
+9013009	exportiunivamalg #x                               	9	8	462.80
+9014011	edu packunivamalg #x                             	17	3	1364.52
+9014011	edu packunivamalg #x                             	17	44	2436.40
+9014011	edu packunivamalg #x                             	17	50	4100.40
+9014011	edu packunivamalg #x                             	18	32	15347.28
+9014011	edu packunivamalg #x                             	19	18	2363.04
+9014011	edu packunivamalg #x                             	19	9	110.12
+9014011	edu packunivamalg #x                             	7	58	86.57
+9014011	edu packunivamalg #x                             	8	40	896.49
+9015009	scholarunivamalg #x                               	17	32	181.60
+9015009	scholarunivamalg #x                               	18	18	1124.16
+9015009	scholarunivamalg #x                               	18	26	25.96
+9015009	scholarunivamalg #x                               	18	30	1062.06
+9015009	scholarunivamalg #x                               	18	31	573.93
+9015009	scholarunivamalg #x                               	18	40	1222.64
+9015009	scholarunivamalg #x                               	18	9	1352.61
+9015009	scholarunivamalg #x                               	19	3	2114.64
+9015009	scholarunivamalg #x                               	19	9	186.30
+9015009	scholarunivamalg #x                               	6	44	1788.93
+9015009	scholarunivamalg #x                               	8	28	248.27
+9015009	scholarunivamalg #x                               	8	38	147.92
+9015009	scholarunivamalg #x                               	8	47	54.20
+9015009	scholarunivamalg #x                               	8	52	4774.34
+9015009	scholarunivamalg #x                               	9	32	81.84
+9015011	scholarunivamalg #x                              	17	17	8.60
+9015011	scholarunivamalg #x                              	17	40	40.70
+9015011	scholarunivamalg #x                              	18	16	2621.71
+9015011	scholarunivamalg #x                              	18	55	1487.52
+9015011	scholarunivamalg #x                              	19	54	555.36
+9015011	scholarunivamalg #x                              	8	2	2811.48
+9015011	scholarunivamalg #x                              	8	55	4235.00
+9016003	corpunivamalg #x                                  	17	53	1200.00
+9016003	corpunivamalg #x                                  	18	8	8380.89
+9016003	corpunivamalg #x                                  	19	8	1079.54
+9016003	corpunivamalg #x                                  	8	42	3279.18
+9016003	corpunivamalg #x                                  	9	42	9576.26

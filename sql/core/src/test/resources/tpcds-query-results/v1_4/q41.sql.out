@@ -53,7 +53,4 @@ LIMIT 100
 -- !query schema
 struct<i_product_name:string>
 -- !query output
-ableationableought
-anticallyeingese
-callycallyeingese
-oughtationableought
+
