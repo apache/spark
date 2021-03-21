@@ -870,8 +870,19 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions)) {
         p
       } else {
-        agg.copy(aggregateExpressions = buildCleanedProjectList(
-          p.projectList, agg.aggregateExpressions))
+        val complexGroupingExpressions =
+          ExpressionSet(agg.groupingExpressions.filter(_.children.nonEmpty))
+
+        def wrapGroupingExpression(e: Expression): Expression = e match {
+          case _: AggregateExpression => e
+          case _ if complexGroupingExpressions.contains(e) => GroupingExpression(e)
+          case _ => e.mapChildren(wrapGroupingExpression)
+        }
+
+        val wrappedAggregateExpressions =
+          agg.aggregateExpressions.map(wrapGroupingExpression(_).asInstanceOf[NamedExpression])
+        agg.copy(aggregateExpressions =
+          buildCleanedProjectList(p.projectList, wrappedAggregateExpressions))
       }
     case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
         if isRenaming(l1, l2) =>

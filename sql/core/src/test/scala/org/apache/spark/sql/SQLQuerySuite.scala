@@ -4116,6 +4116,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-34581: Don't optimize out grouping expressions from aggregate expressions") {
+    withTempView("t") {
+      Seq[Integer](null, 1, 2, 3, null).toDF("id").createOrReplaceTempView("t")
+
+      val df = spark.sql(
+        """
+          |SELECT not(id), c
+          |FROM (
+          |  SELECT t.id IS NULL AS id, count(*) AS c
+          |  FROM t
+          |  GROUP BY t.id IS NULL
+          |) t
+          |""".stripMargin)
+      checkAnswer(df, Row(true, 3) :: Row(false, 2) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

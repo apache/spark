@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -153,5 +153,22 @@ object GroupingID {
 
   def dataType: DataType = {
     if (SQLConf.get.integerGroupingIdEnabled) IntegerType else LongType
+  }
+}
+
+/**
+ * Wrapper expression to avoid further optizations of child
+ */
+case class GroupingExpression(child: Expression) extends UnaryExpression {
+  override def eval(input: InternalRow): Any = {
+    child.eval(input)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.genCode(ctx)
+  }
+
+  override def dataType: DataType = {
+    child.dataType
   }
 }
