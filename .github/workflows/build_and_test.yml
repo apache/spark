@@ -440,7 +440,13 @@ jobs:
       with:
         repository: maropu/spark-tpcds-sf-1
         path: ./tpcds-sf-1
-        lfs: true
+    - name: Cache TPC-DS generated data
+      uses: actions/cache@v2
+      with:
+        path: ./tpcds-sf-1
+        key: tpcds-${{ hashFiles('tpcds-sf-1/.spark-tpcds-sf-1.md5') }}
+        restore-keys: |
+          tpcds-
     - name: Install Java 8
       uses: actions/setup-java@v1
       with:
