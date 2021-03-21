@@ -498,50 +498,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 }
 
 /**
- * Remove redundant aggregates from a query plan. A redundant aggregate is an aggregate whose
- * only goal is to keep distinct values, while its parent aggregate would ignore duplicate values.
- */
-object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
-      val aliasMap = getAliasMap(lower)
-
-      val newAggregate = upper.copy(
-        child = lower.child,
-        groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
-        aggregateExpressions = upper.aggregateExpressions.map(
-          replaceAliasButKeepName(_, aliasMap))
-      )
-
-      // We might have introduces non-deterministic grouping expression
-      if (newAggregate.groupingExpressions.exists(!_.deterministic)) {
-        PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
-      } else {
-        newAggregate
-      }
-  }
-
-  private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoAggregateExpressions = !upper.aggregateExpressions.exists(isAggregate)
-
-    lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
-      lower
-        .aggregateExpressions
-        .filter(_.deterministic)
-        .filter(!isAggregate(_))
-        .map(_.toAttribute)
-    ))
-
-    upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
-  }
-
-  private def isAggregate(expr: Expression): Boolean = {
-    expr.find(e => e.isInstanceOf[AggregateExpression] ||
-      PythonUDF.isGroupedAggPandasUDF(e)).isDefined
-  }
-}
-
-/**
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
