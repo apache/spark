@@ -301,7 +301,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
 
     if (argumentString.nonEmpty) {
       s"""

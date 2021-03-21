@@ -22,15 +22,17 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView}
-import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog.{TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
+import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.{AbstractDataType, DataType, StructField, StructType}
 
 /**
  * Object for grouping all error messages of the query compilation.
@@ -753,5 +755,336 @@ private[spark] object QueryCompilationErrors {
   def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
     new AnalysisException(s"Invalid partitionExprs specified: $sortOrders For range " +
       "partitioning use REPARTITION_BY_RANGE instead.")
+  }
+
+  def partitionColumnNotSpecifiedError(format: String, partitionColumn: String): Throwable = {
+    new AnalysisException(s"Failed to resolve the schema for $format for " +
+      s"the partition column: $partitionColumn. It must be specified manually.")
+  }
+
+  def dataSchemaNotSpecifiedError(format: String): Throwable = {
+    new AnalysisException(s"Unable to infer schema for $format. It must be specified manually.")
+  }
+
+  def dataPathNotExistError(path: String): Throwable = {
+    new AnalysisException(s"Path does not exist: $path")
+  }
+
+  def dataSourceOutputModeUnsupportedError(
+      className: String, outputMode: OutputMode): Throwable = {
+    new AnalysisException(s"Data source $className does not support $outputMode output mode")
+  }
+
+  def schemaNotSpecifiedForSchemaRelationProviderError(className: String): Throwable = {
+    new AnalysisException(s"A schema needs to be specified when using $className.")
+  }
+
+  def userSpecifiedSchemaMismatchActualSchemaError(
+      schema: StructType, actualSchema: StructType): Throwable = {
+    new AnalysisException(
+      s"""
+         |The user-specified schema doesn't match the actual schema:
+         |user-specified: ${schema.toDDL}, actual: ${actualSchema.toDDL}. If you're using
+         |DataFrameReader.schema API or creating a table, please do not specify the schema.
+         |Or if you're scanning an existed table, please drop it and re-create it.
+       """.stripMargin)
+  }
+
+  def dataSchemaNotSpecifiedError(format: String, fileCatalog: String): Throwable = {
+    new AnalysisException(
+      s"Unable to infer schema for $format at $fileCatalog. It must be specified manually")
+  }
+
+  def invalidDataSourceError(className: String): Throwable = {
+    new AnalysisException(s"$className is not a valid Spark SQL Data Source.")
+  }
+
+  def cannotSaveIntervalIntoExternalStorageError(): Throwable = {
+    new AnalysisException("Cannot save interval data type into external storage.")
+  }
+
+  def cannotResolveAttributeError(name: String, data: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"Unable to resolve $name given [${data.output.map(_.name).mkString(", ")}]")
+  }
+
+  def orcNotUsedWithHiveEnabledError(): Throwable = {
+    new AnalysisException(
+      s"""
+         |Hive built-in ORC data source must be used with Hive support enabled.
+         |Please use the native ORC data source by setting 'spark.sql.orc.impl' to 'native'
+       """.stripMargin)
+  }
+
+  def failedToFindAvroDataSourceError(provider: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |Failed to find data source: $provider. Avro is built-in but external data
+         |source module since Spark 2.4. Please deploy the application as per
+         |the deployment section of "Apache Avro Data Source Guide".
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def failedToFindKafkaDataSourceError(provider: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |Failed to find data source: $provider. Please deploy the application as
+         |per the deployment section of "Structured Streaming + Kafka Integration Guide".
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"""
+         |Multiple sources found for $provider (${sourceNames.mkString(", ")}),
+         | please specify the fully qualified class name.
+       """.stripMargin)
+  }
+
+  def writeEmptySchemasUnsupportedByDataSourceError(): Throwable = {
+    new AnalysisException(
+      s"""
+         |Datasource does not support writing empty or nested empty schemas.
+         |Please make sure the data schema has at least one or more column(s).
+       """.stripMargin)
+  }
+
+  def insertMismatchedColumnNumberError(
+      targetAttributes: Seq[Attribute],
+      sourceAttributes: Seq[Attribute],
+      staticPartitionsSize: Int): Throwable = {
+    new AnalysisException(
+      s"""
+         |The data to be inserted needs to have the same number of columns as the
+         |target table: target table has ${targetAttributes.size} column(s) but the
+         |inserted data has ${sourceAttributes.size + staticPartitionsSize} column(s),
+         |which contain $staticPartitionsSize partition column(s) having assigned
+         |constant values.
+       """.stripMargin)
+  }
+
+  def insertMismatchedPartitionNumberError(
+      targetPartitionSchema: StructType,
+      providedPartitionsSize: Int): Throwable = {
+    new AnalysisException(
+      s"""
+         |The data to be inserted needs to have the same number of partition columns
+         |as the target table: target table has ${targetPartitionSchema.fields.size}
+         |partition column(s) but the inserted data has $providedPartitionsSize
+         |partition columns specified.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def invalidPartitionColumnError(
+      partKey: String, targetPartitionSchema: StructType): Throwable = {
+    new AnalysisException(
+      s"""
+         |$partKey is not a partition column. Partition columns are
+         |${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}
+       """.stripMargin)
+  }
+
+  def multiplePartitionColumnValuesSpecifiedError(
+      field: StructField, potentialSpecs: Map[String, String]): Throwable = {
+    new AnalysisException(
+      s"""
+         |Partition column ${field.name} have multiple values specified,
+         |${potentialSpecs.mkString("[", ", ", "]")}. Please only specify a single value.
+       """.stripMargin)
+  }
+
+  def invalidOrderingForConstantValuePartitionColumnError(
+      targetPartitionSchema: StructType): Throwable = {
+    new AnalysisException(
+      s"""
+         |The ordering of partition columns is
+         |${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}
+         |All partition columns having constant values need to appear before other
+         |partition columns that do not have an assigned constant value.
+       """.stripMargin)
+  }
+
+  def cannotWriteDataToRelationsWithMultiplePathsError(): Throwable = {
+    new AnalysisException("Can only write data to relations with a single path.")
+  }
+
+  def failedToRebuildExpressionError(filter: Filter): Throwable = {
+    new AnalysisException(
+      s"Fail to rebuild expression: missing key $filter in `translatedFilterToExpr`")
+  }
+
+  def dataTypeUnsupportedByDataSourceError(format: String, field: StructField): Throwable = {
+    new AnalysisException(
+      s"$format data source does not support ${field.dataType.catalogString} data type.")
+  }
+
+  def failToResolveDataSourceForTableError(table: CatalogTable, key: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |Fail to resolve data source for the table ${table.identifier} since the table
+         |serde property has the duplicated key $key with extra options specified for this
+         |scan operation. To fix this, you can rollback to the legacy behavior of ignoring
+         |the extra options by setting the config
+         |${SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key} to `false`, or address the
+         |conflicts of the same config.
+       """.stripMargin)
+  }
+
+  def outputPathAlreadyExistsError(outputPath: Path): Throwable = {
+    new AnalysisException(s"path $outputPath already exists.")
+  }
+
+  def cannotUseDataTypeForPartitionColumnError(field: StructField): Throwable = {
+    new AnalysisException(s"Cannot use ${field.dataType} for partition column")
+  }
+
+  def cannotUseAllColumnsForPartitionColumnsError(): Throwable = {
+    new AnalysisException(s"Cannot use all columns for partition columns")
+  }
+
+  def partitionColumnNotFoundInSchemaError(col: String, schemaCatalog: String): Throwable = {
+    new AnalysisException(s"Partition column `$col` not found in schema $schemaCatalog")
+  }
+
+  def columnNotFoundInSchemaError(
+      col: StructField, tableSchema: Option[StructType]): Throwable = {
+    new AnalysisException(s"""Column "${col.name}" not found in schema $tableSchema""")
+  }
+
+  def unsupportedDataSourceTypeForDirectQueryOnFilesError(className: String): Throwable = {
+    new AnalysisException(s"Unsupported data source type for direct query on files: $className")
+  }
+
+  def saveDataIntoViewNotAllowedError(): Throwable = {
+    new AnalysisException("Saving data into a view is not allowed.")
+  }
+
+  def mismatchedTableFormatError(
+      tableName: String, existingProvider: Class[_], specifiedProvider: Class[_]): Throwable = {
+    new AnalysisException(
+      s"""
+         |The format of the existing table $tableName is `${existingProvider.getSimpleName}`.
+         |It doesn't match the specified format `${specifiedProvider.getSimpleName}`.
+       """.stripMargin)
+  }
+
+  def mismatchedTableLocationError(
+      identifier: TableIdentifier,
+      existingTable: CatalogTable,
+      tableDesc: CatalogTable): Throwable = {
+    new AnalysisException(
+      s"""
+         |The location of the existing table ${identifier.quotedString} is
+         |`${existingTable.location}`. It doesn't match the specified location
+         |`${tableDesc.location}`.
+       """.stripMargin)
+  }
+
+  def mismatchedTableColumnNumberError(
+      tableName: String,
+      existingTable: CatalogTable,
+      query: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"""
+         |The column number of the existing table $tableName
+         |(${existingTable.schema.catalogString}) doesn't match the data schema
+         |(${query.schema.catalogString})
+       """.stripMargin)
+  }
+
+  def cannotResolveColumnGivenInputColumnsError(col: String, inputColumns: String): Throwable = {
+    new AnalysisException(s"cannot resolve '$col' given input columns: [$inputColumns]")
+  }
+
+  def mismatchedTablePartitionColumnError(
+      tableName: String,
+      specifiedPartCols: Seq[String],
+      existingPartCols: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |Specified partitioning does not match that of the existing table $tableName.
+         |Specified partition columns: [${specifiedPartCols.mkString(", ")}]
+         |Existing partition columns: [$existingPartCols]
+       """.stripMargin)
+  }
+
+  def mismatchedTableBucketingError(
+      tableName: String,
+      specifiedBucketString: String,
+      existingBucketString: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |Specified bucketing does not match that of the existing table $tableName.
+         |Specified bucketing: $specifiedBucketString
+         |Existing bucketing: $existingBucketString
+       """.stripMargin)
+  }
+
+  def specifyPartitionNotAllowedWhenTableSchemaNotDefinedError(): Throwable = {
+    new AnalysisException("It is not allowed to specify partitioning when the " +
+      "table schema is not defined.")
+  }
+
+  def bucketingColumnCannotBePartOfPartitionColumnsError(
+      bucketCol: String, normalizedPartCols: Seq[String]): Throwable = {
+    new AnalysisException(s"bucketing column '$bucketCol' should not be part of " +
+      s"partition columns '${normalizedPartCols.mkString(", ")}'")
+  }
+
+  def bucketSortingColumnCannotBePartOfPartitionColumnsError(
+    sortCol: String, normalizedPartCols: Seq[String]): Throwable = {
+    new AnalysisException(s"bucket sorting column '$sortCol' should not be part of " +
+      s"partition columns '${normalizedPartCols.mkString(", ")}'")
+  }
+
+  def mismatchedInsertedDataColumnNumberError(
+      tableName: String, insert: InsertIntoStatement, staticPartCols: Set[String]): Throwable = {
+    new AnalysisException(
+      s"$tableName requires that the data to be inserted have the same number of columns as " +
+        s"the target table: target table has ${insert.table.output.size} column(s) but the " +
+        s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
+        s"including ${staticPartCols.size} partition column(s) having constant value(s).")
+  }
+
+  def requestedPartitionsMismatchTablePartitionsError(
+      tableName: String,
+      normalizedPartSpec: Map[String, Option[String]],
+      partColNames: StructType): Throwable = {
+    new AnalysisException(
+      s"""
+         |Requested partitioning does not match the table $tableName:
+         |Requested partitions: ${normalizedPartSpec.keys.mkString(",")}
+         |Table partitions: ${partColNames.mkString(",")}
+       """.stripMargin)
+  }
+
+  def ddlWithoutHiveSupportEnabledError(detail: String): Throwable = {
+    new AnalysisException(s"Hive support is required to $detail")
+  }
+
+  def createTableColumnTypesOptionColumnNotFoundInSchemaError(
+      col: String, schema: StructType): Throwable = {
+    new AnalysisException(
+      s"createTableColumnTypes option column $col not found in schema ${schema.catalogString}")
+  }
+
+  def parquetTypeUnsupportedError(parquetType: String): Throwable = {
+    new AnalysisException(s"Parquet type not supported: $parquetType")
+  }
+
+  def parquetTypeUnsupportedYetError(parquetType: String): Throwable = {
+    new AnalysisException(s"Parquet type not yet supported: $parquetType")
+  }
+
+  def illegalParquetTypeError(parquetType: String): Throwable = {
+    new AnalysisException(s"Illegal Parquet type: $parquetType")
+  }
+
+  def unrecognizedParquetTypeError(field: String): Throwable = {
+    new AnalysisException(s"Unrecognized Parquet type: $field")
+  }
+
+  def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
+    new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
   }
 }

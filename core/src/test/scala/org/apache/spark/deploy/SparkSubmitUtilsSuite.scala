@@ -304,4 +304,22 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
         s" Resolved jars are: $jarPath")
     }
   }
+
+  test("SPARK-34757: should ignore cache for SNAPSHOT dependencies") {
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1-SNAPSHOT")
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val ivySettings = SparkSubmitUtils.buildIvySettings(Some(repo), Some(tempIvyPath))
+      // set isTest to false since we need to check the resolved jar file
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString, ivySettings, transitive = true, isTest = false)
+      val modifiedTimestamp = Files.getLastModifiedTime(Paths.get(jarPath.head))
+      // update the artifact and resolve again
+      IvyTestUtils.createLocalRepositoryForTests(main, None, Some(new File(new URI(repo))))
+      SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString, ivySettings, transitive = true, isTest = false)
+      // check that the artifact is updated
+      assert(
+        modifiedTimestamp.compareTo(Files.getLastModifiedTime(Paths.get(jarPath.head))) != 0)
+    }
+  }
 }

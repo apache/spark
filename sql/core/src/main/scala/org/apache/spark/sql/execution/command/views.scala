@@ -327,7 +327,8 @@ object ViewHelper extends SQLConfHelper with Logging {
     "spark.sql.codegen.",
     "spark.sql.execution.",
     "spark.sql.shuffle.",
-    "spark.sql.adaptive.")
+    "spark.sql.adaptive.",
+    SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
 
   private val configAllowList = Seq(
     SQLConf.DISABLE_HINTS.key
