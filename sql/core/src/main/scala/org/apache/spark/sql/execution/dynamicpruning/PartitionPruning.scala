@@ -156,7 +156,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     if (canBuildBroadcast) {
       estimatePruningSideSize > overhead
     } else {
-      // We need to make sure that otherPlan can be broadcast by size to avoid driver OOM
+      // We can't reuse the broadcast because the join type doesn't support broadcast,
+      // and doing DPP means running an extra query that may have significant overhead.
+      // We need to make the pruning side is very big so that DPP is still worthy.
       canBroadcastBySize(otherPlan, conf) && estimatePruningSideSize * 0.04 > overhead
     }
   }
