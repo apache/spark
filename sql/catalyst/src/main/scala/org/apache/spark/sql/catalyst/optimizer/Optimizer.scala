@@ -74,6 +74,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ReorderJoin,
         EliminateOuterJoin,
         // Simplify expressions
+        LikeSimplification,
         BooleanSimplification,
         SimplifyConditionals,
         PushFoldableIntoBranches,
@@ -81,6 +82,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
         SimplifyConditionalsInPredicate,
+        SimplifyCasts,
+        SimplifyCaseConversionExpressions,
+        SimplifyExtractValueOps,
         // Operator push down
         PushProjectionThroughUnion,
         PushDownPredicates,
@@ -107,10 +111,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ConstantFolding,
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
-        LikeSimplification,
         PruneFilters,
-        SimplifyCasts,
-        SimplifyCaseConversionExpressions,
         RewriteCorrelatedScalarSubquery,
         EliminateSerialization,
         RemoveRedundantAliases,
@@ -118,7 +119,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         UnwrapCastInBinaryComparison,
         RemoveNoopOperators,
         OptimizeUpdateFields,
-        SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
         CombineConcats) ++
         extendedOperatorOptimizationRules
