@@ -35,7 +35,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions,
       ReplaceDistinctWithAggregate,
-      RemoveOuterJoin) :: Nil
+      EliminateUnnecessaryOuterJoin) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)

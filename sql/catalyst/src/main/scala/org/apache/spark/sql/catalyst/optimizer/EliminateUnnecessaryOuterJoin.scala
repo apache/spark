@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 /**
  * Removes outer join if it only has distinct on streamed side.
  */
-object RemoveOuterJoin extends Rule[LogicalPlan] {
+object EliminateUnnecessaryOuterJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
       if a.isEquallyDistinct && a.references.subsetOf(AttributeSet(left.output)) =>
