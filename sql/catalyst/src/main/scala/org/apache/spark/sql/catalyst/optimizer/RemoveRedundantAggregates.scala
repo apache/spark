@@ -48,7 +48,9 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   }
 
   private def isLowerRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoAggregateExpressions = !upper.aggregateExpressions.exists(isAggregate)
+    val upperHasNoDuplicateSensitiveAgg = !upper
+      .aggregateExpressions
+      .exists(isDuplicateSensitiveAggregate)
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower
@@ -58,11 +60,18 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
         .map(_.toAttribute)
     ))
 
-    upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
+    upperHasNoDuplicateSensitiveAgg && upperRefsOnlyDeterministicNonAgg
   }
 
   private def isAggregate(expr: Expression): Boolean = {
     expr.find(e => e.isInstanceOf[AggregateExpression] ||
       PythonUDF.isGroupedAggPandasUDF(e)).isDefined
+  }
+
+  private def isDuplicateSensitiveAggregate(expr: Expression): Boolean = {
+    expr.find {
+      case ae: AggregateExpression => !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction)
+      case e => PythonUDF.isGroupedAggPandasUDF(e)
+    }.isDefined
   }
 }
