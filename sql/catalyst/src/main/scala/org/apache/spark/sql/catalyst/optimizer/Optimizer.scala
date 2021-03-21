@@ -74,6 +74,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
         ReorderJoin,
         EliminateOuterJoin,
         // Simplify expressions
+        NullPropagation,
+        ConstantPropagation,
+        FoldablePropagation,
+        ConstantFolding,
         LikeSimplification,
         BooleanSimplification,
         SimplifyConditionals,
@@ -104,11 +108,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Constant folding and strength reduction
         OptimizeRepartition,
         TransposeWindow,
-        NullPropagation,
-        ConstantPropagation,
-        FoldablePropagation,
         OptimizeIn,
-        ConstantFolding,
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
         PruneFilters,
