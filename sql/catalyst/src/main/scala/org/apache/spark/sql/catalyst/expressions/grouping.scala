@@ -157,7 +157,8 @@ object GroupingID {
 }
 
 /**
- * Wrapper expression to avoid further optizations of child
+ * Wrapper expression to avoid further optimizations between the parent and child of this
+ * expression.
  */
 case class GroupingExpression(child: Expression) extends UnaryExpression {
   override def eval(input: InternalRow): Any = {
