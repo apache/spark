@@ -396,7 +396,7 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   override def supportCodegen: Boolean = (joinType, buildSide) match {
-    case (_: InnerLike, _) | (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => true
+    case (_: InnerLike, _) | (LeftSemi | LeftAnti, BuildRight) => true
     case _ => false
   }
 
@@ -484,19 +484,19 @@ case class BroadcastNestedLoopJoinExec(
       }
     } else {
       val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
-      val findMatchedRow = ctx.freshName("findMatchedRow")
+      val foundMatch = ctx.freshName("foundMatch")
       val arrayIndex = ctx.freshName("arrayIndex")
 
       s"""
-         |boolean $findMatchedRow = false;
+         |boolean $foundMatch = false;
          |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
          |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
          |  $checkCondition {
-         |    $findMatchedRow = true;
+         |    $foundMatch = true;
          |    break;
          |  }
          |}
-         |if ($findMatchedRow == $exists) {
+         |if ($foundMatch == $exists) {
          |  $numOutput.add(1);
          |  ${consume(ctx, input)}
          |}
