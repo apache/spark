@@ -70,10 +70,19 @@ abstract class Optimizer(catalogManager: CatalogManager)
   def defaultBatches: Seq[Batch] = {
     val operatorOptimizationRuleSet =
       Seq(
-        // Operator push down
-        PushProjectionThroughUnion,
+        // Optimize join
         ReorderJoin,
         EliminateOuterJoin,
+        // Simplify expressions
+        BooleanSimplification,
+        SimplifyConditionals,
+        PushFoldableIntoBranches,
+        RemoveDispensableExpressions,
+        SimplifyBinaryComparison,
+        ReplaceNullWithFalseInPredicate,
+        SimplifyConditionalsInPredicate,
+        // Operator push down
+        PushProjectionThroughUnion,
         PushDownPredicates,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
@@ -99,13 +108,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,
-        BooleanSimplification,
-        SimplifyConditionals,
-        PushFoldableIntoBranches,
-        RemoveDispensableExpressions,
-        SimplifyBinaryComparison,
-        ReplaceNullWithFalseInPredicate,
-        SimplifyConditionalsInPredicate,
         PruneFilters,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
