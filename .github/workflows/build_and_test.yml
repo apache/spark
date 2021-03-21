@@ -388,28 +388,6 @@ jobs:
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 install
         rm -rf ~/.m2/repository/org/apache/spark
 
-  scala-213:
-    name: Scala 2.13 build with SBT
-    runs-on: ubuntu-20.04
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v2
-    - name: Cache Coursier local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.cache/coursier
-        key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          scala-213-coursier-
-    - name: Install Java 8
-      uses: actions/setup-java@v1
-      with:
-        java-version: 8
-    - name: Build with SBT
-      run: |
-        ./dev/change-scala-version.sh 2.13
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
-
   hadoop-2:
     name: Hadoop 2 build with SBT
     runs-on: ubuntu-20.04
