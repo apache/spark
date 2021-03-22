@@ -249,3 +249,45 @@ case class MakeInterval(
 
   override def prettyName: String = "make_interval"
 }
+
+case class MultiplyYMInterval(
+    interval: Expression,
+    num: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  override def left: Expression = interval
+  override def right: Expression = num
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
+  override def dataType: DataType = YearMonthIntervalType
+
+  override def nullSafeEval(interval: Any, num: Any): Any = {
+    val months = interval.asInstanceOf[Int]
+    right.dataType match {
+      case ByteType => Math.multiplyExact(months, num.asInstanceOf[Byte])
+      case ShortType => Math.multiplyExact(months, num.asInstanceOf[Short])
+      case IntegerType => Math.multiplyExact(months, num.asInstanceOf[Int])
+      case LongType => Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
+      case FloatType =>
+        Math.toIntExact(Math.round(months * num.asInstanceOf[Float].toDouble))
+      case DoubleType =>
+        Math.toIntExact(Math.round(months * num.asInstanceOf[Double]))
+      case _: DecimalType =>
+        ((new Decimal).set(months) * num.asInstanceOf[Decimal]).roundToInt()
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
+    case ByteType | ShortType | IntegerType =>
+      defineCodeGen(ctx, ev, (m, n) => s"java.lang.Math.multiplyExact($m, $n)")
+    case LongType =>
+      val jlm = classOf[Math].getName
+      defineCodeGen(ctx, ev, (m, n) => s"$jlm.toIntExact($jlm.multiplyExact($m, $n))")
+    case FloatType | DoubleType =>
+      val jlm = classOf[Math].getName
+      defineCodeGen(ctx, ev, (m, n) => s"$jlm.toIntExact($jlm.round($m * (double)$n))")
+    case _: DecimalType =>
+      defineCodeGen(ctx, ev, (m, n) => s"(new Decimal()).set($m) * n).roundToInt()")
+  }
+
+  override def prettyName: String = "multiply_ym_interval"
+}
