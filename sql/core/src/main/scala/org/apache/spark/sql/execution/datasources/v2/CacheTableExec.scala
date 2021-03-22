@@ -94,6 +94,11 @@ case class CacheTableAsSelectExec(
   override lazy val relationName: String = tempViewName
 
   override lazy val planToCache: LogicalPlan = {
+    // If the plan cannot be analyzed, throw an exception and don't proceed.
+    val qe = sparkSession.sessionState.executePlan(query)
+    qe.assertAnalyzed()
+    val analyzedPlan = qe.analyzed
+
     Dataset.ofRows(sparkSession,
       CreateViewCommand(
         name = TableIdentifier(tempViewName),
@@ -101,7 +106,7 @@ case class CacheTableAsSelectExec(
         comment = None,
         properties = Map.empty,
         originalText = Some(originalText),
-        child = query,
+        child = analyzedPlan,
         allowExisting = false,
         replace = false,
         viewType = LocalTempView
