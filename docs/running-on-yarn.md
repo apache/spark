@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
-
+ 
      http://www.apache.org/licenses/LICENSE-2.0
-
+ 
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -163,7 +163,7 @@ To use a custom metrics.properties for the application master and executors, upd
     Please note that this feature can be used only with YARN 3.0+
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
-    Example:
+    Example: 
     To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu.amount</code>
   </td>
   <td>3.0.0</td>
@@ -185,10 +185,10 @@ To use a custom metrics.properties for the application master and executors, upd
     Please note that this feature can be used only with YARN 3.0+
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
-    Example:
+    Example: 
     To request GPU resources from YARN, use: <code>spark.yarn.driver.resource.yarn.io/gpu.amount</code>
   </td>
-  <td>3.0.0</td>
+  <td>3.0.0</td> 
 </tr>
 <tr>
   <td><code>spark.yarn.executor.resource.{resource-type}.amount</code></td>
@@ -198,7 +198,7 @@ To use a custom metrics.properties for the application master and executors, upd
     Please note that this feature can be used only with YARN 3.0+
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
-    Example:
+    Example: 
     To request GPU resources from YARN, use: <code>spark.yarn.executor.resource.yarn.io/gpu.amount</code>
   </td>
   <td>3.0.0</td>
@@ -219,7 +219,7 @@ To use a custom metrics.properties for the application master and executors, upd
     Only used in <code>cluster</code> mode. Time for the YARN Application Master to wait for the
     SparkContext to be initialized.
   </td>
- <td>1.3.0</td>
+ <td>1.3.0</td> 
 </tr>
 <tr>
   <td><code>spark.yarn.submit.file.replication</code></td>
@@ -235,7 +235,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>
     Staging directory used while submitting applications.
   </td>
- <td>2.0.0</td>
+ <td>2.0.0</td> 
 </tr>
 <tr>
   <td><code>spark.yarn.preserve.staging.files</code></td>
@@ -243,7 +243,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>
     Set to <code>true</code> to preserve the staged files (Spark jar, app jar, distributed cache files) at the end of the job rather than delete them.
   </td>
-  <td>1.1.0</td>
+  <td>1.1.0</td> 
 </tr>
 <tr>
   <td><code>spark.yarn.scheduler.heartbeat.interval-ms</code></td>
@@ -409,12 +409,12 @@ To use a custom metrics.properties for the application master and executors, upd
 <tr>
   <td><code>spark.yarn.populateHadoopClasspath</code></td>
   <td>
-    For <code>with-hadoop</code> Spark distribution, this is set to false;
+    For <code>with-hadoop</code> Spark distribution, this is set to false; 
     for <code>no-hadoop</code> distribution, this is set to true.
   </td>
   <td>
     Whether to populate Hadoop classpath from <code>yarn.application.classpath</code> and
-    <code>mapreduce.application.classpath</code> Note that if this is set to <code>false</code>,
+    <code>mapreduce.application.classpath</code> Note that if this is set to <code>false</code>, 
     it requires a <code>with-Hadoop</code> Spark distribution that bundles Hadoop runtime or
     user has to provide a Hadoop installation separately.
   </td>
@@ -427,7 +427,7 @@ To use a custom metrics.properties for the application master and executors, upd
   The maximum number of attempts that will be made to submit the application.
   It should be no larger than the global number of max attempts in the YARN configuration.
   </td>
-  <td>1.3.0</td>
+  <td>1.3.0</td> 
 </tr>
 <tr>
   <td><code>spark.yarn.am.attemptFailuresValidityInterval</code></td>
@@ -572,7 +572,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.metrics.namespace</code></td>
   <td>(none)</td>
   <td>
-  The root namespace for AM metrics reporting.
+  The root namespace for AM metrics reporting. 
   If it is not set then the YARN application ID is used.
   </td>
   <td>2.4.0</td>
