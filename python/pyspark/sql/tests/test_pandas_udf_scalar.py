@@ -1182,7 +1182,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for _, i in series.items():
                 boxes.append([ExampleBox(*([i] * 4)), ExampleBox(*([i + 1] * 4))])
             return pd.Series(boxes)
-        
+
         df = self.spark.range(1, 3)
         df = (
             df
@@ -1193,12 +1193,12 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             Row(
                 id=1,
                 points=[ExamplePoint(1, 1), ExamplePoint(2, 2)],
-                boxes=[ExampleBox(1, 1, 1, 1), ExampleBox(2, 2, 2, 2)]
+                boxes=[ExampleBox(1, 1, 1, 1), ExampleBox(2, 2, 2, 2)],
             ),
             Row(
                 id=2,
                 points=[ExamplePoint(2, 2), ExamplePoint(3, 3)],
-                boxes=[ExampleBox(2, 2, 2, 2), ExampleBox(3, 3, 3, 3)]
+                boxes=[ExampleBox(2, 2, 2, 2), ExampleBox(3, 3, 3, 3)],
             ),
         ], df.collect())
 
