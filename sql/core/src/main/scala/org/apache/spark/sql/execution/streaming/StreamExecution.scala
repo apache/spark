@@ -69,7 +69,7 @@ abstract class StreamExecution(
     override val sparkSession: SparkSession,
     override val name: String,
     private val checkpointRoot: String,
-    analyzedPlan: LogicalPlan,
+    val analyzedPlan: LogicalPlan,
     val sink: Table,
     val trigger: Trigger,
     val triggerClock: Clock,
