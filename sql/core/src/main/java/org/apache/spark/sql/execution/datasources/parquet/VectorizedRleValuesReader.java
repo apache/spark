@@ -638,7 +638,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-  public final void readIntegersAsUnsigned(int total, WritableColumnVector c, int rowId) {
+  public void readIntegersAsUnsigned(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
