@@ -838,19 +838,10 @@ The following options provides finer-grained control for this feature:
   </td>
   <td>3.0.0</td>
 </tr>
-<tr>
-  <td><code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems</code></td>
-  <td>(none)</td>
-  <td>
-    A comma-separated list of Hadoop filesystems for whose hosts will be excluded from from delegation
-    token renewal at resource scheduler. For example, <code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.com:8032,
-    hdfs://nn2.com:8032</code>. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
-    Note that as resource scheduler does not renew token, so any application running longer than the original token expiration that tries
-    to use that token will likely fail.
-  </td>
-  <td>3.2.0</td>
-</tr>
 </table>
+
+Users can exclude Kerberos delegation token renewal at resource scheduler. Currently it is only supported
+on YARN. The configuration is covered in the [Running Spark on YARN](running-on-yarn.html#yarn-specific-kerberos-configuration) page.
 
 ## Long-Running Applications
 
