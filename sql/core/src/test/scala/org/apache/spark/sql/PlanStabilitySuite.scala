@@ -44,9 +44,6 @@ import org.apache.spark.sql.internal.SQLConf
  *   actual explain plan: /path/to/tmp/q1.actual.explain.txt
  *   [actual simplified plan]
  *
- * The explain files are saved to help debug later, they are not checked. Only the simplified
- * plans are checked (by string comparison).
- *
  *
  * To run the entire test suite:
  * {{{
