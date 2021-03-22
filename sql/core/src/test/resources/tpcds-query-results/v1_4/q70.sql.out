@@ -5,4 +5,4 @@ struct<total_sum:decimal(17,2),s_state:string,s_county:string,lochierarchy:tinyi
 -- !query output
 -440986113.22	NULL	NULL	2	1
 -440986113.22	TN	NULL	1	1
--440986113.22	TN	Williamson County             	0	1
+-440986113.22	TN	Williamson County	0	1
