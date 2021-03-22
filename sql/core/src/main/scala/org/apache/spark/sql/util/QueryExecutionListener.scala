@@ -124,7 +124,7 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
   }
 }
 
-private[sql] class ExecutionListenerBus(sessionUUID: String)
+private[sql] class ExecutionListenerBus private(sessionUUID: String)
   extends SparkListener with ListenerBus[QueryExecutionListener, SparkListenerSQLExecutionEnd] {
 
   def this(manager: ExecutionListenerManager, session: SparkSession) = {
