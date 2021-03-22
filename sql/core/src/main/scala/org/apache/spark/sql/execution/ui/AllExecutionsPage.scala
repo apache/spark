@@ -26,6 +26,7 @@ import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -408,7 +409,7 @@ private[ui] class ExecutionDataSource(
       case "Job IDs" | "Succeeded Job IDs" => Ordering by (_.completedJobData.headOption)
       case "Running Job IDs" => Ordering.by(_.runningJobData.headOption)
       case "Failed Job IDs" => Ordering.by(_.failedJobData.headOption)
-      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
+      case unknownColumn => throw QueryExecutionErrors.unknownColumnError(unknownColumn)
     }
     if (desc) {
       ordering.reverse

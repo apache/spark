@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 
@@ -29,7 +30,7 @@ case class SimpleCost(value: Long) extends Cost {
     case SimpleCost(thatValue) =>
       if (value < thatValue) -1 else if (value > thatValue) 1 else 0
     case _ =>
-      throw new IllegalArgumentException(s"Could not compare cost with $that")
+      throw QueryExecutionErrors.cannotCompareCostWithTargetCostError(that.toString)
   }
 }
 

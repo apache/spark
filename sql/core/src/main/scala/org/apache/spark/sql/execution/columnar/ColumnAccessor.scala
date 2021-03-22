@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
@@ -151,8 +152,7 @@ private[sql] object ColumnAccessor {
       case array: ArrayType => new ArrayColumnAccessor(buf, array)
       case map: MapType => new MapColumnAccessor(buf, map)
       case udt: UserDefinedType[_] => ColumnAccessor(udt.sqlType, buffer)
-      case other =>
-        throw new Exception(s"not support type: $other")
+      case other => throw QueryExecutionErrors.notSupportTypeError(other)
     }
   }
 
@@ -162,7 +162,7 @@ private[sql] object ColumnAccessor {
       val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
       nativeAccessor.decompress(columnVector, numRows)
     } else {
-      throw new RuntimeException("Not support non-primitive type now")
+      throw QueryExecutionErrors.notSupportNonPrimitiveTypeError()
     }
   }
 

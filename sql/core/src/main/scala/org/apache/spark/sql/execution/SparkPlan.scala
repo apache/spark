@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -174,7 +175,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def execute(): RDD[InternalRow] = executeQuery {
     if (isCanonicalizedPlan) {
-      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+      throw QueryExecutionErrors.executeCanonicalizedPlanError()
     }
     doExecute()
   }
@@ -187,7 +188,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def executeBroadcast[T](): broadcast.Broadcast[T] = executeQuery {
     if (isCanonicalizedPlan) {
-      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+      throw QueryExecutionErrors.executeCanonicalizedPlanError()
     }
     doExecuteBroadcast()
   }
@@ -201,7 +202,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   final def executeColumnar(): RDD[ColumnarBatch] = executeQuery {
     if (isCanonicalizedPlan) {
-      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+      throw QueryExecutionErrors.executeCanonicalizedPlanError()
     }
     doExecuteColumnar()
   }
@@ -294,7 +295,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Overridden by concrete implementations of SparkPlan.
    */
   protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    throw new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
+    throw QueryExecutionErrors.doExecuteBroadcastNotImplementedError(nodeName)
   }
 
   /**
@@ -303,8 +304,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * when it is no longer needed. This allows input formats to be able to reuse batches if needed.
    */
   protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    throw new IllegalStateException(s"Internal Error ${this.getClass} has column support" +
-      s" mismatch:\n${this}")
+    throw QueryExecutionErrors.sparkPlanHasColumnSupportMismatchError(this.getClass, this.toString)
   }
 
   /**

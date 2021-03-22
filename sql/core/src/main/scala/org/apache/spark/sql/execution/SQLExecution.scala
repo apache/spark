@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
 import org.apache.spark.util.Utils
@@ -51,7 +52,7 @@ object SQLExecution {
       // started execution of a query didn't call withNewExecutionId. The execution ID should be
       // set by calling withNewExecutionId in the action that begins execution, like
       // Dataset.collect or DataFrameWriter.insertInto.
-      throw new IllegalStateException("Execution ID should be set")
+      throw QueryExecutionErrors.notSetExecutionIDError()
     }
   }
 

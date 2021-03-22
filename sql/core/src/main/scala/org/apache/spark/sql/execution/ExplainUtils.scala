@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 
 object ExplainUtils extends AdaptiveSparkPlanHelper {
@@ -205,7 +206,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
     case iter: Iterable[_] => s"${fieldName} [${iter.size}]: ${iter.mkString("[", ", ", "]")}"
     case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
     case str: String => s"${fieldName}: ${str}"
-    case _ => throw new IllegalArgumentException(s"Unsupported type for argument values: $values")
+    case _ => throw QueryExecutionErrors.unsupportedTypeForArgumentValuesError(values)
   }
 
   /**

@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.{AnalysisException, Column, Dataset}
+import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Cast, Equality, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -154,13 +155,7 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
       }
 
       if (ambiguousAttrs.nonEmpty) {
-        throw new AnalysisException(s"Column ${ambiguousAttrs.mkString(", ")} are ambiguous. " +
-          "It's probably because you joined several Datasets together, and some of these " +
-          "Datasets are the same. This column points to one of the Datasets but Spark is unable " +
-          "to figure out which one. Please alias the Datasets with different names via " +
-          "`Dataset.as` before joining them, and specify the column using qualified name, e.g. " +
-          """`df.as("a").join(df.as("b"), $"a.id" > $"b.id")`. You can also set """ +
-          s"${SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key} to false to disable this check.")
+        throw QueryCompilationErrors.ambiguousAttributesInSelfJoinError(ambiguousAttrs)
       }
     }
 

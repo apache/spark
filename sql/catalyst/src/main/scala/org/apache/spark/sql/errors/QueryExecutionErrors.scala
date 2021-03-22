@@ -29,10 +29,13 @@ import org.codehaus.janino.InternalCompilerException
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.AccumulatorV2
 
 /**
  * Object for grouping all error messages of the query runtime.
@@ -556,4 +559,179 @@ object QueryExecutionErrors {
       left: StructType, right: StructType, e: Throwable): Throwable = {
     new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
   }
+
+  def unsupportedTypeForArgumentValuesError(values: Any): Throwable = {
+    new IllegalArgumentException(s"Unsupported type for argument values: $values")
+  }
+
+  def notSetExecutionIDError(): Throwable = {
+    new IllegalStateException("Execution ID should be set")
+  }
+
+  def executeCanonicalizedPlanError(): Throwable = {
+    new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+  }
+
+  def doExecuteBroadcastNotImplementedError(nodeName: String): Throwable = {
+    new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
+  }
+
+  def sparkPlanHasColumnSupportMismatchError(sparkPlan: Class[_], plan: String): Throwable = {
+    new IllegalStateException(s"Internal Error $sparkPlan has column support" +
+      s" mismatch:\n$plan")
+  }
+
+  def logicalOperatorNotReplacedByOptimizedOperatorError(
+      logicalOperator: String, replaceOperator: String): Throwable = {
+    new IllegalStateException(s"$logicalOperator should have been" +
+      s" replaced by $replaceOperator in the optimizer")
+  }
+
+  def ddlUnsupportedTemporarilyError(ddl: String): Throwable = {
+    new UnsupportedOperationException(s"$ddl is not supported temporarily.")
+  }
+
+  def operatingOnCanonicalizationPlanError(): Throwable = {
+    new IllegalStateException("operating on canonicalization plan")
+  }
+
+  def unexpectedShufflePartitionSpecError(p: String): Throwable = {
+    new IllegalStateException(s"unexpected $p")
+  }
+
+  def operatingOnCanonicalizedPlanError(): Throwable = {
+    new IllegalStateException("operating on canonicalized plan")
+  }
+
+  def wrongPlanForShuffleStageError(plan: String): Throwable = {
+    new IllegalStateException(s"wrong plan for shuffle stage:\n $plan")
+  }
+
+  def wrongPlanForBroadcastStageError(plan: String): Throwable = {
+    new IllegalStateException(s"wrong plan for broadcast stage:\n $plan")
+  }
+
+  def executeBroadcastTimeoutError(timeout: Long): Throwable = {
+    new SparkException(
+      s"""
+         |Could not execute broadcast in $timeout secs. You can increase the timeout
+         |for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or disable broadcast join
+         |by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotCompareCostWithTargetCostError(cost: String): Throwable = {
+    new IllegalArgumentException(s"Could not compare cost with $cost")
+  }
+
+  def callMethodWithEmptyGroupingExpressionsError(): Throwable = {
+    new IllegalStateException(
+      "This method should not be called when groupingExpressions is not empty.")
+  }
+
+  def unsupportedDataTypeError(dt: DataType): Throwable = {
+    new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+  }
+
+  def notSupportTypeError(dataType: DataType): Throwable = {
+    new Exception(s"not support type: $dataType")
+  }
+
+  def notSupportNonPrimitiveTypeError(): Throwable = {
+    new RuntimeException("Not support non-primitive type now")
+  }
+
+  def unsupportedTypeError(dataType: DataType): Throwable = {
+    new Exception(s"Unsupported type: ${dataType.catalogString}")
+  }
+
+  def columnarInputUnsupportedError(): Throwable = {
+    new IllegalStateException("Columnar input is not supported")
+  }
+
+  def unsupportedTypeInEncodingError(operator: String): Throwable = {
+    new IllegalStateException(s"Not supported type in $operator.")
+  }
+
+  def useDictionaryEncodingWhenDictionaryOverflowError(): Throwable = {
+    new IllegalStateException(
+      "Dictionary encoding should not be used because of dictionary overflow.")
+  }
+
+  def hashJoinCannotTakeJoinTypeError(joinType: JoinType): Throwable = {
+    new IllegalArgumentException(s"HashJoin should not take $joinType as the JoinType")
+  }
+
+  def hashJoinCannotTakeJoinTypeWithBuildLeftError(joinType: JoinType): Throwable = {
+    new IllegalArgumentException(
+      s"HashJoin should not take $joinType as the JoinType with building left side")
+  }
+
+  def hashJoinCannotTakeJoinTypeWithBuildRightError(joinType: JoinType): Throwable = {
+    new IllegalArgumentException(
+      s"HashJoin should not take $joinType as the JoinType with building right side")
+  }
+
+  def endOfIteratorError(): Throwable = {
+    new NoSuchElementException("End of the iterator")
+  }
+
+  def cannotAllocateMemoryToGrowBytesToBytesMapError(): Throwable = {
+    new IOException("Could not allocate memory to grow BytesToBytesMap")
+  }
+
+  def cannotAcquireMemoryToBuildHashRelationError(size: Long, got: Long): Throwable = {
+    new SparkException(s"Can't acquire $size bytes memory to build hash relation, " +
+      s"got $got bytes")
+  }
+
+  def rowLargerThanLimitUnsupportedError(): Throwable = {
+    new UnsupportedOperationException("Does not support row that is larger than 256M")
+  }
+
+  def cannotBuildHashedRelationWithUniqueKeysExceededError(): Throwable = {
+    new UnsupportedOperationException(
+      "Cannot build HashedRelation with more than 1/3 billions unique keys")
+  }
+
+  def cannotBuildHashedRelationLargerThanLimitError(): Throwable = {
+    new UnsupportedOperationException(
+      "Can not build a HashedRelation that is larger than 8G")
+  }
+
+  def cannotMergeSQLMetricWithAccumulatorV2Error(
+      metric: String, accumulatorV2: AccumulatorV2[Long, Long]): Throwable = {
+    new UnsupportedOperationException(
+      s"Cannot merge $metric with ${accumulatorV2.getClass.getName}")
+  }
+
+  def unexpectedMetricsTypeError(metricsType: String): Throwable = {
+    new IllegalStateException(s"unexpected metrics type: $metricsType")
+  }
+
+  def failedToPushRowIntoRowQueueError(rowQueue: String): Throwable = {
+    new SparkException(s"failed to push a row into $rowQueue")
+  }
+
+  def unexpectedWindowFunctionFrameError(frame: String): Throwable = {
+    new RuntimeException(s"Unexpected window function frame $frame.")
+  }
+
+  def cannotParseStatisticAsPercentileError(
+      stats: String, e: NumberFormatException): Throwable = {
+    new IllegalArgumentException(s"Unable to parse $stats as a percentile", e)
+  }
+
+  def statisticIsNotRecognisedStatisticError(stats: String): Throwable = {
+    new IllegalArgumentException(s"$stats is not a recognised statistic")
+  }
+
+  def unknownColumnError(unknownColumn: String): Throwable = {
+    new IllegalArgumentException(s"Unknown column: $unknownColumn")
+  }
+
+  def unexpectedAccumulableUpdateValueError(o: Any): Throwable = {
+    new IllegalArgumentException(s"Unexpected: $o")
+  }
+
 }

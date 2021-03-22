@@ -25,6 +25,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -764,8 +765,7 @@ private[columnar] object ColumnType {
       case map: MapType => MAP(map)
       case struct: StructType => STRUCT(struct)
       case udt: UserDefinedType[_] => apply(udt.sqlType)
-      case other =>
-        throw new Exception(s"Unsupported type: ${other.catalogString}")
+      case other => throw QueryExecutionErrors.unsupportedTypeError(other)
     }
   }
 }

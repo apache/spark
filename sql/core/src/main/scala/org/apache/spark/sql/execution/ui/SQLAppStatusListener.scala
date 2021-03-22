@@ -27,6 +27,7 @@ import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -534,7 +535,7 @@ private class LiveStageMetrics(
         val value = acc.update.get match {
           case s: String => s.toLong
           case l: Long => l
-          case o => throw new IllegalArgumentException(s"Unexpected: $o")
+          case o => throw QueryExecutionErrors.unexpectedAccumulableUpdateValueError(o)
         }
 
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
