@@ -30,7 +30,6 @@ R/pkg/tests/fulltests/Rplots.pdf
 build/*.jar
 build/apache-maven*
 build/scala*
-build/zinc*
 cache
 checkpoint
 conf/*.cmd
@@ -48,6 +47,7 @@ dev/pr-deps/
 dist/
 docs/_site/
 docs/api
+docs/.local_ruby_bundle
 sql/docs
 sql/site
 lib_managed/

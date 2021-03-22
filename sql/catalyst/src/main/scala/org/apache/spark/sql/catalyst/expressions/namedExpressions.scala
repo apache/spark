@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
@@ -222,8 +222,9 @@ case class Alias(child: Expression, name: String)(
   }
 
   override def sql: String = {
-    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
-    s"${child.sql} AS $qualifierPrefix${quoteIdentifier(name)}"
+    val qualifierPrefix =
+      if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
+    s"${child.sql} AS $qualifierPrefix${quoteIfNeeded(name)}"
   }
 }
 
@@ -347,8 +348,9 @@ case class AttributeReference(
   }
 
   override def sql: String = {
-    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
-    s"$qualifierPrefix${quoteIdentifier(name)}"
+    val qualifierPrefix =
+      if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
+    s"$qualifierPrefix${quoteIfNeeded(name)}"
   }
 }
 

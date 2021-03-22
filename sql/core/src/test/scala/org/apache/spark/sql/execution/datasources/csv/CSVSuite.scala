@@ -2409,7 +2409,7 @@ abstract class CSVSuite
             val errorMsg = intercept[AnalysisException] {
               readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
             }.getMessage
-            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+            assert(errorMsg.contains("cannot resolve 'AAA'"))
           }
         }
       }
@@ -2450,6 +2450,17 @@ abstract class CSVSuite
         .csv(dataPath).collect()
       val exceptResults = Array(row1, row2)
       assert(result.sameElements(exceptResults))
+    }
+  }
+
+  test("SPARK-34768: counting a long record with ignoreTrailingWhiteSpace set to true") {
+    val bufSize = 128
+    val line = "X" * (bufSize - 1) + "| |"
+    withTempPath { path =>
+      Seq(line).toDF.write.text(path.getAbsolutePath)
+      assert(spark.read.format("csv")
+        .option("delimiter", "|")
+        .option("ignoreTrailingWhiteSpace", "true").load(path.getAbsolutePath).count() == 1)
     }
   }
 }

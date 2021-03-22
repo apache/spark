@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, V1Write, Write, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, V1Write, Write, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -215,11 +215,9 @@ case class AtomicReplaceTableAsSelectExec(
  * Rows in the output data set are appended.
  */
 case class AppendDataExec(
-    table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
+    write: Write) extends V2ExistingTableWriteExec
 
 /**
  * Physical plan node for overwrite into a v2 table.
@@ -232,11 +230,9 @@ case class AppendDataExec(
  * AlwaysTrue to delete all rows.
  */
 case class OverwriteByExpressionExec(
-    table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
+    write: Write) extends V2ExistingTableWriteExec
 
 /**
  * Physical plan node for dynamic partition overwrite into a v2 table.
@@ -248,37 +244,16 @@ case class OverwriteByExpressionExec(
  * are not modified.
  */
 case class OverwritePartitionsDynamicExec(
-    table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
+    write: Write) extends V2ExistingTableWriteExec
 
 case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
     query: SparkPlan) extends V2TableWriteExec {
 
-  def writeOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
-
   override protected def run(): Seq[InternalRow] = {
     writeWithV2(batchWrite)
-  }
-}
-
-/**
- * Helper for physical plans that build batch writes.
- */
-trait BatchWriteHelper {
-  def table: SupportsWrite
-  def query: SparkPlan
-  def writeOptions: CaseInsensitiveStringMap
-
-  def newWriteBuilder(): WriteBuilder = {
-    val info = LogicalWriteInfoImpl(
-      queryId = UUID.randomUUID().toString,
-      query.schema,
-      writeOptions)
-    table.newWriteBuilder(info)
   }
 }
 

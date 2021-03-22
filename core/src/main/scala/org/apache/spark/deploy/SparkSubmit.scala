@@ -44,7 +44,7 @@ import org.apache.ivy.core.report.ResolveReport
 import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
-import org.apache.ivy.plugins.matcher.GlobPatternMatcher
+import org.apache.ivy.plugins.matcher.{GlobPatternMatcher, PatternMatcher}
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
@@ -1089,7 +1089,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[spark] object SparkSubmitUtils {
+private[spark] object SparkSubmitUtils extends Logging {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream
@@ -1153,6 +1153,8 @@ private[spark] object SparkSubmitUtils {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
     cr.setName("spark-list")
+    cr.setChangingMatcher(PatternMatcher.REGEXP)
+    cr.setChangingPattern(".*-SNAPSHOT")
 
     val localM2 = new IBiblioResolver
     localM2.setM2compatible(true)
@@ -1203,9 +1205,16 @@ private[spark] object SparkSubmitUtils {
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): Seq[String] = {
-    artifacts.map { artifactInfo =>
-      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
-      val extraAttrs = artifactInfo.asInstanceOf[Artifact].getExtraAttributes
+    artifacts.map(_.asInstanceOf[Artifact]).filter { artifactInfo =>
+      if (artifactInfo.getExt == "jar") {
+        true
+      } else {
+        logInfo(s"Skipping non-jar dependency ${artifactInfo.getId}")
+        false
+      }
+    }.map { artifactInfo =>
+      val artifact = artifactInfo.getModuleRevisionId
+      val extraAttrs = artifactInfo.getExtraAttributes
       val classifier = if (extraAttrs.containsKey("classifier")) {
         "-" + extraAttrs.get("classifier")
       } else {
@@ -1305,6 +1314,8 @@ private[spark] object SparkSubmitUtils {
     remoteRepos.filterNot(_.trim.isEmpty).map(_.split(",")).foreach { repositoryList =>
       val cr = new ChainResolver
       cr.setName("user-list")
+      cr.setChangingMatcher(PatternMatcher.REGEXP)
+      cr.setChangingPattern(".*-SNAPSHOT")
 
       // add current default resolver, if any
       Option(ivySettings.getDefaultResolver).foreach(cr.add)

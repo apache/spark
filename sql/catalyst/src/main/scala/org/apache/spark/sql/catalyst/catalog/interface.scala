@@ -31,6 +31,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -467,6 +468,8 @@ object CatalogTable {
   val VIEW_REFERRED_TEMP_VIEW_NAMES = VIEW_PREFIX + "referredTempViewNames"
   val VIEW_REFERRED_TEMP_FUNCTION_NAMES = VIEW_PREFIX + "referredTempFunctionsNames"
 
+  val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
+
   def splitLargeTableProp(
       key: String,
       value: String,
@@ -779,9 +782,15 @@ case class UnresolvedCatalogRelation(
 
 /**
  * A wrapper to store the temporary view info, will be kept in `SessionCatalog`
- * and will be transformed to `View` during analysis
+ * and will be transformed to `View` during analysis. If the temporary view is
+ * storing an analyzed plan, `plan` is set to the analyzed plan for the view.
  */
-case class TemporaryViewRelation(tableMeta: CatalogTable) extends LeafNode {
+case class TemporaryViewRelation(
+    tableMeta: CatalogTable,
+    plan: Option[LogicalPlan] = None) extends LeafNode {
+  require(plan.isEmpty ||
+    (plan.get.resolved && tableMeta.properties.contains(VIEW_STORING_ANALYZED_PLAN)))
+
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }

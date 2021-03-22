@@ -89,10 +89,13 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes =
-    AttributeSeq(children.flatMap(c => c.output ++ c.metadataOutput))
+  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+
+  private[this] lazy val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
 
   private[this] lazy val outputAttributes = AttributeSeq(output)
+
+  private[this] lazy val outputMetadataAttributes = AttributeSeq(metadataOutput)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
@@ -103,6 +106,7 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
     childAttributes.resolve(nameParts, resolver)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -113,6 +117,7 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
     outputAttributes.resolve(nameParts, resolver)
+      .orElse(outputMetadataAttributes.resolve(nameParts, resolver))
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -122,7 +127,7 @@ abstract class LogicalPlan
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    outputAttributes.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
+    resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
   }
 
   /**

@@ -18,13 +18,14 @@
 package org.apache.spark.sql.internal
 
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.util.Try
+import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
@@ -35,6 +36,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
@@ -51,22 +53,22 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private[sql] val sqlConfEntries = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, ConfigEntry[_]]())
+  private[sql] val sqlConfEntries =
+    new ConcurrentHashMap[String, ConfigEntry[_]]()
 
   val staticConfKeys: java.util.Set[String] =
     java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
 
-  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
-    require(!sqlConfEntries.containsKey(entry.key),
-      s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
-    sqlConfEntries.put(entry.key, entry)
-  }
+  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.merge(entry.key, entry,
+    (existingConfigEntry, newConfigEntry) => {
+      require(existingConfigEntry == null,
+        s"Duplicate SQLConfigEntry. ${newConfigEntry.key} has been registered")
+      newConfigEntry
+    }
+  )
 
   // For testing only
-  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
-    sqlConfEntries.remove(entry.key)
-  }
+  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.remove(entry.key)
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
 
@@ -481,7 +483,7 @@ object SQLConf {
 
   val COALESCE_PARTITIONS_INITIAL_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.initialPartitionNum")
-      .doc("The initial number of shuffle partitions before coalescing. By default it equals to " +
+      .doc("The initial number of shuffle partitions before coalescing. If not set, it equals to " +
         s"${SHUFFLE_PARTITIONS.key}. This configuration only has an effect when " +
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and '${COALESCE_PARTITIONS_ENABLED.key}' " +
         "are both true.")
@@ -861,7 +863,9 @@ object SQLConf {
       .doc("The threshold of set size for InSet predicate when pruning partitions through Hive " +
         "Metastore. When the set size exceeds the threshold, we rewrite the InSet predicate " +
         "to be greater than or equal to the minimum value in set and less than or equal to the " +
-        "maximum value in set. Larger values may cause Hive Metastore stack overflow.")
+        "maximum value in set. Larger values may cause Hive Metastore stack overflow. But for " +
+        "InSet inside Not with values exceeding the threshold, we won't push it to Hive Metastore."
+      )
       .version("3.1.0")
       .internal()
       .intConf
@@ -2031,6 +2035,17 @@ object SQLConf {
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
+  val ARROW_PYSPARK_SELF_DESTRUCT_ENABLED =
+    buildConf("spark.sql.execution.arrow.pyspark.selfDestruct.enabled")
+      .doc("When true, make use of Apache Arrow's self-destruct and split-blocks options " +
+        "for columnar data transfers in PySpark, when converting from Arrow to Pandas. " +
+        "This reduces memory usage at the cost of some CPU time. " +
+        "This optimization applies to: pyspark.sql.DataFrame.toPandas " +
+        "when 'spark.sql.execution.arrow.pyspark.enabled' is set.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_JVM_STACKTRACE_ENABLED =
     buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
       .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
@@ -2457,10 +2472,10 @@ object SQLConf {
 
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
-      "uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.")
+      "uncompressed, deflate, snappy, bzip2, xz and zstandard. Default codec is snappy.")
     .version("2.4.0")
     .stringConf
-    .checkValues(Set("uncompressed", "deflate", "snappy", "bzip2", "xz"))
+    .checkValues(Set("uncompressed", "deflate", "snappy", "bzip2", "xz", "zstandard"))
     .createWithDefault("snappy")
 
   val AVRO_DEFLATE_LEVEL = buildConf("spark.sql.avro.deflate.level")
@@ -2674,7 +2689,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.typeCoercion.datetimeToString.enabled")
       .internal()
       .doc("If it is set to true, date/timestamp will cast to string in binary comparisons " +
-        "with String")
+        s"with String when ${ANSI_ENABLED.key} is false.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -2837,6 +2852,7 @@ object SQLConf {
       .createWithDefault(100)
 
   val LEGACY_ALLOW_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.allowHashOnMapType")
+    .internal()
     .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
       "an analysis exception will be thrown.")
     .version("3.0.0")
@@ -2851,22 +2867,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.int96RebaseModeInWrite")
+  val PARQUET_INT96_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.parquet.int96RebaseModeInWrite")
       .internal()
-      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
-        "Proleptic Gregorian calendar to the legacy hybrid (Julian + Gregorian) calendar when " +
-        "writing Parquet files. When CORRECTED, Spark will not do rebase and write the timestamps" +
-        " as it is. When EXCEPTION, Spark will fail the writing if it sees ancient timestamps " +
-        "that are ambiguous between the two calendars.")
+      .doc("When LEGACY, Spark will rebase INT96 timestamps from Proleptic Gregorian calendar to " +
+        "the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and write the timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees ancient " +
+        "timestamps that are ambiguous between the two calendars.")
       .version("3.1.0")
+      .withAlternative("spark.sql.legacy.parquet.int96RebaseModeInWrite")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
+  val PARQUET_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.parquet.datetimeRebaseModeInWrite")
       .internal()
       .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
@@ -2875,30 +2892,32 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. " +
         "This config influences on writes of the following parquet logical types: DATE, " +
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
-        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
+        s"${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
+      .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.parquet.int96RebaseModeInRead")
+  val PARQUET_INT96_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.parquet.int96RebaseModeInRead")
       .internal()
-      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
-        "the legacy hybrid (Julian + Gregorian) calendar to Proleptic Gregorian calendar when " +
-        "reading Parquet files. When CORRECTED, Spark will not do rebase and read the timestamps " +
-        "as it is. When EXCEPTION, Spark will fail the reading if it sees ancient timestamps " +
-        "that are ambiguous between the two calendars. This config is only effective if the " +
-        "writer info (like Spark, Hive) of the Parquet files is unknown.")
+      .doc("When LEGACY, Spark will rebase INT96 timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and read the timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees ancient " +
+        "timestamps that are ambiguous between the two calendars. This config is only effective " +
+        "if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
+      .withAlternative("spark.sql.legacy.parquet.int96RebaseModeInRead")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+  val PARQUET_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.parquet.datetimeRebaseModeInRead")
       .internal()
       .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
@@ -2908,15 +2927,16 @@ object SQLConf {
         "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
         "This config influences on reads of the following parquet logical types: DATE, " +
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
-        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
+        s"${PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
       .version("3.0.0")
+      .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_AVRO_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInWrite")
+  val AVRO_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.avro.datetimeRebaseModeInWrite")
       .internal()
       .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Avro files. " +
@@ -2924,13 +2944,14 @@ object SQLConf {
         "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
+      .withAlternative("spark.sql.legacy.avro.datetimeRebaseModeInWrite")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_AVRO_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInRead")
+  val AVRO_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.avro.datetimeRebaseModeInRead")
       .internal()
       .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Avro files. " +
@@ -2939,6 +2960,7 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
+      .withAlternative("spark.sql.legacy.avro.datetimeRebaseModeInRead")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -3114,7 +3136,21 @@ object SQLConf {
       DeprecatedConfig(CONVERT_CTAS.key, "3.1",
         s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead."),
       DeprecatedConfig("spark.sql.sources.schemaStringLengthThreshold", "3.2",
-        s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead.")
+        s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead."),
+      DeprecatedConfig(PARQUET_INT96_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
+        s"Use '${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}' instead."),
+      DeprecatedConfig(PARQUET_INT96_REBASE_MODE_IN_READ.alternatives.head, "3.2",
+        s"Use '${PARQUET_INT96_REBASE_MODE_IN_READ.key}' instead."),
+      DeprecatedConfig(PARQUET_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
+        s"Use '${PARQUET_REBASE_MODE_IN_WRITE.key}' instead."),
+      DeprecatedConfig(PARQUET_REBASE_MODE_IN_READ.alternatives.head, "3.2",
+        s"Use '${PARQUET_REBASE_MODE_IN_READ.key}' instead."),
+      DeprecatedConfig(AVRO_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
+        s"Use '${AVRO_REBASE_MODE_IN_WRITE.key}' instead."),
+      DeprecatedConfig(AVRO_REBASE_MODE_IN_READ.alternatives.head, "3.2",
+        s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead."),
+      DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
+        """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead.""")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -3607,6 +3643,8 @@ class SQLConf extends Serializable with Logging {
 
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
 
+  def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
+
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
@@ -3829,6 +3867,27 @@ class SQLConf extends Serializable with Logging {
     }
   }
 
+  private var definedConfsLoaded = false
+  /**
+   * Init [[StaticSQLConf]] and [[org.apache.spark.sql.hive.HiveUtils]] so that all the defined
+   * SQL Configurations will be registered to SQLConf
+   */
+  private def loadDefinedConfs(): Unit = {
+    if (!definedConfsLoaded) {
+      definedConfsLoaded = true
+      // Force to register static SQL configurations
+      StaticSQLConf
+      try {
+        // Force to register SQL configurations from Hive module
+        val symbol = ScalaReflection.mirror.staticModule("org.apache.spark.sql.hive.HiveUtils")
+        ScalaReflection.mirror.reflectModule(symbol).instance
+      } catch {
+        case NonFatal(e) =>
+          logWarning("SQL configurations from Hive module is not loaded", e)
+      }
+    }
+  }
+
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
    * This creates a new copy of the config properties in the form of a Map.
@@ -3841,6 +3900,7 @@ class SQLConf extends Serializable with Logging {
    * definition contains key, defaultValue and doc.
    */
   def getAllDefinedConfs: Seq[(String, String, String, String)] = sqlConfEntries.synchronized {
+    loadDefinedConfs()
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc, entry.version)

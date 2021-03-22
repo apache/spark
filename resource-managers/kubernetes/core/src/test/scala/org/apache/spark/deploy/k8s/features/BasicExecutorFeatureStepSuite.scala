@@ -290,7 +290,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     ereq.cores(4).memory("2g").memoryOverhead("1g").pysparkMemory("3g")
     treq.cpus(2)
     rpb.require(ereq).require(treq)
-    val rp = rpb.build
+    val rp = rpb.build()
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
     val executor = step.configurePod(SparkPod.initialPod())
 
@@ -307,7 +307,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     ereq.cores(2).resource("gpu", 2, "/path/getGpusResources.sh", "nvidia.com")
     treq.cpus(1)
     rpb.require(ereq).require(treq)
-    val rp = rpb.build
+    val rp = rpb.build()
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
     val executor = step.configurePod(SparkPod.initialPod())
 

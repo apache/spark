@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -27,6 +29,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2374,5 +2377,201 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
     assert(e2.getCause.isInstanceOf[RuntimeException])
     assert(e2.getCause.getMessage == "hello")
+  }
+
+  test("SPARK-34677: negate/add/subtract year-month and day-time intervals") {
+    import testImplicits._
+    val df = Seq((Period.ofMonths(10), Duration.ofDays(10), Period.ofMonths(1), Duration.ofDays(1)))
+      .toDF("year-month-A", "day-time-A", "year-month-B", "day-time-B")
+    val negatedDF = df.select(-$"year-month-A", -$"day-time-A")
+    checkAnswer(negatedDF, Row(Period.ofMonths(-10), Duration.ofDays(-10)))
+    val addDF = df.select($"year-month-A" + $"year-month-B", $"day-time-A" + $"day-time-B")
+    checkAnswer(addDF, Row(Period.ofMonths(11), Duration.ofDays(11)))
+    val subDF = df.select($"year-month-A" - $"year-month-B", $"day-time-A" - $"day-time-B")
+    checkAnswer(subDF, Row(Period.ofMonths(9), Duration.ofDays(9)))
+  }
+
+  test("SPARK-34721: add a year-month interval to a date") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingTimezonesIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid) {
+          Seq(
+            (LocalDate.of(1900, 10, 1), Period.ofMonths(0)) -> LocalDate.of(1900, 10, 1),
+            (LocalDate.of(1970, 1, 1), Period.ofMonths(-1)) -> LocalDate.of(1969, 12, 1),
+            (LocalDate.of(2021, 3, 11), Period.ofMonths(1)) -> LocalDate.of(2021, 4, 11),
+            (LocalDate.of(2020, 12, 31), Period.ofMonths(2)) -> LocalDate.of(2021, 2, 28),
+            (LocalDate.of(2021, 5, 31), Period.ofMonths(-3)) -> LocalDate.of(2021, 2, 28),
+            (LocalDate.of(2020, 2, 29), Period.ofYears(1)) -> LocalDate.of(2021, 2, 28),
+            (LocalDate.of(1, 1, 1), Period.ofYears(2020)) -> LocalDate.of(2021, 1, 1)
+          ).foreach { case ((date, period), result) =>
+            val df = Seq((date, period)).toDF("date", "interval")
+            checkAnswer(
+              df.select($"date" + $"interval", $"interval" + $"date"),
+              Row(result, result))
+          }
+        }
+      }
+
+      val e = intercept[SparkException] {
+        Seq((LocalDate.of(2021, 3, 11), Period.ofMonths(Int.MaxValue)))
+          .toDF("date", "interval")
+          .select($"date" + $"interval")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("integer overflow"))
+    }
+  }
+
+  test("SPARK-34721: subtract a year-month interval from a date") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingTimezonesIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid) {
+          Seq(
+            (LocalDate.of(1582, 10, 4), Period.ofMonths(0)) -> LocalDate.of(1582, 10, 4),
+            (LocalDate.of(1582, 10, 15), Period.ofMonths(1)) -> LocalDate.of(1582, 9, 15),
+            (LocalDate.of(1, 1, 1), Period.ofMonths(-1)) -> LocalDate.of(1, 2, 1),
+            (LocalDate.of(9999, 10, 31), Period.ofMonths(-2)) -> LocalDate.of(9999, 12, 31),
+            (LocalDate.of(2021, 5, 31), Period.ofMonths(3)) -> LocalDate.of(2021, 2, 28),
+            (LocalDate.of(2021, 2, 28), Period.ofYears(1)) -> LocalDate.of(2020, 2, 28),
+            (LocalDate.of(2020, 2, 29), Period.ofYears(4)) -> LocalDate.of(2016, 2, 29)
+          ).foreach { case ((date, period), result) =>
+            val df = Seq((date, period)).toDF("date", "interval")
+            checkAnswer(df.select($"date" - $"interval"), Row(result))
+          }
+        }
+      }
+
+      val e = intercept[SparkException] {
+        Seq((LocalDate.of(2021, 3, 11), Period.ofMonths(Int.MaxValue)))
+          .toDF("date", "interval")
+          .select($"date" - $"interval")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("integer overflow"))
+    }
+  }
+
+  test("SPARK-34739: add a year-month interval to a timestamp") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingZoneIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
+          Seq(
+            (LocalDateTime.of(1900, 1, 1, 0, 0, 0, 123456000), Period.ofMonths(0)) ->
+              LocalDateTime.of(1900, 1, 1, 0, 0, 0, 123456000),
+            (LocalDateTime.of(1970, 1, 1, 0, 0, 0, 1000), Period.ofMonths(-1)) ->
+              LocalDateTime.of(1969, 12, 1, 0, 0, 0, 1000),
+            (LocalDateTime.of(2021, 3, 14, 1, 2, 3, 0), Period.ofMonths(1)) ->
+              LocalDateTime.of(2021, 4, 14, 1, 2, 3, 0),
+            (LocalDateTime.of(2020, 12, 31, 23, 59, 59, 999999000), Period.ofMonths(2)) ->
+              LocalDateTime.of(2021, 2, 28, 23, 59, 59, 999999000),
+            (LocalDateTime.of(2021, 5, 31, 0, 0, 1, 0), Period.ofMonths(-3)) ->
+              LocalDateTime.of(2021, 2, 28, 0, 0, 1, 0),
+            (LocalDateTime.of(2020, 2, 29, 12, 13, 14), Period.ofYears(1)) ->
+              LocalDateTime.of(2021, 2, 28, 12, 13, 14),
+            (LocalDateTime.of(1, 1, 1, 1, 1, 1, 1000), Period.ofYears(2020)) ->
+              LocalDateTime.of(2021, 1, 1, 1, 1, 1, 1000)
+          ).foreach { case ((ldt, period), expected) =>
+            val df = Seq((ldt.atZone(zid).toInstant, period)).toDF("ts", "interval")
+            val result = expected.atZone(zid).toInstant
+            checkAnswer(df.select($"ts" + $"interval", $"interval" + $"ts"), Row(result, result))
+          }
+        }
+      }
+
+      val e = intercept[SparkException] {
+        Seq((Instant.parse("2021-03-14T18:55:00Z"), Period.ofMonths(Int.MaxValue)))
+          .toDF("ts", "interval")
+          .select($"ts" + $"interval")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+    }
+  }
+
+  test("SPARK-34739: subtract a year-month interval from a timestamp") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingZoneIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
+          Seq(
+            (LocalDateTime.of(1582, 10, 4, 0, 0, 0), Period.ofMonths(0)) ->
+              LocalDateTime.of(1582, 10, 4, 0, 0, 0),
+            (LocalDateTime.of(1582, 10, 15, 23, 59, 59, 999999000), Period.ofMonths(1)) ->
+              LocalDateTime.of(1582, 9, 15, 23, 59, 59, 999999000),
+            (LocalDateTime.of(1, 1, 1, 1, 1, 1, 1000), Period.ofMonths(-1)) ->
+              LocalDateTime.of(1, 2, 1, 1, 1, 1, 1000),
+            (LocalDateTime.of(9999, 10, 31, 23, 59, 59, 999000000), Period.ofMonths(-2)) ->
+              LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999000000),
+            (LocalDateTime.of(2021, 5, 31, 0, 0, 0, 1000), Period.ofMonths(3)) ->
+              LocalDateTime.of(2021, 2, 28, 0, 0, 0, 1000),
+            (LocalDateTime.of(2021, 2, 28, 11, 12, 13, 123456000), Period.ofYears(1)) ->
+              LocalDateTime.of(2020, 2, 28, 11, 12, 13, 123456000),
+            (LocalDateTime.of(2020, 2, 29, 1, 2, 3, 5000), Period.ofYears(4)) ->
+              LocalDateTime.of(2016, 2, 29, 1, 2, 3, 5000)
+          ).foreach { case ((ldt, period), expected) =>
+            val df = Seq((ldt.atZone(zid).toInstant, period)).toDF("ts", "interval")
+            checkAnswer(df.select($"ts" - $"interval"), Row(expected.atZone(zid).toInstant))
+          }
+        }
+      }
+
+      val e = intercept[SparkException] {
+        Seq((Instant.parse("2021-03-14T18:55:00Z"), Period.ofMonths(Int.MaxValue)))
+          .toDF("ts", "interval")
+          .select($"ts" - $"interval")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+    }
+  }
+
+  test("SPARK-34761: add/subtract a day-time interval to/from a timestamp") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingZoneIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
+          Seq(
+            (LocalDateTime.of(1900, 1, 1, 0, 0, 0, 123456000), Duration.ofDays(0)) ->
+              LocalDateTime.of(1900, 1, 1, 0, 0, 0, 123456000),
+            (LocalDateTime.of(1970, 1, 1, 0, 0, 0, 100000000), Duration.ofDays(-1)) ->
+              LocalDateTime.of(1969, 12, 31, 0, 0, 0, 100000000),
+            (LocalDateTime.of(2021, 3, 14, 1, 2, 3), Duration.ofDays(1)) ->
+              LocalDateTime.of(2021, 3, 15, 1, 2, 3),
+            (LocalDateTime.of(2020, 12, 31, 23, 59, 59, 999000000),
+              Duration.ofDays(2 * 30).plusMillis(1)) -> LocalDateTime.of(2021, 3, 2, 0, 0, 0),
+            (LocalDateTime.of(2020, 3, 16, 0, 0, 0, 1000), Duration.of(-1, ChronoUnit.MICROS)) ->
+              LocalDateTime.of(2020, 3, 16, 0, 0, 0),
+            (LocalDateTime.of(2020, 2, 29, 12, 13, 14), Duration.ofDays(365)) ->
+              LocalDateTime.of(2021, 2, 28, 12, 13, 14),
+            (LocalDateTime.of(1582, 10, 4, 1, 2, 3, 40000000),
+              Duration.ofDays(10).plusMillis(60)) ->
+              LocalDateTime.of(1582, 10, 14, 1, 2, 3, 100000000)
+          ).foreach { case ((ldt, duration), expected) =>
+            val ts = ldt.atZone(zid).toInstant
+            val result = expected.atZone(zid).toInstant
+            val df = Seq((ts, duration, result)).toDF("ts", "interval", "result")
+            checkAnswer(
+              df.select($"ts" + $"interval", $"interval" + $"ts", $"result" - $"interval"),
+              Row(result, result, ts))
+          }
+        }
+      }
+
+      Seq(
+        "2021-03-16T18:56:00Z" -> "ts + i",
+        "1900-03-16T18:56:00Z" -> "ts - i").foreach { case (instant, op) =>
+        val e = intercept[SparkException] {
+          Seq(
+            (Instant.parse(instant), Duration.of(Long.MaxValue, ChronoUnit.MICROS)))
+            .toDF("ts", "i")
+            .selectExpr(op)
+            .collect()
+        }.getCause
+        assert(e.isInstanceOf[ArithmeticException])
+        assert(e.getMessage.contains("long overflow"))
+      }
+    }
   }
 }
