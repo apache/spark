@@ -33,9 +33,9 @@ class AggregateOptimizeSuite extends AnalysisTest {
     val batches = Batch("Aggregate", FixedPoint(100),
       FoldablePropagation,
       RemoveLiteralFromGroupExpressions,
+      RemoveUnnecessaryOuterJoin,
       RemoveRepetitionFromGroupExpressions,
-      ReplaceDistinctWithAggregate,
-      EliminateUnnecessaryOuterJoin) :: Nil
+      ReplaceDistinctWithAggregate) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -75,7 +75,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Remove left join if it only has distinct on left side") {
+  test("SPARK-34808: Remove left join if it only has distinct on left side") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val query = Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr)).select("x.b".attr))
@@ -84,7 +84,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
     comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
-  test("Remove right join if it only has distinct on right side") {
+  test("SPARK-34808: Remove right join if it only has distinct on right side") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr)).select("y.b".attr))
@@ -93,13 +93,24 @@ class AggregateOptimizeSuite extends AnalysisTest {
     comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
-  test("Should not remove left join if select 2 join sides") {
+  test("SPARK-34808: Should not remove left join if select 2 join sides") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
       .select("x.b".attr, "y.c".attr))
     val correctAnswer = x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
       .select("x.b".attr, "y.c".attr).groupBy("x.b".attr, "y.c".attr)("x.b".attr, "y.c".attr)
+
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-34808: RemoveUnnecessaryOuterJoin must before RemoveRepetitionFromGroupExpressions") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val query = Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+      .select("x.b".attr, "x.b".attr))
+    val correctAnswer =
+      x.select("x.b".attr, "x.b".attr).groupBy("x.b".attr)("x.b".attr, "x.b".attr).analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }

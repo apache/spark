@@ -190,8 +190,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceDeduplicateWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
-      RemoveRepetitionFromGroupExpressions,
-      EliminateUnnecessaryOuterJoin) :: Nil ++
+      RemoveUnnecessaryOuterJoin,
+      RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
     // This batch rewrites plans after the operator optimization and
     // before any batches that depend on stats.
