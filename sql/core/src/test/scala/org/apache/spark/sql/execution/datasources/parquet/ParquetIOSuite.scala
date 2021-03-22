@@ -316,11 +316,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         |  required INT32 a(UINT_8);
         |  required INT32 b(UINT_16);
         |  required INT32 c(UINT_32);
-        |  required INT64 d(UINT_64);
         |}
       """.stripMargin)
 
-    val expectedSparkTypes = Seq(ShortType, IntegerType, LongType, DecimalType(20, 0))
+    val expectedSparkTypes = Seq(ShortType, IntegerType, LongType)
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)

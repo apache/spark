@@ -203,6 +203,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     }
   }
 
+  // A fork of `readIntegers`, reading the signed integers as unsigned in long type
   public void readIntegersAsUnsigned(
     int total,
     WritableColumnVector c,
