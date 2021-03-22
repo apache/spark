@@ -86,10 +86,9 @@ trait FileScan extends Scan
   protected def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
   private lazy val (normalizedPartitionFilters, normalizedDataFilters) = {
-    val output = readSchema().toAttributes.map(a => a.withName(normalizeName(a.name)))
-    val partitionFilterAttributes =
-      AttributeSet(partitionFilters).map(a => normalizeName(a.name) -> a).toMap
-    val dataFiltersAttributes = AttributeSet(dataFilters).map(a => normalizeName(a.name) -> a).toMap
+    val output = readSchema().toAttributes
+    val partitionFilterAttributes = AttributeSet(partitionFilters).map(a => a.name -> a).toMap
+    val dataFiltersAttributes = AttributeSet(dataFilters).map(a => a.name -> a).toMap
     val normalizedPartitionFilters = ExpressionSet(partitionFilters.map(
       QueryPlan.normalizeExpressions(_,
         output.map(a => partitionFilterAttributes.getOrElse(a.name, a)))))
