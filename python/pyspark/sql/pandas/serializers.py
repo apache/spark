@@ -194,7 +194,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             return array
 
         def create_arrs_names(s, t: pa.DataType, dt: Optional[DataType] = None):
-            # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
+            # If input s is empty with zero columns, return empty Arrays with struct
             if len(s) == 0 and len(s.columns) == 0:
                 return [(pa.array([], type=field.type), field.name) for field in t]
 
