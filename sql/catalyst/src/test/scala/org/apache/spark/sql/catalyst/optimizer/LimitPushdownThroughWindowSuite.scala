@@ -155,15 +155,22 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(correctAnswer.analyze))
   }
 
-  test("Should not push down if partitionSpec is not empty") {
+  test("Should push down if partitionSpec is not empty") {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
       .limit(2)
 
+    val correctAnswer = testRelation
+      .select(a, b, c)
+      .orderBy(a.asc, c.desc)
+      .limit(2)
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+
     comparePlans(
       Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(originalQuery.analyze))
+      WithoutOptimize.execute(correctAnswer.analyze))
   }
 
   test("Should not push down when child's maxRows smaller than limit value") {
