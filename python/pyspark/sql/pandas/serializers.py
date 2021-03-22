@@ -198,7 +198,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             if len(s) == 0 and len(s.columns) == 0:
                 return [(pa.array([], type=field.type), field.name) for field in t]
 
-            if self._assign_cols_by_name and any(instance(name, str) for name in s.columns):
+            if self._assign_cols_by_name and any(isinstance(name, str) for name in s.columns):
                 # Assign result columns by schema name if user labeled with strings
                 by_field_name = True
             else:
@@ -233,7 +233,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         arrs = []
         for s, t in series:
-            if t is not None and instanceof(t, DataType):
+            if t is not None and isinstance(t, DataType):
                 dt = t
                 t = to_arrow_type(dt)
                 arrs_names = create_arrs_names(s, t, dt)
