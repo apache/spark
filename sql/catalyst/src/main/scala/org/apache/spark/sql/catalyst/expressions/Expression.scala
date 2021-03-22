@@ -691,8 +691,6 @@ object BinaryOperator {
  */
 trait TernaryExpression extends Expression with TernaryLike[Expression] {
 
-//  override def children: Seq[Expression] = null
-
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def nullable: Boolean = children.exists(_.nullable)
@@ -702,12 +700,11 @@ trait TernaryExpression extends Expression with TernaryLike[Expression] {
    * If subclass of TernaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
-    val exprs = children
-    val value1 = exprs(0).eval(input)
+    val value1 = first.eval(input)
     if (value1 != null) {
-      val value2 = exprs(1).eval(input)
+      val value2 = second.eval(input)
       if (value2 != null) {
-        val value3 = exprs(2).eval(input)
+        val value3 = third.eval(input)
         if (value3 != null) {
           return nullSafeEval(value1, value2, value3)
         }

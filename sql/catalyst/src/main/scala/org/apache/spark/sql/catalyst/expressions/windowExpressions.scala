@@ -182,9 +182,10 @@ case class SpecifiedWindowFrame(
     frameType: FrameType,
     lower: Expression,
     upper: Expression)
-  extends WindowFrame {
+  extends WindowFrame with BinaryLike[Expression] {
 
-  override def children: Seq[Expression] = lower :: upper :: Nil
+  override def left: Expression = lower
+  override def right: Expression = upper
 
   lazy val valueBoundary: Seq[Expression] =
     children.filterNot(_.isInstanceOf[SpecialFrameBoundary])
