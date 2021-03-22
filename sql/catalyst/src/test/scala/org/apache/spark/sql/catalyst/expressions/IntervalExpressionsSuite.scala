@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{Decimal, YearMonthIntervalType}
+import org.apache.spark.sql.types.DataTypeTestUtils.numericTypes
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -296,6 +297,12 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case ((period, num), expected) =>
       checkExceptionInExpression[ArithmeticException](
         MultiplyYMInterval(Literal(period), Literal(num)), expected)
+    }
+
+    numericTypes.foreach { numType =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (interval: Expression, num: Expression) => MultiplyYMInterval(interval, num),
+        YearMonthIntervalType, numType)
     }
   }
 }
