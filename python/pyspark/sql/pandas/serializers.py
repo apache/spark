@@ -233,17 +233,19 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         arrs = []
         for s, t in series:
-            if t is not None and isinstance(t, DataType):
-                dt = t
+            dt = t # Always keep the original type in dt
+            # Convert t to arrow type if it is instanceof DataType
+            if isinstance(dt, DataType):
                 t = to_arrow_type(dt)
-                arrs_names = create_arrs_names(s, t, dt)
-                struct_arrs, struct_names = zip(*arrs_names)
-                arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
-            elif t is not None and pa.types.is_struct(t):
+
+            if t is not None and pa.types.is_struct(t) and not isinstance(dt, UserDefinedType):
                 if not isinstance(s, pd.DataFrame):
                     raise ValueError("A field of type StructType expects a pandas.DataFrame, "
                                      "but got: %s" % str(type(s)))
-                arrs_names = create_arrs_names(s, t)
+                if isinstance(dt, DataType):
+                    arrs_names = create_arrs_names(s, t, dt)
+                else:
+                    arrs_names = create_arrs_names(s, t)
                 struct_arrs, struct_names = zip(*arrs_names)
                 arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
             else:
