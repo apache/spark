@@ -56,7 +56,7 @@ Input [2]: [d_date_sk#5, d_date#6]
 
 (6) Filter [codegen id : 1]
 Input [2]: [d_date_sk#5, d_date#6]
-Condition : (((isnotnull(d_date#6) AND (d_date#6 >= 10644)) AND (d_date#6 <= 10674)) AND isnotnull(d_date_sk#5))
+Condition : (((isnotnull(d_date#6) AND (d_date#6 >= 1999-02-22)) AND (d_date#6 <= 1999-03-24)) AND isnotnull(d_date_sk#5))
 
 (7) Project [codegen id : 1]
 Output [1]: [d_date_sk#5]
@@ -87,7 +87,7 @@ Arguments: [ss_item_sk#1 ASC NULLS FIRST], false, 0
 Output [6]: [i_item_sk#9, i_item_id#10, i_item_desc#11, i_current_price#12, i_class#13, i_category#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [In(i_category, [Sports,Books,Home]), IsNotNull(i_item_sk)]
+PushedFilters: [In(i_category, [Sports                                            ,Books                                             ,Home                                              ]), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_class:string,i_category:string>
 
 (14) ColumnarToRow [codegen id : 4]
@@ -95,7 +95,7 @@ Input [6]: [i_item_sk#9, i_item_id#10, i_item_desc#11, i_current_price#12, i_cla
 
 (15) Filter [codegen id : 4]
 Input [6]: [i_item_sk#9, i_item_id#10, i_item_desc#11, i_current_price#12, i_class#13, i_category#14]
-Condition : (i_category#14 IN (Sports,Books,Home) AND isnotnull(i_item_sk#9))
+Condition : (i_category#14 IN (Sports                                            ,Books                                             ,Home                                              ) AND isnotnull(i_item_sk#9))
 
 (16) Exchange
 Input [6]: [i_item_sk#9, i_item_id#10, i_item_desc#11, i_current_price#12, i_class#13, i_category#14]
