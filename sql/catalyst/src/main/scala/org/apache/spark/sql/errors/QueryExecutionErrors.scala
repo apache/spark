@@ -29,7 +29,7 @@ import org.codehaus.janino.InternalCompilerException
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
