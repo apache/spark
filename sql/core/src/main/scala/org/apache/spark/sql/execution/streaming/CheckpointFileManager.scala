@@ -277,7 +277,6 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
       fs.delete(path, true)
     } catch {
       case e: FileNotFoundException =>
-        logInfo(s"Failed to delete $path as it does not exist")
         // ignore if file has already been deleted
     }
   }

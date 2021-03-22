@@ -21,28 +21,64 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.types.StructType
 
 trait AnalysisTest extends PlanTest {
 
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
+
+  protected def createTempView(
+      catalog: SessionCatalog,
+      name: String,
+      plan: LogicalPlan,
+      overrideIfExists: Boolean): Unit = {
+    val identifier = TableIdentifier(name)
+    val metadata = createTempViewMetadata(identifier, plan.schema)
+    val viewDefinition = TemporaryViewRelation(metadata, Some(plan))
+    catalog.createTempView(name, viewDefinition, overrideIfExists)
+  }
+
+  protected def createGlobalTempView(
+      catalog: SessionCatalog,
+      name: String,
+      plan: LogicalPlan,
+      overrideIfExists: Boolean): Unit = {
+    val globalDb = Some(SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE))
+    val identifier = TableIdentifier(name, globalDb)
+    val metadata = createTempViewMetadata(identifier, plan.schema)
+    val viewDefinition = TemporaryViewRelation(metadata, Some(plan))
+    catalog.createGlobalTempView(name, viewDefinition, overrideIfExists)
+  }
+
+  private def createTempViewMetadata(
+      identifier: TableIdentifier,
+      schema: StructType): CatalogTable = {
+    CatalogTable(
+      identifier = identifier,
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = schema,
+      properties = Map((VIEW_STORING_ANALYZED_PLAN, "true")))
+  }
 
   protected def getAnalyzer: Analyzer = {
     val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
-    catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
-    catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
-    catalog.createTempView("TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
-    catalog.createGlobalTempView("TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
-    catalog.createGlobalTempView("TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
+    createTempView(catalog, "TaBlE", TestRelations.testRelation, overrideIfExists = true)
+    createTempView(catalog, "TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
+    createTempView(catalog, "TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
+    createGlobalTempView(catalog, "TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
+    createGlobalTempView(catalog, "TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
     new Analyzer(catalog) {
       override val extendedResolutionRules = EliminateSubqueryAliases +: extendedAnalysisRules
     }

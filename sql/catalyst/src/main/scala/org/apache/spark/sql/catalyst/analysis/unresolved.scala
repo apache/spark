@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
@@ -174,7 +175,8 @@ object UnresolvedAttribute {
   /**
    * Creates an [[UnresolvedAttribute]], parsing segments separated by dots ('.').
    */
-  def apply(name: String): UnresolvedAttribute = new UnresolvedAttribute(name.split("\\."))
+  def apply(name: String): UnresolvedAttribute =
+    new UnresolvedAttribute(CatalystSqlParser.parseMultipartIdentifier(name))
 
   /**
    * Creates an [[UnresolvedAttribute]], from a single quoted string (for example using backticks in

@@ -1037,7 +1037,7 @@ package object config {
       .doc("When true, HadoopRDD/NewHadoopRDD will not create partitions for empty input splits.")
       .version("2.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SECRET_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.regex")
@@ -1047,7 +1047,7 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token".r)
+      .createWithDefault("(?i)secret|password|token|access[.]key".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
