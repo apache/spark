@@ -24,12 +24,11 @@ case class Aggregation(aggregateExpressions: Seq[AggregateFunc],
 
 abstract class AggregateFunc
 
-// Todo: add Count
-
 case class Avg(column: String, dataType: DataType, isDistinct: Boolean) extends AggregateFunc
 case class Min(column: String, dataType: DataType) extends AggregateFunc
 case class Max(column: String, dataType: DataType) extends AggregateFunc
 case class Sum(column: String, dataType: DataType, isDistinct: Boolean) extends AggregateFunc
+case class Count(column: String, dataType: DataType, isDistinct: Boolean) extends AggregateFunc
 
 object Aggregation {
   // Returns an empty Aggregate

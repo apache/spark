@@ -55,7 +55,9 @@ case class JDBCScanBuilder(
   override def pushAggregation(aggregation: Aggregation): Unit = {
     if (jdbcOptions.pushDownAggregate) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
-      if (!JDBCRDD.compileAggregates(aggregation.aggregateExpressions, dialect)._1.isEmpty) {
+      // push down if all the aggregates are supported by the underlying Data Source
+      if (JDBCRDD.compileAggregates(aggregation.aggregateExpressions, dialect)._1.length ==
+        aggregation.aggregateExpressions.size) {
         pushedAggregations = aggregation
       }
     }

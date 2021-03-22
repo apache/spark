@@ -735,6 +735,16 @@ object DataSourceStrategy
       case sum: aggregate.Sum =>
         val colName = columnAsString(sum.child)
         if (colName.nonEmpty) Some(Sum(colName, sum.dataType, aggregates.isDistinct)) else None
+      case count: aggregate.Count =>
+        val columnName = count.children.head match {
+          case Literal(_, _) =>
+            "1"
+          case _ => columnAsString(count.children.head)
+        }
+        if (columnName.nonEmpty) {
+          Some(Count(columnName, count.dataType, aggregates.isDistinct))
+        }
+        else None
       case _ => None
     }
   }

@@ -175,6 +175,11 @@ object JDBCRDD extends Logging {
         } else {
           aggBuilder += s"AVG(${distinct} ${quoteEachCols(column, dialect)})"
         }
+      case Count(column, dataType, isDistinct) =>
+        val distinct = if (isDistinct) "DISTINCT " else ""
+        dataTypeBuilder += dataType
+        val col = if (column.equals("1")) column else quote(column)
+          aggBuilder += s"COUNT(${distinct} $col)"
       case _ =>
     }
     (aggBuilder.result, dataTypeBuilder.result)
@@ -258,18 +263,22 @@ private[jdbc] class JDBCRDD(
    * `columns`, but as a String suitable for injection into a SQL query.
    */
   private val columnList: String = {
-    val (compiledAgg, aggDataType) =
-      JDBCRDD.compileAggregates(aggregation.aggregateExpressions, JdbcDialects.get(url))
     val sb = new StringBuilder()
-    if (compiledAgg.length == 0) {
+    if(aggregation.aggregateExpressions.isEmpty) {
       updatedSchema = schema
       columns.foreach(x => sb.append(",").append(x))
     } else {
-      getAggregateColumnsList(sb, compiledAgg, aggDataType)
+      val (compiledAgg, aggDataType) =
+        JDBCRDD.compileAggregates(aggregation.aggregateExpressions, JdbcDialects.get(url))
+        getAggregateColumnsList(sb, compiledAgg, aggDataType)
     }
     if (sb.length == 0) "1" else sb.substring(1)
   }
 
+  /*
+   * Build the column lists for Aggregates push down:
+   * each of the Aggregates + groupBy columns
+   */
   private def getAggregateColumnsList(
       sb: StringBuilder,
       compiledAgg: Array[String],
@@ -405,7 +414,6 @@ private[jdbc] class JDBCRDD(
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
     rs = stmt.executeQuery()
-
     val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, updatedSchema, inputMetrics)
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](

@@ -24,7 +24,7 @@ import org.apache.spark.sql.sources.Aggregation;
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * push down aggregates to the data source.
  *
- * @since 3.1.0
+ * @since 3.2.0
  */
 @Evolving
 public interface SupportsPushDownAggregates extends ScanBuilder {
@@ -37,7 +37,7 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
   void pushAggregation(Aggregation aggregation);
 
   /**
-   * Returns the aggregates that are pushed to the data source via
+   * Returns the aggregation that are pushed to the data source via
    * {@link #pushAggregation(Aggregation aggregation)}.
    */
   Aggregation pushedAggregation();
