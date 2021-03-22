@@ -261,21 +261,24 @@ case class MultiplyYMInterval(
   override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
   override def dataType: DataType = YearMonthIntervalType
 
+  @transient
+  private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
+    case ByteType => (months: Int, num) => Math.multiplyExact(months, num.asInstanceOf[Byte])
+    case ShortType => (months: Int, num) => Math.multiplyExact(months, num.asInstanceOf[Short])
+    case IntegerType => (months: Int, num) => Math.multiplyExact(months, num.asInstanceOf[Int])
+    case LongType =>
+      (months: Int, num) => Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
+    case FloatType => (months: Int, num) =>
+      Math.toIntExact(Math.round(months * num.asInstanceOf[Float].toDouble))
+    case DoubleType => (months: Int, num) =>
+      Math.toIntExact(Math.round(months * num.asInstanceOf[Double]))
+    case _: DecimalType => (months: Int, num) =>
+      val decimalRes = ((new Decimal).set(months) * num.asInstanceOf[Decimal]).toJavaBigDecimal
+      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
+  }
+
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    val months = interval.asInstanceOf[Int]
-    right.dataType match {
-      case ByteType => Math.multiplyExact(months, num.asInstanceOf[Byte])
-      case ShortType => Math.multiplyExact(months, num.asInstanceOf[Short])
-      case IntegerType => Math.multiplyExact(months, num.asInstanceOf[Int])
-      case LongType => Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
-      case FloatType =>
-        Math.toIntExact(Math.round(months * num.asInstanceOf[Float].toDouble))
-      case DoubleType =>
-        Math.toIntExact(Math.round(months * num.asInstanceOf[Double]))
-      case _: DecimalType =>
-        val decimalRes = ((new Decimal).set(months) * num.asInstanceOf[Decimal]).toJavaBigDecimal
-        decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
-    }
+    evalFunc(interval.asInstanceOf[Int], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
