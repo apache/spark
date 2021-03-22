@@ -878,6 +878,9 @@ private[spark] abstract class PythonServer[T](
 
 private[spark] object PythonServer {
 
+  // visible for testing
+  private[spark] var timeout = 15000
+
   /**
    * Create a socket server and run user function on the socket in a background thread.
    *
@@ -896,7 +899,7 @@ private[spark] object PythonServer {
       (func: Socket => Unit): (Int, String) = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
     // Close the socket if no connection in 15 seconds
-    serverSocket.setSoTimeout(15000)
+    serverSocket.setSoTimeout(timeout)
 
     new Thread(threadName) {
       setDaemon(true)

@@ -3257,12 +3257,11 @@ class Dataset[T] private[sql](
 
   private[sql] def collectToPython(): Array[Any] = {
     EvaluatePython.registerPicklers()
-    withAction("collectToPython", queryExecution) { plan =>
+    val iter = withAction("collectToPython", queryExecution) { plan =>
       val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
-      val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
-        plan.executeCollect().iterator.map(toJava))
-      PythonRDD.serveIterator(iter, "serve-DataFrame")
+      new SerDeUtil.AutoBatchedPickler(plan.executeCollect().iterator.map(toJava))
     }
+    PythonRDD.serveIterator(iter, "serve-DataFrame")
   }
 
   private[sql] def getRowsToPython(
