@@ -70,11 +70,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
   def defaultBatches: Seq[Batch] = {
     val operatorOptimizationRuleSet =
       Seq(
-        TransposeWindow,
         // Operator push down
         PushProjectionThroughUnion,
         ReorderJoin,
         EliminateOuterJoin,
+        TransposeWindow,
         PushDownPredicates,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
