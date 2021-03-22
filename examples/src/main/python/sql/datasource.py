@@ -278,6 +278,21 @@ def csv_dataset_example(spark):
     # "output" is a folder which contains multiple csv files and a _SUCCESS file.
     df3.write.csv("output")
 
+    # Read all files in a folder, please make sure only CSV files should present in the folder.
+    folderPath = "examples/src/main/resources"
+    df5 = spark.read.csv(folderPath)
+    df5.show()
+    # Wrong schema because non-CSV files are read
+    # +-----------+
+    # |        _c0|
+    # +-----------+
+    # |238val_238|
+    # |  86val_86|
+    # |311val_311|
+    # |  27val_27|
+    # |165val_165|
+    # +-----------+
+
     # $example off:csv_dataset$
 
 
