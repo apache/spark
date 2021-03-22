@@ -565,6 +565,10 @@ public class VectorizedColumnReader {
         canReadAsIntDecimal(column.dataType())) {
       defColumn.readIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+    } else if (column.dataType() == DataTypes.LongType) {
+      //  We use LongType to handle UINT32
+      defColumn.readIntegersAsUnsigned(
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.ByteType) {
       defColumn.readBytes(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);

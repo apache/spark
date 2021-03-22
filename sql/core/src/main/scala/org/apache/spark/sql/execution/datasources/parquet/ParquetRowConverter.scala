@@ -252,6 +252,11 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
     catalystType match {
+      case LongType if parquetType.getOriginalType == OriginalType.UINT_32 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            updater.setLong(Integer.toUnsignedLong(value))
+        }
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
 

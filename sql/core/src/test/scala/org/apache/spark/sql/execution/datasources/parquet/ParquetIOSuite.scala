@@ -313,18 +313,21 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("SPARK-10113 Support for unsigned Parquet logical types") {
     val parquetSchema = MessageTypeParser.parseMessageType(
       """message root {
-        |  required int32 c(UINT_32);
+        |  required INT32 a(UINT_8);
+        |  required INT32 b(UINT_16);
+        |  required INT32 c(UINT_32);
+        |  required INT64 d(UINT_64);
         |}
       """.stripMargin)
+
+    val expectedSparkTypes = Seq(ShortType, IntegerType, LongType, DecimalType(20, 0))
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
       val conf = spark.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf)
-      val errorMessage = intercept[Throwable] {
-        spark.read.parquet(path.toString).printSchema()
-      }.toString
-      assert(errorMessage.contains("Parquet type not supported"))
+      val sparkTypes = spark.read.parquet(path.toString).schema.map(_.dataType)
+      assert(sparkTypes === expectedSparkTypes)
     }
   }
 
@@ -381,9 +384,25 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     checkCompressionCodec(CompressionCodecName.SNAPPY)
   }
 
+  private def createParquetWriter(schema: MessageType, path: Path): ParquetWriter[Group] = {
+    val testWriteSupport = new TestGroupWriteSupport(schema)
+    /**
+     * Provide a builder for constructing a parquet writer - after PARQUET-248 directly
+     * constructing the writer is deprecated and should be done through a builder. The default
+     * builders include Avro - but for raw Parquet writing we must create our own builder.
+     */
+    class ParquetWriterBuilder() extends
+      ParquetWriter.Builder[Group, ParquetWriterBuilder](path) {
+      override def getWriteSupport(conf: Configuration) = testWriteSupport
+
+      override def self() = this
+    }
+    new ParquetWriterBuilder().build()
+  }
+
   test("read raw Parquet file") {
     def makeRawParquetFile(path: Path): Unit = {
-      val schema = MessageTypeParser.parseMessageType(
+      val schemaStr =
         """
           |message root {
           |  required boolean _1;
@@ -392,22 +411,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           |  required float   _4;
           |  required double  _5;
           |}
-        """.stripMargin)
+        """.stripMargin
+      val schema = MessageTypeParser.parseMessageType(schemaStr)
 
-      val testWriteSupport = new TestGroupWriteSupport(schema)
-      /**
-       * Provide a builder for constructing a parquet writer - after PARQUET-248 directly
-       * constructing the writer is deprecated and should be done through a builder. The default
-       * builders include Avro - but for raw Parquet writing we must create our own builder.
-       */
-      class ParquetWriterBuilder() extends
-          ParquetWriter.Builder[Group, ParquetWriterBuilder](path) {
-        override def getWriteSupport(conf: Configuration) = testWriteSupport
 
-        override def self() = this
-      }
-
-      val writer = new ParquetWriterBuilder().build()
+      val writer = createParquetWriter(schema, path)
 
       (0 until 10).foreach { i =>
         val record = new SimpleGroup(schema)
@@ -432,6 +440,42 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("SPARK-34817: Read UINT_8/UINT_16/UINT_32 from parquet") {
+    def makeRawParquetFile(path: Path): Unit = {
+      val schemaStr =
+        """message root {
+          |  required INT32 a(UINT_8);
+          |  required INT32 b(UINT_16);
+          |  required INT32 c(UINT_32);
+          |}
+        """.stripMargin
+      val schema = MessageTypeParser.parseMessageType(schemaStr)
+
+
+      val writer = createParquetWriter(schema, path)
+
+      (0 until 10).foreach { i =>
+        val record = new SimpleGroup(schema)
+        record.add(0, i + Byte.MaxValue)
+        record.add(1, i + Short.MaxValue)
+        record.add(2, i + Int.MaxValue)
+        writer.write(record)
+      }
+      writer.close()
+    }
+
+    withTempDir { dir =>
+      val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+      makeRawParquetFile(path)
+      readParquetFile(path.toString) { df =>
+        checkAnswer(df, (0 until 10).map { i =>
+          Row(i + Byte.MaxValue.toShort, i + Short.MaxValue.toInt, i + Int.MaxValue.toLong)
+          Row(i + Byte.MaxValue, i + Short.MaxValue, i + Int.MaxValue.toLong)
+
+        })
+      }
+    }
+  }
   test("write metadata") {
     val hadoopConf = spark.sessionState.newHadoopConf()
     withTempPath { file =>
