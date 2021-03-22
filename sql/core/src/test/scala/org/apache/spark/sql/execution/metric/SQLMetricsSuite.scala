@@ -452,11 +452,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a"
         val rightQuery = "SELECT * FROM testData2 RIGHT JOIN testDataForJoin ON " +
           "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a"
-        Seq((leftQuery, false), (rightQuery, false), (leftQuery, true), (rightQuery, true))
-          .foreach { case (query, enableWholeStage) =>
+        Seq((leftQuery, 0L, false), (rightQuery, 0L, false), (leftQuery, 1L, true),
+          (rightQuery, 1L, true)).foreach { case (query, nodeId, enableWholeStage) =>
           val df = spark.sql(query)
           testSparkPlanMetrics(df, 2, Map(
-            0L -> (("BroadcastNestedLoopJoin", Map(
+            nodeId -> (("BroadcastNestedLoopJoin", Map(
               "number of output rows" -> 12L)))),
             enableWholeStage
           )
