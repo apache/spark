@@ -229,8 +229,10 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
-    // "<>", "!=", "between", and "case" is SystemFunctions, only show when showSystemFunctions=true
+    // Hard code "<>", "!=", "between", "case", and "||"
+    // for now as there is no corresponding functions.
+    // "<>", "!=", "between", "case", and "||" is SystemFunctions,
+    // only show when showSystemFunctions=true
     if (showSystemFunctions) {
       (functionNames ++
         StringUtils.filterPattern(FunctionsCommand.virtualOperators, pattern.getOrElse("*")))

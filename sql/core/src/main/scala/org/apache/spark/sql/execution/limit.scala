@@ -132,14 +132,18 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
+    // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
+    // Here we have to inline it to not change its name. This is fine as we won't have many limit
+    // operators in one query.
+    //
+    // Note: create counter variable here instead of `doConsume()` to avoid compilation error,
+    // because upstream operators might not call `doConsume()` here
+    // (e.g. `HashJoin.codegenInner()`).
+    ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
-    // Here we have to inline it to not change its name. This is fine as we won't have many limit
-    // operators in one query.
-    ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
     s"""
        | if ($countTerm < $limit) {
        |   $countTerm += 1;
