@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -451,21 +451,14 @@ trait Stateful extends Nondeterministic {
 /**
  * A leaf expression, i.e. one without any child expressions.
  */
-abstract class LeafExpression extends Expression {
-
-  override final def children: Seq[Expression] = Nil
-}
+trait LeafExpression extends Expression with LeafLike[Expression]
 
 
 /**
  * An expression with one input and one output. The output is by default evaluated to null
  * if the input is evaluated to null.
  */
-abstract class UnaryExpression extends Expression {
-
-  def child: Expression
-
-  override final def children: Seq[Expression] = child :: Nil
+trait UnaryExpression extends Expression with UnaryLike[Expression] {
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -552,12 +545,7 @@ object UnaryExpression {
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class BinaryExpression extends Expression {
-
-  def left: Expression
-  def right: Expression
-
-  override final def children: Seq[Expression] = Seq(left, right)
+trait BinaryExpression extends Expression with BinaryLike[Expression] {
 
   override def foldable: Boolean = left.foldable && right.foldable
 
