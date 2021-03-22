@@ -106,7 +106,7 @@ case class CacheTableAsSelectExec(
         comment = None,
         properties = Map.empty,
         originalText = Some(originalText),
-        child = analyzedPlan,
+        analyzedPlan = analyzedPlan,
         allowExisting = false,
         replace = false,
         viewType = LocalTempView
