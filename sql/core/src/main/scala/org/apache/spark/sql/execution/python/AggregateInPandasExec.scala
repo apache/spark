@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.aggregate.UpdatingSessionIterator
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
@@ -53,12 +54,31 @@ case class AggregateInPandasExec(
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
+  val sessionWindowOption = groupingExpressions.find { p =>
+    p.metadata.contains(SessionWindow.marker)
+  }
+
+  val groupingWithoutSessionExpressions = sessionWindowOption match {
+    case Some(sessionExpression) =>
+      groupingExpressions.filterNot { p => p.semanticEquals(sessionExpression) }
+
+    case None => groupingExpressions
+  }
+
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (groupingExpressions.isEmpty) {
+    if (groupingWithoutSessionExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(groupingExpressions) :: Nil
+      ClusteredDistribution(groupingWithoutSessionExpressions) :: Nil
     }
+  }
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = sessionWindowOption match {
+    case Some(sessionExpression) =>
+      Seq((groupingWithoutSessionExpressions ++ Seq(sessionExpression))
+        .map(SortOrder(_, Ascending)))
+
+    case None => Seq(groupingExpressions.map(SortOrder(_, Ascending)))
   }
 
   private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
@@ -72,9 +92,6 @@ case class AggregateInPandasExec(
         (ChainedPythonFunctions(Seq(udf.func)), udf.children)
     }
   }
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingExpressions.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
@@ -107,13 +124,14 @@ case class AggregateInPandasExec(
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
+      val newIter: Iterator[InternalRow] = mayAppendUpdatingSessionIterator(iter)
       val prunedProj = UnsafeProjection.create(allInputs.toSeq, child.output)
 
       val grouped = if (groupingExpressions.isEmpty) {
         // Use an empty unsafe row as a place holder for the grouping key
-        Iterator((new UnsafeRow(), iter))
+        Iterator((new UnsafeRow(), newIter))
       } else {
-        GroupedIterator(iter, groupingExpressions, child.output)
+        GroupedIterator(newIter, groupingExpressions, child.output)
       }.map { case (key, rows) =>
         (key, rows.map(prunedProj))
       }
@@ -153,5 +171,21 @@ case class AggregateInPandasExec(
         resultProj(joinedRow)
       }
     }}
+  }
+
+  private def mayAppendUpdatingSessionIterator(iter: Iterator[InternalRow])
+    : Iterator[InternalRow] = {
+    val newIter = sessionWindowOption match {
+      case Some(sessionExpression) =>
+        val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
+        val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
+
+        new UpdatingSessionIterator(iter, groupingWithoutSessionExpressions, sessionExpression,
+          child.output, inMemoryThreshold, spillThreshold)
+
+      case None => iter
+    }
+
+    newIter
   }
 }

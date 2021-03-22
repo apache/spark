@@ -341,38 +341,6 @@ class SymmetricHashJoinStateManager(
   // Clean up any state store resources if necessary at the end of the task
   Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
 
-  /** Helper trait for invoking common functionalities of a state store. */
-  private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
-
-    /** StateStore that the subclasses of this class is going to operate on */
-    protected def stateStore: StateStore
-
-    def commit(): Unit = {
-      stateStore.commit()
-      logDebug("Committed, metrics = " + stateStore.metrics)
-    }
-
-    def abortIfNeeded(): Unit = {
-      if (!stateStore.hasCommitted) {
-        logInfo(s"Aborted store ${stateStore.id}")
-        stateStore.abort()
-      }
-    }
-
-    def metrics: StateStoreMetrics = stateStore.metrics
-
-    /** Get the StateStore with the given schema */
-    protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
-      val storeProviderId = StateStoreProviderId(
-        stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
-      val store = StateStore.get(
-        storeProviderId, keySchema, valueSchema, None,
-        stateInfo.get.storeVersion, storeConf, hadoopConf)
-      logInfo(s"Loaded store ${store.id}")
-      store
-    }
-  }
-
   /**
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
@@ -387,11 +355,13 @@ class SymmetricHashJoinStateManager(
 
 
   /** A wrapper around a [[StateStore]] that stores [key -> number of values]. */
-  private class KeyToNumValuesStore extends StateStoreHandler(KeyToNumValuesType) {
+  private class KeyToNumValuesStore extends StateStoreHandler {
     private val longValueSchema = new StructType().add("value", "long")
     private val longToUnsafeRow = UnsafeProjection.create(longValueSchema)
     private val valueRow = longToUnsafeRow(new SpecificInternalRow(longValueSchema))
-    protected val stateStore: StateStore = getStateStore(keySchema, longValueSchema)
+    protected val stateStore: StateStore = getStateStore(keySchema, longValueSchema,
+      getStateStoreName(joinSide, KeyToNumValuesType), stateInfo, partitionId,
+      storeConf, hadoopConf)
 
     /** Get the number of values the key has */
     def get(key: UnsafeRow): Long = {
@@ -534,7 +504,7 @@ class SymmetricHashJoinStateManager(
    * state format version - please refer implementations of [[KeyWithIndexToValueRowConverter]].
    */
   private class KeyWithIndexToValueStore(stateFormatVersion: Int)
-    extends StateStoreHandler(KeyWithIndexToValueType) {
+    extends StateStoreHandler {
 
     private val keyWithIndexExprs = keyAttributes :+ Literal(1L)
     private val keyWithIndexSchema = keySchema.add("index", LongType)
@@ -550,7 +520,9 @@ class SymmetricHashJoinStateManager(
     private val valueRowConverter = KeyWithIndexToValueRowConverter.create(stateFormatVersion)
 
     protected val stateStore = getStateStore(keyWithIndexSchema,
-      valueRowConverter.valueAttributes.toStructType)
+      valueRowConverter.valueAttributes.toStructType,
+      getStateStoreName(joinSide, KeyWithIndexToValueType), stateInfo, partitionId,
+      storeConf, hadoopConf)
 
     def get(key: UnsafeRow, valueIndex: Long): ValueAndMatchPair = {
       valueRowConverter.convertValue(stateStore.get(keyWithIndexRow(key, valueIndex)))
@@ -634,8 +606,6 @@ object SymmetricHashJoinStateManager {
       getStateStoreName(joinSide, stateStoreType)
     }
   }
-
-  private sealed trait StateStoreType
 
   private case object KeyToNumValuesType extends StateStoreType {
     override def toString(): String = "keyToNumValues"

@@ -239,7 +239,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       df.select(window($"time", "10 second"), window($"time", "15 second")).collect()
     }
     assert(e.getMessage.contains(
-      "Multiple time window expressions would result in a cartesian product"))
+      "Multiple time/session window expressions would result in a cartesian product"))
   }
 
   test("aliased windows") {

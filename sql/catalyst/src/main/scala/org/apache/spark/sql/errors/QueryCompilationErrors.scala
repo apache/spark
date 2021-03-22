@@ -349,8 +349,9 @@ private[spark] object QueryCompilationErrors {
   }
 
   def multiTimeWindowExpressionsNotSupportedError(t: TreeNode[_]): Throwable = {
-    new AnalysisException("Multiple time window expressions would result in a cartesian product " +
-      "of rows, therefore they are currently not supported.", t.origin.line, t.origin.startPosition)
+    new AnalysisException("Multiple time/session window expressions would result in a cartesian " +
+      "product of rows, therefore they are currently not supported.", t.origin.line,
+      t.origin.startPosition)
   }
 
   def viewOutputNumberMismatchQueryColumnNamesError(
