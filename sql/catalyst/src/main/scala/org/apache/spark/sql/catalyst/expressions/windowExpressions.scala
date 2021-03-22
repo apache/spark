@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExcept
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
@@ -279,9 +280,11 @@ case class UnresolvedWindowExpression(
 
 case class WindowExpression(
     windowFunction: Expression,
-    windowSpec: WindowSpecDefinition) extends Expression with Unevaluable {
+    windowSpec: WindowSpecDefinition) extends Expression with Unevaluable
+  with BinaryLike[Expression] {
 
-  override def children: Seq[Expression] = windowFunction :: windowSpec :: Nil
+  override def left: Expression = windowFunction
+  override def right: Expression = windowSpec
 
   override def dataType: DataType = windowFunction.dataType
   override def nullable: Boolean = windowFunction.nullable
@@ -371,9 +374,12 @@ trait OffsetWindowFunction extends WindowFunction {
  * will get the value of x 2 rows back from the current row in the partition.
  */
 sealed abstract class FrameLessOffsetWindowFunction
-  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes {
+  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes
+  with TernaryLike[Expression] {
 
-  override def children: Seq[Expression] = Seq(input, offset, default)
+  override def first: Expression = input
+  override def second: Expression = offset
+  override def third: Expression = default
 
   /*
    * The result of an OffsetWindowFunction is dependent on the frame in which the
@@ -500,8 +506,6 @@ case class Lag(
   def this(input: Expression) = this(input, Literal(1))
 
   def this() = this(Literal(null))
-
-  override def children: Seq[Expression] = Seq(input, inputOffset, default)
 
   override val offset: Expression = UnaryMinus(inputOffset) match {
     case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
@@ -634,13 +638,15 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
-    extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes {
+    extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
   override lazy val default = Literal.create(null, input.dataType)
 
-  override def children: Seq[Expression] = input :: offset :: Nil
+  override def left: Expression = input
+  override def right: Expression = offset
 
   override val frame: WindowFrame = UnspecifiedFrame
 
@@ -734,10 +740,12 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
   since = "2.0.0",
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
-case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
+case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction
+    with UnaryLike[Expression] {
+
   def this() = this(Literal(1))
 
-  override def children: Seq[Expression] = Seq(buckets)
+  override def child: Expression = buckets
 
   // Validate buckets. Note that this could be relaxed, the bucket value only needs to constant
   // for each partition.

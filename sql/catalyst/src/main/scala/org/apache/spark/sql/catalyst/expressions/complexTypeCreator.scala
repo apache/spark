@@ -521,7 +521,9 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     this(child, Literal(","), Literal(":"))
   }
 
-  override def children: Seq[Expression] = Seq(text, pairDelim, keyValueDelim)
+  override def first: Expression = text
+  override def second: Expression = pairDelim
+  override def third: Expression = keyValueDelim
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
 

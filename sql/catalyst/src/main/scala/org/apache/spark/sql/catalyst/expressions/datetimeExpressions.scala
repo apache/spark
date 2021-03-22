@@ -1603,7 +1603,9 @@ case class MonthsBetween(
   def this(date1: Expression, date2: Expression, roundOff: Expression) =
     this(date1, date2, roundOff, None)
 
-  override def children: Seq[Expression] = Seq(date1, date2, roundOff)
+  override def first: Expression = date1
+  override def second: Expression = date2
+  override def third: Expression = roundOff
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType, BooleanType)
 
@@ -2000,7 +2002,9 @@ case class MakeDate(
   def this(year: Expression, month: Expression, day: Expression) =
     this(year, month, day, SQLConf.get.ansiEnabled)
 
-  override def children: Seq[Expression] = Seq(year, month, day)
+  override def first: Expression = year
+  override def second: Expression = month
+  override def third: Expression = day
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
   override def dataType: DataType = DateType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true

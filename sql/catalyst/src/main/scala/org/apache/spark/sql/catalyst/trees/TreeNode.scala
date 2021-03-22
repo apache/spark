@@ -835,18 +835,18 @@ trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
 
 trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def child: T
-  override final lazy val children: Seq[T] = child :: Nil
+  @transient override final lazy val children: Seq[T] = child :: Nil
 }
 
 trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def left: T
   def right: T
-  override final lazy val children: Seq[T] = left :: right :: Nil
+  @transient override final lazy val children: Seq[T] = left :: right :: Nil
 }
 
 trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def first: T
   def second: T
   def third: T
-  override final lazy val children: Seq[T] = first :: second :: third :: Nil
+  @transient override final lazy val children: Seq[T] = first :: second :: third :: Nil
 }
