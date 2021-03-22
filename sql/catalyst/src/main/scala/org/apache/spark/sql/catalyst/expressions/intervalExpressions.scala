@@ -263,15 +263,12 @@ case class MultiplyYMInterval(
 
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
-    case ByteType => (months: Int, num) => Math.multiplyExact(months, num.asInstanceOf[Byte])
-    case ShortType => (months: Int, num) => Math.multiplyExact(months, num.asInstanceOf[Short])
-    case IntegerType => (months: Int, num) => Math.multiplyExact(months, num.asInstanceOf[Int])
-    case LongType =>
-      (months: Int, num) => Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
-    case FloatType => (months: Int, num) =>
-      Math.toIntExact(Math.round(months * num.asInstanceOf[Float].toDouble))
-    case DoubleType => (months: Int, num) =>
-      Math.toIntExact(Math.round(months * num.asInstanceOf[Double]))
+    case ByteType | ShortType | IntegerType => (months: Int, num) =>
+      Math.multiplyExact(months, num.asInstanceOf[Number].intValue())
+    case LongType => (months: Int, num) =>
+      Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
+    case FloatType | DoubleType => (months: Int, num) =>
+      Math.toIntExact(Math.round(months * num.asInstanceOf[Number].doubleValue()))
     case _: DecimalType => (months: Int, num) =>
       val decimalRes = ((new Decimal).set(months) * num.asInstanceOf[Decimal]).toJavaBigDecimal
       decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
