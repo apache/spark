@@ -41,6 +41,11 @@ import scala.util.Try
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.lang3.StringUtils
 import org.apache.log4j.PropertyConfigurator
+import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.handler.DefaultHandler
+import org.eclipse.jetty.server.handler.HandlerList
+import org.eclipse.jetty.server.handler.ResourceHandler
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, render}
 
@@ -361,6 +366,21 @@ private[spark] object TestUtils {
     } finally {
       sc.listenerBus.waitUntilEmpty()
       sc.listenerBus.removeListener(listener)
+    }
+  }
+
+  def withHttpServer(resBaseDir: String = ".")(body: URI => Unit): Unit = {
+    val server = new Server(0) // choosing randomly from the available ports
+    val resHandler = new ResourceHandler()
+    resHandler.setResourceBase(resBaseDir)
+    val handlers = new HandlerList()
+    handlers.setHandlers(Array[Handler](resHandler, new DefaultHandler()))
+    server.setHandler(handlers)
+    server.start()
+    try {
+      body(server.getURI())
+    } finally {
+      server.stop()
     }
   }
 
