@@ -19,6 +19,8 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
+from typing import Optional
+
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
 from pyspark.sql.types import ArrayType, DataType, UserDefinedType
 from pyspark.sql.pandas.types import to_arrow_type
@@ -156,7 +158,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             _convert_dict_to_map_items
         from pandas.api.types import is_categorical_dtype
 
-        def create_array(s, t: pa.DataType, dt: DataType = None):
+        def create_array(s, t: pa.DataType, dt: Optional[DataType] = None):
             if dt is not None:
                 if isinstance(dt, UserDefinedType):
                     s = s.apply(dt.serialize)
@@ -191,7 +193,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                     raise e
             return array
 
-        def create_arrs_names(s, t: pa.DataType, dt: DataType = None):
+        def create_arrs_names(s, t: pa.DataType, dt: Optional[DataType] = None):
             # Input partition and result pandas.DataFrame empty, make empty Arrays with struct
             if len(s) == 0 and len(s.columns) == 0:
                 return [(pa.array([], type=field.type), field.name) for field in t]
