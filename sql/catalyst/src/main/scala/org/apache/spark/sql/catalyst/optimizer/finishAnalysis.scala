@@ -67,6 +67,34 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
 }
 
 /**
+ * Wrap complex grouping expression in aggregate expressions without aggregate function into
+ * `GroupingExpression` nodes so as to avoid further optimizations between the expression and its
+ * parent.
+ *
+ * This is required as further optimizations could change the grouping expression and so make the
+ * aggregate expression invalid.
+ */
+object WrapGroupingExpressions extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transform {
+      case a: Aggregate =>
+        val complexGroupingExpressions =
+          ExpressionSet(a.groupingExpressions.filter(_.children.nonEmpty))
+
+        def wrapGroupingExpression(e: Expression): Expression = e match {
+          case _: GroupingExpression => e
+          case _: AggregateExpression => e
+          case _ if complexGroupingExpressions.contains(e) => GroupingExpression(e)
+          case _ => e.mapChildren(wrapGroupingExpression)
+        }
+
+        a.copy(aggregateExpressions =
+          a.aggregateExpressions.map(wrapGroupingExpression(_).asInstanceOf[NamedExpression]))
+    }
+  }
+}
+
+/**
  * Computes the current date and time to make sure we return the same result in a single query.
  */
 object ComputeCurrentTime extends Rule[LogicalPlan] {

@@ -4123,12 +4123,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
       val df = spark.sql(
         """
-          |SELECT not(id), c
-          |FROM (
-          |  SELECT t.id IS NULL AS id, count(*) AS c
-          |  FROM t
-          |  GROUP BY t.id IS NULL
-          |) t
+          |SELECT not(t.id IS NULL), count(*) AS c
+          |FROM t
+          |GROUP BY t.id IS NULL
           |""".stripMargin)
       checkAnswer(df, Row(true, 3) :: Row(false, 2) :: Nil)
     }
