@@ -232,12 +232,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         arrs = []
-        for s, t in series:
-            dt = t # Always keep the original type in dt
-            # Convert t to arrow type if it is instanceof DataType
-            if isinstance(dt, DataType):
-                t = to_arrow_type(dt)
-
+        for s, dt in series:
+            t = to_arrow_type(dt) if isinstance(dt, DataType) else dt
             if t is not None and pa.types.is_struct(t) and not isinstance(dt, UserDefinedType):
                 if not isinstance(s, pd.DataFrame):
                     raise ValueError("A field of type StructType expects a pandas.DataFrame, "
@@ -249,7 +245,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 struct_arrs, struct_names = zip(*arrs_names)
                 arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
             else:
-                arrs.append(create_array(s, t))
+                arrs.append(create_array(s, t, dt))
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
