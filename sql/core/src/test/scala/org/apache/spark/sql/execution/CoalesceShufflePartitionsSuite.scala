@@ -415,7 +415,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
 
   test("SPARK-34790: enable IO encryption in AQE partition coalescing") {
     val test: SparkSession => Unit = { spark: SparkSession =>
-      val ds = spark.range(10)
+      val ds = spark.range(0, 100, 1, numInputPartitions)
       val resultDf = ds.repartition(ds.col("id"))
       resultDf.collect()
 
@@ -427,7 +427,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         }.isDefinedAt(0))
     }
     Seq(true, false).foreach { enableIOEncryption =>
-      // before SPARK-34790, it will throw an exception when io encryption enabled.
+      // Before SPARK-34790, it will throw an exception when io encryption enabled.
       withSparkSession(test, Int.MaxValue, None, enableIOEncryption)
     }
   }
