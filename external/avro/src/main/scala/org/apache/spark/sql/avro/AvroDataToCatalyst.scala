@@ -104,7 +104,7 @@ private[avro] case class AvroDataToCatalyst(
     if (binary(0) == 0xC3.toByte && binary(1) == 0x01.toByte) {
       return 10
     }
-    return 0
+    0
   }
 
   override def nullSafeEval(input: Any): Any = {
