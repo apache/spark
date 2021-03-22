@@ -4,7 +4,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_
       BroadcastHashJoin [i_category,i_brand,cc_name,rn,i_category,i_brand,cc_name,rn]
         Project [i_category,i_brand,cc_name,d_year,d_moy,sum_sales,avg_monthly_sales,rn,sum_sales]
           BroadcastHashJoin [i_category,i_brand,cc_name,rn,i_category,i_brand,cc_name,rn]
-            Filter [d_year,avg_monthly_sales,sum_sales,rn]
+            Filter [d_year,avg_monthly_sales,sum_sales]
               InputAdapter
                 Window [d_year,d_moy,i_category,i_brand,cc_name]
                   WholeStageCodegen (8)
@@ -62,25 +62,23 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_
               BroadcastExchange #7
                 WholeStageCodegen (15)
                   Project [i_category,i_brand,cc_name,sum_sales,rn]
-                    Filter [rn]
-                      InputAdapter
-                        Window [d_year,d_moy,i_category,i_brand,cc_name]
-                          WholeStageCodegen (14)
-                            Sort [i_category,i_brand,cc_name,d_year,d_moy]
-                              InputAdapter
-                                Exchange [i_category,i_brand,cc_name] #8
-                                  WholeStageCodegen (13)
-                                    HashAggregate [i_category,i_brand,cc_name,d_year,d_moy,sum] [sum(UnscaledValue(cs_sales_price)),sum_sales,sum]
-                                      InputAdapter
-                                        ReusedExchange [i_category,i_brand,cc_name,d_year,d_moy,sum] #9
+                    InputAdapter
+                      Window [d_year,d_moy,i_category,i_brand,cc_name]
+                        WholeStageCodegen (14)
+                          Sort [i_category,i_brand,cc_name,d_year,d_moy]
+                            InputAdapter
+                              Exchange [i_category,i_brand,cc_name] #8
+                                WholeStageCodegen (13)
+                                  HashAggregate [i_category,i_brand,cc_name,d_year,d_moy,sum] [sum(UnscaledValue(cs_sales_price)),sum_sales,sum]
+                                    InputAdapter
+                                      ReusedExchange [i_category,i_brand,cc_name,d_year,d_moy,sum] #9
         InputAdapter
           BroadcastExchange #10
             WholeStageCodegen (22)
               Project [i_category,i_brand,cc_name,sum_sales,rn]
-                Filter [rn]
-                  InputAdapter
-                    Window [d_year,d_moy,i_category,i_brand,cc_name]
-                      WholeStageCodegen (21)
-                        Sort [i_category,i_brand,cc_name,d_year,d_moy]
-                          InputAdapter
-                            ReusedExchange [i_category,i_brand,cc_name,d_year,d_moy,sum_sales] #8
+                InputAdapter
+                  Window [d_year,d_moy,i_category,i_brand,cc_name]
+                    WholeStageCodegen (21)
+                      Sort [i_category,i_brand,cc_name,d_year,d_moy]
+                        InputAdapter
+                          ReusedExchange [i_category,i_brand,cc_name,d_year,d_moy,sum_sales] #8
