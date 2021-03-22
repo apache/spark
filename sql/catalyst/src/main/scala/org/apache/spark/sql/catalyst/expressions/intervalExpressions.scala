@@ -250,6 +250,7 @@ case class MakeInterval(
   override def prettyName: String = "make_interval"
 }
 
+// Multiply an year-month interval by a numeric
 case class MultiplyYMInterval(
     interval: Expression,
     num: Expression)
@@ -272,7 +273,8 @@ case class MultiplyYMInterval(
       case DoubleType =>
         Math.toIntExact(Math.round(months * num.asInstanceOf[Double]))
       case _: DecimalType =>
-        ((new Decimal).set(months) * num.asInstanceOf[Decimal]).roundToInt()
+        val decimalRes = ((new Decimal).set(months) * num.asInstanceOf[Decimal]).toJavaBigDecimal
+        decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
     }
   }
 
@@ -286,7 +288,9 @@ case class MultiplyYMInterval(
       val jlm = classOf[Math].getName
       defineCodeGen(ctx, ev, (m, n) => s"$jlm.toIntExact($jlm.round($m * (double)$n))")
     case _: DecimalType =>
-      defineCodeGen(ctx, ev, (m, n) => s"(new Decimal()).set($m) * n).roundToInt()")
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
+        ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
   }
 
   override def prettyName: String = "multiply_ym_interval"
