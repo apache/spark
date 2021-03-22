@@ -94,7 +94,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
       test(s"SPARK-33482: Test $name equals") {
         val partitioningAwareFileIndex = newPartitioningAwareFileIndex()
 
-        val parquetScan = scanBuilder(
+        val scan = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -105,7 +105,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        val parquetScanEquals = scanBuilder(
+        val scanEquals = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema.copy(),
@@ -116,13 +116,13 @@ trait FileScanSuiteBase extends SharedSparkSession {
           Seq(partitionFilters: _*),
           Seq(dataFilters: _*))
 
-        assert(parquetScan === parquetScanEquals)
+        assert(scan === scanEquals)
       }
 
       test(s"SPARK-33482: Test $name fileIndex not equals") {
         val partitioningAwareFileIndex = newPartitioningAwareFileIndex()
 
-        val parquetScan = scanBuilder(
+        val scan = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -135,7 +135,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
 
         val partitioningAwareFileIndexNotEqual = newPartitioningAwareFileIndex()
 
-        val parquetScanNotEqual = scanBuilder(
+        val scanNotEqual = scanBuilder(
           spark,
           partitioningAwareFileIndexNotEqual,
           dataSchema,
@@ -146,14 +146,14 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        assert(parquetScan !== parquetScanNotEqual)
+        assert(scan !== scanNotEqual)
       }
 
       if (!exclusions.contains("dataSchema")) {
         test(s"SPARK-33482: Test $name dataSchema not equals") {
           val partitioningAwareFileIndex = newPartitioningAwareFileIndex()
 
-          val parquetScan = scanBuilder(
+          val scan = scanBuilder(
             spark,
             partitioningAwareFileIndex,
             dataSchema,
@@ -164,7 +164,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
             partitionFilters,
             dataFilters)
 
-          val parquetScanNotEqual = scanBuilder(
+          val scanNotEqual = scanBuilder(
             spark,
             partitioningAwareFileIndex,
             dataSchemaNotEqual,
@@ -175,14 +175,14 @@ trait FileScanSuiteBase extends SharedSparkSession {
             partitionFilters,
             dataFilters)
 
-          assert(parquetScan !== parquetScanNotEqual)
+          assert(scan !== scanNotEqual)
         }
       }
 
       test(s"SPARK-33482: Test $name readDataSchema not equals") {
         val partitioningAwareFileIndex = newPartitioningAwareFileIndex()
 
-        val parquetScan = scanBuilder(
+        val scan = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -193,7 +193,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        val parquetScanNotEqual = scanBuilder(
+        val scanNotEqual = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -204,13 +204,13 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        assert(parquetScan !== parquetScanNotEqual)
+        assert(scan !== scanNotEqual)
       }
 
       test(s"SPARK-33482: Test $name readPartitionSchema not equals") {
         val partitioningAwareFileIndex = newPartitioningAwareFileIndex()
 
-        val parquetScan = scanBuilder(
+        val scan = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -221,7 +221,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        val parquetScanNotEqual = scanBuilder(
+        val scanNotEqual = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -232,14 +232,14 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        assert(parquetScan !== parquetScanNotEqual)
+        assert(scan !== scanNotEqual)
       }
 
       if (!exclusions.contains("pushedFilters")) {
         test(s"SPARK-33482: Test $name pushedFilters not equals") {
           val partitioningAwareFileIndex = newPartitioningAwareFileIndex()
 
-          val parquetScan = scanBuilder(
+          val scan = scanBuilder(
             spark,
             partitioningAwareFileIndex,
             dataSchema,
@@ -250,7 +250,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
             partitionFilters,
             dataFilters)
 
-          val parquetScanNotEqual = scanBuilder(
+          val scanNotEqual = scanBuilder(
             spark,
             partitioningAwareFileIndex,
             dataSchema,
@@ -261,14 +261,14 @@ trait FileScanSuiteBase extends SharedSparkSession {
             partitionFilters,
             dataFilters)
 
-          assert(parquetScan !== parquetScanNotEqual)
+          assert(scan !== scanNotEqual)
         }
       }
 
       test(s"SPARK-33482: Test $name options not equals") {
         val partitioningAwareFileIndex = newPartitioningAwareFileIndex()
 
-        val parquetScan = scanBuilder(
+        val scan = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -279,7 +279,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        val parquetScanNotEqual = scanBuilder(
+        val scanNotEqual = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -290,13 +290,13 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        assert(parquetScan !== parquetScanNotEqual)
+        assert(scan !== scanNotEqual)
       }
 
       test(s"SPARK-33482: Test $name partitionFilters not equals") {
         val partitioningAwareFileIndex = newPartitioningAwareFileIndex()
 
-        val parquetScan = scanBuilder(
+        val scan = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -307,7 +307,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        val parquetScanNotEqual = scanBuilder(
+        val scanNotEqual = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -317,13 +317,13 @@ trait FileScanSuiteBase extends SharedSparkSession {
           options,
           partitionFiltersNotEqual,
           dataFilters)
-        assert(parquetScan !== parquetScanNotEqual)
+        assert(scan !== scanNotEqual)
       }
 
       test(s"SPARK-33482: Test $name dataFilters not equals") {
         val partitioningAwareFileIndex = newPartitioningAwareFileIndex()
 
-        val parquetScan = scanBuilder(
+        val scan = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -334,7 +334,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
           partitionFilters,
           dataFilters)
 
-        val parquetScanNotEqual = scanBuilder(
+        val scanNotEqual = scanBuilder(
           spark,
           partitioningAwareFileIndex,
           dataSchema,
@@ -344,7 +344,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
           options,
           partitionFilters,
           dataFiltersNotEqual)
-        assert(parquetScan !== parquetScanNotEqual)
+        assert(scan !== scanNotEqual)
       }
     }
   }
