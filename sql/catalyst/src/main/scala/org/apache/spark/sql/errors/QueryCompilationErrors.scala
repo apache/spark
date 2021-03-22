@@ -1300,8 +1300,8 @@ private[spark] object QueryCompilationErrors {
   }
 
   def cannotApplyTableValuedFunctionError(
-      name: String, arguments: String, usage: String): Throwable = {
-    new AnalysisException(s"Table-valued function $name cannot with alternatives: $usage\n" +
-      s"cannot be applied to: ($arguments)")
+      name: String, arguments: String, usage: String, details: String = ""): Throwable = {
+    new AnalysisException(s"Table-valued function $name with alternatives: $usage\n" +
+      s"cannot be applied to ($arguments): $details")
   }
 }
