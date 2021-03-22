@@ -102,7 +102,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
 
 }
 
-private[python] object ArrowEvalPythonExec {
+private[sql] object ArrowEvalPythonExec {
   /**
    * Erase User-Defined Types and returns the plain Spark StructType instead.
    *
