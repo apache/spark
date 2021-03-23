@@ -108,7 +108,7 @@ Input [2]: [d_date_sk#11, d_date#12]
 
 (16) Filter [codegen id : 2]
 Input [2]: [d_date_sk#11, d_date#12]
-Condition : (((isnotnull(d_date#12) AND (d_date#12 >= 2000-01-27)) AND (d_date#12 <= 2000-04-26)) AND isnotnull(d_date_sk#11))
+Condition : (((isnotnull(d_date#12) AND (d_date#12 >= 10983)) AND (d_date#12 <= 11073)) AND isnotnull(d_date_sk#11))
 
 (17) Project [codegen id : 2]
 Output [1]: [d_date_sk#11]
