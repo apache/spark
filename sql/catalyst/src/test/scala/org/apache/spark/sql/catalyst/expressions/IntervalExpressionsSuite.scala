@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, YearMonthIntervalType}
+import org.apache.spark.sql.types.{Decimal, DecimalType, YearMonthIntervalType}
 import org.apache.spark.sql.types.DataTypeTestUtils.numericTypes
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -280,6 +280,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-34824: multiply year-month interval by numeric") {
     Seq(
+      (Period.ofMonths(-100), Float.NaN) -> Period.ofMonths(0),
+      (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
       (Period.ofMonths(0), 10) -> Period.ofMonths(0),
       (Period.ofMonths(10), 0L) -> Period.ofMonths(0),
       (Period.ofYears(100), -1.toByte) -> Period.ofYears(-100),
@@ -292,11 +294,14 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     Seq(
-      (Period.ofMonths(2), Int.MaxValue) -> "overflow",
-      (Period.ofMonths(Int.MinValue), 10d) -> "overflow"
-    ).foreach { case ((period, num), expected) =>
+      (Period.ofMonths(2), Int.MaxValue),
+      (Period.ofMonths(Int.MinValue), 10d),
+      (Period.ofMonths(200), Double.PositiveInfinity),
+      (Period.ofMonths(200), Float.NegativeInfinity),
+    ).foreach { case (period, num) =>
       checkExceptionInExpression[ArithmeticException](
-        MultiplyYMInterval(Literal(period), Literal(num)), expected)
+        MultiplyYMInterval(Literal(period), Literal(num)),
+        "overflow")
     }
 
     numericTypes.foreach { numType =>
