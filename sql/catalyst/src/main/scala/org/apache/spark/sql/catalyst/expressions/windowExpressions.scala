@@ -375,12 +375,7 @@ trait OffsetWindowFunction extends WindowFunction {
  * will get the value of x 2 rows back from the current row in the partition.
  */
 sealed abstract class FrameLessOffsetWindowFunction
-  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes
-  with TernaryLike[Expression] {
-
-  override def first: Expression = input
-  override def second: Expression = offset
-  override def third: Expression = default
+  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes {
 
   /*
    * The result of an OffsetWindowFunction is dependent on the frame in which the
@@ -451,7 +446,7 @@ sealed abstract class FrameLessOffsetWindowFunction
 // scalastyle:on line.size.limit line.contains.tab
 case class Lead(
     input: Expression, offset: Expression, default: Expression, ignoreNulls: Boolean)
-    extends FrameLessOffsetWindowFunction {
+    extends FrameLessOffsetWindowFunction with TernaryLike[Expression] {
 
   def this(input: Expression, offset: Expression, default: Expression) =
     this(input, offset, default, false)
@@ -461,6 +456,10 @@ case class Lead(
   def this(input: Expression) = this(input, Literal(1))
 
   def this() = this(Literal(null))
+
+  override def first: Expression = input
+  override def second: Expression = offset
+  override def third: Expression = default
 }
 
 /**
@@ -497,7 +496,7 @@ case class Lead(
 // scalastyle:on line.size.limit line.contains.tab
 case class Lag(
     input: Expression, inputOffset: Expression, default: Expression, ignoreNulls: Boolean)
-    extends FrameLessOffsetWindowFunction {
+    extends FrameLessOffsetWindowFunction with TernaryLike[Expression] {
 
   def this(input: Expression, inputOffset: Expression, default: Expression) =
     this(input, inputOffset, default, false)
@@ -512,6 +511,10 @@ case class Lag(
     case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
     case o => o
   }
+
+  override def first: Expression = input
+  override def second: Expression = inputOffset
+  override def third: Expression = default
 }
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {
