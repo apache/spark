@@ -207,7 +207,7 @@ Arguments: [rank(_w2#23) windowspecdefinition(s_state#15, _w2#23 DESC NULLS LAST
 
 (32) Filter [codegen id : 7]
 Input [4]: [s_state#22, s_state#15, _w2#23, ranking#25]
-Condition : (isnotnull(ranking#25) AND (ranking#25 <= 5))
+Condition : (ranking#25 <= 5)
 
 (33) Project [codegen id : 7]
 Output [1]: [s_state#22]
