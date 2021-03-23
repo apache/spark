@@ -1889,13 +1889,27 @@ class Analyzer(override val catalogManager: CatalogManager)
   private def resolveExpression(
       expr: Expression,
       resolveColumnByName: Seq[String] => Option[Expression],
-      resolveColumnByOrdinal: Int => Attribute,
+      getAttrCandidates: () => Seq[Attribute],
       throws: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
       if (e.resolved) return e
       e match {
         case f: LambdaFunction if !f.bound => f
-        case GetColumnByOrdinal(ordinal, _) => resolveColumnByOrdinal(ordinal)
+
+        case GetColumnByOrdinal(ordinal, _) =>
+          val attrCandidates = getAttrCandidates()
+          assert(ordinal >= 0 && ordinal < attrCandidates.length)
+          attrCandidates(ordinal)
+
+        case GetViewColumnByNameAndOrdinal(viewName, colName, ordinal, expectedNumCandidates) =>
+          val attrCandidates = getAttrCandidates()
+          val matched = attrCandidates.filter(a => resolver(a.name, colName))
+          if (matched.length != expectedNumCandidates) {
+            throw QueryCompilationErrors.incompatibleViewSchemaChange(
+              viewName, colName, expectedNumCandidates, matched)
+          }
+          matched(ordinal)
+
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
             resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
@@ -1909,6 +1923,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
           logDebug(s"Resolving $u to $result")
           result
+
         case u @ UnresolvedExtractValue(child, fieldName) =>
           val newChild = innerResolve(child, isTopLevel = false)
           if (newChild.resolved) {
@@ -1916,6 +1931,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           } else {
             u.copy(child = newChild)
           }
+
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
     }
@@ -1948,10 +1964,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveColumnByName = nameParts => {
         plan.resolve(nameParts, resolver)
       },
-      resolveColumnByOrdinal = ordinal => {
-        assert(ordinal >= 0 && ordinal < plan.output.length)
-        plan.output(ordinal)
-      },
+      getAttrCandidates = () => plan.output,
       throws = throws)
   }
 
@@ -1971,10 +1984,9 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, resolver)
       },
-      resolveColumnByOrdinal = ordinal => {
+      getAttrCandidates = () => {
         assert(q.children.length == 1)
-        assert(ordinal >= 0 && ordinal < q.children.head.output.length)
-        q.children.head.output(ordinal)
+        q.children.head.output
       },
       throws = true)
   }

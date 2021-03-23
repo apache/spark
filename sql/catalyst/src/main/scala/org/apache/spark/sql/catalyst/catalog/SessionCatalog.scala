@@ -847,9 +847,29 @@ class SessionCatalog(
     // the extra columns that we don't require), with UpCast (to make sure the type change is
     // safe) and Alias (to respect user-specified view column names) according to the view schema
     // in the catalog.
+    // Note that, the column names may have duplication, e.g. `CREATE VIEW v(x, y) AS
+    // SELECT 1 col, 2 col`. We need to make sure that the matching attributes have the same
+    // number of duplications, and pick the corresponding attribute by ordinal.
+    val viewConf = View.effectiveSQLConf(metadata.viewSQLConfigs, isTempView)
+    val normalizeColName: String => String = if (viewConf.caseSensitiveAnalysis) {
+      identity
+    } else {
+      _.toLowerCase(Locale.ROOT)
+    }
+    val nameToCounts = viewColumnNames.groupBy(normalizeColName).mapValues(_.length)
+    val nameToCurrentOrdinal = scala.collection.mutable.HashMap.empty[String, Int]
+
     val projectList = viewColumnNames.zip(metadata.schema).map { case (name, field) =>
-      Alias(UpCast(UnresolvedAttribute.quoted(name), field.dataType), field.name)(
-        explicitMetadata = Some(field.metadata))
+      val normalizedName = normalizeColName(name)
+      val count = nameToCounts(normalizedName)
+      val col = if (count > 1) {
+        val ordinal = nameToCurrentOrdinal.getOrElse(normalizedName, 0)
+        nameToCurrentOrdinal(normalizedName) = ordinal + 1
+        GetViewColumnByNameAndOrdinal(metadata.identifier.toString, name, ordinal, count)
+      } else {
+        UnresolvedAttribute.quoted(name)
+      }
+      Alias(UpCast(col, field.dataType), field.name)(explicitMetadata = Some(field.metadata))
     }
     View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
   }
