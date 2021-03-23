@@ -293,5 +293,5 @@ case class MultiplyYMInterval(
         ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
   }
 
-  override def prettyName: String = "multiply_ym_interval"
+  override def toString: String = s"($left * $right)"
 }
