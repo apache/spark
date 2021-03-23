@@ -461,7 +461,7 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (_, buildRowArrayTerm) = prepareBroadcast(ctx)
+    val (buildRowArray, buildRowArrayTerm) = prepareBroadcast(ctx)
     val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
     val buildVars = genBuildSideVars(ctx, buildRow, broadcast)
 
@@ -474,25 +474,33 @@ case class BroadcastNestedLoopJoinExec(
     val foundMatch = ctx.freshName("foundMatch")
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    s"""
-       |boolean $foundMatch = false;
-       |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
-       |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
-       |  boolean $shouldOutputRow = false;
-       |  $checkCondition {
-       |    $shouldOutputRow = true;
-       |    $foundMatch = true;
-       |  }
-       |  if ($arrayIndex == $buildRowArrayTerm.length - 1 && !$foundMatch) {
-       |    $buildRow = null;
-       |    $shouldOutputRow = true;
-       |  }
-       |  if ($shouldOutputRow) {
-       |    $numOutput.add(1);
-       |    ${consume(ctx, resultVars)}
-       |  }
-       |}
-     """.stripMargin
+    if (buildRowArray.isEmpty) {
+      s"""
+         |UnsafeRow $buildRow = null;
+         |$numOutput.add(1);
+         |${consume(ctx, resultVars)}
+       """.stripMargin
+    } else {
+      s"""
+         |boolean $foundMatch = false;
+         |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
+         |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
+         |  boolean $shouldOutputRow = false;
+         |  $checkCondition {
+         |    $shouldOutputRow = true;
+         |    $foundMatch = true;
+         |  }
+         |  if ($arrayIndex == $buildRowArrayTerm.length - 1 && !$foundMatch) {
+         |    $buildRow = null;
+         |    $shouldOutputRow = true;
+         |  }
+         |  if ($shouldOutputRow) {
+         |    $numOutput.add(1);
+         |    ${consume(ctx, resultVars)}
+         |  }
+         |}
+       """.stripMargin
+    }
   }
 
   private def codegenLeftExistence(

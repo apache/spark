@@ -215,6 +215,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val df1 = spark.range(4).select($"id".as("k1"))
     val df2 = spark.range(3).select($"id".as("k2"))
     val df3 = spark.range(2).select($"id".as("k3"))
+    val df4 = spark.range(0).select($"id".as("k4"))
 
     Seq(true, false).foreach { codegenEnabled =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
@@ -240,11 +241,19 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           .join(df3, $"k1" <= $"k3", "left_outer")
         hasJoinInCodegen = twoJoinsDF.queryExecution.executedPlan.collect {
           case WholeStageCodegenExec(BroadcastNestedLoopJoinExec(
-          _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
+            _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
         }.size === 1
         assert(hasJoinInCodegen == codegenEnabled)
         checkAnswer(twoJoinsDF,
           Seq(Row(2, 0, null), Row(3, 0, null), Row(3, 1, null), Row(null, 2, null)))
+
+        // test build side is empty
+        val buildSideIsEmptyDF = df3.join(df4, $"k3" > $"k4", "left_outer")
+        hasJoinInCodegen = buildSideIsEmptyDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: BroadcastNestedLoopJoinExec) => true
+        }.size === 1
+        assert(hasJoinInCodegen == codegenEnabled)
+        checkAnswer(buildSideIsEmptyDF, Seq(Row(0, null), Row(1, null)))
       }
     }
   }
