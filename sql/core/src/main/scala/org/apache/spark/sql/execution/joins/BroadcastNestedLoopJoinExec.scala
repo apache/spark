@@ -395,8 +395,9 @@ case class BroadcastNestedLoopJoinExec(
     }
   }
 
-  override def supportCodegen: Boolean = {
-    joinType.isInstanceOf[InnerLike]
+  override def supportCodegen: Boolean = (joinType, buildSide) match {
+    case (_: InnerLike, _) | (LeftSemi | LeftAnti, BuildRight) => true
+    case _ => false
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -410,29 +411,33 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    joinType match {
-      case _: InnerLike => codegenInner(ctx, input)
+    (joinType, buildSide) match {
+      case (_: InnerLike, _) => codegenInner(ctx, input)
+      case (LeftSemi, BuildRight) => codegenLeftExistence(ctx, input, exists = true)
+      case (LeftAnti, BuildRight) => codegenLeftExistence(ctx, input, exists = false)
       case _ =>
         throw new IllegalArgumentException(
-          s"BroadcastNestedLoopJoin code-gen should not take $joinType as the JoinType")
+          s"BroadcastNestedLoopJoin code-gen should not take neither $joinType as the JoinType " +
+          s"nor $buildSide as the BuildSide")
     }
   }
 
   /**
-   * Returns the variable name for [[Broadcast]] side.
+   * Returns a tuple of [[Broadcast]] side and the variable name for it.
    */
-  private def prepareBroadcast(ctx: CodegenContext): String = {
+  private def prepareBroadcast(ctx: CodegenContext): (Array[InternalRow], String) = {
     // Create a name for broadcast side
     val broadcastArray = broadcast.executeBroadcast[Array[InternalRow]]()
     val broadcastTerm = ctx.addReferenceObj("broadcastTerm", broadcastArray)
 
     // Inline mutable state since not many join operations in a task
-    ctx.addMutableState("InternalRow[]", "buildRowArray",
+    val arrayTerm = ctx.addMutableState("InternalRow[]", "buildRowArray",
       v => s"$v = (InternalRow[]) $broadcastTerm.value();", forceInline = true)
+    (broadcastArray.value, arrayTerm)
   }
 
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val buildRowArrayTerm = prepareBroadcast(ctx)
+    val (_, buildRowArrayTerm) = prepareBroadcast(ctx)
     val (buildRow, checkCondition, buildVars) = getJoinCondition(ctx, input, streamed, broadcast)
 
     val resultVars = buildSide match {
@@ -451,5 +456,51 @@ case class BroadcastNestedLoopJoinExec(
        |  }
        |}
      """.stripMargin
+  }
+
+  private def codegenLeftExistence(
+      ctx: CodegenContext,
+      input: Seq[ExprCode],
+      exists: Boolean): String = {
+    val (buildRowArray, buildRowArrayTerm) = prepareBroadcast(ctx)
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
+    if (condition.isEmpty) {
+      if (buildRowArray.nonEmpty == exists) {
+        // Return streamed side if join condition is empty and
+        // 1. build side is non-empty for LeftSemi join
+        // or
+        // 2. build side is empty for LeftAnti join.
+        s"""
+           |$numOutput.add(1);
+           |${consume(ctx, input)}
+         """.stripMargin
+      } else {
+        // Return nothing if join condition is empty and
+        // 1. build side is empty for LeftSemi join
+        // or
+        // 2. build side is non-empty for LeftAnti join.
+        ""
+      }
+    } else {
+      val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
+      val foundMatch = ctx.freshName("foundMatch")
+      val arrayIndex = ctx.freshName("arrayIndex")
+
+      s"""
+         |boolean $foundMatch = false;
+         |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
+         |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
+         |  $checkCondition {
+         |    $foundMatch = true;
+         |    break;
+         |  }
+         |}
+         |if ($foundMatch == $exists) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |}
+     """.stripMargin
+    }
   }
 }
