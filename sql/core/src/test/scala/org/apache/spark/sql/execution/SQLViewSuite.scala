@@ -47,24 +47,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("terry") {
-    withTable("view_base_table") {
-      withView("key_dependent_view") {
-        sql("CREATE TABLE view_base_table (key int, data varchar(20)) USING PARQUET")
-        sql("CREATE VIEW key_dependent_view AS SELECT * FROM view_base_table GROUP BY key")
-      }
-    }
-  }
-
-  test("terry2") {
-    withTempView("tv") {
-      Seq(1).toDF.createTempView("tv")
-      withView("v1_temp") {
-        sql("CREATE VIEW v1_temp AS SELECT * FROM tv")
-      }
-    }
-  }
-
   test("create a permanent view on a permanent view") {
     withView("jtv1", "jtv2") {
       sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")

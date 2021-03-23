@@ -39,12 +39,6 @@ class DataFrameJoinSuite extends QueryTest
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
-  test("terry") {
-    val df = Seq(1).toDF("`x.y`")
-    df.select("`x.y`").show
-    df.resolve("``x.y``")
-  }
-
   test("join - join using") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
     val df2 = Seq(1, 2, 3).map(i => (i, (i + 1).toString)).toDF("int", "str")
