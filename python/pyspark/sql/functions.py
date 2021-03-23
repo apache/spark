@@ -2350,7 +2350,7 @@ def session_window(timeColumn, gapDuration):
     Examples
     --------
     >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
-    >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
+    >>> w = df.groupBy(session_window("date", "5 seconds")).agg(sum("val").alias("sum"))
     >>> w.select(w.window.start.cast("string").alias("start"),
     ...          w.window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
