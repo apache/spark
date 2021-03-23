@@ -138,31 +138,21 @@ class StreamingQueryProgress private[sql](
   override def toString: String = prettyJson
 
   private[sql] def jsonValue: JValue = {
-    def safeDoubleToJValue(value: Double): JValue = {
-      if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
-    }
-
-    /** Convert map to JValue while handling empty maps. Also, this sorts the keys. */
-    def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
-      if (map.isEmpty) return JNothing
-      val keys = map.asScala.keySet.toSeq.sorted
-      keys.map { k => k -> valueToJValue(map.get(k)) : JObject }.reduce(_ ~ _)
-    }
-
     ("id" -> JString(id.toString)) ~
     ("runId" -> JString(runId.toString)) ~
     ("name" -> JString(name)) ~
     ("timestamp" -> JString(timestamp)) ~
     ("batchId" -> JInt(batchId)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
-    ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
-    ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
-    ("durationMs" -> safeMapToJValue[JLong](durationMs, v => JInt(v.toLong))) ~
-    ("eventTime" -> safeMapToJValue[String](eventTime, s => JString(s))) ~
+    ("inputRowsPerSecond" -> SafeJsonSerializer.safeDoubleToJValue(inputRowsPerSecond)) ~
+    ("processedRowsPerSecond" -> SafeJsonSerializer.safeDoubleToJValue(processedRowsPerSecond)) ~
+    ("durationMs" -> SafeJsonSerializer.safeMapToJValue[JLong](durationMs, v => JInt(v.toLong))) ~
+    ("eventTime" -> SafeJsonSerializer.safeMapToJValue[String](eventTime, s => JString(s))) ~
     ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
     ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
     ("sink" -> sink.jsonValue) ~
-    ("observedMetrics" -> safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
+    ("observedMetrics" ->
+      SafeJsonSerializer.safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
   }
 }
 
@@ -188,7 +178,8 @@ class SourceProgress protected[sql](
   val latestOffset: String,
   val numInputRows: Long,
   val inputRowsPerSecond: Double,
-  val processedRowsPerSecond: Double) extends Serializable {
+  val processedRowsPerSecond: Double,
+  val metrics: ju.Map[String, String] = Map[String, String]().asJava) extends Serializable {
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -199,17 +190,14 @@ class SourceProgress protected[sql](
   override def toString: String = prettyJson
 
   private[sql] def jsonValue: JValue = {
-    def safeDoubleToJValue(value: Double): JValue = {
-      if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
-    }
-
     ("description" -> JString(description)) ~
-      ("startOffset" -> tryParse(startOffset)) ~
-      ("endOffset" -> tryParse(endOffset)) ~
-      ("latestOffset" -> tryParse(latestOffset)) ~
-      ("numInputRows" -> JInt(numInputRows)) ~
-      ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
-      ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond))
+    ("startOffset" -> tryParse(startOffset)) ~
+    ("endOffset" -> tryParse(endOffset)) ~
+    ("latestOffset" -> tryParse(latestOffset)) ~
+    ("numInputRows" -> JInt(numInputRows)) ~
+    ("inputRowsPerSecond" -> SafeJsonSerializer.safeDoubleToJValue(inputRowsPerSecond)) ~
+    ("processedRowsPerSecond" -> SafeJsonSerializer.safeDoubleToJValue(processedRowsPerSecond)) ~
+    ("metrics" -> SafeJsonSerializer.safeMapToJValue[String](metrics, s => JString(s)))
   }
 
   private def tryParse(json: String) = try {
@@ -257,4 +245,17 @@ private[sql] object SinkProgress {
 
   def apply(description: String, numOutputRows: Option[Long]): SinkProgress =
     new SinkProgress(description, numOutputRows.getOrElse(DEFAULT_NUM_OUTPUT_ROWS))
+}
+
+private object SafeJsonSerializer {
+  def safeDoubleToJValue(value: Double): JValue = {
+    if (value.isNaN || value.isInfinity) JNothing else JDouble(value)
+  }
+
+  /** Convert map to JValue while handling empty maps. Also, this sorts the keys. */
+  def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
+    if (map.isEmpty) return JNothing
+    val keys = map.asScala.keySet.toSeq.sorted
+    keys.map { k => k -> valueToJValue(map.get(k)) : JObject }.reduce(_ ~ _)
+  }
 }

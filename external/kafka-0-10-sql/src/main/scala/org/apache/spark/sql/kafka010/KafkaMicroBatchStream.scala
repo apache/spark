@@ -18,13 +18,16 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.Optional
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadAllAvailable, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadAllAvailable, ReadLimit, ReadMaxRows, ReportsSourceMetrics, SupportsAdmissionControl}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.UninterruptibleThread
@@ -51,7 +54,8 @@ private[kafka010] class KafkaMicroBatchStream(
     options: CaseInsensitiveStringMap,
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
-    failOnDataLoss: Boolean) extends SupportsAdmissionControl with MicroBatchStream with Logging {
+    failOnDataLoss: Boolean)
+  extends SupportsAdmissionControl with ReportsSourceMetrics with MicroBatchStream with Logging {
 
   private[kafka010] val pollTimeoutMs = options.getLong(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
@@ -132,6 +136,10 @@ private[kafka010] class KafkaMicroBatchStream(
   }
 
   override def toString(): String = s"KafkaV2[$kafkaOffsetReader]"
+
+  override def metrics(latestOffset: Optional[Offset]): ju.Map[String, String] = {
+    KafkaMicroBatchStream.metrics(latestOffset, latestPartitionOffsets)
+  }
 
   /**
    * Read initial partition offsets from the checkpoint, or decide the offsets and write them to
@@ -216,5 +224,38 @@ private[kafka010] class KafkaMicroBatchStream(
     } else {
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
+  }
+}
+
+object KafkaMicroBatchStream extends Logging {
+
+  /**
+   * Compute the difference of offset per partition between latestAvailablePartitionOffsets
+   * and latestConsumedPartitionOffsets.
+   * Because of rate limit, latest consumed offset per partition can be smaller than
+   * the latest available offset per partition.
+   * @param latestConsumedOffset latest consumed offset
+   * @param latestAvailablePartitionOffsets latest available offset per partition
+   * @return the generated metrics map
+   */
+  def metrics(latestConsumedOffset: Optional[Offset],
+              latestAvailablePartitionOffsets: PartitionOffsetMap): ju.Map[String, String] = {
+    val offset = Option(latestConsumedOffset.orElse(null))
+
+    if (offset.nonEmpty) {
+      val consumedPartitionOffsets = offset.map(KafkaSourceOffset(_)).get.partitionToOffsets
+      val offsetsBehindLatest = latestAvailablePartitionOffsets
+        .filter(partitionOffset => consumedPartitionOffsets.contains(partitionOffset._1))
+        .map(partitionOffset =>
+          partitionOffset._2 - consumedPartitionOffsets.get(partitionOffset._1).get)
+      if (offsetsBehindLatest.size > 0) {
+        val avgOffsetBehindLatest = offsetsBehindLatest.sum.toDouble / offsetsBehindLatest.size
+        return Map[String, String](
+          "minOffsetsBehindLatest" -> offsetsBehindLatest.min.toString,
+          "maxOffsetsBehindLatest" -> offsetsBehindLatest.max.toString,
+          "avgOffsetsBehindLatest" -> avgOffsetBehindLatest.toString).asJava
+      }
+    }
+    Map[String, String]().asJava
   }
 }

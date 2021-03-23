@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.Locale
+import java.util.{Locale, Optional}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -1296,6 +1296,130 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       makeSureGetOffsetCalled,
       CheckNewAnswer(32, 33, 34, 35, 36)
     )
+  }
+
+
+  test("test custom metrics - with rate limit") {
+    import testImplicits._
+
+    val topic = newTopic()
+    val data = 1 to 10
+    testUtils.createTopic(topic, partitions = 2)
+    testUtils.sendMessages(topic, (1 to 5).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (6 to 10).map(_.toString).toArray, Some(1))
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("maxOffsetsPerTrigger", 1)
+      .option(STARTING_OFFSETS_OPTION_KEY, "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(kafka)(
+      StartStream(),
+      makeSureGetOffsetCalled,
+      CheckAnswer(data: _*),
+      Execute { query => {
+        // The rate limit is 1, so there must be some delay in offsets per partition.
+        val progressWithDelay = query.recentProgress.map(_.sources.head).reverse.find {
+          progress =>
+            !progress.metrics.isEmpty && {
+              // find the metrics that has non-zero average offsetsBehindLatest greater than 0.
+              progress.metrics.get("avgOffsetsBehindLatest").toDouble > 0
+            }
+        }
+        assert(progressWithDelay.nonEmpty)
+        val metrics = progressWithDelay.get.metrics
+        assert(metrics.keySet() ==
+          Set("minOffsetsBehindLatest",
+            "maxOffsetsBehindLatest",
+            "avgOffsetsBehindLatest").asJava)
+        assert(metrics.get("minOffsetsBehindLatest").toLong > 0)
+        assert(metrics.get("maxOffsetsBehindLatest").toLong > 0)
+        assert(metrics.get("avgOffsetsBehindLatest").toDouble > 0)
+      }}
+    )
+  }
+
+  test("test custom metrics - no rate limit") {
+    import testImplicits._
+
+    val topic = newTopic()
+    val data = 1 to 10
+    testUtils.createTopic(topic, partitions = 2)
+    testUtils.sendMessages(topic, (1 to 5).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (6 to 10).map(_.toString).toArray, Some(1))
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option(STARTING_OFFSETS_OPTION_KEY, "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(kafka)(
+      StartStream(),
+      makeSureGetOffsetCalled,
+      CheckAnswer(data: _*),
+      Execute { query => {
+        val progress = query.recentProgress.map(_.sources.head).lastOption
+        assert(progress.nonEmpty)
+        val metrics = progress.get.metrics
+        // When there is no rate limit, there shouldn't be any delay in the current stream.
+        assert(metrics.keySet() ==
+          Set("minOffsetsBehindLatest",
+            "maxOffsetsBehindLatest",
+            "avgOffsetsBehindLatest").asJava)
+        assert(metrics.get("minOffsetsBehindLatest").toLong == 0)
+        assert(metrics.get("maxOffsetsBehindLatest").toLong == 0)
+        assert(metrics.get("avgOffsetsBehindLatest").toDouble == 0)
+      }}
+    )
+  }
+
+  test("test custom metrics - corner cases") {
+    val topic1 = new TopicPartition(newTopic(), 0)
+    val topic2 = new TopicPartition(newTopic(), 0)
+    val latestOffset = Map[TopicPartition, Long]((topic1, 3L), (topic2, 6L))
+
+    // test empty offset.
+    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(null), latestOffset) ==
+      Map[String, String]().asJava)
+
+    // test empty offsetsBehindLatest && topics are missing in the latestConsumedOffset.
+    val emptyOffset = KafkaSourceOffset(Map[TopicPartition, Long]())
+    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(emptyOffset), latestOffset) ==
+      Map[String, String]().asJava)
+
+    // test valid offsetsBehindLatest
+    val offset = KafkaSourceOffset(Map[TopicPartition, Long]((topic1, 1L), (topic2, 2L)))
+    assert(
+      KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), latestOffset) ==
+        Map[String, String](
+          "minOffsetsBehindLatest" -> "2",
+          "maxOffsetsBehindLatest" -> "4",
+          "avgOffsetsBehindLatest" -> "3.0").asJava)
+
+    // test a topic is missing in both the latestConsumedOffset and latestAvailableOffset.
+    val topic3 = new TopicPartition(newTopic(), 0)
+    val offset2 =
+      KafkaSourceOffset(Map[TopicPartition, Long]((topic1, 1L), (topic3, 2L)))
+    val latestAvailableOffsets = Map[TopicPartition, Long]((topic2, 3L), (topic3, 6L))
+    assert(
+      KafkaMicroBatchStream.metrics(Optional.ofNullable(offset2), latestAvailableOffsets) ==
+        Map[String, String](
+          "minOffsetsBehindLatest" -> "4",
+          "maxOffsetsBehindLatest" -> "4",
+          "avgOffsetsBehindLatest" -> "4.0").asJava)
   }
 }
 
