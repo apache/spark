@@ -148,7 +148,7 @@
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
     <codahale.metrics.version>4.1.1</codahale.metrics.version>
-    <avro.version>1.10.1</avro.version>
+    <avro.version>1.10.2</avro.version>
     <aws.kinesis.client.version>1.14.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.844</aws.java.sdk.version>
@@ -169,7 +169,7 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.11.4</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.12.2</fasterxml.jackson.version>
     <snappy.version>1.1.8.2</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.15</commons-codec.version>
@@ -1029,7 +1029,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.2.6</version>
+        <version>42.2.19</version>
         <scope>test</scope>
       </dependency>
       <dependency>

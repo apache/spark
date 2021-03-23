@@ -48,5 +48,7 @@ class NamedExpressionSuite extends SparkFunSuite {
     assert(attr11.sql === "`c``d`.`a.b` AS `g.h`.`e.f`")
     val attr12 = Alias(attr8, "e`f")(qualifier = "g.h"::Nil)
     assert(attr12.sql === "`c``d`.`a.b` AS `g.h`.`e``f`")
+    val attr13 = UnresolvedAttribute("`a.b`")
+    assert(attr13.sql === "`a.b`")
   }
 }

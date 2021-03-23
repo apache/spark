@@ -101,7 +101,7 @@ class SessionCatalog(
 
   /** List of temporary views, mapping from table name to their logical plan. */
   @GuardedBy("this")
-  protected val tempViews = new mutable.HashMap[String, LogicalPlan]
+  protected val tempViews = new mutable.HashMap[String, TemporaryViewRelation]
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
@@ -460,8 +460,8 @@ class SessionCatalog(
    * Return whether a table/view with the specified name exists. If no database is specified, check
    * with current database.
    */
-  def tableExists(name: TableIdentifier): Boolean = synchronized {
-    val db = formatDatabaseName(name.database.getOrElse(currentDb))
+  def tableExists(name: TableIdentifier): Boolean = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     externalCatalog.tableExists(db, table)
   }
@@ -573,13 +573,13 @@ class SessionCatalog(
    */
   def createTempView(
       name: String,
-      tableDefinition: LogicalPlan,
+      viewDefinition: TemporaryViewRelation,
       overrideIfExists: Boolean): Unit = synchronized {
     val table = formatTableName(name)
     if (tempViews.contains(table) && !overrideIfExists) {
       throw new TempTableAlreadyExistsException(name)
     }
-    tempViews.put(table, tableDefinition)
+    tempViews.put(table, viewDefinition)
   }
 
   /**
@@ -587,7 +587,7 @@ class SessionCatalog(
    */
   def createGlobalTempView(
       name: String,
-      viewDefinition: LogicalPlan,
+      viewDefinition: TemporaryViewRelation,
       overrideIfExists: Boolean): Unit = {
     globalTempViewManager.create(formatTableName(name), viewDefinition, overrideIfExists)
   }
@@ -598,7 +598,7 @@ class SessionCatalog(
    */
   def alterTempViewDefinition(
       name: TableIdentifier,
-      viewDefinition: LogicalPlan): Boolean = synchronized {
+      viewDefinition: TemporaryViewRelation): Boolean = synchronized {
     val viewName = formatTableName(name.table)
     if (name.database.isEmpty) {
       if (tempViews.contains(viewName)) {
@@ -617,14 +617,14 @@ class SessionCatalog(
   /**
    * Return a local temporary view exactly as it was stored.
    */
-  def getRawTempView(name: String): Option[LogicalPlan] = synchronized {
+  def getRawTempView(name: String): Option[TemporaryViewRelation] = synchronized {
     tempViews.get(formatTableName(name))
   }
 
   /**
    * Generate a [[View]] operator from the temporary view stored.
    */
-  def getTempView(name: String): Option[LogicalPlan] = synchronized {
+  def getTempView(name: String): Option[View] = synchronized {
     getRawTempView(name).map(getTempViewPlan)
   }
 
@@ -635,14 +635,14 @@ class SessionCatalog(
   /**
    * Return a global temporary view exactly as it was stored.
    */
-  def getRawGlobalTempView(name: String): Option[LogicalPlan] = {
+  def getRawGlobalTempView(name: String): Option[TemporaryViewRelation] = {
     globalTempViewManager.get(formatTableName(name))
   }
 
   /**
    * Generate a [[View]] operator from the global temporary view stored.
    */
-  def getGlobalTempView(name: String): Option[LogicalPlan] = {
+  def getGlobalTempView(name: String): Option[View] = {
     getRawGlobalTempView(name).map(getTempViewPlan)
   }
 
@@ -680,25 +680,10 @@ class SessionCatalog(
   def getTempViewOrPermanentTableMetadata(name: TableIdentifier): CatalogTable = synchronized {
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
-      tempViews.get(table).map {
-        case TemporaryViewRelation(metadata, _) => metadata
-        case plan =>
-          CatalogTable(
-            identifier = TableIdentifier(table),
-            tableType = CatalogTableType.VIEW,
-            storage = CatalogStorageFormat.empty,
-            schema = plan.output.toStructType)
-      }.getOrElse(getTableMetadata(name))
+      tempViews.get(table).map(_.tableMeta).getOrElse(getTableMetadata(name))
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
-      globalTempViewManager.get(table).map {
-        case TemporaryViewRelation(metadata, _) => metadata
-        case plan =>
-          CatalogTable(
-            identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
-            tableType = CatalogTableType.VIEW,
-            storage = CatalogStorageFormat.empty,
-            schema = plan.output.toStructType)
-      }.getOrElse(throw new NoSuchTableException(globalTempViewManager.database, table))
+      globalTempViewManager.get(table).map(_.tableMeta)
+        .getOrElse(throw new NoSuchTableException(globalTempViewManager.database, table))
     } else {
       getTableMetadata(name)
     }
@@ -834,21 +819,9 @@ class SessionCatalog(
     }
   }
 
-  private def getTempViewPlan(plan: LogicalPlan): LogicalPlan = {
-    plan match {
-      case TemporaryViewRelation(tableMeta, None) =>
-        fromCatalogTable(tableMeta, isTempView = true)
-      case TemporaryViewRelation(tableMeta, Some(plan)) =>
-        View(desc = tableMeta, isTempView = true, child = plan)
-      case other => other
-    }
-  }
-
-  def getTempViewSchema(plan: LogicalPlan): StructType = {
-    plan match {
-      case viewInfo: TemporaryViewRelation => viewInfo.tableMeta.schema
-      case v => v.schema
-    }
+  private def getTempViewPlan(viewInfo: TemporaryViewRelation): View = viewInfo.plan match {
+    case Some(p) => View(desc = viewInfo.tableMeta, isTempView = true, child = p)
+    case None => fromCatalogTable(viewInfo.tableMeta, isTempView = true)
   }
 
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
@@ -909,7 +882,7 @@ class SessionCatalog(
     isTempView(nameParts.asTableIdentifier)
   }
 
-  def lookupTempView(name: TableIdentifier): Option[LogicalPlan] = {
+  def lookupTempView(name: TableIdentifier): Option[View] = {
     val tableName = formatTableName(name.table)
     if (name.database.isEmpty) {
       tempViews.get(tableName).map(getTempViewPlan)
