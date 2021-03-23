@@ -791,8 +791,9 @@ Spark application.
 The shuffle service will, by default, take all of its configurations from the Hadoop Configuration
 used by the NodeManager (e.g. `yarn-site.xml`). However, it is also possible to configure the
 shuffle service independently using a file named `spark-shuffle-site.xml` which should be placed
-onto the classpath of the NodeManager. The shuffle service will treat this as a standard Hadoop
-Configuration resource and overlay it on top of the NodeManager's configuration.
+onto the classpath of the shuffle service (which is, by default, shared with the classpath of the
+NodeManager). The shuffle service will treat this as a standard Hadoop Configuration resource and
+overlay it on top of the NodeManager's configuration.
 
 # Launching your application with Apache Oozie
 
@@ -865,7 +866,7 @@ above. For example, you may have configuration like:
 ```
 
 The two `spark-*-config` directories each contain one file, `spark-shuffle-site.xml`. These are XML
-files in the [Hadoop Configuration format](https://hadoop.apache.org/docs/r3.2.0/api/org/apache/hadoop/conf/Configuration.html)
+files in the [Hadoop Configuration format](https://hadoop.apache.org/docs/r3.2.2/api/org/apache/hadoop/conf/Configuration.html)
 which each contain a few configurations to adjust the port number and metrics name prefix used:
 ```xml
 <configuration>

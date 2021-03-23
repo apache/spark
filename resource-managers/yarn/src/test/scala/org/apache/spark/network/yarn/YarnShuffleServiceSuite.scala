@@ -56,6 +56,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    // Ensure that each test uses a fresh metrics system
+    DefaultMetricsSystem.shutdown()
+    DefaultMetricsSystem.setInstance(new MetricsSystemImpl())
     yarnConfig = new YarnConfiguration()
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
@@ -418,9 +421,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     yarnConfig.set(YarnShuffleService.SPARK_SHUFFLE_SERVICE_METRICS_NAMESPACE_KEY, "fooMetrics")
     s1.init(yarnConfig)
 
-    val metricsSystem = DefaultMetricsSystem.instance.asInstanceOf[MetricsSystemImpl]
-    assert(metricsSystem.getSource("sparkShuffleService") === null)
-    assert(metricsSystem.getSource("fooMetrics").isInstanceOf[YarnShuffleServiceMetrics])
+    assert(DefaultMetricsSystem.instance.getSource("sparkShuffleService") === null)
+    assert(DefaultMetricsSystem.instance.getSource("fooMetrics")
+        .isInstanceOf[YarnShuffleServiceMetrics])
   }
 
   test("create default merged shuffle file manager instance") {

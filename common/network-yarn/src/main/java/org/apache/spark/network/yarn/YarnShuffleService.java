@@ -164,6 +164,13 @@ public class YarnShuffleService extends AuxiliaryService {
   private DB db;
 
   public YarnShuffleService() {
+    // The name of the auxiliary service configured within the NodeManager
+    // (`yarn.nodemanager.aux-services`) is treated as the source-of-truth, so this one can be
+    // arbitrary. The NodeManager will log a warning if the configured name doesn't match this name,
+    // to inform operators of a potential misconfiguration, but this name is otherwise not used.
+    // It is hard-coded instead of using the value of the `spark.shuffle.service.name` configuration
+    // because at this point in instantiation there is no Configuration object; it is not passed
+    // until `serviceInit` is called, at which point it's too late to adjust the name.
     super("spark_shuffle");
     logger.info("Initializing YARN shuffle service for Spark");
     instance = this;

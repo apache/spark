@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.net.URLClassLoader
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.Files
@@ -108,59 +107,6 @@ class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
     )
   }
 
-}
-
-/**
- * SPARK-34828: Integration test for the external shuffle service with an alternate name and
- * configs (by using a configuration overlay)
- */
-@ExtendedYarnTest
-class YarnShuffleAlternateNameConfigSuite extends YarnShuffleIntegrationSuite {
-
-  private[this] val shuffleServiceName = "custom_shuffle_service_name"
-
-  override def newYarnConfig(): YarnConfiguration = {
-    val yarnConfig = super.newYarnConfig()
-    yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, shuffleServiceName)
-    yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format(shuffleServiceName),
-      classOf[YarnShuffleService].getCanonicalName)
-    val overlayConf = new YarnConfiguration()
-    // Enable authentication in the base NodeManager conf but not in the client. This would break
-    // shuffle, unless the shuffle service conf overlay overrides to turn off authentication.
-    overlayConf.setBoolean(NETWORK_AUTH_ENABLED.key, true)
-    // Add the authentication conf to a separate config object used as an overlay rather than
-    // setting it directly. This is necessary because a config overlay will override previous
-    // config overlays, but not configs which were set directly on the config object.
-    yarnConfig.addResource(overlayConf)
-    yarnConfig
-  }
-
-  override protected def extraSparkConf(): Map[String, String] =
-    super.extraSparkConf() ++ Map(SHUFFLE_SERVICE_NAME.key -> shuffleServiceName)
-
-  override def beforeAll(): Unit = {
-    val configFileContent =
-      s"""<?xml version="1.0" encoding="UTF-8"?>
-         |<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
-         |<configuration>
-         |  <property>
-         |    <name>${NETWORK_AUTH_ENABLED.key}</name>
-         |    <value>false</value>
-         |  </property>
-         |</configuration>
-         |""".stripMargin
-    val jarFile = TestUtils.createJarWithFiles(Map(
-      YarnTestAccessor.getShuffleServiceConfOverlayResourceName -> configFileContent
-    ))
-    // Configure a custom classloader which includes the conf overlay as a resource
-    val oldClassLoader = Thread.currentThread().getContextClassLoader
-    Thread.currentThread().setContextClassLoader(new URLClassLoader(Array(jarFile)))
-    try {
-      super.beforeAll()
-    } finally {
-      Thread.currentThread().setContextClassLoader(oldClassLoader)
-    }
-  }
 }
 
 private object YarnExternalShuffleDriver extends Logging with Matchers {
