@@ -101,7 +101,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     }
   }
 
-  private def computeProcessTree(): Set[Int] = {
+  // Exposed for testing
+  private[executor] def computeProcessTree(): Set[Int] = {
     if (!isAvailable || testing) {
       return Set()
     }
@@ -159,7 +160,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     }
   }
 
-  def addProcfsMetricsFromOneProcess(
+  // Exposed for testing
+  private[executor] def addProcfsMetricsFromOneProcess(
       allMetrics: ProcfsMetrics,
       pid: Int): ProcfsMetrics = {
 
@@ -199,6 +201,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       case f: IOException =>
         logWarning("There was a problem with reading" +
           " the stat file of the process. ", f)
+        isAvailable = false
         ProcfsMetrics(0, 0, 0, 0, 0, 0)
     }
   }
