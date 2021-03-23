@@ -79,11 +79,25 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                       InputAdapter
                                         ReusedExchange [ca_address_sk] #4
                                   InputAdapter
-                                    ReusedExchange [i_item_sk,i_manufact_id] #5
+                                    BroadcastExchange #8
+                                      WholeStageCodegen (10)
+                                        BroadcastHashJoin [i_manufact_id,i_manufact_id]
+                                          Filter [i_item_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.item [i_item_sk,i_manufact_id]
+                                          InputAdapter
+                                            BroadcastExchange #9
+                                              WholeStageCodegen (9)
+                                                Project [i_manufact_id]
+                                                  Filter [i_category]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.item [i_category,i_manufact_id]
                   WholeStageCodegen (18)
                     HashAggregate [i_manufact_id,sum] [sum(UnscaledValue(ws_ext_sales_price)),total_sales,sum]
                       InputAdapter
-                        Exchange [i_manufact_id] #8
+                        Exchange [i_manufact_id] #10
                           WholeStageCodegen (17)
                             HashAggregate [i_manufact_id,ws_ext_sales_price] [sum,sum]
                               Project [ws_ext_sales_price,i_manufact_id]
@@ -102,4 +116,4 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                       InputAdapter
                                         ReusedExchange [ca_address_sk] #4
                                   InputAdapter
-                                    ReusedExchange [i_item_sk,i_manufact_id] #5
+                                    ReusedExchange [i_item_sk,i_manufact_id] #8

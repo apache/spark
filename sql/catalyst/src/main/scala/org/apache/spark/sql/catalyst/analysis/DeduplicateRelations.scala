@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeSet, NamedExpression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -79,39 +77,23 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         (m, Seq(m))
       }
 
-    case plan: LogicalPlan =>
+    case _ if plan.children.nonEmpty =>
+      val newChildren = ArrayBuffer.empty[LogicalPlan]
       val relations = ArrayBuffer.empty[MultiInstanceRelation]
-      val newPlan = if (plan.children.nonEmpty) {
-        val newChildren = ArrayBuffer.empty[LogicalPlan]
-        for (c <- plan.children) {
-          val (renewed, collected) = renewDuplicatedRelations(existingRelations ++ relations, c)
-          newChildren += renewed
-          relations ++= collected
-        }
+      for (c <- plan.children) {
+        val (renewed, collected) = renewDuplicatedRelations(existingRelations ++ relations, c)
+        newChildren += renewed
+        relations ++= collected
+      }
 
-        if (plan.childrenResolved) {
-          val attrMap = AttributeMap(
-            plan
-              .children
-              .flatMap(_.output).zip(newChildren.flatMap(_.output))
-              .filter { case (a1, a2) => a1.exprId != a2.exprId }
-          )
-          plan.withNewChildren(newChildren).rewriteAttrs(attrMap)
-        } else {
-          plan.withNewChildren(newChildren)
-        }
+      if (plan.childrenResolved) {
+        val attrMap = AttributeMap(plan.children.flatMap(_.output).zip(
+          newChildren.flatMap(_.output)).filter { case (a1, a2) => a1.exprId != a2.exprId })
+        val newPlan = plan.withNewChildren(newChildren).rewriteAttrs(attrMap)
+        (newPlan, relations)
       } else {
-        plan
+        (plan.withNewChildren(newChildren), relations)
       }
-
-      val planWithNewSubquery = newPlan.transformExpressions {
-        case subquery: PlanExpression[LogicalPlan @unchecked] =>
-          val (renewed, collected) = renewDuplicatedRelations(
-            existingRelations ++ relations, subquery.plan)
-          relations ++= collected
-          subquery.withNewPlan(renewed)
-      }
-      (planWithNewSubquery, relations)
 
     case _ => (plan, Nil)
   }
