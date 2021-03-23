@@ -48,8 +48,8 @@ import org.apache.spark.sql.util.SchemaUtils
  * @param properties the properties of this view.
  * @param originalText the original SQL text of this view, can be None if this view is created via
  *                     Dataset API.
- * @param child the logical plan that represents the view; this is used to generate the logical
- *              plan for temporary view and the view schema.
+ * @param analyzedPlan the logical plan that represents the view; this is used to generate the
+ *                     logical plan for temporary view and the view schema.
  * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
  *                already exists, throws analysis exception.
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
@@ -69,6 +69,8 @@ case class CreateViewCommand(
   extends RunnableCommand {
 
   import ViewHelper._
+
+  override def plansToCheckAnalysis: Seq[LogicalPlan] = Seq(analyzedPlan)
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(analyzedPlan)
 
