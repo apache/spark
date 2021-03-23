@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
-import java.net.{HttpURLConnection, URI, URL}
+import java.net.{HttpURLConnection, InetSocketAddress, URI, URL}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JavaFiles, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
@@ -369,8 +369,9 @@ private[spark] object TestUtils {
     }
   }
 
-  def withHttpServer(resBaseDir: String = ".")(body: URI => Unit): Unit = {
-    val server = new Server(0) // choosing randomly from the available ports
+  def withHttpServer(resBaseDir: String = ".")(body: URL => Unit): Unit = {
+    // 0 as port means choosing randomly from the available ports
+    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName, 0))
     val resHandler = new ResourceHandler()
     resHandler.setResourceBase(resBaseDir)
     val handlers = new HandlerList()
@@ -378,7 +379,7 @@ private[spark] object TestUtils {
     server.setHandler(handlers)
     server.start()
     try {
-      body(server.getURI())
+      body(server.getURI.toURL)
     } finally {
       server.stop()
     }

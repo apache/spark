@@ -103,7 +103,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
     TestUtils.withHttpServer(sys.props("spark.test.home")) { baseURL =>
       sparkAppConf
-        .set("spark.files", baseURL.toString + REMOTE_PAGE_RANK_DATA_FILE)
+        .set("spark.files", baseURL.resolve(REMOTE_PAGE_RANK_DATA_FILE))
       runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
     }
   }
