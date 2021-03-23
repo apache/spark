@@ -1889,7 +1889,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   private def resolveExpression(
       expr: Expression,
       resolveColumnByName: Seq[String] => Option[Expression],
-      resolveByOrdinalCandidates: () => Seq[Attribute],
+      getAttrCandidates: () => Seq[Attribute],
       throws: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
       if (e.resolved) return e
@@ -1897,12 +1897,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         case f: LambdaFunction if !f.bound => f
 
         case GetColumnByOrdinal(ordinal, _) =>
-          val attrCandidates = resolveByOrdinalCandidates()
+          val attrCandidates = getAttrCandidates()
           assert(ordinal >= 0 && ordinal < attrCandidates.length)
           attrCandidates(ordinal)
 
         case GetViewColumnByNameAndOrdinal(viewName, colName, ordinal, expectedNumCandidates) =>
-          val attrCandidates = resolveByOrdinalCandidates()
+          val attrCandidates = getAttrCandidates()
           val matched = attrCandidates.filter(a => resolver(a.name, colName))
           if (matched.length != expectedNumCandidates) {
             throw QueryCompilationErrors.incompatibleViewSchemaChange(
@@ -1964,7 +1964,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveColumnByName = nameParts => {
         plan.resolve(nameParts, resolver)
       },
-      resolveByOrdinalCandidates = () => plan.output,
+      getAttrCandidates = () => plan.output,
       throws = throws)
   }
 
@@ -1984,7 +1984,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, resolver)
       },
-      resolveByOrdinalCandidates = () => {
+      getAttrCandidates = () => {
         assert(q.children.length == 1)
         q.children.head.output
       },
