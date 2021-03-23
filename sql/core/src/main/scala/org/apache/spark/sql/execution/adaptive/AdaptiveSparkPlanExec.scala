@@ -94,7 +94,7 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    PlanAdaptiveDynamicPruningFilters(context.stageCache),
+    PlanAdaptiveDynamicPruningFilters(inputPlan, context.stageCache),
     ReuseAdaptiveSubquery(context.subqueryCache),
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
@@ -463,7 +463,7 @@ case class AdaptiveSparkPlanExec(
       }
   }
 
-  private def newQueryStage(e: Exchange): QueryStageExec = {
+  private[adaptive] def newQueryStage(e: Exchange): QueryStageExec = synchronized {
     val optimizedPlan = applyPhysicalRules(
       e.child, queryStageOptimizerRules, Some((planChangeLogger, "AQE Query Stage Optimization")))
     val queryStage = e match {
@@ -493,7 +493,9 @@ case class AdaptiveSparkPlanExec(
     queryStage
   }
 
-  private def reuseQueryStage(existing: QueryStageExec, exchange: Exchange): QueryStageExec = {
+  private[adaptive] def reuseQueryStage(
+      existing: QueryStageExec,
+      exchange: Exchange): QueryStageExec = synchronized {
     val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, exchange)

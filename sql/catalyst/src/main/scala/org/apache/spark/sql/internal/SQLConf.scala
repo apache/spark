@@ -277,6 +277,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_CREATE_BROADCAST_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.createBroadcastEnabled")
+      .doc(s"When true, we will create a broadcast stage for dynamic partition pruning when " +
+        "the AQE stageCache does't exist the broadcast stage. This configuration only has an " +
+        s"effect when 'spark.sql.adaptive.enabled' is true.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(true)
+
   val DYNAMIC_PARTITION_PRUNING_USE_STATS =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.useStats")
       .internal()
@@ -3240,6 +3249,9 @@ class SQLConf extends Serializable with Logging {
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
+
+  def dynamicPartitionPruningCreateBroadcastEnabled: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_CREATE_BROADCAST_ENABLED)
 
   def dynamicPartitionPruningUseStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_USE_STATS)
 

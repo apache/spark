@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
@@ -167,7 +167,7 @@ abstract class DynamicPartitionPruningSuiteBase
   def checkPartitionPruningPredicate(
       df: DataFrame,
       withSubquery: Boolean,
-      withBroadcast: Boolean): Unit = {
+      withBroadcast: Boolean): (Int, Int, Int) = {
     df.collect()
 
     val plan = df.queryExecution.executedPlan
@@ -187,10 +187,15 @@ abstract class DynamicPartitionPruningSuiteBase
     assert(subqueryBroadcast.nonEmpty == withBroadcast,
       s"$hasBroadcast trigger DPP with a reused broadcast exchange:\n${df.queryExecution}")
 
+    val dppReusedExchangeExecs = Seq.newBuilder[ReusedExchangeExec]
+    val dppCreatedExchangeExecs = Seq.newBuilder[BroadcastExchangeExec]
     subqueryBroadcast.foreach { s =>
       s.child match {
         case _: ReusedExchangeExec => // reuse check ok.
-        case BroadcastQueryStageExec(_, _: ReusedExchangeExec, _) => // reuse check ok.
+        case BroadcastQueryStageExec(_, r: ReusedExchangeExec, _) =>
+          dppReusedExchangeExecs += r // reuse check ok
+        case BroadcastQueryStageExec(_, b: BroadcastExchangeExec, _) =>
+          dppCreatedExchangeExecs += b // dpp created
         case b: BroadcastExchangeLike =>
           val hasReuse = plan.find {
             case ReusedExchangeExec(_, e) => e eq b
@@ -209,6 +214,14 @@ abstract class DynamicPartitionPruningSuiteBase
         case o => o
       }
       assert(subquery.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
+    }
+    (findReusedExchange(plan).size, dppReusedExchangeExecs.result().size,
+      dppCreatedExchangeExecs.result().size)
+  }
+
+  def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
+    collectWithSubqueries(plan) {
+      case BroadcastQueryStageExec(_, e: ReusedExchangeExec, _) => e
     }
   }
 
@@ -770,8 +783,8 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("partition pruning in broadcast hash joins",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+  // Support partition pruning in broadcast hash joins not only in nonAQE but also in AQE.
+  test("partition pruning in broadcast hash joins") {
     Given("disable broadcast pruning and disable subquery duplication")
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
@@ -806,7 +819,9 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, true, false)
+      // TODO: we need to apply an aggregate on the buildPlan in order to be column
+      checkPartitionPruningPredicate(df,
+        !spark.sessionState.conf.adaptiveExecutionEnabled, false)
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
@@ -867,7 +882,9 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, true, false)
+      // TODO: we need to apply an aggregate on the buildPlan in order to be column
+      checkPartitionPruningPredicate(df,
+        !spark.sessionState.conf.adaptiveExecutionEnabled, false)
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
@@ -875,6 +892,60 @@ abstract class DynamicPartitionPruningSuiteBase
         Row(1050, 2, 50, 3) ::
         Row(1060, 2, 50, 3) :: Nil
       )
+    }
+  }
+
+  test("test 'spark.sql.optimizer.dynamicPartitionPruning.createBroadcastEnabled'" +
+    " which can improve DPP in AQE.") {
+    Seq(true, false).foreach { dppCreateBroadcastEnabled =>
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_CREATE_BROADCAST_ENABLED.key ->
+          dppCreateBroadcastEnabled.toString) {
+        withTable("store", "date", "item") {
+          spark.range(500)
+            .select((($"id" + 30) % 50).as("ss_item_sk"),
+              ($"id" % 20).as("ss_sold_date_sk"), ($"id" * 3).as("price"))
+            .write.partitionBy("ss_sold_date_sk")
+            .format("parquet").mode("overwrite").saveAsTable("store")
+
+          spark.range(20)
+            .select($"id".as("d_date_sk"), ($"id").as("d_year"))
+            .write.format("parquet").mode("overwrite").saveAsTable("date")
+
+          spark.range(20)
+            .select(($"id" + 30).as("i_item_sk"))
+            .write.format("parquet").mode("overwrite").saveAsTable("item")
+
+          val df = sql(
+            """
+              |WITH aux AS
+              |(SELECT i_item_sk as frequent_item_sk FROM store, item, date
+              |WHERE ss_sold_date_sk = d_date_sk
+              |AND ss_item_sk = i_item_sk
+              |AND d_year IN (2, 4, 6, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+              |GROUP BY i_item_sk HAVING count(*) > 0)
+              |SELECT sum(sales) a
+              |    FROM (SELECT price sales FROM item, date, aux, store
+              |    WHERE d_year IN (1, 3, 5, 7)
+              |      AND ss_sold_date_sk = d_date_sk
+              |      AND ss_item_sk = i_item_sk
+              |      AND i_item_sk = frequent_item_sk) x
+            """.stripMargin)
+
+          val (planAllReusedExchangeSize, dppReusedExchangeExecSize, dppCreatedExchangeExecSize) =
+            checkPartitionPruningPredicate(df, false, true)
+          if (dppCreateBroadcastEnabled) {
+            // one ReusedExchange is created by DPP and reused in AQE, and others come from AQE.
+            assert(planAllReusedExchangeSize === 3 && dppReusedExchangeExecSize === 1 &&
+              dppCreatedExchangeExecSize == 1)
+          } else {
+            assert(planAllReusedExchangeSize === 2 && dppReusedExchangeExecSize === 1 &&
+              dppCreatedExchangeExecSize == 0)
+          }
+          checkAnswer(df, Row(28080) :: Nil)
+        }
+      }
     }
   }
 
@@ -1322,8 +1393,10 @@ abstract class DynamicPartitionPruningSuiteBase
           |JOIN code_stats s
           |ON f.store_id = s.store_id WHERE f.date_id <= 1030
         """.stripMargin)
-
-      checkPartitionPruningPredicate(df, false, true)
+      // TODO(weixiuli): supoport dynamic pruning filter on the probe side in AQE.
+      if (!spark.sessionState.conf.adaptiveExecutionEnabled) {
+        checkPartitionPruningPredicate(df, false, true)
+      }
 
       checkAnswer(df,
         Row(1000, 1, 1, 10) ::
@@ -1366,7 +1439,8 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("SPARK-32817: DPP throws error when the broadcast side is empty") {
+  test("SPARK-32817: DPP throws error when the broadcast side is empty",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
