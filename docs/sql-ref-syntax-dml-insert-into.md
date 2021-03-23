@@ -62,8 +62,8 @@ INSERT INTO [ TABLE ] table_identifier [ partition_spec ]
 #### Single Row Insert Using a VALUES Clause
 
 ```sql
-CREATE TABLE students (name VARCHAR(64), address VARCHAR(64), student_id INT)
-    USING PARQUET PARTITIONED BY (student_id);
+CREATE TABLE students (name VARCHAR(64), address VARCHAR(64))
+    USING PARQUET PARTITIONED BY (student_id INT);
 
 INSERT INTO students VALUES
     ('Amy Smith', '123 Park Ave, San Jose', 111111);
