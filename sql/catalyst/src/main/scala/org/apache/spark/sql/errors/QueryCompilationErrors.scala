@@ -1304,4 +1304,10 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Table-valued function $name with alternatives: $usage\n" +
       s"cannot be applied to ($arguments): $details")
   }
+
+  def incompatibleRangeInputDataTypeError(
+      expression: Expression, dataType: DataType): Throwable = {
+    new AnalysisException(s"Incompatible input data type. " +
+      s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
+  }
 }

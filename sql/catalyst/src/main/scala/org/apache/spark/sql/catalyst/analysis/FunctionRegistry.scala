@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.lang.reflect.Constructor
 import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
@@ -757,55 +756,26 @@ object TableFunctionRegistry {
     val info = expressionInfo[T](name)
     val builder = (expressions: Seq[Expression]) => {
       val argTypes = expressions.map(_.dataType.typeName).mkString(", ")
-      // Find a constructor method that matches the number of arguments.
-      val constructor = constructors.find(isValidConstructor(_, expressions)).getOrElse {
-        throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
-          name, argTypes, info.getUsage, "invalid number of function arguments")
-      }
-      // Implicitly cast the input expressions into the constructor parameter data types.
-      val casted = expressions.zip(constructor.getParameterTypes).map { case (expr, paramType) =>
-        val dataType = getDataType(paramType)
-        assert(dataType.isDefined)
-        TypeCoercion.implicitCast(expr, dataType.get) match {
-          case Some(expr) => expr.eval().asInstanceOf[Object]
-          case _ => throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
-            name, argTypes, info.getUsage, "incompatible argument data type")
-        }
+      val params = Seq.fill(expressions.size)(classOf[Expression])
+      val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
+        val validParametersCount = constructors
+          .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
+          .map(_.getParameterCount).distinct.sorted
+        throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+          validParametersCount, name, params)
       }
       try {
-        constructor.newInstance(casted: _*).asInstanceOf[LogicalPlan]
+        f.newInstance(expressions : _*).asInstanceOf[LogicalPlan]
       } catch {
+        // the exception is an invocation exception. To get a meaningful message, we need the
+        // cause.
         case e: Exception =>
-          // The exception is an invocation exception. To get a meaningful message, we need the
-          // cause if applicable.
           val details = if (e.getCause != null) e.getCause.getMessage else e.toString
           throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
             name, argTypes, info.getUsage, details)
       }
     }
     (name, (info, builder))
-  }
-
-  /**
-   * Check if the constructor is valid given the input expressions.
-   */
-  private def isValidConstructor(
-      constructor: Constructor[_],
-      expressions: Seq[Expression]): Boolean = {
-    constructor.getParameterCount == expressions.size &&
-      constructor.getParameterTypes.map(getDataType).forall(_.isDefined)
-  }
-
-  /**
-   * Optionally get the data type from the input parameter. Currently only int and long
-   * are supported. Please update this method when adding new table-valued functions.
-   */
-  private def getDataType(parameterType: Class[_]): Option[DataType] = {
-    parameterType.getSimpleName.toLowerCase(Locale.ROOT) match {
-      case "int" => Some(IntegerType)
-      case "long" => Some(LongType)
-      case _ => None
-    }
   }
 
   /**

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, TypeCoercion}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
@@ -556,9 +557,23 @@ object Range {
     val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
     new Range(start, end, step, numSlices, output, isStreaming)
   }
+
   def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
     Range(start, end, step, Some(numSlices))
   }
+
+  private def castAndEval[T](expression: Expression, dataType: DataType): T = {
+    TypeCoercion.implicitCast(expression, dataType)
+      .map(_.eval())
+      .filter(_ != null)
+      .getOrElse {
+        throw QueryCompilationErrors.incompatibleRangeInputDataTypeError(expression, dataType)
+      }.asInstanceOf[T]
+  }
+
+  def toLong(expression: Expression): Long = castAndEval[Long](expression, LongType)
+
+  def toInt(expression: Expression): Int = castAndEval[Int](expression, IntegerType)
 }
 
 @ExpressionDescription(
@@ -603,17 +618,27 @@ case class Range(
 
   require(step != 0, s"step ($step) cannot be 0")
 
-  def this(start: Long, end: Long, step: Long, numSlices: Int) =
-    this(start, end, step, Some(numSlices),
-      StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes, false)
+  def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) =
+    this(
+      start = Range.toLong(start),
+      end = Range.toLong(end),
+      step = Range.toLong(step),
+      numSlices = Some(Range.toInt(numSlices)),
+      output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes,
+      isStreaming = false)
 
-  def this(start: Long, end: Long, step: Long) =
-    this(start, end, step, None,
-      StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes, false)
+  def this(start: Expression, end: Expression, step: Expression) =
+    this(
+      start = Range.toLong(start),
+      end = Range.toLong(end),
+      step = Range.toLong(step),
+      numSlices = None,
+      output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes,
+      isStreaming = false)
 
-  def this(start: Long, end: Long) = this(start, end, 1)
+  def this(start: Expression, end: Expression) = this(start, end, Literal.create(1L, LongType))
 
-  def this(end: Long) = this(0, end)
+  def this(end: Expression) = this(Literal.create(0L, LongType), end)
 
   val numElements: BigInt = {
     val safeStart = BigInt(start)
