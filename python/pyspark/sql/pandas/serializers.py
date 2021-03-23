@@ -208,7 +208,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             if dt is None:
                 if by_field_name:
                     return [(create_array(s[field.name], field.type), field.name) for field in t]
-                else: 
+                else:
                     return [
                         (create_array(s[s.columns[i]], field.type), field.name)
                         for i, field in enumerate(t)
@@ -221,7 +221,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                     ]
                 else:
                     return [
-                        (create_array(s[s.columns[i]], field.type, struct_field.dataType), field.name)
+                        (create_array(s[s.columns[i]], field.type, struct_field.dataType),
+                         field.name)
                         for i, (field, struct_field) in enumerate(zip(t, dt.fields))
                     ]
 

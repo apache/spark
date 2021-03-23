@@ -22,7 +22,7 @@ import tempfile
 from contextlib import contextmanager
 
 from pyspark.sql import SparkSession
-from pyspark.sql.types import ArrayType, DoubleType, TimestampType, StructField, StructType, \
+from pyspark.sql.types import ArrayType, DoubleType, StructField, StructType, \
     UserDefinedType, Row
 from pyspark.testing.utils import ReusedPySparkTestCase
 
