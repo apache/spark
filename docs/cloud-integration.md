@@ -250,7 +250,8 @@ More details on these committers can be found in the latest Hadoop documentation
 Here is the documentation on the standard connectors both from Apache and the cloud providers.
 
 * [OpenStack Swift](https://hadoop.apache.org/docs/current/hadoop-openstack/index.html).
-* [Azure Blob Storage and Azure Datalake Gen 2](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html).
+* [Azure Blob Storage](https://hadoop.apache.org/docs/current/hadoop-azure/index.html).
+* [Azure Blob Filesystem (ABFS) and Azure Datalake Gen 2](https://hadoop.apache.org/docs/current/hadoop-azure/abfs.html).
 * [Azure Data Lake Gen 1](https://hadoop.apache.org/docs/current/hadoop-azure-datalake/index.html).
 * [Hadoop-AWS module (Hadoop 3.x)](https://hadoop.apache.org/docs/current3/hadoop-aws/tools/hadoop-aws/index.html).
 * [Amazon S3 via S3A and S3N (Hadoop 2.x)](https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html).
