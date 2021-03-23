@@ -54,7 +54,7 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
     assert(r.pythonRSSTotal == 7831552)
 
     // proc file of pid 22764 doesn't exist, so partial metrics shouldn't be returned
-    ptree = Set(26109, 22763, 22764)
+    ptree = Set(26109, 22764, 22763)
     when(mockedP.computeProcessTree).thenReturn(ptree)
     r = mockedP.computeAllMetrics
     assert(r.jvmVmemTotal == 0)
