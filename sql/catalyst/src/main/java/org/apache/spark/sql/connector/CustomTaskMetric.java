@@ -18,34 +18,29 @@
 package org.apache.spark.sql.connector;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.read.PartitionReader;
 
 /**
- * A custom metric. Data source can define supported custom metrics using this interface.
- * During query execution, Spark will collect the task metrics using {@link CustomTaskMetric}
- * and combine the metrics at the driver side. How to combine task metrics is defined by the
- * metric class with the same metric name.
+ * A custom task metric. This is a logical representation of a metric reported by data sources
+ * at the executor side. During query execution, Spark will collect the task metrics per partition
+ * by {@link PartitionReader} and update internal metrics based on collected metric values.
+ * For streaming query, Spark will collect and combine metrics for a final result per micro batch.
+ *
+ * The metrics will be gathered during query execution back to the driver and then combined. How
+ * the task metrics are combined is defined by corresponding {@link CustomMetric} with same metric
+ * name. The final result will be shown up in the physical operator in Spark UI.
  *
  * @since 3.2.0
  */
 @Evolving
-public interface CustomMetric {
+public interface CustomTaskMetric {
     /**
-     * Returns the name of custom metric.
+     * Returns the name of custom task metric.
      */
     String name();
 
     /**
-     * Returns the description of custom metric.
+     * Returns the long value of custom task metric.
      */
-    String description();
-
-    /**
-     * The initial value of this metric.
-     */
-    long initialValue = 0L;
-
-    /**
-     * Given an array of task metric values, returns aggregated final metric value.
-     */
-    String aggregateTaskMetrics(long[] taskMetrics);
+    long value();
 }
