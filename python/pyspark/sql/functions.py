@@ -2342,8 +2342,8 @@ def session_window(timeColumn, gapDuration):
     gapDuration is provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
     interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
 
-    The output column will be a struct called 'session_window' by default with the nested columns 'start'
-    and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+    The output column will be a struct called 'session_window' by default with the nested columns
+    'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
 
     .. versionadded:: 3.2.0
 
