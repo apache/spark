@@ -28,7 +28,6 @@ trait Command extends LogicalPlan {
   override def output: Seq[Attribute] = Seq.empty
   override def producedAttributes: AttributeSet = outputSet
   override def children: Seq[LogicalPlan] = Seq.empty
-  def plansToCheckAnalysis: Seq[LogicalPlan] = Seq.empty
   // Commands are eagerly executed. They will be converted to LocalRelation after the DataFrame
   // is created. That said, the statistics of a command is useless. Here we just return a dummy
   // statistics to avoid unnecessary statistics calculation of command's children.

@@ -94,7 +94,9 @@ case class CacheTableAsSelectExec(
   override lazy val relationName: String = tempViewName
 
   override lazy val planToCache: LogicalPlan = {
-    // If the plan cannot be analyzed, throw an exception and don't proceed.
+    // CacheTableAsSelectExec.query is not resolved yet (e.g., not a child of CacheTableAsSelect)
+    // in order to skip optimizing it; note that we need to pass an analyzed plan to
+    // CreateViewCommand for the cache to work correctly. Thus, the query is analyzed below.
     val qe = sparkSession.sessionState.executePlan(query)
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed

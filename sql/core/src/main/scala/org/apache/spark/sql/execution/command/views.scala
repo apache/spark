@@ -70,8 +70,6 @@ case class CreateViewCommand(
 
   import ViewHelper._
 
-  override def plansToCheckAnalysis: Seq[LogicalPlan] = Seq(analyzedPlan)
-
   override def innerChildren: Seq[QueryPlan[_]] = Seq(analyzedPlan)
 
   if (viewType == PersistedView) {

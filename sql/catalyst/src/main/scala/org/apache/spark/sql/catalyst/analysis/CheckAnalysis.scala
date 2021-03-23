@@ -167,9 +167,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case _: ShowTableExtended =>
         throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
 
-      case c: Command =>
-        c.plansToCheckAnalysis.foreach(checkAnalysis)
-
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
         // If the arguments of the higher-order functions are resolved but the type check fails,
@@ -686,6 +683,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case _ => // Analysis successful!
         }
     }
+
+    // Check analysis on internal nodes.
+    plan match {
+      case c: Command =>
+        c.innerChildren.foreach {
+          case l: LogicalPlan => checkAnalysis(l)
+          case _ =>
+        }
+
+      case _ => // Analysis successful!
+    }
+
     checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
