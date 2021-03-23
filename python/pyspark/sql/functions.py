@@ -2342,7 +2342,7 @@ def session_window(timeColumn, gapDuration):
     gapDuration is provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
     interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
 
-    The output column will be a struct called 'window' by default with the nested columns 'start'
+    The output column will be a struct called 'session_window' by default with the nested columns 'start'
     and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
 
     .. versionadded:: 3.2.0
@@ -2351,8 +2351,8 @@ def session_window(timeColumn, gapDuration):
     --------
     >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
     >>> w = df.groupBy(session_window("date", "5 seconds")).agg(sum("val").alias("sum"))
-    >>> w.select(w.window.start.cast("string").alias("start"),
-    ...          w.window.end.cast("string").alias("end"), "sum").collect()
+    >>> w.select(w.session_window.start.cast("string").alias("start"),
+    ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
     """
     def check_string_field(field, fieldName):
