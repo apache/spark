@@ -25,7 +25,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
-import com.github.benmanes.caffeine.cache.{CacheLoader, CacheWriter, Caffeine, LoadingCache, RemovalCause}
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache, RemovalCause, RemovalListener}
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.FilterHolder
 
@@ -58,15 +58,14 @@ private[history] class ApplicationCache(
 
   }
 
-  private val cacheWriter = new CacheWriter[CacheKey, CacheEntry] {
-    override def write(key: CacheKey, value: CacheEntry): Unit = {}
+  private val removalListener = new RemovalListener[CacheKey, CacheEntry] {
 
     /**
      * Removal event notifies the provider to detach the UI.
      * @param key removal key
      * @param value removal value
      */
-    override def delete(key: CacheKey, value: CacheEntry,
+    override def onRemoval(key: CacheKey, value: CacheEntry,
         cause: RemovalCause): Unit = {
       metrics.evictionCount.inc()
       logDebug(s"Evicting entry $key")
@@ -76,9 +75,9 @@ private[history] class ApplicationCache(
 
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
     Caffeine.newBuilder()
-        .maximumSize(retainedApplications)
-        .writer(cacheWriter)
-        .build(appLoader)
+      .maximumSize(retainedApplications)
+      .evictionListener(removalListener)
+      .build(appLoader)
   }
 
   /**
