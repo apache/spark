@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, NamedExpression, NullOrdering, NullsFirst, NullsLast, SortDirection, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, IdentityTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortValue}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
@@ -49,8 +49,6 @@ object DistributionAndOrderingUtils {
         // for OrderedDistribution and generic expressions for ClusteredDistribution
         // this allows RepartitionByExpression to pick either range or hash partitioning
         RepartitionByExpression(distribution, query, finalNumPartitions)
-      } else if (numPartitions > 0) {
-        Repartition(numPartitions, shuffle = true, query)
       } else {
         query
       }

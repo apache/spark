@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{catalyst, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, RoundRobinPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NullOrdering, SortDirection, SortOrder}
@@ -290,7 +290,9 @@ class WriteDistributionAndOrderingSuite
         Seq.empty
       )
     )
-    val writePartitioning = unspecifiedWritePartitioning(targetNumPartitions)
+
+    // The target number of partitions won't take effect with unspecified distribution.
+    val writePartitioning = UnknownPartitioning(0)
 
     checkWriteRequirements(
       tableDistribution,
@@ -336,7 +338,8 @@ class WriteDistributionAndOrderingSuite
     val tableDistribution = Distributions.unspecified()
 
     val writeOrdering = Seq.empty[catalyst.expressions.SortOrder]
-    val writePartitioning = unspecifiedWritePartitioning(targetNumPartitions)
+    // The target number of partitions won't take effect with unspecified distribution.
+    val writePartitioning = UnknownPartitioning(0)
 
     checkWriteRequirements(
       tableDistribution,
@@ -790,14 +793,6 @@ class WriteDistributionAndOrderingSuite
     targetNumPartitions match {
       case Some(parts) => HashPartitioning(writePartitioningExprs, parts)
       case _ => HashPartitioning(writePartitioningExprs, conf.numShufflePartitions)
-    }
-  }
-
-  private def unspecifiedWritePartitioning(
-      targetNumPartitions: Option[Int]): physical.Partitioning = {
-    targetNumPartitions match {
-      case Some(parts) => RoundRobinPartitioning(parts)
-      case _ => UnknownPartitioning(0)
     }
   }
 }
