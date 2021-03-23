@@ -442,7 +442,7 @@ trait TPCDSBase extends SharedSparkSession {
         |`d_fy_quarter_seq` INT,
         |`d_fy_week_seq` INT,
         |`d_day_name` CHAR(9),
-        |`d_quarter_name` CHAR(1),
+        |`d_quarter_name` CHAR(6),
         |`d_holiday` CHAR(1),
         |`d_weekend` CHAR(1),
         |`d_following_holiday` CHAR(1),
