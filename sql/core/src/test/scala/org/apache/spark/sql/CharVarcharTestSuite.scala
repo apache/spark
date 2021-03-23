@@ -631,6 +631,45 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       checkAnswer(spark.table("t"), Row("c "))
     }
   }
+
+  test("SPARK-34833: right-padding applied correctly for correlated subqueries - join keys") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
+      sql(s"CREATE TABLE t2(v VARCHAR(5), c CHAR(8)) USING $format")
+      sql("INSERT INTO t1 VALUES ('c', 'b')")
+      sql("INSERT INTO t2 VALUES ('a', 'b')")
+      Seq("t1.c = t2.c", "t2.c = t1.c").foreach { predicate =>
+        checkAnswer(sql(
+          s"""
+             |SELECT v FROM t1
+             |WHERE 'a' IN (SELECT v FROM t2 WHERE $predicate)
+           """.stripMargin),
+          Row("c"))
+      }
+    }
+  }
+
+  test("SPARK-34833: right-padding applied correctly for correlated subqueries - other preds") {
+    withTable("t") {
+      sql("CREATE TABLE t(c0 INT, c1 CHAR(5), c2 CHAR(7)) USING parquet")
+      sql("INSERT INTO t VALUES (1, 'abc', 'abc')")
+      Seq("c1 = 'abc'", "'abc' = c1", "c1 = c2", "c1 IN ('abc', 'defghijk')", "c1 IN (c2)")
+        .foreach { predicate =>
+
+          checkAnswer(sql(
+            s"""
+               |SELECT c0 FROM t t1
+               |WHERE (
+               |  SELECT count(*) AS c
+               |  FROM t
+               |  WHERE c0 = t1.c0 AND $predicate
+               |) > 0
+               |LIMIT 3
+           """.stripMargin),
+            Row(1))
+        }
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
