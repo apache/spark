@@ -180,7 +180,7 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(df.columns, ['col1', '_2'])
 
     def test_infer_schema_fails(self):
-        with self.assertRaisesRegexp(TypeError, 'field a'):
+        with self.assertRaisesRegex(TypeError, 'field a'):
             self.spark.createDataFrame(self.spark.sparkContext.parallelize([[1, 1], ["x", 1]]),
                                        schema=["a", "b"], samplingRatio=0.99)
 
@@ -578,18 +578,18 @@ class TypesTests(ReusedSQLTestCase):
             ArrayType(LongType()),
             ArrayType(LongType())
         ), ArrayType(LongType()))
-        with self.assertRaisesRegexp(TypeError, 'element in array'):
+        with self.assertRaisesRegex(TypeError, 'element in array'):
             _merge_type(ArrayType(LongType()), ArrayType(DoubleType()))
 
         self.assertEqual(_merge_type(
             MapType(StringType(), LongType()),
             MapType(StringType(), LongType())
         ), MapType(StringType(), LongType()))
-        with self.assertRaisesRegexp(TypeError, 'key of map'):
+        with self.assertRaisesRegex(TypeError, 'key of map'):
             _merge_type(
                 MapType(StringType(), LongType()),
                 MapType(DoubleType(), LongType()))
-        with self.assertRaisesRegexp(TypeError, 'value of map'):
+        with self.assertRaisesRegex(TypeError, 'value of map'):
             _merge_type(
                 MapType(StringType(), LongType()),
                 MapType(StringType(), DoubleType()))
@@ -598,7 +598,7 @@ class TypesTests(ReusedSQLTestCase):
             StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
             StructType([StructField("f1", LongType()), StructField("f2", StringType())])
         ), StructType([StructField("f1", LongType()), StructField("f2", StringType())]))
-        with self.assertRaisesRegexp(TypeError, 'field f1'):
+        with self.assertRaisesRegex(TypeError, 'field f1'):
             _merge_type(
                 StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
                 StructType([StructField("f1", DoubleType()), StructField("f2", StringType())]))
@@ -607,7 +607,7 @@ class TypesTests(ReusedSQLTestCase):
             StructType([StructField("f1", StructType([StructField("f2", LongType())]))]),
             StructType([StructField("f1", StructType([StructField("f2", LongType())]))])
         ), StructType([StructField("f1", StructType([StructField("f2", LongType())]))]))
-        with self.assertRaisesRegexp(TypeError, 'field f2 in field f1'):
+        with self.assertRaisesRegex(TypeError, 'field f2 in field f1'):
             _merge_type(
                 StructType([StructField("f1", StructType([StructField("f2", LongType())]))]),
                 StructType([StructField("f1", StructType([StructField("f2", StringType())]))]))
@@ -616,7 +616,7 @@ class TypesTests(ReusedSQLTestCase):
             StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]),
             StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())])
         ), StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]))
-        with self.assertRaisesRegexp(TypeError, 'element in array field f1'):
+        with self.assertRaisesRegex(TypeError, 'element in array field f1'):
             _merge_type(
                 StructType([
                     StructField("f1", ArrayType(LongType())),
@@ -635,7 +635,7 @@ class TypesTests(ReusedSQLTestCase):
         ), StructType([
             StructField("f1", MapType(StringType(), LongType())),
             StructField("f2", StringType())]))
-        with self.assertRaisesRegexp(TypeError, 'value of map field f1'):
+        with self.assertRaisesRegex(TypeError, 'value of map field f1'):
             _merge_type(
                 StructType([
                     StructField("f1", MapType(StringType(), LongType())),
@@ -648,7 +648,7 @@ class TypesTests(ReusedSQLTestCase):
             StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
             StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))])
         ), StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]))
-        with self.assertRaisesRegexp(TypeError, 'key of map element in array field f1'):
+        with self.assertRaisesRegex(TypeError, 'key of map element in array field f1'):
             _merge_type(
                 StructType([StructField("f1", ArrayType(MapType(StringType(), LongType())))]),
                 StructType([StructField("f1", ArrayType(MapType(DoubleType(), LongType())))])
@@ -734,7 +734,7 @@ class TypesTests(ReusedSQLTestCase):
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
-            with self.assertRaisesRegexp(TypeError, "infer the type of the field myarray"):
+            with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
 
@@ -789,13 +789,13 @@ class DataTypeTests(unittest.TestCase):
 class DataTypeVerificationTests(unittest.TestCase):
 
     def test_verify_type_exception_msg(self):
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             ValueError,
             "test_name",
             lambda: _make_type_verifier(StringType(), nullable=False, name="test_name")(None))
 
         schema = StructType([StructField('a', StructType([StructField('b', IntegerType())]))])
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             TypeError,
             "field b in field a",
             lambda: _make_type_verifier(schema)([["data"]]))

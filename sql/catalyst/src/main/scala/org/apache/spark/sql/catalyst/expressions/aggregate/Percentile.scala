@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -165,7 +165,7 @@ case class Percentile(
       if (frqLong > 0) {
         buffer.changeValue(key, frqLong, _ + frqLong)
       } else if (frqLong < 0) {
-        throw new SparkException(s"Negative values found in ${frequencyExpression.sql}")
+        throw QueryExecutionErrors.negativeValueUnexpectedError(frequencyExpression)
       }
     }
     buffer
@@ -191,13 +191,13 @@ case class Percentile(
 
     val sortedCounts = buffer.toSeq.sortBy(_._1)(
       child.dataType.asInstanceOf[NumericType].ordering.asInstanceOf[Ordering[AnyRef]])
-    val accumlatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
+    val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
-    val maxPosition = accumlatedCounts.last._2 - 1
+    val maxPosition = accumulatedCounts.last._2 - 1
 
     percentages.map { percentile =>
-      getPercentile(accumlatedCounts, maxPosition * percentile)
+      getPercentile(accumulatedCounts, maxPosition * percentile)
     }
   }
 

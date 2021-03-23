@@ -91,7 +91,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
-      val reordered = if (SQLConf.get.starSchemaDetection && !SQLConf.get.cboEnabled) {
+      val reordered = if (conf.starSchemaDetection && !conf.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
@@ -305,6 +305,13 @@ trait JoinSelectionHelper {
            LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }
+  }
+
+  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
+    getBroadcastBuildSide(join.left, join.right, join.joinType,
+      join.hint, hintOnly = true, conf).isDefined ||
+      getBroadcastBuildSide(join.left, join.right, join.joinType,
+        join.hint, hintOnly = false, conf).isDefined
   }
 
   def hintToBroadcastLeft(hint: JoinHint): Boolean = {

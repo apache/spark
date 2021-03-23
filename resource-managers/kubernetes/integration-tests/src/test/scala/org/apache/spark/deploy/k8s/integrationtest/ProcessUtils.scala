@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.integrationtest
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
@@ -32,8 +33,10 @@ object ProcessUtils extends Logging {
   def executeProcess(
       fullCommand: Array[String],
       timeout: Long,
-      dumpErrors: Boolean = true): Seq[String] = {
+      dumpErrors: Boolean = true,
+      env: Map[String, String] = Map.empty[String, String]): Seq[String] = {
     val pb = new ProcessBuilder().command(fullCommand: _*)
+    pb.environment().putAll(env.asJava)
     pb.redirectErrorStream(true)
     val proc = pb.start()
     val outputLines = new ArrayBuffer[String]

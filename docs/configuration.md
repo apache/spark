@@ -785,6 +785,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.archives</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of archives to be extracted into the working directory of each executor.
+    .jar, .tar.gz, .tgz and .zip are supported. You can specify the directory name to unpack via
+    adding <code>#</code> after the file name to unpack, for example, <code>file.zip#directory</code>.
+    This configuration is experimental.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.pyspark.driver.python</code></td>
   <td></td>
   <td>
@@ -917,8 +928,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Enables the external shuffle service. This service preserves the shuffle files written by
-    executors so the executors can be safely removed. This must be enabled if
-    <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
+    executors so the executors can be safely removed. The external shuffle service
     must be set up in order to enable it. See
     <a href="job-scheduling.html#configuration-and-setup">dynamic allocation
     configuration and setup documentation</a> for more information.
@@ -1030,10 +1040,15 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.compression.codec</code></td>
-  <td></td>
+  <td>zstd</td>
   <td>
-    The codec to compress logged events. If this is not given,
-    <code>spark.io.compression.codec</code> will be used.
+    The codec to compress logged events. By default, Spark provides four codecs:
+    <code>lz4</code>, <code>lzf</code>, <code>snappy</code>, and <code>zstd</code>.
+    You can also use fully qualified class names to specify the codec, e.g.
+    <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    <code>org.apache.spark.io.LZFCompressionCodec</code>,
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>,
+    and <code>org.apache.spark.io.ZStdCompressionCodec</code>.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1908,7 +1923,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>120s</td>
   <td>
     Default timeout for all network interactions. This config will be used in place of
-    <code>spark.core.connection.ack.wait.timeout</code>,
     <code>spark.storage.blockManagerHeartbeatTimeoutMs</code>,
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
@@ -1970,16 +1984,6 @@ Apart from these, the following properties are also available, and may be useful
     Duration for an RPC remote endpoint lookup operation to wait before timing out.
   </td>
   <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.core.connection.ack.wait.timeout</code></td>
-  <td><code>spark.network.timeout</code></td>
-  <td>
-    How long for the connection to wait for ack to occur before timing
-    out and giving up. To avoid unwilling timeout caused by long pause like GC,
-    you can set larger value.
-  </td>
-  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
@@ -2308,6 +2312,15 @@ Apart from these, the following properties are also available, and may be useful
     Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
   <td>0.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.speculation.min.threshold</code></td>
+  <td>100ms</td>
+  <td>
+    Minimum amount of time a task runs before being considered for speculation.
+    This can be used to avoid launching speculative copies of tasks that are very short.
+  </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.speculation.task.duration.threshold</code></td>

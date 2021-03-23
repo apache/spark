@@ -16,14 +16,13 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import java.io.File
-
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.util.Utils
 
 private[spark] class KubernetesExecutorBuilder {
 
@@ -36,10 +35,16 @@ private[spark] class KubernetesExecutorBuilder {
       .map { file =>
         KubernetesUtils.loadPodFromTemplate(
           client,
-          new File(file),
-          conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
+          file,
+          conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME),
+          conf.sparkConf)
       }
       .getOrElse(SparkPod.initialPod())
+
+    val userFeatures = conf.get(Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS)
+      .map { className =>
+        Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
+      }
 
     val features = Seq(
       new BasicExecutorFeatureStep(conf, secMgr, resourceProfile),
@@ -47,7 +52,7 @@ private[spark] class KubernetesExecutorBuilder {
       new MountSecretsFeatureStep(conf),
       new EnvSecretsFeatureStep(conf),
       new MountVolumesFeatureStep(conf),
-      new LocalDirsFeatureStep(conf))
+      new LocalDirsFeatureStep(conf)) ++ userFeatures
 
     val spec = KubernetesExecutorSpec(
       initialPod,

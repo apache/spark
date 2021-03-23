@@ -19,12 +19,15 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
+import scala.annotation.tailrec
+
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.{InvalidUnsafeRowException, StateSchemaNotCompatible}
 import org.apache.spark.sql.functions._
 import org.apache.spark.util.Utils
 
@@ -239,11 +242,19 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
         CheckAnswer(Row(0, 20, Seq(0, 2, 4, 6, 8)), Row(1, 25, Seq(1, 3, 5, 7, 9)))
        */
       AddData(inputData, 10 to 19: _*),
-      ExpectFailure[SparkException](e => {
-        // Check the exception message to make sure the state store format changing.
-        assert(e.getCause.getCause.getMessage.contains(
-          "The streaming query failed by state format invalidation."))
-      })
+      ExpectFailure[SparkException] { e =>
+        assert(findStateSchemaException(e))
+      }
     )
+  }
+
+  @tailrec
+  private def findStateSchemaException(exc: Throwable): Boolean = {
+    exc match {
+      case _: StateSchemaNotCompatible => true
+      case _: InvalidUnsafeRowException => true
+      case e1 if e1.getCause != null => findStateSchemaException(e1.getCause)
+      case _ => false
+    }
   }
 }

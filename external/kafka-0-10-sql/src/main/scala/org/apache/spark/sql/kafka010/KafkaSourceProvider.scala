@@ -93,7 +93,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       caseInsensitiveParameters, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
       STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
-    val kafkaOffsetReader = new KafkaOffsetReader(
+    val kafkaOffsetReader = KafkaOffsetReader.build(
       strategy(caseInsensitiveParameters),
       kafkaParamsForDriver(specifiedKafkaParams),
       caseInsensitiveParameters,
@@ -460,7 +460,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         caseInsensitiveOptions, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
         STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
-      val kafkaOffsetReader = new KafkaOffsetReader(
+      val kafkaOffsetReader = KafkaOffsetReader.build(
         strategy(caseInsensitiveOptions),
         kafkaParamsForDriver(specifiedKafkaParams),
         caseInsensitiveOptions,
@@ -489,7 +489,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         caseInsensitiveOptions, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
         STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
-      val kafkaOffsetReader = new KafkaOffsetReader(
+      val kafkaOffsetReader = KafkaOffsetReader.build(
         strategy(caseInsensitiveOptions),
         kafkaParamsForDriver(specifiedKafkaParams),
         caseInsensitiveOptions,

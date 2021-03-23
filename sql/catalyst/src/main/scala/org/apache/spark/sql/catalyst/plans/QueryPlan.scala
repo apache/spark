@@ -301,7 +301,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
 
     if (argumentString.nonEmpty) {
       s"""
@@ -397,7 +397,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
       case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
-        // normalize the epxrId too.
+        // normalize the exprId too.
         id += 1
         ar.withExprId(ExprId(id)).canonicalized
 

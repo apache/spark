@@ -47,7 +47,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.{CommandLineUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.{CommandLineUtils, DependencyUtils, ResetSystemProperties, Utils}
 
 trait TestPrematureExit {
   suite: SparkFunSuite =>
@@ -331,6 +331,43 @@ class SparkSubmitSuite
     conf.get("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
     conf.get("spark.yarn.dist.jars") should include
       regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
+    conf.get(UI_ENABLED) should be (false)
+    sys.props("SPARK_SUBMIT") should be ("true")
+  }
+
+  test("SPARK-33530: handles standalone mode with archives") {
+    val clArgs = Seq(
+      "--master", "spark://localhost:1234",
+      "--executor-memory", "5g",
+      "--executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--jars", "one.jar,two.jar,three.jar",
+      "--driver-memory", "4g",
+      "--files", "file1.txt,file2.txt",
+      "--archives", "archive1.zip,archive2.jar",
+      "--num-executors", "6",
+      "--name", "beauty",
+      "--conf", "spark.ui.enabled=false",
+      "thejar.jar",
+      "arg1", "arg2")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
+    val childArgsStr = childArgs.mkString(" ")
+    childArgsStr should include ("arg1 arg2")
+    mainClass should be ("org.SomeClass")
+
+    classpath(0) should endWith ("thejar.jar")
+    classpath(1) should endWith ("one.jar")
+    classpath(2) should endWith ("two.jar")
+    classpath(3) should endWith ("three.jar")
+
+    conf.get("spark.executor.memory") should be ("5g")
+    conf.get("spark.driver.memory") should be ("4g")
+    conf.get("spark.executor.cores") should be ("5")
+    conf.get("spark.jars") should include regex (".*one.jar,.*two.jar,.*three.jar")
+    conf.get("spark.files") should include regex (".*file1.txt,.*file2.txt")
+    conf.get("spark.archives") should include regex (".*archive1.zip,.*archive2.jar")
+    conf.get("spark.app.name") should be ("beauty")
     conf.get(UI_ENABLED) should be (false)
     sys.props("SPARK_SUBMIT") should be ("true")
   }
@@ -1069,8 +1106,8 @@ class SparkSubmitSuite
 
     // The path and filename are preserved.
     assert(outputUri.getPath.endsWith(new Path(sourceUri).getName))
-    assert(FileUtils.readFileToString(new File(outputUri.getPath)) ===
-      FileUtils.readFileToString(new File(sourceUri.getPath)))
+    assert(FileUtils.readFileToString(new File(outputUri.getPath), StandardCharsets.UTF_8) ===
+      FileUtils.readFileToString(new File(sourceUri.getPath), StandardCharsets.UTF_8))
   }
 
   private def deleteTempOutputFile(outputPath: String): Unit = {
@@ -1084,8 +1121,7 @@ class SparkSubmitSuite
     val sparkConf = new SparkConf(false)
     intercept[IOException] {
       DependencyUtils.downloadFile(
-        "abc:/my/file", Utils.createTempDir(), sparkConf, new Configuration(),
-        new SecurityManager(sparkConf))
+        "abc:/my/file", Utils.createTempDir(), sparkConf, new Configuration())
     }
   }
 
@@ -1095,19 +1131,17 @@ class SparkSubmitSuite
     val tmpDir = Utils.createTempDir()
     updateConfWithFakeS3Fs(hadoopConf)
     intercept[FileNotFoundException] {
-      DependencyUtils.downloadFile("s3a:/no/such/file", tmpDir, sparkConf, hadoopConf,
-        new SecurityManager(sparkConf))
+      DependencyUtils.downloadFile("s3a:/no/such/file", tmpDir, sparkConf, hadoopConf)
     }
   }
 
   test("downloadFile does not download local file") {
     val sparkConf = new SparkConf(false)
-    val secMgr = new SecurityManager(sparkConf)
     // empty path is considered as local file.
     val tmpDir = Files.createTempDirectory("tmp").toFile
-    assert(DependencyUtils.downloadFile("", tmpDir, sparkConf, new Configuration(), secMgr) === "")
-    assert(DependencyUtils.downloadFile("/local/file", tmpDir, sparkConf, new Configuration(),
-      secMgr) === "/local/file")
+    assert(DependencyUtils.downloadFile("", tmpDir, sparkConf, new Configuration()) === "")
+    assert(DependencyUtils.downloadFile(
+      "/local/file", tmpDir, sparkConf, new Configuration()) === "/local/file")
   }
 
   test("download one file to local") {
@@ -1115,13 +1149,12 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content)
+    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
     val sourcePath = s"s3a://${jarFile.toURI.getPath}"
-    val outputPath = DependencyUtils.downloadFile(sourcePath, tmpDir, sparkConf, hadoopConf,
-      new SecurityManager(sparkConf))
+    val outputPath = DependencyUtils.downloadFile(sourcePath, tmpDir, sparkConf, hadoopConf)
     checkDownloadedFile(sourcePath, outputPath)
     deleteTempOutputFile(outputPath)
   }
@@ -1131,14 +1164,13 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content)
+    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
     val sourcePaths = Seq("/local/file", s"s3a://${jarFile.toURI.getPath}")
     val outputPaths = DependencyUtils
-      .downloadFileList(sourcePaths.mkString(","), tmpDir, sparkConf, hadoopConf,
-        new SecurityManager(sparkConf))
+      .downloadFileList(sourcePaths.mkString(","), tmpDir, sparkConf, hadoopConf)
       .split(",")
 
     assert(outputPaths.length === sourcePaths.length)
@@ -1152,7 +1184,6 @@ class SparkSubmitSuite
     val fs = File.separator
     val sparkConf = new SparkConf(false)
     val hadoopConf = new Configuration()
-    val secMgr = new SecurityManager(sparkConf)
 
     val appJarName = "myApp.jar"
     val jar1Name = "myJar1.jar"
@@ -1160,8 +1191,7 @@ class SparkSubmitSuite
     val userJar = s"file:/path${fs}to${fs}app${fs}jar$fs$appJarName"
     val jars = s"file:/$jar1Name,file:/$appJarName,file:/$jar2Name"
 
-    val resolvedJars = DependencyUtils
-      .resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf, secMgr)
+    val resolvedJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf)
 
     assert(!resolvedJars.contains(appJarName))
     assert(resolvedJars.contains(jar1Name) && resolvedJars.contains(jar2Name))

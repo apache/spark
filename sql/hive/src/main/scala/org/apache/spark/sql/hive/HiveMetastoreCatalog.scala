@@ -332,7 +332,7 @@ private[hive] object HiveMetastoreCatalog {
       metastoreSchema: StructType,
       inferredSchema: StructType): StructType = try {
     // scalastyle:off caselocale
-    // Find any nullable fields in mestastore schema that are missing from the inferred schema.
+    // Find any nullable fields in metastore schema that are missing from the inferred schema.
     val metastoreFields = metastoreSchema.map(f => f.name.toLowerCase -> f).toMap
     val missingNullables = metastoreFields
       .filterKeys(!inferredSchema.map(_.name.toLowerCase).contains(_))

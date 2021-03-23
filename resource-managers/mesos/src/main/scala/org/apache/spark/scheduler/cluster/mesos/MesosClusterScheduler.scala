@@ -30,7 +30,7 @@ import org.apache.mesos.Protos.{SlaveID => AgentID, TaskState => MesosTaskState,
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
+import org.apache.spark.{SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.internal.config._
@@ -125,8 +125,7 @@ private[spark] class MesosClusterScheduler(
   extends Scheduler with MesosSchedulerUtils with MesosScheduler {
   var frameworkUrl: String = _
   private val metricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MESOS_CLUSTER, conf,
-      new SecurityManager(conf))
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MESOS_CLUSTER, conf)
   private val master = conf.get("spark.master")
   private val appName = conf.get("spark.app.name")
   private val queuedCapacity = conf.get(config.MAX_DRIVERS)
@@ -614,7 +613,7 @@ private[spark] class MesosClusterScheduler(
     val (remainingResources, cpuResourcesToUse) =
       partitionResources(offer.remainingResources, "cpus", desc.cores)
     val (finalResources, memResourcesToUse) =
-      partitionResources(remainingResources.asJava, "mem", desc.mem)
+      partitionResources(remainingResources.asJava, "mem", driverContainerMemory(desc))
     offer.remainingResources = finalResources.asJava
 
     val appName = desc.conf.get("spark.app.name")
@@ -646,7 +645,7 @@ private[spark] class MesosClusterScheduler(
       tasks: mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]): Unit = {
     for (submission <- candidates) {
       val driverCpu = submission.cores
-      val driverMem = submission.mem
+      val driverMem = driverContainerMemory(submission)
       val driverConstraints =
         parseConstraintString(submission.conf.get(config.DRIVER_CONSTRAINTS))
       logTrace(s"Finding offer to launch driver with cpu: $driverCpu, mem: $driverMem, " +

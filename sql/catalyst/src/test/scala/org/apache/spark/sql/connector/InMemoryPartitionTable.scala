@@ -54,6 +54,7 @@ class InMemoryPartitionTable(
     if (memoryTablePartitions.containsKey(ident)) {
       throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
     } else {
+      createPartitionKey(ident.toSeq(schema))
       memoryTablePartitions.put(ident, properties)
     }
   }
@@ -61,6 +62,7 @@ class InMemoryPartitionTable(
   def dropPartition(ident: InternalRow): Boolean = {
     if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.remove(ident)
+      removePartitionKey(ident.toSeq(schema))
       true
     } else {
       false
@@ -83,22 +85,11 @@ class InMemoryPartitionTable(
     }
   }
 
-  def listPartitionIdentifiers(ident: InternalRow): Array[InternalRow] = {
-    val prefixPartCols =
-      new StructType(partitionSchema.dropRight(partitionSchema.length - ident.numFields).toArray)
-    val prefixPart = ident.toSeq(prefixPartCols)
-    memoryTablePartitions.keySet().asScala
-      .filter(_.toSeq(partitionSchema).startsWith(prefixPart)).toArray
-  }
-
-  override def partitionExists(ident: InternalRow): Boolean =
-    memoryTablePartitions.containsKey(ident)
-
   override protected def addPartitionKey(key: Seq[Any]): Unit = {
-    memoryTablePartitions.put(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
+    memoryTablePartitions.putIfAbsent(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
   }
 
-  override def listPartitionByNames(
+  override def listPartitionIdentifiers(
       names: Array[String],
       ident: InternalRow): Array[InternalRow] = {
     assert(names.length == ident.numFields,
@@ -117,5 +108,27 @@ class InMemoryPartitionTable(
       }
       currentRow == ident
     }.toArray
+  }
+
+  override def renamePartition(from: InternalRow, to: InternalRow): Boolean = {
+    if (memoryTablePartitions.containsKey(to)) {
+      throw new PartitionAlreadyExistsException(name, to, partitionSchema)
+    } else {
+      val partValue = memoryTablePartitions.remove(from)
+      if (partValue == null) {
+        throw new NoSuchPartitionException(name, from, partitionSchema)
+      }
+      memoryTablePartitions.put(to, partValue) == null &&
+        renamePartitionKey(partitionSchema, from.toSeq(schema), to.toSeq(schema))
+    }
+  }
+
+  override def truncatePartition(ident: InternalRow): Boolean = {
+    if (memoryTablePartitions.containsKey(ident)) {
+      clearPartition(ident.toSeq(schema))
+      true
+    } else {
+      throw new NoSuchPartitionException(name, ident, partitionSchema)
+    }
   }
 }

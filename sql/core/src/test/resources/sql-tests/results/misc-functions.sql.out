@@ -61,7 +61,7 @@ array<int>	map<int,int>	struct<a:int,b:string>
 -- !query
 SELECT assert_true(true), assert_true(boolean(1))
 -- !query schema
-struct<assert_true(true, 'true' is not true!):null,assert_true(CAST(1 AS BOOLEAN), 'cast(1 as boolean)' is not true!):null>
+struct<assert_true(true, 'true' is not true!):null,assert_true(1, 'cast(1 as boolean)' is not true!):null>
 -- !query output
 NULL	NULL
 

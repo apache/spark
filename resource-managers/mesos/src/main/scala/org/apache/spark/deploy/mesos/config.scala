@@ -183,6 +183,14 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val DRIVER_MEMORY_OVERHEAD =
+    ConfigBuilder("spark.mesos.driver.memoryOverhead")
+      .doc("The amount of additional memory, specified in MB, to be allocated to the driver. " +
+        "By default, the overhead will be larger of either 384 or 10% of spark.driver.memory. " +
+        "Only applies to cluster mode.")
+      .intConf
+      .createOptional
+
   private[spark] val EXECUTOR_URI =
     ConfigBuilder("spark.executor.uri").version("0.8.0").stringConf.createOptional
 

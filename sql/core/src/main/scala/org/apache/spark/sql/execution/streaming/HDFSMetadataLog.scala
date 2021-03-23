@@ -239,18 +239,33 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       .reverse
   }
 
+  private var lastPurgedBatchId: Long = -1L
+
   /**
    * Removes all the log entry earlier than thresholdBatchId (exclusive).
    */
   override def purge(thresholdBatchId: Long): Unit = {
-    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
-      .map(f => pathToBatchId(f.getPath))
+    val possibleTargetBatchIds = (lastPurgedBatchId + 1 until thresholdBatchId)
+    if (possibleTargetBatchIds.length <= 3) {
+      // avoid using list if we only need to purge at most 3 elements
+      possibleTargetBatchIds.foreach { batchId =>
+        val path = batchIdToPath(batchId)
+        fileManager.delete(path)
+        logTrace(s"Removed metadata log file: $path")
+      }
+    } else {
+      // using list to retrieve all elements
+      val batchIds = fileManager.list(metadataPath, batchFilesFilter)
+        .map(f => pathToBatchId(f.getPath))
 
-    for (batchId <- batchIds if batchId < thresholdBatchId) {
-      val path = batchIdToPath(batchId)
-      fileManager.delete(path)
-      logTrace(s"Removed metadata log file: $path")
+      for (batchId <- batchIds if batchId < thresholdBatchId) {
+        val path = batchIdToPath(batchId)
+        fileManager.delete(path)
+        logTrace(s"Removed metadata log file: $path")
+      }
     }
+
+    lastPurgedBatchId = thresholdBatchId - 1
   }
 
   /**
@@ -267,36 +282,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
-  /**
-   * Parse the log version from the given `text` -- will throw exception when the parsed version
-   * exceeds `maxSupportedVersion`, or when `text` is malformed (such as "xyz", "v", "v-1",
-   * "v123xyz" etc.)
-   */
-  private[sql] def validateVersion(text: String, maxSupportedVersion: Int): Int = {
-    if (text.length > 0 && text(0) == 'v') {
-      val version =
-        try {
-          text.substring(1, text.length).toInt
-        } catch {
-          case _: NumberFormatException =>
-            throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
-              s"version from $text.")
-        }
-      if (version > 0) {
-        if (version > maxSupportedVersion) {
-          throw new IllegalStateException(s"UnsupportedLogVersion: maximum supported log version " +
-            s"is v${maxSupportedVersion}, but encountered v$version. The log file was produced " +
-            s"by a newer version of Spark and cannot be read by this version. Please upgrade.")
-        } else {
-          return version
-        }
-      }
-    }
-
-    // reaching here means we failed to read the correct log version
-    throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
-      s"version from $text.")
-  }
+  private[sql] def validateVersion(text: String, maxSupportedVersion: Int): Int =
+    MetadataVersionUtil.validateVersion(text, maxSupportedVersion)
 }
 
 object HDFSMetadataLog {
