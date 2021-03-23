@@ -582,21 +582,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-33992: char/varchar resolution in correlated sub query") {
-    withTable("t1", "t2") {
-      sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
-      sql(s"CREATE TABLE t2(v VARCHAR(3), c CHAR(5)) USING $format")
-      sql("INSERT INTO t1 VALUES ('c', 'b')")
-      sql("INSERT INTO t2 VALUES ('a', 'b')")
-
-      checkAnswer(sql(
-        """
-          |SELECT v FROM t1
-          |WHERE 'a' IN (SELECT v FROM t2 WHERE t1.c = t2.c )""".stripMargin),
-        Row("c"))
-    }
-  }
-
   test("SPARK-34003: fix char/varchar fails w/ both group by and order by ") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), i INT) USING $format")
@@ -638,7 +623,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t2(v VARCHAR(5), c CHAR(8)) USING $format")
       sql("INSERT INTO t1 VALUES ('c', 'b')")
       sql("INSERT INTO t2 VALUES ('a', 'b')")
-      Seq("t1.c = t2.c", "t2.c = t1.c").foreach { predicate =>
+      Seq("t1.c = t2.c", "t2.c = t1.c", "t1.c = 'b'", "'b' = t1.c").foreach { predicate =>
         checkAnswer(sql(
           s"""
              |SELECT v FROM t1

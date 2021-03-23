@@ -4009,6 +4009,16 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             b.withNewChildren(newChildren.reverse)
           }.getOrElse(b)
 
+        case b @ BinaryComparison(OuterReference(attr: Attribute), lit) if lit.foldable =>
+          padOuterAttrLitComp(attr, lit).map { newChildren =>
+            b.withNewChildren(newChildren)
+          }.getOrElse(b)
+
+        case b @ BinaryComparison(lit, OuterReference(attr: Attribute)) if lit.foldable =>
+          padOuterAttrLitComp(attr, lit).map { newChildren =>
+            b.withNewChildren(newChildren.reverse)
+          }.getOrElse(b)
+
         case i @ In(attr: Attribute, list)
           if attr.dataType == StringType && list.forall(_.foldable) =>
           CharVarcharUtils.getRawType(attr.metadata).flatMap {
@@ -4043,14 +4053,6 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     }
   }
 
-  private def padOuterRefAttrCmp(outerAttr: Attribute, attr: Attribute): Seq[Expression] = {
-    val Seq(r, newAttr) = CharVarcharUtils.addPaddingInStringComparison(Seq(outerAttr, attr))
-    val newOuterRef = r.transform {
-      case ar: Attribute if ar.semanticEquals(outerAttr) => OuterReference(ar)
-    }
-    Seq(newOuterRef, newAttr)
-  }
-
   private def padAttrLitCmp(attr: Attribute, lit: Expression): Option[Seq[Expression]] = {
     if (attr.dataType == StringType) {
       CharVarcharUtils.getRawType(attr.metadata).flatMap {
@@ -4073,6 +4075,25 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     } else {
       None
     }
+  }
+
+  private def padOuterAttrLitComp(
+      outerAttr: Attribute,
+      lit: Expression): Option[Seq[Expression]] = {
+    padAttrLitCmp(outerAttr, lit).map { case Seq(newAttr, newLit) =>
+      val newOuterRef = newAttr.transform {
+        case ar: Attribute if ar.semanticEquals(outerAttr) => OuterReference(ar)
+      }
+      Seq(newOuterRef, newLit)
+    }
+  }
+
+  private def padOuterRefAttrCmp(outerAttr: Attribute, attr: Attribute): Seq[Expression] = {
+    val Seq(r, newAttr) = CharVarcharUtils.addPaddingInStringComparison(Seq(outerAttr, attr))
+    val newOuterRef = r.transform {
+      case ar: Attribute if ar.semanticEquals(outerAttr) => OuterReference(ar)
+    }
+    Seq(newOuterRef, newAttr)
   }
 
   private def addPadding(expr: Expression, charLength: Int, targetLength: Int): Expression = {
