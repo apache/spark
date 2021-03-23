@@ -1051,7 +1051,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-22748: Analyze __grouping__id as a literal function") {
-    assertAnalysisSuccess(EliminateSubqueryAliases(parsePlan(
+    assertAnalysisSuccess(parsePlan(
       """
         |SELECT grouping__id FROM (
         |  SELECT grouping__id FROM (
@@ -1059,61 +1059,61 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |      GROUP BY a, b WITH ROLLUP
         |  )
         |)
-      """.stripMargin)), false)
+      """.stripMargin), false)
 
 
-    assertAnalysisSuccess(EliminateSubqueryAliases(parsePlan(
+    assertAnalysisSuccess(parsePlan(
       """
         |SELECT grouping__id FROM (
         |  SELECT a, b, count(1), grouping__id FROM TaBlE2
         |   GROUP BY a, b WITH CUBE
         |)
-      """.stripMargin)), false)
+      """.stripMargin), false)
 
-    assertAnalysisSuccess(EliminateSubqueryAliases(parsePlan(
+    assertAnalysisSuccess(parsePlan(
       """
         |SELECT grouping__id FROM (
         |  SELECT a, b, count(1), grouping__id FROM TaBlE2
         |    GROUP BY a, b GROUPING SETS ((a, b), ())
         |)
-      """.stripMargin)), false)
+      """.stripMargin), false)
 
-    assertAnalysisSuccess(EliminateSubqueryAliases(parsePlan(
+    assertAnalysisSuccess(parsePlan(
       """
         |SELECT a, b, count(1) FROM TaBlE2
         |  GROUP BY CUBE(a, b) HAVING grouping__id > 0
-      """.stripMargin)), false)
+      """.stripMargin), false)
 
-    assertAnalysisSuccess(EliminateSubqueryAliases(parsePlan(
+    assertAnalysisSuccess(parsePlan(
       """
         |SELECT * FROM (
-        |  SELECT a, b, count(1) FROM TaBlE2
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
         |    GROUP BY a, b GROUPING SETS ((a, b), ())
         |) WHERE grouping__id > 0
-      """.stripMargin)), false)
+      """.stripMargin), false)
 
-    assertAnalysisSuccess(EliminateSubqueryAliases(parsePlan(
+    assertAnalysisSuccess(parsePlan(
       """
         |SELECT * FROM (
-        |  SELECT a, b, count(1) FROM TaBlE2
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
         |    GROUP BY a, b GROUPING SETS ((a, b), ())
         |) ORDER BY grouping__id > 0
-      """.stripMargin)), false)
+      """.stripMargin), false)
 
-    assertAnalysisSuccess(EliminateSubqueryAliases(parsePlan(
+    assertAnalysisSuccess(parsePlan(
       """
         |SELECT a, b, count(1) FROM TaBlE2
         |  GROUP BY a, b GROUPING SETS ((a, b), ())
         |    ORDER BY grouping__id > 0
-      """.stripMargin)), false)
+      """.stripMargin), false)
 
-    assertAnalysisError(EliminateSubqueryAliases(parsePlan(
+    assertAnalysisError(parsePlan(
       """
         |SELECT grouping__id FROM (
         |  SELECT a, b, count(1), grouping__id FROM TaBlE2
         |    GROUP BY a, b
         |)
-      """.stripMargin)),
+      """.stripMargin),
       Seq("grouping_id() can only be used with GroupingSets/Cube/Rollup"),
       false)
   }
