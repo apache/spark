@@ -297,11 +297,10 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Period.ofMonths(2), Int.MaxValue),
       (Period.ofMonths(Int.MinValue), 10d),
       (Period.ofMonths(200), Double.PositiveInfinity),
-      (Period.ofMonths(200), Float.NegativeInfinity),
+      (Period.ofMonths(-200), Float.NegativeInfinity)
     ).foreach { case (period, num) =>
       checkExceptionInExpression[ArithmeticException](
-        MultiplyYMInterval(Literal(period), Literal(num)),
-        "overflow")
+        MultiplyYMInterval(Literal(period), Literal(num)), "overflow")
     }
 
     numericTypes.foreach { numType =>
