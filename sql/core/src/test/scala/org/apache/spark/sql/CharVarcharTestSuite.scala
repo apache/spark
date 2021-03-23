@@ -651,7 +651,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-34833: right-padding applied correctly for correlated subqueries - other preds") {
     withTable("t") {
-      sql("CREATE TABLE t(c0 INT, c1 CHAR(5), c2 CHAR(7)) USING parquet")
+      sql(s"CREATE TABLE t(c0 INT, c1 CHAR(5), c2 CHAR(7)) USING $format")
       sql("INSERT INTO t VALUES (1, 'abc', 'abc')")
       Seq("c1 = 'abc'", "'abc' = c1", "c1 = c2", "c1 IN ('abc', 'defghijk')", "c1 IN (c2)")
         .foreach { predicate =>
