@@ -1109,7 +1109,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
             self.assertEqual(expected, df1.collect())
 
-    # SPARK-34600
+    # SPARK-34799
     def test_user_defined_types_with_udf(self):
         """PandasUDF returns single UDT out.
         """
@@ -1136,13 +1136,12 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn("vector", create_vector(col("id")))
             .withColumn("box", create_boxes(col("id")))
         )
-        df.show()
         self.assertEqual([
             Row(id=0, vector=ExamplePoint(0, 1), box=ExampleBox(0, 1, 2, 3)),
             Row(id=1, vector=ExamplePoint(1, 2), box=ExampleBox(1, 2, 3, 4))
         ], df.collect())
 
-    # SPARK-34600
+    # SPARK-34799
     def test_user_defined_types_in_struct(self):
         @pandas_udf(StructType([
             StructField("vec", ArrayType(ExamplePointUDT())),
@@ -1159,7 +1158,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         df = self.spark.range(1, 3)
         df = df.withColumn("nested", array_of_udt_structs(df.id))
-        df.show()
         self.assertEqual([
             Row(id=1, nested=Row(
                 vec=[ExamplePoint(1, 1), ExamplePoint(2, 2)],
@@ -1169,7 +1167,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 box=[ExampleBox(2, 2, 2, 2), ExampleBox(3, 3, 3, 3)]))
         ], df.collect())
 
-    # SPARK-34600
+    # SPARK-34799
     def test_user_defined_types_in_array(self):
         @pandas_udf(ArrayType(ExamplePointUDT()))
         def array_of_points(series: pd.Series) -> pd.Series:
@@ -1191,7 +1189,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             .withColumn("points", array_of_points(df.id))
             .withColumn("boxes", array_of_boxes(df.id))
         )
-        df.show()
         self.assertEqual([
             Row(
                 id=1,
