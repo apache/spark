@@ -313,7 +313,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-34850: multiply day-time interval by numeric") {
     Seq(
-      (Duration.ofDays(-100), Float.NaN) -> Duration.ofDays(0),
       (Duration.ofHours(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
       (Duration.ofMinutes(0), 10) -> Duration.ofMinutes(0),
       (Duration.ofSeconds(10), 0L) -> Duration.ofSeconds(0),
@@ -321,19 +320,18 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Duration.ofDays(12), 0.3d) -> Duration.ofDays(12).multipliedBy(3).dividedBy(10),
       (Duration.of(-1000, ChronoUnit.MICROS), 0.3f) -> Duration.of(-300, ChronoUnit.MICROS),
       (Duration.ofDays(9999), 0.0001d) -> Duration.ofDays(9999).dividedBy(10000),
-      (Duration.ofDays(9999), BigDecimal(0.0001)) -> Duration.ofDays(9999).dividedBy(10000),
-      (Duration.ofDays(200), Double.PositiveInfinity) ->
-        Duration.of(Long.MaxValue, ChronoUnit.MICROS),
-      (Duration.ofDays(-200), Float.NegativeInfinity) ->
-        Duration.of(Long.MaxValue, ChronoUnit.MICROS)
+      (Duration.ofDays(9999), BigDecimal(0.0001)) -> Duration.ofDays(9999).dividedBy(10000)
     ).foreach { case ((duration, num), expected) =>
       checkEvaluation(MultiplyDTInterval(Literal(duration), Literal(num)), expected)
     }
 
     Seq(
+      (Duration.ofDays(-100), Float.NaN) -> "input is infinite or NaN",
       (Duration.ofDays(2), Int.MaxValue) -> "overflow",
       (Duration.ofHours(Int.MinValue), Short.MinValue) -> "overflow",
-      (Duration.ofDays(10), BigDecimal(Long.MinValue)) -> "Overflow"
+      (Duration.ofDays(10), BigDecimal(Long.MinValue)) -> "Overflow",
+      (Duration.ofDays(200), Double.PositiveInfinity) -> "input is infinite or NaN",
+      (Duration.ofDays(-200), Float.NegativeInfinity) -> "input is infinite or NaN"
     ).foreach { case ((duration, num), expectedErrMsg) =>
       checkExceptionInExpression[ArithmeticException](
         MultiplyDTInterval(Literal(duration), Literal(num)), expectedErrMsg)

@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.RoundingMode
 import java.util.Locale
+
+import com.google.common.math.DoubleMath
 
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
@@ -313,9 +316,9 @@ case class MultiplyDTInterval(
       Math.multiplyExact(micros, num.asInstanceOf[Number].longValue())
     case _: DecimalType => (micros: Long, num) =>
       val decimalRes = ((new Decimal).set(micros) * num.asInstanceOf[Decimal]).toJavaBigDecimal
-      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+      decimalRes.setScale(0, RoundingMode.HALF_UP).longValueExact()
     case _: FractionalType => (micros: Long, num) =>
-      Math.round(micros * num.asInstanceOf[Number].doubleValue())
+      DoubleMath.roundToLong(micros * num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
@@ -330,7 +333,9 @@ case class MultiplyDTInterval(
         s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
         ".setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()")
     case _: FractionalType =>
-      defineCodeGen(ctx, ev, (m, n) => s"java.lang.Math.round($m * (double)$n)")
+      val dm = classOf[DoubleMath].getName
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"$dm.roundToLong($m * (double)$n, java.math.RoundingMode.HALF_UP)")
   }
 
   override def toString: String = s"($left * $right)"
