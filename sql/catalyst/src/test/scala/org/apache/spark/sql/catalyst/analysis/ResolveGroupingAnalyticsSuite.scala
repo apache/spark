@@ -287,9 +287,9 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
         Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)))),
         Seq(unresolved_a, unresolved_b), r1))
     val expected = Project(Seq(a, b), Sort(
-      Seq(SortOrder('aggOrder.byte.withNullability(false), Ascending)), true,
+      Seq(SortOrder(grouping_a, Ascending)), true,
       Aggregate(Seq(a, b, gid),
-        Seq(a, b, grouping_a.as("aggOrder")),
+        Seq(a, b, gid),
         Expand(
           Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L),
             Seq(a, b, c, a, b, 0L)),
@@ -309,9 +309,9 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
         Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)))),
         Seq(unresolved_a, unresolved_b), r1))
     val expected3 = Project(Seq(a, b), Sort(
-      Seq(SortOrder('aggOrder.long.withNullability(false), Ascending)), true,
+      Seq(SortOrder(gid, Ascending)), true,
       Aggregate(Seq(a, b, gid),
-        Seq(a, b, gid.as("aggOrder")),
+        Seq(a, b, gid),
         Expand(
           Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L),
             Seq(a, b, c, a, b, 0L)),
