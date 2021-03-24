@@ -377,7 +377,6 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
 
   test("SPARK-34472: local:// ivySettings file should not be localized on driver in cluster mode") {
-
     val emptyIvySettings = createEmptyIvySettingsFile
     val localIvySettingsPath = s"${Utils.LOCAL_SCHEME}://${emptyIvySettings.getAbsolutePath}"
     val result = File.createTempFile("result", null, tempDir)
@@ -391,7 +390,6 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("SPARK-34472: non-local ivySettings file should be localized on driver in cluster mode") {
-
     val emptyIvySettings = createEmptyIvySettingsFile
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,
