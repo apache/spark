@@ -58,7 +58,7 @@ private[history] class ApplicationCache(
 
   }
 
-  private val removalListener = new RemovalListener[CacheKey, CacheEntry] {
+  private val evictionListener = new RemovalListener[CacheKey, CacheEntry] {
 
     /**
      * Removal event notifies the provider to detach the UI.
@@ -76,7 +76,7 @@ private[history] class ApplicationCache(
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
     Caffeine.newBuilder()
       .maximumSize(retainedApplications)
-      .evictionListener(removalListener)
+      .evictionListener(evictionListener)
       .build(appLoader)
   }
 
@@ -224,7 +224,10 @@ private[history] class ApplicationCache(
     }
   }
 
-  def invalidate(key: CacheKey): Unit = appCache.invalidate(key)
+  def invalidate(key: CacheKey): Unit = appCache.asMap().computeIfPresent(key, (key, value) => {
+    evictionListener.onRemoval(key, value, null)
+    null
+  })
 
 }
 
