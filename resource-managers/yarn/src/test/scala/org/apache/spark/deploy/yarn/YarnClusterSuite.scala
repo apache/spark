@@ -369,15 +369,37 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, result, "true")
   }
 
-  test("SPARK-34472: ivySettings file should be localized on driver in cluster mode") {
-
+  def createEmptyIvySettingsFile: File = {
     val emptyIvySettings = File.createTempFile("ivy", ".xml")
     Files.write("<ivysettings />", emptyIvySettings, StandardCharsets.UTF_8)
+    emptyIvySettings
+  }
 
+
+  test("SPARK-34472: local:// ivySettings file should not be localized on driver in cluster mode") {
+
+    val emptyIvySettings = createEmptyIvySettingsFile
+    val localIvySettingsPath = s"${Utils.LOCAL_SCHEME}://${emptyIvySettings.getAbsolutePath}"
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,
       mainClassName(YarnAddJarTest.getClass),
-      appArgs = Seq(result.getAbsolutePath),
+      // If original ivySettings was a local URI, it should not be localized through YarnClient
+      // so the expected ivySettings path on the driver is exactly the same as the user path
+      appArgs = Seq(result.getAbsolutePath, localIvySettingsPath),
+      extraConf = Map("spark.jars.ivySettings" -> localIvySettingsPath))
+    checkResult(finalState, result)
+  }
+
+  test("SPARK-34472: non-local ivySettings file should be localized on driver in cluster mode") {
+
+    val emptyIvySettings = createEmptyIvySettingsFile
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(clientMode = false,
+      mainClassName(YarnAddJarTest.getClass),
+      // For non-local URIs, make sure that ivySettings conf was changed to the localized file
+      // So the expected ivySettings path on the driver will start with the file name and then
+      // so random UUID suffix
+      appArgs = Seq(result.getAbsolutePath, emptyIvySettings.getName),
       extraConf = Map("spark.jars.ivySettings" -> emptyIvySettings.getAbsolutePath))
     checkResult(finalState, result)
   }
@@ -598,26 +620,26 @@ private object YarnClasspathTest extends Logging {
 
 private object YarnAddJarTest extends Logging {
   def main(args: Array[String]): Unit = {
-    if (args.length != 1) {
+    if (args.length != 2) {
       // scalastyle:off println
       System.err.println(
         s"""
            |Invalid command line: ${args.mkString(" ")}
            |
-           |Usage: YarnAddJarTest [result file]
+           |Usage: YarnAddJarTest [result file] [expected ivy settings prefix]
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
     }
 
     val resultPath = args(0)
+    val expectedIvySettingsPrefix = args(1)
     val sc = new SparkContext(new SparkConf())
 
     var result = "failure"
     try {
       val settingsFile = sc.getConf.get("spark.jars.ivySettings")
-      // Make sure that ivySettings conf was set to the localized file
-      assert(settingsFile.startsWith(Client.LOCALIZED_CONF_DIR))
+      assert(settingsFile.startsWith(expectedIvySettingsPrefix))
 
       val caught = intercept[RuntimeException] {
         sc.addJar("ivy://org.fake-project.test:test:1.0.0")

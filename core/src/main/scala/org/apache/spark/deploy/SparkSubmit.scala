@@ -1277,7 +1277,11 @@ private[spark] object SparkSubmitUtils {
       settingsFile: String,
       remoteRepos: Option[String],
       ivyPath: Option[String]): IvySettings = {
-    val file = new File(settingsFile)
+    val file = if (Utils.isLocalUri(settingsFile)) {
+      new File(new URI(settingsFile).getPath)
+    } else {
+      new File(settingsFile)
+    }
     require(file.exists(), s"Ivy settings file $file does not exist")
     require(file.isFile(), s"Ivy settings file $file is not a normal file")
     val ivySettings: IvySettings = new IvySettings

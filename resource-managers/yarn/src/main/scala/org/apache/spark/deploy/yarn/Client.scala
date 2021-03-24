@@ -131,6 +131,18 @@ private[spark] class Client(
 
   require(keytab == null || !Utils.isLocalUri(keytab), "Keytab should reference a local file.")
 
+  private val ivySettings = sparkConf.getOption("spark.jars.ivySettings")
+  private val ivySettingsLocalizedFileName: Option[String] = ivySettings match {
+    case Some(ivySettingsPath) if isClusterMode && !Utils.isLocalUri(ivySettingsPath) =>
+      val ivySettingsFile = new File(ivySettingsPath)
+      require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
+      require(ivySettingsFile.isFile(), s"Ivy settings file $ivySettingsFile is not a normal file")
+      // Generate a file name that can be used for the ivySettings file, that does not conflict
+      // with any user file.
+      Some(ivySettingsFile.getName() + "-" + UUID.randomUUID().toString)
+    case _ => None
+  }
+
   private val launcherBackend = new LauncherBackend() {
     override protected def conf: SparkConf = sparkConf
 
@@ -518,6 +530,13 @@ private[spark] class Client(
       require(localizedPath != null, "Keytab file already distributed.")
     }
 
+    // If we passed in a ivySettings file, make sure we copy the file to the distributed cache
+    // so that the driver can access it
+    ivySettingsLocalizedFileName.foreach { ivy =>
+      val (_, localizedPath) = distribute(ivySettings.get, destName = Some(ivy))
+      require(localizedPath != null, "IvySettings file already distributed.")
+    }
+
     /**
      * Add Spark to the cache. There are two settings that control what files to add to the cache:
      * - if a Spark archive is defined, use the archive. The archive is expected to contain
@@ -793,24 +812,10 @@ private[spark] class Client(
       // distributed file.
       amKeytabFileName.foreach { kt => props.setProperty(KEYTAB.key, kt) }
 
-      // Upload user provided ivysettings.xml file to the distributed cache
-      val ivySettings = sparkConf.getOption("spark.jars.ivySettings")
-      ivySettings match {
-        case Some(ivySettingsPath) if isClusterMode && !Utils.isLocalUri(ivySettingsPath) =>
-          val ivySettingsFile = new File(ivySettingsPath)
-          require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
-          require(ivySettingsFile.isFile(),
-            s"Ivy settings file $ivySettingsFile is not a normal file")
-          // Generate a file name that can be used for the ivySettings file, that does not conflict
-          // with any other conf file.
-          val amIvySettingsFileName = ivySettingsFile.getName() + "-" + UUID.randomUUID().toString
-          confStream.putNextEntry(new ZipEntry(amIvySettingsFileName))
-          Files.copy(ivySettingsFile.toPath, confStream)
-          confStream.closeEntry()
-
-          // Override the ivySettings file name with the name of the distributed file
-          props.setProperty("spark.jars.ivySettings", s"$LOCALIZED_CONF_DIR/$amIvySettingsFileName")
-        case _ => // do nothing
+      // If propagating the ivySettings file to the distributed cache, override the ivySettings
+      // file name with the name of the distributed file.
+      ivySettingsLocalizedFileName.foreach { ivy =>
+        props.setProperty("spark.jars.ivySettings", ivy)
       }
 
 
