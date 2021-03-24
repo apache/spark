@@ -203,6 +203,36 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
+  // NOTE: branch-2.4 does not have the interpreted implementation of SafeProjection, so
+  // it does not fall back into the interpreted mode if the compilation fails.
+  // Therefore, the test in this PR just checks that the compilation error happens
+  // instead of checking that the interpreted mode works well.
+  private def checkCompilationError[T : ExpressionEncoder](
+      input: T,
+      testName: String): Unit = {
+    testAndVerifyNotLeakingReflectionObjects(s"compilation error: $testName: $input") {
+      val encoder = implicitly[ExpressionEncoder[T]]
+      val row = encoder.toRow(input)
+      val boundEncoder = encoder.resolveAndBind()
+      val errMsg = intercept[RuntimeException] {
+        boundEncoder.fromRow(row)
+      }.getCause.getMessage
+      assert(errMsg.contains("failed to compile: "))
+    }
+  }
+
+  // holder class to trigger Class.getSimpleName issue
+  object MalformedClassObject extends Serializable {
+    case class MalformedNameExample(x: Int)
+  }
+
+  {
+    OuterScopes.addOuterScope(MalformedClassObject)
+    checkCompilationError(
+      MalformedClassObject.MalformedNameExample(42),
+      "nested Scala class")
+  }
+
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
   productTest(

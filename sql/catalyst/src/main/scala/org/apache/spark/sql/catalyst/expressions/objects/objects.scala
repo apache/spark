@@ -486,7 +486,7 @@ case class NewInstance(
     ev.isNull = resultIsNull
 
     val constructorCall = outer.map { gen =>
-      s"${gen.value}.new ${cls.getSimpleName}($argString)"
+      s"${gen.value}.new ${Utils.getSimpleName(cls)}($argString)"
     }.getOrElse {
       s"new $className($argString)"
     }
