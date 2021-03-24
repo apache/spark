@@ -680,21 +680,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |Invalid expressions: [${invalidExprSqls.mkString(", ")}]""".stripMargin
             )
 
+          case c: Command =>
+            c.innerChildren.foreach {
+              case l: LogicalPlan => checkAnalysis(l)
+              case _ =>
+            }
+
           case _ => // Analysis successful!
         }
     }
-
-    // Check analysis on internal nodes.
-    plan match {
-      case c: Command =>
-        c.innerChildren.foreach {
-          case l: LogicalPlan => checkAnalysis(l)
-          case _ =>
-        }
-
-      case _ => // Analysis successful!
-    }
-
     checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
