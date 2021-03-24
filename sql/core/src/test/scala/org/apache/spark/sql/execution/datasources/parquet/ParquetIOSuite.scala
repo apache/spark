@@ -52,26 +52,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-// Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
-// with an empty configuration (it is after all not intended to be used in this way?)
-// and members are private so we need to make our own in order to pass the schema
-// to the writer.
-private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteSupport[Group] {
-  var groupWriter: GroupWriter = null
-
-  override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
-    groupWriter = new GroupWriter(recordConsumer, schema)
-  }
-
-  override def init(configuration: Configuration): WriteContext = {
-    new WriteContext(schema, new java.util.HashMap[String, String]())
-  }
-
-  override def write(record: Group): Unit = {
-    groupWriter.write(record)
-  }
-}
-
 /**
  * A test suite that tests basic Parquet I/O.
  */
