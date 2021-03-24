@@ -190,7 +190,7 @@ object UnresolvedAttribute {
    * Used to split attribute name by dot with backticks rule.
    * Backticks must appear in pairs, and the quoted string must be a complete name part,
    * which means `ab..c`e.f is not allowed.
-   * Escape character is not supported now, so we can't use backtick inside name part.
+   * We can use backtick only inside quoted name parts.
    */
   def parseAttributeName(name: String): Seq[String] = {
     def e = new AnalysisException(s"syntax error in attribute name: $name")
@@ -202,8 +202,13 @@ object UnresolvedAttribute {
       val char = name(i)
       if (inBacktick) {
         if (char == '`') {
-          inBacktick = false
-          if (i + 1 < name.length && name(i + 1) != '.') throw e
+          if (i + 1 < name.length && name(i + 1) == '`') {
+            tmp += '`'
+            i += 1
+          } else {
+            inBacktick = false
+            if (i + 1 < name.length && name(i + 1) != '.') throw e
+          }
         } else {
           tmp += char
         }
