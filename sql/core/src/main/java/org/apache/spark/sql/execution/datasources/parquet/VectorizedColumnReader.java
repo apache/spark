@@ -374,6 +374,11 @@ public class VectorizedColumnReader {
             }
           }
         } else if (column.dataType() == DataTypes.LongType) {
+          // In `ParquetToSparkSchemaConverter`, we map parquet UINT32 to our LongType.
+          // For unsigned int32, it stores as dictionary encoded signed int32 in Parquet
+          // whenever dictionary is available.
+          // Here we eagerly decode it to the original signed int value then convert to
+          // long(unit32).
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i,
@@ -576,7 +581,9 @@ public class VectorizedColumnReader {
       defColumn.readIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.LongType) {
-      // We use LongType to handle UINT32. In Parquet, UINT32 values are stored as signed integers
+      // In `ParquetToSparkSchemaConverter`, we map parquet UINT32 to our LongType.
+      // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary fall backs.
+      // We use read them as long values.
       defColumn.readUnsignedIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.ByteType) {

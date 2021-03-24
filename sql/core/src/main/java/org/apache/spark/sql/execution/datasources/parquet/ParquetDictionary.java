@@ -40,8 +40,9 @@ public final class ParquetDictionary implements Dictionary {
   @Override
   public long decodeToLong(int id) {
     if (needTransform) {
-      // for unsigned int32, it stores as signed int32. We need to decode it
-      // to int before converting to long
+      // For unsigned int32, it stores as dictionary encoded signed int32 in Parquet
+      // whenever dictionary is available.
+      // Here we lazily decode it to the original signed int value then convert to long(unit32).
       return Integer.toUnsignedLong(dictionary.decodeToInt(id));
     } else {
       return dictionary.decodeToLong(id);
