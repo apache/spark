@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.temporal.ChronoUnit
 import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 
 import scala.language.implicitConversions
 
@@ -325,7 +325,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Duration.ofDays(200), Double.PositiveInfinity) ->
         Duration.of(Long.MaxValue, ChronoUnit.MICROS),
       (Duration.ofDays(-200), Float.NegativeInfinity) ->
-        Duration.of(Long.MaxValue, ChronoUnit.MICROS),
+        Duration.of(Long.MaxValue, ChronoUnit.MICROS)
     ).foreach { case ((duration, num), expected) =>
       checkEvaluation(MultiplyDTInterval(Literal(duration), Literal(num)), expected)
     }
