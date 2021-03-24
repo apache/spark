@@ -1434,6 +1434,9 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def hasConflictingAttrs(p: LogicalPlan): Boolean = {
       p.children.length > 1 && {
+        // Note that duplicated attributes are allowed within a single node,
+        // e.g., df.select($"a", $"a"), so we should only check conflicting
+        // attributes between nodes.
         p.children.tail.foldLeft(p.children.head.outputSet) {
           case (conflictAttrs, child) => conflictAttrs.intersect(child.outputSet)
         }.nonEmpty
