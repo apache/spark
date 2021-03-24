@@ -295,3 +295,43 @@ case class MultiplyYMInterval(
 
   override def toString: String = s"($left * $right)"
 }
+
+// Multiply a day-time interval by a numeric
+case class MultiplyDTInterval(
+    interval: Expression,
+    num: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  override def left: Expression = interval
+  override def right: Expression = num
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DayTimeIntervalType, NumericType)
+  override def dataType: DataType = DayTimeIntervalType
+
+  @transient
+  private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
+    case _: IntegralType => (micros: Long, num) =>
+      Math.multiplyExact(micros, num.asInstanceOf[Number].longValue())
+    case _: DecimalType => (micros: Long, num) =>
+      val decimalRes = ((new Decimal).set(micros) * num.asInstanceOf[Decimal]).toJavaBigDecimal
+      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+    case _: FractionalType => (micros: Long, num) =>
+      Math.round(micros * num.asInstanceOf[Number].doubleValue())
+  }
+
+  override def nullSafeEval(interval: Any, num: Any): Any = {
+    evalFunc(interval.asInstanceOf[Long], num)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
+    case _: IntegralType =>
+      defineCodeGen(ctx, ev, (m, n) => s"java.lang.Math.multiplyExact($m, $n)")
+    case _: DecimalType =>
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
+        ".setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()")
+    case _: FractionalType =>
+      defineCodeGen(ctx, ev, (m, n) => s"java.lang.Math.round($m * (double)$n)")
+  }
+
+  override def toString: String = s"($left * $right)"
+}
