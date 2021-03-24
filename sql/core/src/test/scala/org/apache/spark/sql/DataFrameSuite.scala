@@ -2755,6 +2755,13 @@ class DataFrameSuite extends QueryTest
     )
     checkAnswer(test.select($"best_name.name"), Row("bob") :: Row("bob") :: Row("sam") :: Nil)
   }
+
+  test("SPARK-34829: Typed ScalaUDF result conversion works") {
+    val reverse = udf((s: String) => s.reverse)
+    val df = Seq(Map(1 -> "abc", 2 -> "def")).toDF("map")
+    val test = df.select(transform_values(col("map"), (_, v) => reverse(v)))
+    checkAnswer(test, Row(Map(1 -> "cab", 2 -> "fed")) :: Nil)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
