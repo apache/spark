@@ -214,8 +214,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
     for (p <- pids) {
       try {
         allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
-        // if we had an error getting any of the metrics, we don't want to report partial metrics, as
-        // that would be misleading.
+        // if we had an error getting any of the metrics, we don't want to
+        // report partial metrics, as that would be misleading.
         if (!isAvailable) {
           return ProcfsMetrics(0, 0, 0, 0, 0, 0)
         }
