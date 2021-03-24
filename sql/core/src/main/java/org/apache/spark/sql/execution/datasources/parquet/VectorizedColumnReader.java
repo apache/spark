@@ -583,7 +583,7 @@ public class VectorizedColumnReader {
     } else if (column.dataType() == DataTypes.LongType) {
       // In `ParquetToSparkSchemaConverter`, we map parquet UINT32 to our LongType.
       // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary fall backs.
-      // We use read them as long values.
+      // We read them as long values.
       defColumn.readUnsignedIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.ByteType) {
