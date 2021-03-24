@@ -65,8 +65,13 @@ Aggregate Attributes [1]: [count#9]
 Results [2]: [i_manufact#5, count#10]
 
 (10) Exchange
+<<<<<<< HEAD
 Input [2]: [i_manufact#5, count#10]
 Arguments: hashpartitioning(i_manufact#5, 5), ENSURE_REQUIREMENTS, [id=#11]
+=======
+Input [2]: [i_manufact#2, count#9]
+Arguments: hashpartitioning(i_manufact#2, 5), ENSURE_REQUIREMENTS, [id=#10]
+>>>>>>> abfd9b23cd7c21e9525df85a16e0611ef0f35908
 
 (11) HashAggregate [codegen id : 2]
 Input [2]: [i_manufact#5, count#10]
