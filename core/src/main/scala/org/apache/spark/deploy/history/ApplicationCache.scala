@@ -25,7 +25,9 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache, RemovalCause, RemovalListener}
+import com.github.benmanes.caffeine.cache.{Caffeine, RemovalCause, RemovalListener}
+import com.github.benmanes.caffeine.guava.CaffeinatedGuava
+import com.google.common.cache.{CacheLoader, LoadingCache}
 import org.eclipse.jetty.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
@@ -73,11 +75,11 @@ private[history] class ApplicationCache(
   }
 
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
-    Caffeine.newBuilder()
+    val builder = Caffeine.newBuilder()
       .maximumSize(retainedApplications)
       .evictionListener(evictionListener)
       .executor((command: Runnable) => command.run())
-      .build(appLoader)
+    CaffeinatedGuava.build(builder, appLoader)
   }
 
   /**
@@ -128,7 +130,7 @@ private[history] class ApplicationCache(
   }
 
   /** @return Number of cached UIs. */
-  def size(): Long = appCache.estimatedSize()
+  def size(): Long = appCache.size()
 
   private def time[T](t: Timer)(f: => T): T = {
     val timeCtx = t.time()
@@ -197,7 +199,7 @@ private[history] class ApplicationCache(
     val sb = new StringBuilder(s"ApplicationCache(" +
           s" retainedApplications= $retainedApplications)")
     sb.append(s"; time= ${clock.getTimeMillis()}")
-    sb.append(s"; entry count= ${appCache.estimatedSize()}\n")
+    sb.append(s"; entry count= ${appCache.size()}\n")
     sb.append("----\n")
     appCache.asMap().asScala.foreach {
       case(key, entry) => sb.append(s"  $key -> $entry\n")
