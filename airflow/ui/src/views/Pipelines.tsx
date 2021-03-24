@@ -19,11 +19,14 @@
 
 import React from 'react';
 import { Center, Heading } from '@chakra-ui/react';
+import AppHeader from 'components/AppHeader';
 
 const Pipelines: React.FC = () => (
-  <Center height="100vh">
-    <Heading>Pipelines</Heading>
-  </Center>
+  <AppHeader>
+    <Center height="100%" width="100%">
+      <Heading>Pipelines</Heading>
+    </Center>
+  </AppHeader>
 );
 
 export default Pipelines;
