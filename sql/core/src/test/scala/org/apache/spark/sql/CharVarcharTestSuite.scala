@@ -653,7 +653,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
              |  FROM t
              |  WHERE c0 = t1.c0 AND $predicate
              |) > 0
-             |LIMIT 3
          """.stripMargin),
           Row(1))
       }
