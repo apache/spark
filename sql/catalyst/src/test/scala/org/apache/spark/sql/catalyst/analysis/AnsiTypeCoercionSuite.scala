@@ -384,10 +384,15 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
     shouldNotCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType))
     shouldNotCastStringInput(TypeCollection(NumericType, BinaryType))
-    // When there are multiple convertible types in the `TypeCollection` and there is no closest
-    // convertible data type among the convertible types.
-    shouldNotCastStringLiteral(TypeCollection(NumericType, BinaryType))
-    shouldNotCast(NullType, TypeCollection(IntegerType, StringType))
+    // When there are multiple convertible types in the `TypeCollection` and there is no such
+    // a data type that can be implicit cast to all the other convertible types in the collection.
+    Seq(TypeCollection(NumericType, StringType),
+      TypeCollection(NumericType, DecimalType, StringType),
+      TypeCollection(IntegerType, LongType, BooleanType),
+      TypeCollection(DateType, TimestampType, BooleanType)).foreach { typeCollection =>
+      shouldNotCastStringLiteral(typeCollection)
+      shouldNotCast(NullType, typeCollection)
+    }
   }
 
   test("tightest common bound for types") {
