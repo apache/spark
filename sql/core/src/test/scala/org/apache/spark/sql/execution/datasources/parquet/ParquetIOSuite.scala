@@ -40,8 +40,8 @@ import org.apache.parquet.hadoop.metadata.CompressionCodecName.GZIP
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.sql._
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -459,11 +459,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val writer = createParquetWriter(schema, path, dictionaryEnabled)
 
         val factory = new SimpleGroupFactory(schema)
-        (0 until 10).foreach { i =>
+        (0 until 1000).foreach { i =>
           val group = factory.newGroup()
-            .append("a", i + Byte.MaxValue)
-            .append("b", i + Short.MaxValue)
-            .append("c", i + Int.MaxValue)
+            .append("a", i % 100 + Byte.MaxValue)
+            .append("b", i % 100 + Short.MaxValue)
+            .append("c", i % 100 + Int.MaxValue)
           writer.write(group)
         }
         writer.close()
@@ -473,8 +473,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val path = new Path(dir.toURI.toString, "part-r-0.parquet")
         makeRawParquetFile(path)
         readParquetFile(path.toString) { df =>
-          checkAnswer(df, (0 until 10).map { i =>
-            Row(i + Byte.MaxValue, i + Short.MaxValue, i + Int.MaxValue.toLong)
+          checkAnswer(df, (0 until 1000).map { i =>
+            Row(i % 100 + Byte.MaxValue,
+              i % 100 + Short.MaxValue,
+              i % 100 + Int.MaxValue.toLong)
           })
         }
       }

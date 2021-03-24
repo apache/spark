@@ -278,16 +278,20 @@ public class VectorizedColumnReader {
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
           PrimitiveType primitiveType = descriptor.getPrimitiveType();
-          if (primitiveType.getOriginalType() == OriginalType.DECIMAL &&
-              primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS() &&
-              primitiveType.getPrimitiveTypeName() == INT64) {
-            // We need to make sure that we initialize the right type for the dictionary otherwise
-            // WritableColumnVector will throw an exception when trying to decode to an Int when the
-            // dictionary is in fact initialized as Long
-            column.setDictionary(new ParquetDictionary(dictionary, true));
-          } else {
-            column.setDictionary(new ParquetDictionary(dictionary, false));
-          }
+
+          // We need to make sure that we initialize the right type for the dictionary otherwise
+          // WritableColumnVector will throw an exception when trying to decode to an Int when the
+          // dictionary is in fact initialized as Long
+          boolean castLongToInt = primitiveType.getOriginalType() == OriginalType.DECIMAL &&
+            primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+            primitiveType.getPrimitiveTypeName() == INT64;
+
+          // We require a long value, but we need to use dictionary to decode the original
+          // signed int first
+          boolean isUnsignedInt32 = primitiveType.getOriginalType() == OriginalType.UINT_32;
+
+          column.setDictionary(
+            new ParquetDictionary(dictionary, castLongToInt || isUnsignedInt32));
         } else {
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
         }
