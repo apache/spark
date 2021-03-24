@@ -29,7 +29,7 @@ import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.concurrent.duration._
 
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
@@ -432,7 +432,7 @@ class ExecutorSuite extends SparkFunSuite
     }
 
     def errorInGuavaCache(e: => Throwable): Throwable = {
-      val cache = Caffeine.newBuilder()
+      val cache = CacheBuilder.newBuilder()
         .build(new CacheLoader[String, String] {
           override def load(key: String): String = throw e
         })
