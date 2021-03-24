@@ -236,11 +236,11 @@ SELECT * FROM withz ORDER BY k
 struct<k:int,v:string>
 -- !query output
 1	1 v
-4	4 v
-7	7 v
 10	10 v
 13	13 v
 16	16 v
+4	4 v
+7	7 v
 
 
 -- !query

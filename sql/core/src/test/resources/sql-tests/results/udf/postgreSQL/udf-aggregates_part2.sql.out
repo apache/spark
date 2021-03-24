@@ -251,9 +251,9 @@ select t1.max_unique2, udf(g) from (select max(udf(unique2)) as max_unique2 FROM
 -- !query schema
 struct<max_unique2:int,udf(g):int>
 -- !query output
-9999	3
-9999	2
 9999	1
+9999	2
+9999	3
 
 
 -- !query

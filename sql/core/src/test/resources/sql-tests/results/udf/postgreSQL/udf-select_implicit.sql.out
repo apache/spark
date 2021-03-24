@@ -111,11 +111,11 @@ ORDER BY udf(c)
 -- !query schema
 struct<udf(count(1)):bigint>
 -- !query output
-2
-2
-2
 1
 1
+2
+2
+2
 2
 
 
@@ -156,16 +156,16 @@ SELECT udf(c) FROM test_missing_target ORDER BY udf(a)
 -- !query schema
 struct<udf(c):string>
 -- !query output
+ABAB
+ABAB
+BBBB
+BBBB
+CCCC
+CCCC
 XXXX
-ABAB
-ABAB
-BBBB
-BBBB
 bbbb
 cccc
 cccc
-CCCC
-CCCC
 
 
 -- !query
@@ -173,10 +173,10 @@ SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b) de
 -- !query schema
 struct<udf(count(1)):bigint>
 -- !query output
-4
-3
-2
 1
+2
+3
+4
 
 
 -- !query
@@ -318,10 +318,10 @@ ORDER BY udf(lower(test_missing_target.c))
 -- !query schema
 struct<udf(count(c)):bigint>
 -- !query output
+1
 2
 3
 4
-1
 
 
 -- !query
@@ -379,10 +379,10 @@ SELECT udf(count(b)) FROM test_missing_target
 -- !query schema
 struct<udf(count(b)):bigint>
 -- !query output
-4
-3
-2
 1
+2
+3
+4
 
 
 -- !query

@@ -108,11 +108,11 @@ SELECT count(*) FROM test_missing_target GROUP BY test_missing_target.c ORDER BY
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-2
-2
-2
 1
 1
+2
+2
+2
 2
 
 
@@ -153,16 +153,16 @@ SELECT c FROM test_missing_target ORDER BY a
 -- !query schema
 struct<c:string>
 -- !query output
+ABAB
+ABAB
+BBBB
+BBBB
+CCCC
+CCCC
 XXXX
-ABAB
-ABAB
-BBBB
-BBBB
 bbbb
 cccc
 cccc
-CCCC
-CCCC
 
 
 -- !query
@@ -170,10 +170,10 @@ SELECT count(*) FROM test_missing_target GROUP BY b ORDER BY b desc
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-4
-3
-2
 1
+2
+3
+4
 
 
 -- !query
@@ -315,10 +315,10 @@ ORDER BY lower(test_missing_target.c)
 -- !query schema
 struct<count(c):bigint>
 -- !query output
+1
 2
 3
 4
-1
 
 
 -- !query
@@ -376,10 +376,10 @@ SELECT count(b) FROM test_missing_target
 -- !query schema
 struct<count(b):bigint>
 -- !query output
-4
-3
-2
 1
+2
+3
+4
 
 
 -- !query

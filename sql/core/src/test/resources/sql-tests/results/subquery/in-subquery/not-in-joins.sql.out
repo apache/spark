@@ -116,9 +116,9 @@ ORDER BY        t1a, t3b
 -- !query schema
 struct<t1a:string,t1b:smallint,t1c:int,count(DISTINCT t3a):bigint,t3b:smallint,t3c:int>
 -- !query output
-val1c	8	16	1	6	12
 val1c	8	16	1	10	12
 val1c	8	16	1	17	16
+val1c	8	16	1	6	12
 
 
 -- !query
@@ -173,9 +173,9 @@ ORDER BY t1b DESC, t1d ASC
 -- !query schema
 struct<count(DISTINCT t1a):bigint,t1b:smallint,t1c:int,t1d:bigint>
 -- !query output
+1	10	NULL	12
 1	16	12	10
 1	16	12	21
-1	10	NULL	12
 1	6	8	10
 1	NULL	16	22
 

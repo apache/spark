@@ -42,8 +42,8 @@ struct<k:string,v1:int,v2:int>
 -- !query output
 one	1	1
 one	1	5
-two	2	22
 three	3	NULL
+two	2	22
 
 
 -- !query
