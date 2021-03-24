@@ -139,7 +139,7 @@ private[spark] object BlockManagerId {
    * object is about 48B, the total memory cost should be below 1MB which is feasible.
    */
   val blockManagerIdCache: LoadingCache[BlockManagerId, BlockManagerId] = {
-    val builder = new Caffeine[BlockManagerId, BlockManagerId].maximumSize(10000)
+    val builder = new Caffeine[BlockManagerId, BlockManagerId]().maximumSize(10000)
     CaffeinatedGuava.build(builder,
       new CacheLoader[BlockManagerId, BlockManagerId]() {
         override def load(id: BlockManagerId): BlockManagerId = id
