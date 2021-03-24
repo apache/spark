@@ -846,6 +846,8 @@ Be aware that the history server information may not be up-to-date with the appl
 
 # Running multiple versions of the Spark Shuffle Service
 
+Please note that this section only applies when running on YARN versions >= 2.9.0.
+
 In some cases it may be desirable to run multiple instances of the Spark Shuffle Service which are
 using different versions of Spark. This can be helpful, for example, when running a YARN cluster
 with a mixed workload of applications running multiple Spark versions, since a given version of

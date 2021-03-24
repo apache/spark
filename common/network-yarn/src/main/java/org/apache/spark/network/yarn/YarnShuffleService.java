@@ -84,7 +84,12 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * Hadoop {@link Configuration} passed by the YARN NodeManager. It is also possible to configure
  * the shuffle service by placing a resource named
  * {@value SHUFFLE_SERVICE_CONF_OVERLAY_RESOURCE_NAME} into the classpath, which should be an
- * XML file in the standard Hadoop Configuration resource format.
+ * XML file in the standard Hadoop Configuration resource format. Note that when the shuffle
+ * service is loaded in the default manner, without configuring
+ * {@code yarn.nodemanager.aux-services.<service>.classpath}, this file must be on the classpath
+ * of the NodeManager itself. When using the {@code classpath} configuration, it can be present
+ * either on the NodeManager's classpath, or specified in the classpath configuration.
+ * This {@code classpath} configuration is only supported on YARN versions >= 2.9.0.
  */
 public class YarnShuffleService extends AuxiliaryService {
   private static final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
