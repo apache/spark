@@ -29,7 +29,9 @@ import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.concurrent.duration._
 
-import com.google.common.cache.{CacheBuilder, CacheLoader}
+import com.github.benmanes.caffeine.cache.Caffeine
+import com.github.benmanes.caffeine.guava.CaffeinatedGuava
+import com.google.common.cache.CacheLoader
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
@@ -431,9 +433,10 @@ class ExecutorSuite extends SparkFunSuite
       }
     }
 
-    def errorInGuavaCache(e: => Throwable): Throwable = {
-      val cache = CacheBuilder.newBuilder()
-        .build(new CacheLoader[String, String] {
+    def errorInCaffeinatedGuavaCache(e: => Throwable): Throwable = {
+      val builder = Caffeine.newBuilder()
+      val cache = CaffeinatedGuava.build(builder,
+        new CacheLoader[String, String] {
           override def load(key: String): String = throw e
         })
       intercept[Throwable] {
@@ -450,16 +453,16 @@ class ExecutorSuite extends SparkFunSuite
       assert(isFatalError(e, depthToCheck) == (depthToCheck >= 1 && isFatal))
       // `e`'s depth is 2 so `depthToCheck` needs to be at least 3 to detect fatal errors.
       assert(isFatalError(errorInThreadPool(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
-      assert(isFatalError(errorInGuavaCache(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
+      assert(isFatalError(errorInCaffeinatedGuavaCache(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
       assert(isFatalError(
         new SparkException("foo", e),
         depthToCheck) == (depthToCheck >= 2 && isFatal))
       // `e`'s depth is 3 so `depthToCheck` needs to be at least 3 to detect fatal errors.
       assert(isFatalError(
-        errorInThreadPool(errorInGuavaCache(e)),
+        errorInThreadPool(errorInCaffeinatedGuavaCache(e)),
         depthToCheck) == (depthToCheck >= 3 && isFatal))
       assert(isFatalError(
-        errorInGuavaCache(errorInThreadPool(e)),
+        errorInCaffeinatedGuavaCache(errorInThreadPool(e)),
         depthToCheck) == (depthToCheck >= 3 && isFatal))
       assert(isFatalError(
         new SparkException("foo", new SparkException("foo", e)),
