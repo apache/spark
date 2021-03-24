@@ -4008,16 +4008,28 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case operator if operator.resolved => operator.transformExpressionsUp {
+      case operator => operator.transformExpressionsUp {
+        case e if !e.childrenResolved => e
+
         // String literal is treated as char type when it's compared to a char type column.
         // We should pad the shorter one to the longer length.
         case b @ BinaryComparison(attr: Attribute, lit) if lit.foldable =>
-          padAttrLitCmp(attr, lit).map { newChildren =>
+          padAttrLitCmp(attr, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren)
           }.getOrElse(b)
 
         case b @ BinaryComparison(lit, attr: Attribute) if lit.foldable =>
-          padAttrLitCmp(attr, lit).map { newChildren =>
+          padAttrLitCmp(attr, attr.metadata, lit).map { newChildren =>
+            b.withNewChildren(newChildren.reverse)
+          }.getOrElse(b)
+
+        case b @ BinaryComparison(or @ OuterReference(attr: Attribute), lit) if lit.foldable =>
+          padAttrLitCmp(or, attr.metadata, lit).map { newChildren =>
+            b.withNewChildren(newChildren)
+          }.getOrElse(b)
+
+        case b @ BinaryComparison(lit, or @ OuterReference(attr: Attribute)) if lit.foldable =>
+          padAttrLitCmp(or, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren.reverse)
           }.getOrElse(b)
 
@@ -4041,6 +4053,12 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         case b @ BinaryComparison(left: Attribute, right: Attribute) =>
           b.withNewChildren(CharVarcharUtils.addPaddingInStringComparison(Seq(left, right)))
 
+        case b @ BinaryComparison(OuterReference(left: Attribute), right: Attribute) =>
+          b.withNewChildren(padOuterRefAttrCmp(left, right))
+
+        case b @ BinaryComparison(left: Attribute, OuterReference(right: Attribute)) =>
+          b.withNewChildren(padOuterRefAttrCmp(right, left).reverse)
+
         case i @ In(attr: Attribute, list) if list.forall(_.isInstanceOf[Attribute]) =>
           val newChildren = CharVarcharUtils.addPaddingInStringComparison(
             attr +: list.map(_.asInstanceOf[Attribute]))
@@ -4049,9 +4067,12 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     }
   }
 
-  private def padAttrLitCmp(attr: Attribute, lit: Expression): Option[Seq[Expression]] = {
-    if (attr.dataType == StringType) {
-      CharVarcharUtils.getRawType(attr.metadata).flatMap {
+  private def padAttrLitCmp(
+      expr: Expression,
+      metadata: Metadata,
+      lit: Expression): Option[Seq[Expression]] = {
+    if (expr.dataType == StringType) {
+      CharVarcharUtils.getRawType(metadata).flatMap {
         case CharType(length) =>
           val str = lit.eval().asInstanceOf[UTF8String]
           if (str == null) {
@@ -4059,9 +4080,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           } else {
             val stringLitLen = str.numChars()
             if (length < stringLitLen) {
-              Some(Seq(StringRPad(attr, Literal(stringLitLen)), lit))
+              Some(Seq(StringRPad(expr, Literal(stringLitLen)), lit))
             } else if (length > stringLitLen) {
-              Some(Seq(attr, StringRPad(lit, Literal(length))))
+              Some(Seq(expr, StringRPad(lit, Literal(length))))
             } else {
               None
             }
@@ -4071,6 +4092,14 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     } else {
       None
     }
+  }
+
+  private def padOuterRefAttrCmp(outerAttr: Attribute, attr: Attribute): Seq[Expression] = {
+    val Seq(r, newAttr) = CharVarcharUtils.addPaddingInStringComparison(Seq(outerAttr, attr))
+    val newOuterRef = r.transform {
+      case ar: Attribute if ar.semanticEquals(outerAttr) => OuterReference(ar)
+    }
+    Seq(newOuterRef, newAttr)
   }
 
   private def addPadding(expr: Expression, charLength: Int, targetLength: Int): Expression = {
