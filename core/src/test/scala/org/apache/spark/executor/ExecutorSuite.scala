@@ -453,7 +453,8 @@ class ExecutorSuite extends SparkFunSuite
       assert(isFatalError(e, depthToCheck) == (depthToCheck >= 1 && isFatal))
       // `e`'s depth is 2 so `depthToCheck` needs to be at least 3 to detect fatal errors.
       assert(isFatalError(errorInThreadPool(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
-      assert(isFatalError(errorInCaffeinatedGuavaCache(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
+      assert(isFatalError(errorInCaffeinatedGuavaCache(e),
+        depthToCheck) == (depthToCheck >= 2 && isFatal))
       assert(isFatalError(
         new SparkException("foo", e),
         depthToCheck) == (depthToCheck >= 2 && isFatal))
