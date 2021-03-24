@@ -69,8 +69,7 @@ import org.apache.spark.network.util.TransportConf;
  *
  * @since 3.1.0
  */
-public class
-RemoteBlockPushResolver implements MergedShuffleFileManager {
+public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
   @VisibleForTesting
