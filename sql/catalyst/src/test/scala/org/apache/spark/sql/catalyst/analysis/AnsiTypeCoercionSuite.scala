@@ -386,8 +386,8 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     shouldNotCastStringInput(TypeCollection(NumericType, BinaryType))
     // When there are multiple convertible types in the `TypeCollection` and there is no such
     // a data type that can be implicit cast to all the other convertible types in the collection.
-    Seq(TypeCollection(NumericType, StringType),
-      TypeCollection(NumericType, DecimalType, StringType),
+    Seq(TypeCollection(NumericType, BinaryType),
+      TypeCollection(NumericType, DecimalType, BinaryType),
       TypeCollection(IntegerType, LongType, BooleanType),
       TypeCollection(DateType, TimestampType, BooleanType)).foreach { typeCollection =>
       shouldNotCastStringLiteral(typeCollection)
