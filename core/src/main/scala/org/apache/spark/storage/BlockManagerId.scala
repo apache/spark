@@ -140,9 +140,10 @@ private[spark] object BlockManagerId {
    */
   val blockManagerIdCache: LoadingCache[BlockManagerId, BlockManagerId] = {
     val builder = new Caffeine[BlockManagerId, BlockManagerId].maximumSize(10000)
-    CaffeinatedGuava.build(builder, new CacheLoader[BlockManagerId, BlockManagerId]() {
-      override def load(id: BlockManagerId): BlockManagerId = id
-    })
+    CaffeinatedGuava.build(builder,
+      new CacheLoader[BlockManagerId, BlockManagerId]() {
+        override def load(id: BlockManagerId): BlockManagerId = id
+      })
   }
 
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {

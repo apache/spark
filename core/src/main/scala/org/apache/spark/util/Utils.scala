@@ -1590,11 +1590,12 @@ private[spark] object Utils extends Logging {
       compressedLogFileLengthCache = {
         val builder = new Caffeine[String, java.lang.Long]
           .maximumSize(compressedLogFileLengthCacheSize)
-        CaffeinatedGuava.build(builder, new CacheLoader[String, java.lang.Long]() {
-          override def load(path: String): java.lang.Long = {
-            Utils.getCompressedFileLength(new File(path))
-          }
-        })
+        CaffeinatedGuava.build(builder,
+          new CacheLoader[String, java.lang.Long]() {
+            override def load(path: String): java.lang.Long = {
+              Utils.getCompressedFileLength(new File(path))
+            }
+          })
       }
     }
     compressedLogFileLengthCache
