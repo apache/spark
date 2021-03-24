@@ -21,16 +21,16 @@ import org.apache.spark.sql.execution.vectorized.Dictionary;
 
 public final class ParquetDictionary implements Dictionary {
   private org.apache.parquet.column.Dictionary dictionary;
-  private boolean castLongToInt = false;
+  private boolean needTransform = false;
 
-  public ParquetDictionary(org.apache.parquet.column.Dictionary dictionary, boolean castLongToInt) {
+  public ParquetDictionary(org.apache.parquet.column.Dictionary dictionary, boolean needTransform) {
     this.dictionary = dictionary;
-    this.castLongToInt = castLongToInt;
+    this.needTransform = needTransform;
   }
 
   @Override
   public int decodeToInt(int id) {
-    if (castLongToInt) {
+    if (needTransform) {
       return (int) dictionary.decodeToLong(id);
     } else {
       return dictionary.decodeToInt(id);
@@ -39,7 +39,13 @@ public final class ParquetDictionary implements Dictionary {
 
   @Override
   public long decodeToLong(int id) {
-    return dictionary.decodeToLong(id);
+    if (needTransform) {
+      // for unsigned int32, it stores as signed int32. We need to decode it
+      // to int before converting to long
+      return Integer.toUnsignedLong(dictionary.decodeToInt(id));
+    } else {
+      return dictionary.decodeToLong(id);
+    }
   }
 
   @Override

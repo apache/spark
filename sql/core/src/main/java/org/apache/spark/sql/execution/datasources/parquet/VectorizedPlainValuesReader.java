@@ -84,7 +84,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
-  public final void readIntegersAsUnsigned(int total, WritableColumnVector c, int rowId) {
+  public final void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
     int requiredBytes = total * 4;
     ByteBuffer buffer = getBuffer(requiredBytes);
     for (int i = 0; i < total; i += 1) {

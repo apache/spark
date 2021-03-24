@@ -46,7 +46,6 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
-import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT32;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.createRLEIterator;
@@ -370,6 +369,13 @@ public class VectorizedColumnReader {
               column.putInt(i, dictionary.decodeToInt(dictionaryIds.getDictId(i)));
             }
           }
+        } else if (column.dataType() == DataTypes.LongType) {
+          for (int i = rowId; i < rowId + num; ++i) {
+            if (!column.isNullAt(i)) {
+              column.putLong(i,
+                Integer.toUnsignedLong(dictionary.decodeToInt(dictionaryIds.getDictId(i))));
+            }
+          }
         } else if (column.dataType() == DataTypes.ByteType) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
@@ -566,8 +572,8 @@ public class VectorizedColumnReader {
       defColumn.readIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.LongType) {
-      //  We use LongType to handle UINT32
-      defColumn.readIntegersAsUnsigned(
+      // We use LongType to handle UINT32. In Parquet, UINT32 values are stored as signed integers
+      defColumn.readUnsignedIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.ByteType) {
       defColumn.readBytes(

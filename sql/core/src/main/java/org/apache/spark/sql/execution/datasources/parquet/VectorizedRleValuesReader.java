@@ -204,7 +204,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   // A fork of `readIntegers`, reading the signed integers as unsigned in long type
-  public void readIntegersAsUnsigned(
+  public void readUnsignedIntegers(
     int total,
     WritableColumnVector c,
     int rowId,
@@ -217,7 +217,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       switch (mode) {
         case RLE:
           if (currentValue == level) {
-            data.readIntegersAsUnsigned(n, c, rowId);
+            data.readUnsignedIntegers(n, c, rowId);
           } else {
             c.putNulls(rowId, n);
           }
@@ -638,7 +638,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-  public void readIntegersAsUnsigned(int total, WritableColumnVector c, int rowId) {
+  public void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
