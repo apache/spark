@@ -87,10 +87,10 @@ ORDER  BY t2c DESC nulls first
 -- !query schema
 struct<t2a:string,t2b:smallint,t2c:int,t2h:timestamp,t2i:date>
 -- !query output
-val1b	8	16	2014-06-04 01:02:00	2014-06-04
-val1b	8	16	2014-07-04 01:01:00	2014-07-04
-val1b	8	16	2014-07-04 01:02:00	2014-07-04
 val1b	8	16	2015-05-04 01:01:00	2015-05-04
+val1b	8	16	2014-07-04 01:01:00	2014-07-04
+val1b	8	16	2014-06-04 01:02:00	2014-06-04
+val1b	8	16	2014-07-04 01:02:00	2014-07-04
 
 
 -- !query
@@ -119,8 +119,8 @@ ORDER  BY t2d DESC
 struct<t2a:string,t2b:smallint,t2d:bigint,count(DISTINCT t2h):bigint,t2i:date>
 -- !query output
 val1b	8	119	1	2015-05-04
-val1b	8	19	1	2014-05-04
 val1b	8	19	1	2014-07-04
+val1b	8	19	1	2014-05-04
 
 
 -- !query
@@ -357,11 +357,11 @@ ORDER BY t1c DESC, t1a DESC
 -- !query schema
 struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint>
 -- !query output
-val1a	16	12	10
-val1a	16	12	21
-val1a	6	8	10
-val1b	8	16	19
 val1c	8	16	19
+val1b	8	16	19
+val1a	16	12	21
+val1a	16	12	10
+val1a	6	8	10
 
 
 -- !query
@@ -404,12 +404,12 @@ ORDER BY t1b DESC NULLs first, t1c  DESC NULLs last
 -- !query schema
 struct<t1a:string,t1b:smallint,t1c:int>
 -- !query output
-val1a	16	12
-val1b	8	16
-val1d	10	NULL
 val1d	NULL	16
+val1a	16	12
 val1e	10	NULL
+val1d	10	NULL
 val1e	10	NULL
+val1b	8	16
 
 
 -- !query
@@ -449,10 +449,10 @@ ORDER BY t1c DESC NULLS last, t1a DESC
 -- !query schema
 struct<t1a:string,t1b:smallint,t1c:int>
 -- !query output
-val1b	8	16
 val1c	8	16
-val1d	10	NULL
+val1b	8	16
 val1e	10	NULL
+val1d	10	NULL
 
 
 -- !query
@@ -584,12 +584,12 @@ ORDER BY t1c DESC NULLS LAST, t1i
 -- !query schema
 struct<count(DISTINCT t1a):bigint,t1b:smallint,t1c:int,t1i:date>
 -- !query output
+1	8	16	2014-05-04
+1	8	16	2014-05-05
+1	16	12	2014-06-04
+1	16	12	2014-07-04
+1	6	8	2014-04-04
 1	10	NULL	2014-05-04
 1	10	NULL	2014-08-04
 1	10	NULL	2014-09-04
 1	10	NULL	2015-05-04
-1	16	12	2014-06-04
-1	16	12	2014-07-04
-1	6	8	2014-04-04
-1	8	16	2014-05-04
-1	8	16	2014-05-05

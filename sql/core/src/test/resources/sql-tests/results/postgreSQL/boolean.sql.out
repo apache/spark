@@ -709,9 +709,9 @@ FROM booltbl3 ORDER BY o
 -- !query schema
 struct<d:string,istrue:boolean,isnottrue:boolean,isfalse:boolean,isnotfalse:boolean,isunknown:boolean,isnotunknown:boolean>
 -- !query output
+true	true	false	false	true	false	true
 false	false	true	true	false	false	true
 null	false	true	false	true	true	false
-true	true	false	false	true	false	true
 
 
 -- !query

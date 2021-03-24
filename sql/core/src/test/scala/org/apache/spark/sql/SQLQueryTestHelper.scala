@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
@@ -61,10 +62,12 @@ trait SQLQueryTestHelper {
   protected def getNormalizedResult(session: SparkSession, sql: String): (String, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
     def isSorted(plan: LogicalPlan): Boolean = plan match {
+      case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
       case _: DescribeCommandBase
           | _: DescribeColumnCommand
           | _: DescribeRelation
           | _: DescribeColumn => true
+      case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => false
     }
 

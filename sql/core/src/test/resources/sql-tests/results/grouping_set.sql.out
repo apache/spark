@@ -127,8 +127,8 @@ ORDER  BY -col1
 -- !query schema
 struct<col1:int,col2:int>
 -- !query output
-1	2
 3	2
+1	2
 
 
 -- !query

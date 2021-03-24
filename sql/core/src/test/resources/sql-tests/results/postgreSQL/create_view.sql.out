@@ -132,9 +132,9 @@ SELECT * FROM viewtest
 -- !query schema
 struct<a:int,b:int>
 -- !query output
-10	15
-15	20
 20	25
+15	20
+10	15
 
 
 -- !query

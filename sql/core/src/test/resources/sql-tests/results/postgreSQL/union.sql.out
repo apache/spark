@@ -201,10 +201,10 @@ ORDER BY 1
 -- !query schema
 struct<five:double>
 -- !query output
--1.2345678901234E-200
 -1.2345678901234E200
 -1004.3
 -34.84
+-1.2345678901234E-200
 0.0
 
 
@@ -235,12 +235,12 @@ ORDER BY 1
 -- !query schema
 struct<nine:double>
 -- !query output
--1.2345678901234E-200
 -1.2345678901234E200
--1004.3
--123456.0
 -2.147483647E9
+-123456.0
+-1004.3
 -34.84
+-1.2345678901234E-200
 0.0
 123456.0
 2.147483647E9
@@ -275,9 +275,9 @@ ORDER BY 1
 -- !query schema
 struct<five:double>
 -- !query output
--1.2345678901234E-200
 -1004.3
 -34.84
+-1.2345678901234E-200
 0.0
 123456.0
 
@@ -435,10 +435,10 @@ SELECT f1 FROM float8_tbl EXCEPT SELECT f1 FROM int4_tbl ORDER BY 1
 -- !query schema
 struct<f1:double>
 -- !query output
--1.2345678901234E-200
 -1.2345678901234E200
 -1004.3
 -34.84
+-1.2345678901234E-200
 
 
 -- !query
@@ -469,13 +469,13 @@ struct<q1:bigint>
 -- !query schema
 struct<q1:bigint>
 -- !query output
--4567890123456789
 123
-123
+4567890123456789
 456
 4567890123456789
+123
 4567890123456789
-4567890123456789
+-4567890123456789
 
 
 -- !query
@@ -492,13 +492,13 @@ SELECT q1 FROM int8_tbl UNION ALL (((SELECT q2 FROM int8_tbl EXCEPT SELECT q1 FR
 -- !query schema
 struct<q1:bigint>
 -- !query output
+123
+123
+4567890123456789
+4567890123456789
+4567890123456789
 -4567890123456789
-123
-123
 456
-4567890123456789
-4567890123456789
-4567890123456789
 
 
 -- !query
@@ -516,8 +516,8 @@ ORDER BY q2,q1
 -- !query schema
 struct<q1:bigint,q2:bigint>
 -- !query output
-123	456
 4567890123456789	-4567890123456789
+123	456
 
 
 -- !query

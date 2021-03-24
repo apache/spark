@@ -1790,6 +1790,8 @@ SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query schema
 struct<xxx:string,udf(i):int,udf(j):int,udf(t):string,udf(k):int>
 -- !query output
+	NULL	NULL	null	NULL
+	NULL	0	zero	NULL
 	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
@@ -1801,8 +1803,6 @@ struct<xxx:string,udf(i):int,udf(j):int,udf(t):string,udf(k):int>
 	6	6	six	NULL
 	7	7	seven	NULL
 	8	8	eight	NULL
-	NULL	0	zero	NULL
-	NULL	NULL	null	NULL
 
 
 -- !query
@@ -1812,6 +1812,8 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query schema
 struct<xxx:string,udf(i):int,udf(j):int,udf(t):string,udf(k):int>
 -- !query output
+	NULL	NULL	null	NULL
+	NULL	0	zero	NULL
 	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
@@ -1823,8 +1825,6 @@ struct<xxx:string,udf(i):int,udf(j):int,udf(t):string,udf(k):int>
 	6	6	six	NULL
 	7	7	seven	NULL
 	8	8	eight	NULL
-	NULL	0	zero	NULL
-	NULL	NULL	null	NULL
 
 
 -- !query
@@ -1868,6 +1868,10 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(udf(t)), udf(k)
 -- !query schema
 struct<xxx:string,udf(i):int,udf(j):int,udf(udf(t)):string,udf(k):int>
 -- !query output
+	NULL	NULL	NULL	NULL
+	NULL	NULL	null	NULL
+	NULL	0	zero	NULL
+	NULL	NULL	NULL	0
 	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
@@ -1879,10 +1883,6 @@ struct<xxx:string,udf(i):int,udf(j):int,udf(udf(t)):string,udf(k):int>
 	6	6	six	NULL
 	7	7	seven	NULL
 	8	8	eight	NULL
-	NULL	0	zero	NULL
-	NULL	NULL	NULL	0
-	NULL	NULL	NULL	NULL
-	NULL	NULL	null	NULL
 
 
 -- !query
@@ -1892,6 +1892,10 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), t, udf(udf(k))
 -- !query schema
 struct<xxx:string,udf(i):int,udf(j):int,t:string,udf(udf(k)):int>
 -- !query output
+	NULL	NULL	NULL	NULL
+	NULL	NULL	null	NULL
+	NULL	0	zero	NULL
+	NULL	NULL	NULL	0
 	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
@@ -1903,10 +1907,6 @@ struct<xxx:string,udf(i):int,udf(j):int,t:string,udf(udf(k)):int>
 	6	6	six	NULL
 	7	7	seven	NULL
 	8	8	eight	NULL
-	NULL	0	zero	NULL
-	NULL	NULL	NULL	0
-	NULL	NULL	NULL	NULL
-	NULL	NULL	null	NULL
 
 
 -- !query
@@ -2370,10 +2370,10 @@ order by udf(udf(1)), 2
 -- !query schema
 struct<q1:bigint,q2:bigint,q1:bigint,q2:bigint,x:int>
 -- !query output
-123	456	123	456	123
-123	4567890123456789	123	4567890123456789	123
 4567890123456789	-4567890123456789	NULL	NULL	NULL
 4567890123456789	123	NULL	NULL	NULL
+123	456	123	456	123
+123	4567890123456789	123	4567890123456789	123
 4567890123456789	4567890123456789	123	4567890123456789	123
 
 
@@ -3023,9 +3023,9 @@ select udf(b.unique1) from
 -- !query schema
 struct<udf(unique1):int>
 -- !query output
+NULL
+NULL
 0
-NULL
-NULL
 NULL
 NULL
 

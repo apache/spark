@@ -3,6 +3,12 @@
 -- !query schema
 struct<c_last_name:string,c_first_name:string,c_salutation:string,c_preferred_cust_flag:string,ss_ticket_number:int,cnt:bigint>
 -- !query output
+NULL	NULL	NULL	Y	16278	15
+NULL	NULL	NULL	N	55640	15
+NULL	NULL	NULL	N	220211	15
+NULL	Joshua              	Sir       	N	108357	15
+NULL	Judy                	Dr.       	NULL	234350	16
+NULL	Roy                 	NULL	NULL	200033	15
 Adams                         	Jerry               	Sir       	N	216653	15
 Anderson                      	Cindy               	Miss      	N	90504	15
 Anderson                      	Marta               	Dr.       	N	176320	15
@@ -138,12 +144,6 @@ Morris                        	Martina             	Miss      	N	32596	15
 Morris                        	Meghan              	Mrs.      	Y	127565	15
 Mulligan                      	Mark                	Sir       	Y	184598	16
 Mullins                       	Vicki               	Dr.       	Y	162762	15
-NULL	Joshua              	Sir       	N	108357	15
-NULL	Judy                	Dr.       	NULL	234350	16
-NULL	NULL	NULL	N	220211	15
-NULL	NULL	NULL	N	55640	15
-NULL	NULL	NULL	Y	16278	15
-NULL	Roy                 	NULL	NULL	200033	15
 Neeley                        	Stephanie           	Mrs.      	N	216299	15
 Nesbitt                       	Andrew              	Miss      	N	185257	15
 Olds                          	Stephen             	Dr.       	N	206275	16

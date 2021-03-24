@@ -50,26 +50,26 @@ SELECT onek.unique1, onek.stringu1 FROM onek
 -- !query schema
 struct<unique1:int,stringu1:string>
 -- !query output
-0	AAAAAA
-1	BAAAAA
-10	KAAAAA
-11	LAAAAA
-12	MAAAAA
-13	NAAAAA
-14	OAAAAA
-15	PAAAAA
-16	QAAAAA
-17	RAAAAA
-18	SAAAAA
 19	TAAAAA
-2	CAAAAA
-3	DAAAAA
-4	EAAAAA
-5	FAAAAA
-6	GAAAAA
-7	HAAAAA
-8	IAAAAA
+18	SAAAAA
+17	RAAAAA
+16	QAAAAA
+15	PAAAAA
+14	OAAAAA
+13	NAAAAA
+12	MAAAAA
+11	LAAAAA
+10	KAAAAA
 9	JAAAAA
+8	IAAAAA
+7	HAAAAA
+6	GAAAAA
+5	FAAAAA
+4	EAAAAA
+3	DAAAAA
+2	CAAAAA
+1	BAAAAA
+0	AAAAAA
 
 
 -- !query
@@ -79,13 +79,6 @@ SELECT onek.unique1, onek.stringu1 FROM onek
 -- !query schema
 struct<unique1:int,stringu1:string>
 -- !query output
-981	TLAAAA
-982	ULAAAA
-983	VLAAAA
-984	WLAAAA
-985	XLAAAA
-986	YLAAAA
-987	ZLAAAA
 988	AMAAAA
 989	BMAAAA
 990	CMAAAA
@@ -98,6 +91,13 @@ struct<unique1:int,stringu1:string>
 997	JMAAAA
 998	KMAAAA
 999	LMAAAA
+981	TLAAAA
+982	ULAAAA
+983	VLAAAA
+984	WLAAAA
+985	XLAAAA
+986	YLAAAA
+987	ZLAAAA
 
 
 -- !query
@@ -107,25 +107,25 @@ SELECT onek.unique1, onek.string4 FROM onek
 -- !query schema
 struct<unique1:int,string4:string>
 -- !query output
-981	AAAAxx
-982	AAAAxx
-983	AAAAxx
-984	VVVVxx
-985	OOOOxx
-986	HHHHxx
-987	OOOOxx
-988	OOOOxx
-989	VVVVxx
-990	HHHHxx
-991	OOOOxx
-992	VVVVxx
-993	HHHHxx
-994	VVVVxx
-995	AAAAxx
-996	OOOOxx
-997	HHHHxx
-998	HHHHxx
 999	AAAAxx
+995	AAAAxx
+983	AAAAxx
+982	AAAAxx
+981	AAAAxx
+998	HHHHxx
+997	HHHHxx
+993	HHHHxx
+990	HHHHxx
+986	HHHHxx
+996	OOOOxx
+991	OOOOxx
+988	OOOOxx
+987	OOOOxx
+985	OOOOxx
+994	VVVVxx
+992	VVVVxx
+989	VVVVxx
+984	VVVVxx
 
 
 -- !query
@@ -135,24 +135,24 @@ SELECT onek.unique1, onek.string4 FROM onek
 -- !query schema
 struct<unique1:int,string4:string>
 -- !query output
+984	VVVVxx
+989	VVVVxx
+992	VVVVxx
+994	VVVVxx
+985	OOOOxx
+987	OOOOxx
+988	OOOOxx
+991	OOOOxx
+996	OOOOxx
+986	HHHHxx
+990	HHHHxx
+993	HHHHxx
+997	HHHHxx
+998	HHHHxx
 981	AAAAxx
 982	AAAAxx
 983	AAAAxx
-984	VVVVxx
-985	OOOOxx
-986	HHHHxx
-987	OOOOxx
-988	OOOOxx
-989	VVVVxx
-990	HHHHxx
-991	OOOOxx
-992	VVVVxx
-993	HHHHxx
-994	VVVVxx
 995	AAAAxx
-996	OOOOxx
-997	HHHHxx
-998	HHHHxx
 999	AAAAxx
 
 
@@ -163,26 +163,26 @@ SELECT onek.unique1, onek.string4 FROM onek
 -- !query schema
 struct<unique1:int,string4:string>
 -- !query output
-0	OOOOxx
-1	OOOOxx
-10	AAAAxx
-11	OOOOxx
-12	AAAAxx
-13	OOOOxx
-14	AAAAxx
-15	VVVVxx
-16	OOOOxx
-17	HHHHxx
-18	VVVVxx
 19	OOOOxx
-2	OOOOxx
-3	VVVVxx
-4	HHHHxx
-5	HHHHxx
-6	OOOOxx
-7	VVVVxx
-8	HHHHxx
+18	VVVVxx
+17	HHHHxx
+16	OOOOxx
+15	VVVVxx
+14	AAAAxx
+13	OOOOxx
+12	AAAAxx
+11	OOOOxx
+10	AAAAxx
 9	HHHHxx
+8	HHHHxx
+7	VVVVxx
+6	OOOOxx
+5	HHHHxx
+4	HHHHxx
+3	VVVVxx
+2	OOOOxx
+1	OOOOxx
+0	OOOOxx
 
 
 -- !query
@@ -194,6 +194,14 @@ struct<unique1:int,string4:string>
 -- !query output
 0	OOOOxx
 1	OOOOxx
+2	OOOOxx
+3	VVVVxx
+4	HHHHxx
+5	HHHHxx
+6	OOOOxx
+7	VVVVxx
+8	HHHHxx
+9	HHHHxx
 10	AAAAxx
 11	OOOOxx
 12	AAAAxx
@@ -204,14 +212,6 @@ struct<unique1:int,string4:string>
 17	HHHHxx
 18	VVVVxx
 19	OOOOxx
-2	OOOOxx
-3	VVVVxx
-4	HHHHxx
-5	HHHHxx
-6	OOOOxx
-7	VVVVxx
-8	HHHHxx
-9	HHHHxx
 
 
 -- !query
@@ -238,26 +238,26 @@ SELECT onek2.unique1, onek2.stringu1 FROM onek2
 -- !query schema
 struct<unique1:int,stringu1:string>
 -- !query output
-0	AAAAAA
-1	BAAAAA
-10	KAAAAA
-11	LAAAAA
-12	MAAAAA
-13	NAAAAA
-14	OAAAAA
-15	PAAAAA
-16	QAAAAA
-17	RAAAAA
-18	SAAAAA
 19	TAAAAA
-2	CAAAAA
-3	DAAAAA
-4	EAAAAA
-5	FAAAAA
-6	GAAAAA
-7	HAAAAA
-8	IAAAAA
+18	SAAAAA
+17	RAAAAA
+16	QAAAAA
+15	PAAAAA
+14	OAAAAA
+13	NAAAAA
+12	MAAAAA
+11	LAAAAA
+10	KAAAAA
 9	JAAAAA
+8	IAAAAA
+7	HAAAAA
+6	GAAAAA
+5	FAAAAA
+4	EAAAAA
+3	DAAAAA
+2	CAAAAA
+1	BAAAAA
+0	AAAAAA
 
 
 -- !query
@@ -375,13 +375,13 @@ SELECT * FROM foo ORDER BY f1
 -- !query schema
 struct<f1:int>
 -- !query output
+NULL
+NULL
 1
-10
 3
-42
 7
-NULL
-NULL
+10
+42
 
 
 -- !query
@@ -389,13 +389,13 @@ SELECT * FROM foo ORDER BY f1 ASC
 -- !query schema
 struct<f1:int>
 -- !query output
+NULL
+NULL
 1
-10
 3
-42
 7
-NULL
-NULL
+10
+42
 
 
 -- !query
@@ -403,13 +403,13 @@ SELECT * FROM foo ORDER BY f1 NULLS FIRST
 -- !query schema
 struct<f1:int>
 -- !query output
+NULL
+NULL
 1
-10
 3
-42
 7
-NULL
-NULL
+10
+42
 
 
 -- !query
@@ -417,11 +417,11 @@ SELECT * FROM foo ORDER BY f1 DESC
 -- !query schema
 struct<f1:int>
 -- !query output
-1
-10
-3
 42
+10
 7
+3
+1
 NULL
 NULL
 
@@ -431,11 +431,11 @@ SELECT * FROM foo ORDER BY f1 DESC NULLS LAST
 -- !query schema
 struct<f1:int>
 -- !query output
-1
-10
-3
 42
+10
 7
+3
+1
 NULL
 NULL
 

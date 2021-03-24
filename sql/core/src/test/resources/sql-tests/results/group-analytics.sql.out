@@ -101,13 +101,13 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year
 -- !query schema
 struct<course:string,year:int,sum(earnings):bigint>
 -- !query output
+NULL	NULL	113000
+Java	NULL	50000
 Java	2012	20000
 Java	2013	30000
-Java	NULL	50000
-NULL	NULL	113000
+dotNET	NULL	63000
 dotNET	2012	15000
 dotNET	2013	48000
-dotNET	NULL	63000
 
 
 -- !query
@@ -115,15 +115,15 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year) 
 -- !query schema
 struct<course:string,year:int,sum(earnings):bigint>
 -- !query output
-Java	2012	20000
-Java	2013	30000
-Java	NULL	50000
+NULL	NULL	113000
 NULL	2012	35000
 NULL	2013	78000
-NULL	NULL	113000
+Java	NULL	50000
+Java	2012	20000
+Java	2013	30000
+dotNET	NULL	63000
 dotNET	2012	15000
 dotNET	2013	48000
-dotNET	NULL	63000
 
 
 -- !query
@@ -161,13 +161,13 @@ GROUP BY course, earnings GROUPING SETS((), (course), (course, earnings)) ORDER 
 -- !query schema
 struct<course:string,sum:bigint>
 -- !query output
+NULL	113000
 Java	20000
 Java	30000
 Java	50000
-NULL	113000
+dotNET	5000
 dotNET	10000
 dotNET	48000
-dotNET	5000
 dotNET	63000
 
 
@@ -177,13 +177,13 @@ GROUP BY course, earnings GROUPING SETS((), (course), (course, earnings)) ORDER 
 -- !query schema
 struct<course:string,sum:bigint,grouping_id(course, earnings):bigint>
 -- !query output
+NULL	113000	3
 Java	20000	0
 Java	30000	0
 Java	50000	1
-NULL	113000	3
+dotNET	5000	0
 dotNET	10000	0
 dotNET	48000	0
-dotNET	5000	0
 dotNET	63000	1
 
 
@@ -229,13 +229,13 @@ struct<course:string,year:int,grouping__id:bigint>
 -- !query output
 Java	2012	0
 Java	2013	0
+dotNET	2012	0
+dotNET	2013	0
 Java	NULL	1
+dotNET	NULL	1
 NULL	2012	2
 NULL	2013	2
 NULL	NULL	3
-dotNET	2012	0
-dotNET	2013	0
-dotNET	NULL	1
 
 
 -- !query
@@ -244,8 +244,8 @@ HAVING GROUPING(year) = 1 AND GROUPING_ID(course, year) > 0 ORDER BY course, yea
 -- !query schema
 struct<course:string,year:int>
 -- !query output
-Java	NULL
 NULL	NULL
+Java	NULL
 dotNET	NULL
 
 
@@ -287,13 +287,13 @@ struct<course:string,year:int,grouping(course):tinyint,grouping(year):tinyint>
 -- !query output
 Java	2012	0	0
 Java	2013	0	0
+dotNET	2012	0	0
+dotNET	2013	0	0
 Java	NULL	0	1
+dotNET	NULL	0	1
 NULL	2012	1	0
 NULL	2013	1	0
 NULL	NULL	1	1
-dotNET	2012	0	0
-dotNET	2013	0	0
-dotNET	NULL	0	1
 
 
 -- !query
@@ -304,13 +304,13 @@ struct<course:string,year:int,grouping_id(course, year):bigint>
 -- !query output
 Java	2012	0
 Java	2013	0
+dotNET	2012	0
+dotNET	2013	0
 Java	NULL	1
+dotNET	NULL	1
 NULL	2012	2
 NULL	2013	2
 NULL	NULL	3
-dotNET	2012	0
-dotNET	2013	0
-dotNET	NULL	1
 
 
 -- !query
@@ -338,13 +338,13 @@ struct<course:string,year:int>
 -- !query output
 Java	2012
 Java	2013
+dotNET	2012
+dotNET	2013
 Java	NULL
+dotNET	NULL
 NULL	2012
 NULL	2013
 NULL	NULL
-dotNET	2012
-dotNET	2013
-dotNET	NULL
 
 
 -- !query
