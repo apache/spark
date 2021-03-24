@@ -26,7 +26,6 @@ import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache, RemovalCause, RemovalListener}
-import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
@@ -77,6 +76,7 @@ private[history] class ApplicationCache(
     Caffeine.newBuilder()
       .maximumSize(retainedApplications)
       .evictionListener(evictionListener)
+      .executor((command: Runnable) => command.run())
       .build(appLoader)
   }
 
@@ -89,7 +89,7 @@ private[history] class ApplicationCache(
     try {
       appCache.get(new CacheKey(appId, attemptId))
     } catch {
-      case e @ (_: CompletionException | _: UncheckedExecutionException) =>
+      case e @ (_: CompletionException | _: RuntimeException) =>
         throw Option(e.getCause()).getOrElse(e)
     }
   }
@@ -225,7 +225,7 @@ private[history] class ApplicationCache(
   }
 
   def invalidate(key: CacheKey): Unit = appCache.asMap().computeIfPresent(key, (key, value) => {
-    evictionListener.onRemoval(key, value, null)
+    evictionListener.onRemoval(key, value, RemovalCause.EXPLICIT)
     null
   })
 

@@ -42,6 +42,7 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 
   private[sql] val cache: LoadingCache[ExpressionProxy, ResultProxy] = {
     val builder = Caffeine.newBuilder().maximumSize(cacheMaxEntries)
+      .executor((command: Runnable) => command.run())
     CaffeinatedGuava.build(builder, new CacheLoader[ExpressionProxy, ResultProxy]() {
       override def load(expr: ExpressionProxy): ResultProxy = {
         ResultProxy(expr.proxyEval(currentInput))

@@ -45,8 +45,6 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 
     val proxy3 = ExpressionProxy(Literal(3), 2, runtime)
     proxy3.eval()
-    // wait data Eviction
-    Thread.sleep(5L)
     assert(runtime.cache.size() == 2)
     assert(runtime.cache.get(proxy3) == ResultProxy(3))
   }

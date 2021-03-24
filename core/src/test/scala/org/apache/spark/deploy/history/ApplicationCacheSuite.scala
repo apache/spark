@@ -192,7 +192,6 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     cache.get("2")
     cache.get("3")
 
-    Thread.sleep(5L)
     // there should have been a detachment here
     assert(1 === operations.detachCount, s"detach count from $cache")
     // and entry app1 no longer attached
@@ -314,7 +313,6 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val metrics = cache.metrics
 
     assertMetric("loadCount", metrics.loadCount, count)
-    Thread.sleep(5L)
     assertMetric("evictionCount", metrics.evictionCount, count - size)
 }
 
@@ -336,7 +334,6 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
 
     def expectLoadAndEvictionCounts(expectedLoad: Int, expectedEvictionCount: Int): Unit = {
       assertMetric("loadCount", metrics.loadCount, expectedLoad)
-      Thread.sleep(5L)
       assertMetric("evictionCount", metrics.evictionCount, expectedEvictionCount)
     }
 
