@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
-import java.util.concurrent.CompletionException
+import java.util.concurrent.ExecutionException
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
@@ -28,6 +28,7 @@ import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.github.benmanes.caffeine.cache.{Caffeine, RemovalCause, RemovalListener}
 import com.github.benmanes.caffeine.guava.CaffeinatedGuava
 import com.google.common.cache.{CacheLoader, LoadingCache}
+import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
@@ -91,7 +92,7 @@ private[history] class ApplicationCache(
     try {
       appCache.get(new CacheKey(appId, attemptId))
     } catch {
-      case e @ (_: CompletionException | _: RuntimeException) =>
+      case e @ (_: ExecutionException | _: UncheckedExecutionException) =>
         throw Option(e.getCause()).getOrElse(e)
     }
   }
