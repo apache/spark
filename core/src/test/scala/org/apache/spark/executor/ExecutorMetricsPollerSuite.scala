@@ -22,7 +22,7 @@ import org.apache.spark.memory.TestMemoryManager
 
 class ExecutorMetricsPollerSuite extends SparkFunSuite {
 
-  test("stage entry shouldn't be removed before a heartbeat occurs") {
+  test("SPARK-34779: stage entry shouldn't be removed before a heartbeat occurs") {
     val testMemoryManager = new TestMemoryManager(new SparkConf())
     val poller = new ExecutorMetricsPoller(testMemoryManager, 1000, None)
 
@@ -30,11 +30,13 @@ class ExecutorMetricsPollerSuite extends SparkFunSuite {
     // stage (0, 0) has an active task, so it remains on stageTCMP after heartbeat.
     assert(poller.getExecutorUpdates.size === 1)
     assert(poller.stageTCMP.size === 1)
+    assert(poller.stageTCMP.get((0, 0)).count.get === 1)
 
     poller.onTaskCompletion(0L, 0, 0)
     // stage (0, 0) doesn't have active tasks, but its entry will be kept until next
     // heartbeat.
     assert(poller.stageTCMP.size === 1)
+    assert(poller.stageTCMP.get((0, 0)).count.get === 0)
 
     // the next heartbeat will report the peak metrics of stage (0, 0) during the
     // previous heartbeat interval, then remove it from stageTCMP.

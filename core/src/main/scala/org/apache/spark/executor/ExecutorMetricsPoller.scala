@@ -181,7 +181,7 @@ private[spark] class ExecutorMetricsPoller(
     }
 
     // Remove the entry from stageTCMP if the task count reaches zero.
-    executorUpdates.foreach { case (k, v) =>
+    executorUpdates.foreach { case (k, _) =>
       stageTCMP.computeIfPresent(k, removeIfInactive)
     }
 
