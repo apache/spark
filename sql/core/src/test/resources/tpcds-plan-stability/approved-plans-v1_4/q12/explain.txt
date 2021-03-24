@@ -44,7 +44,7 @@ Condition : isnotnull(ws_item_sk#1)
 Output [6]: [i_item_sk#5, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [In(i_category, [Sports,Books,Home]), IsNotNull(i_item_sk)]
+PushedFilters: [In(i_category, [Sports                                            ,Books                                             ,Home                                              ]), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string,i_item_desc:string,i_current_price:decimal(7,2),i_class:string,i_category:string>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -52,7 +52,7 @@ Input [6]: [i_item_sk#5, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#
 
 (6) Filter [codegen id : 1]
 Input [6]: [i_item_sk#5, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
-Condition : (i_category#10 IN (Sports,Books,Home) AND isnotnull(i_item_sk#5))
+Condition : (i_category#10 IN (Sports                                            ,Books                                             ,Home                                              ) AND isnotnull(i_item_sk#5))
 
 (7) BroadcastExchange
 Input [6]: [i_item_sk#5, i_item_id#6, i_item_desc#7, i_current_price#8, i_class#9, i_category#10]
@@ -79,7 +79,7 @@ Input [2]: [d_date_sk#12, d_date#13]
 
 (12) Filter [codegen id : 2]
 Input [2]: [d_date_sk#12, d_date#13]
-Condition : (((isnotnull(d_date#13) AND (d_date#13 >= 10644)) AND (d_date#13 <= 10674)) AND isnotnull(d_date_sk#12))
+Condition : (((isnotnull(d_date#13) AND (d_date#13 >= 1999-02-22)) AND (d_date#13 <= 1999-03-24)) AND isnotnull(d_date_sk#12))
 
 (13) Project [codegen id : 2]
 Output [1]: [d_date_sk#12]
