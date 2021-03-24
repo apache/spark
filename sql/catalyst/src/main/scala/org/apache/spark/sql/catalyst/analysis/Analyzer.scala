@@ -374,6 +374,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case (_, CalendarIntervalType) => MultiplyInterval(r, l, f)
           case (YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
           case (_, YearMonthIntervalType) => MultiplyYMInterval(r, l)
+          case (DayTimeIntervalType, _) => MultiplyDTInterval(l, r)
+          case (_, DayTimeIntervalType) => MultiplyDTInterval(r, l)
           case _ => m
         }
         case d @ Divide(l, r, f) if d.childrenResolved => (l.dataType, r.dataType) match {
