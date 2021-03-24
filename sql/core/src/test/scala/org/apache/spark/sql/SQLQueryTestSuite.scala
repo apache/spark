@@ -58,7 +58,8 @@ import org.apache.spark.util.Utils
  *
  * To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite" * }}}
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite"
+ * }}}
  *
  * To re-generate golden file for a single test, run:
  * {{{
