@@ -2758,10 +2758,17 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-34829: Typed ScalaUDF result conversion works") {
     val reverse = udf((s: String) => s.reverse)
-    val df = Seq(Map(1 -> "abc", 2 -> "def")).toDF("map")
-    val test = df.select(transform_values(col("map"), (_, v) => reverse(v)))
-    checkAnswer(test, Row(Map(1 -> "cab", 2 -> "fed")) :: Nil)
+    val df = Seq(Array("abc", "def")).toDF("array")
+    val test = df.select(transform(col("array"), s => reverse(s)))
+    checkAnswer(test, Row(Array("cba", "fed")) :: Nil)
+
+    val reverse2 = udf((b: Bar2) => Bar2(b.s.reverse))
+    val df2 = Seq(Array(Bar2("abc"), Bar2("def"))).toDF("array")
+    val test2 = df2.select(transform(col("array"), b => reverse2(b)))
+    checkAnswer(test2, Row(Array(Row("cba"), Row("fed"))) :: Nil)
   }
 }
 
 case class GroupByKey(a: Int, b: Int)
+
+case class Bar2(s: String)
