@@ -19,9 +19,9 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
+import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.guava.CaffeinatedGuava
-import com.google.common.cache.LoadingCache
+import com.google.common.cache.{CacheLoader, LoadingCache}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi

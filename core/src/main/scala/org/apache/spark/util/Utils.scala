@@ -44,7 +44,9 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache}
+import com.github.benmanes.caffeine.cache.Caffeine
+import com.github.benmanes.caffeine.guava.CaffeinatedGuava
+import com.google.common.cache.{CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
@@ -1585,13 +1587,15 @@ private[spark] object Utils extends Logging {
     if (compressedLogFileLengthCache == null) {
       val compressedLogFileLengthCacheSize = sparkConf.get(
         UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF)
-      compressedLogFileLengthCache = Caffeine.newBuilder()
-        .maximumSize(compressedLogFileLengthCacheSize)
-        .build[String, java.lang.Long](new CacheLoader[String, java.lang.Long]() {
-        override def load(path: String): java.lang.Long = {
-          Utils.getCompressedFileLength(new File(path))
-        }
-      })
+      compressedLogFileLengthCache = {
+        val builder = new Caffeine[String, java.lang.Long]
+          .maximumSize(compressedLogFileLengthCacheSize)
+        CaffeinatedGuava.build(builder, new CacheLoader[String, java.lang.Long]() {
+          override def load(path: String): java.lang.Long = {
+            Utils.getCompressedFileLength(new File(path))
+          }
+        })
+      }
     }
     compressedLogFileLengthCache
   }
