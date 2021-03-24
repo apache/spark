@@ -33,18 +33,18 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.github.benmanes.caffeine.cache.Weigher;
+import com.github.benmanes.caffeine.guava.CaffeinatedGuava;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
@@ -104,10 +104,10 @@ RemoteBlockPushResolver implements MergedShuffleFileManager {
           return new ShuffleIndexInformation(file);
         }
       };
-    indexCache = Caffeine.newBuilder()
+    Caffeine<File, ShuffleIndexInformation> builder = Caffeine.newBuilder()
       .maximumWeight(conf.mergedIndexCacheSize())
-      .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
-      .build(indexCacheLoader);
+      .weigher((file, indexInfo) -> indexInfo.getSize());
+    indexCache = CaffeinatedGuava.build(builder, indexCacheLoader);
     this.errorHandler = new ErrorHandler.BlockPushErrorHandler();
   }
 
@@ -203,7 +203,7 @@ RemoteBlockPushResolver implements MergedShuffleFileManager {
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(chunkId);
       return new FileSegmentManagedBuffer(
         conf, dataFile, shuffleIndexRecord.getOffset(), shuffleIndexRecord.getLength());
-    } catch (CompletionException e) {
+    } catch (ExecutionException e) {
       throw new RuntimeException(String.format(
         "Failed to open merged shuffle index file %s", indexFile.getPath()), e);
     }
