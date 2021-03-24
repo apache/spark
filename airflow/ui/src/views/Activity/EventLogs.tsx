@@ -18,18 +18,12 @@
  */
 
 import React from 'react';
-import { render } from 'react-dom';
-import { BrowserRouter } from 'react-router-dom';
-import { ChakraProvider } from '@chakra-ui/react';
+import { Center, Heading } from '@chakra-ui/react';
 
-import App from './App';
-import theme from './theme';
-
-render(
-  <BrowserRouter basename="/">
-    <ChakraProvider theme={theme}>
-      <App />
-    </ChakraProvider>
-  </BrowserRouter>,
-  document.getElementById('root'),
+const EventLogs: React.FC = () => (
+  <Center height="100vh">
+    <Heading>Event Logs</Heading>
+  </Center>
 );
+
+export default EventLogs;
