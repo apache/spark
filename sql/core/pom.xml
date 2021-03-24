@@ -90,6 +90,11 @@
       <artifactId>caffeine</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+
+    <dependency>
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-core</artifactId>
     </dependency>
