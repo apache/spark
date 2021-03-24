@@ -41,7 +41,7 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
     assert(r.jvmRSSTotal == 262610944)
   }
 
-  test("partial metrics shouldn't be returned") {
+  test("SPARK-34845: partial metrics shouldn't be returned") {
     val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
     val mockedP = spy(p)
 

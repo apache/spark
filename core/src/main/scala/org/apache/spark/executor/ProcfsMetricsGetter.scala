@@ -220,7 +220,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
           return ProcfsMetrics(0, 0, 0, 0, 0, 0)
         }
       } catch {
-        case f: IOException =>
+        case _: IOException =>
           return ProcfsMetrics(0, 0, 0, 0, 0, 0)
       }
     }
