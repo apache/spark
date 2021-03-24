@@ -2186,12 +2186,21 @@ class SparkContext(config: SparkConf) extends Logging {
    * has overridden the call site using `setCallSite()`, this will return the user's version.
    */
   private[spark] def getCallSite(): CallSite = {
-    lazy val callSite = Utils.getCallSite()
-    CallSite(
-      Option(getLocalProperty(CallSite.SHORT_FORM)).getOrElse(callSite.shortForm),
-      Option(getLocalProperty(CallSite.LONG_FORM)).getOrElse(callSite.longForm)
-    )
+    if (getLocalProperty(CallSite.SHORT_FORM) == null
+      || getLocalProperty(CallSite.LONG_FORM) == null) {
+      val callSite = Utils.getCallSite()
+      CallSite(
+        Option(getLocalProperty(CallSite.SHORT_FORM)).getOrElse(callSite.shortForm),
+        Option(getLocalProperty(CallSite.LONG_FORM)).getOrElse(callSite.longForm)
+      )
+    } else {
+      CallSite(
+        getLocalProperty(CallSite.SHORT_FORM),
+        getLocalProperty(CallSite.LONG_FORM)
+      )
+    }
   }
+
 
   /**
    * Run a function on a given set of partitions in an RDD and pass the results to the given
