@@ -48,8 +48,8 @@ public interface RequiresDistributionAndOrdering extends Write {
    * Implementations may override this to require a specific number of input partitions.
    * <p>
    * Note that Spark doesn't support the number of partitions on {@link UnspecifiedDistribution},
-   * if requiredDistribution() returns {@link UnspecifiedDistribution}, the return value for this
-   * method will be ignored.
+   * the query will fail if the number of partitions are provided but the distribution is
+   * unspecified.
    *
    * @return the required number of partitions, any value less than 1 mean no requirement.
    */

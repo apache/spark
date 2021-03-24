@@ -21,7 +21,7 @@ import java.util.Collections
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{catalyst, DataFrame, QueryTest}
+import org.apache.spark.sql.{catalyst, AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, UnknownPartitioning}
@@ -291,7 +291,6 @@ class WriteDistributionAndOrderingSuite
       )
     )
 
-    // The target number of partitions won't take effect with unspecified distribution.
     val writePartitioning = UnknownPartitioning(0)
 
     checkWriteRequirements(
@@ -300,7 +299,9 @@ class WriteDistributionAndOrderingSuite
       targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
-      writeCommand = command)
+      writeCommand = command,
+      // if the number of partitions is specified, we expect query to fail
+      expectAnalysisException = targetNumPartitions.isDefined)
   }
 
   test("unspecified distribution and no sort: append") {
@@ -338,7 +339,6 @@ class WriteDistributionAndOrderingSuite
     val tableDistribution = Distributions.unspecified()
 
     val writeOrdering = Seq.empty[catalyst.expressions.SortOrder]
-    // The target number of partitions won't take effect with unspecified distribution.
     val writePartitioning = UnknownPartitioning(0)
 
     checkWriteRequirements(
@@ -347,7 +347,9 @@ class WriteDistributionAndOrderingSuite
       targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
-      writeCommand = command)
+      writeCommand = command,
+      // if the number of partitions is specified, we expect query to fail
+      expectAnalysisException = targetNumPartitions.isDefined)
   }
 
   test("ordered distribution and sort with manual global sort: append") {
@@ -682,22 +684,32 @@ class WriteDistributionAndOrderingSuite
       expectedWritePartitioning: physical.Partitioning,
       expectedWriteOrdering: Seq[catalyst.expressions.SortOrder],
       writeTransform: DataFrame => DataFrame = df => df,
-      writeCommand: String = "append"): Unit = {
+      writeCommand: String = "append",
+      expectAnalysisException: Boolean = false): Unit = {
 
     catalog.createTable(ident, schema, Array.empty, emptyProps, tableDistribution,
       tableOrdering, tableNumPartitions)
 
     val df = spark.createDataFrame(Seq((1, "a"), (2, "b"), (3, "c"))).toDF("id", "data")
     val writer = writeTransform(df).writeTo(tableNameAsString)
-    val executedPlan = writeCommand match {
+
+    def executeCommand(): SparkPlan = writeCommand match {
       case "append" => execute(writer.append())
       case "overwrite" => execute(writer.overwrite(lit(true)))
       case "overwriteDynamic" => execute(writer.overwritePartitions())
     }
 
-    checkPartitioningAndOrdering(executedPlan, expectedWritePartitioning, expectedWriteOrdering)
+    if (expectAnalysisException) {
+      intercept[AnalysisException] {
+        executeCommand()
+      }
+    } else {
+      val executedPlan = executeCommand()
 
-    checkAnswer(spark.table(tableNameAsString), df)
+      checkPartitioningAndOrdering(executedPlan, expectedWritePartitioning, expectedWriteOrdering)
+
+      checkAnswer(spark.table(tableNameAsString), df)
+    }
   }
 
   private def checkPartitioningAndOrdering(

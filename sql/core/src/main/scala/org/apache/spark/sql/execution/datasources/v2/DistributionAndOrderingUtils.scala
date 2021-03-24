@@ -49,6 +49,9 @@ object DistributionAndOrderingUtils {
         // for OrderedDistribution and generic expressions for ClusteredDistribution
         // this allows RepartitionByExpression to pick either range or hash partitioning
         RepartitionByExpression(distribution, query, finalNumPartitions)
+      } else if (numPartitions > 0) {
+        throw new AnalysisException("The number of partitions can't be specified with unspecified" +
+          " distribution. Invalid Sink requirements detected.")
       } else {
         query
       }
