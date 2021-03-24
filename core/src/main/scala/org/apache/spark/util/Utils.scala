@@ -1588,7 +1588,7 @@ private[spark] object Utils extends Logging {
       val compressedLogFileLengthCacheSize = sparkConf.get(
         UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF)
       compressedLogFileLengthCache = {
-        val builder = new Caffeine[String, java.lang.Long]()
+        val builder = Caffeine.newBuilder()
           .maximumSize(compressedLogFileLengthCacheSize)
         CaffeinatedGuava.build(builder,
           new CacheLoader[String, java.lang.Long]() {
