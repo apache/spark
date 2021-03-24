@@ -369,10 +369,11 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
       TypeCollection(ArrayType(StringType), StringType),
       ArrayType(StringType, true))
 
-    // When there are multiple convertible types in the `TypeCollection`, use the closet convertible
-    // data type among convertible types.
+    // When there are multiple convertible types in the `TypeCollection`, use the closest
+    // convertible data type among convertible types.
     shouldCast(IntegerType, TypeCollection(BinaryType, FloatType, LongType), LongType)
-    shouldCast(IntegerType, TypeCollection(BinaryType, LongType, NumericType), IntegerType)
+    shouldCast(ShortType, TypeCollection(BinaryType, LongType, IntegerType), IntegerType)
+    shouldCast(ShortType, TypeCollection(DateType, LongType, IntegerType, DoubleType), IntegerType)
     // If the result is Float type and Double type is also among the convertible target types,
     // use Double Type instead of Float type.
     shouldCast(LongType, TypeCollection(FloatType, DoubleType, StringType), DoubleType)
