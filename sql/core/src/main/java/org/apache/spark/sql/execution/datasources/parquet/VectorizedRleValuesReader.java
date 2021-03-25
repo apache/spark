@@ -436,7 +436,6 @@ public final class VectorizedRleValuesReader extends ValuesReader
     }
   }
 
-
   public void readUnsignedLongs(
       int total,
       WritableColumnVector c,

@@ -150,7 +150,6 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
-
   // A fork of `readLongs` to rebase the timestamp values. For performance reasons, this method
   // iterates the values twice: check if we need to rebase first, then go to the optimized branch
   // if rebase is not needed.
