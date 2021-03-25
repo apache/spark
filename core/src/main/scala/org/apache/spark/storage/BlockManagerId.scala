@@ -19,9 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 
-import com.github.benmanes.caffeine.cache.Caffeine
-import com.github.benmanes.caffeine.guava.CaffeinatedGuava
-import com.google.common.cache.CacheLoader
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
@@ -138,14 +136,11 @@ private[spark] object BlockManagerId {
    * The max cache size is hardcoded to 10000, since the size of a BlockManagerId
    * object is about 48B, the total memory cost should be below 1MB which is feasible.
    */
-  val blockManagerIdCache = {
-    val builder = Caffeine.newBuilder()
-      .maximumSize(10000)
-    CaffeinatedGuava.build(builder,
-      new CacheLoader[BlockManagerId, BlockManagerId]() {
-        override def load(id: BlockManagerId): BlockManagerId = id
-      })
-  }
+  val blockManagerIdCache = Caffeine.newBuilder()
+    .maximumSize(10000)
+    .build(new CacheLoader[BlockManagerId, BlockManagerId]() {
+      override def load(id: BlockManagerId) = id
+    })
 
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
     blockManagerIdCache.get(id)
