@@ -427,7 +427,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         } else if (StringUtils.isFalseString(s)) {
           false
         } else {
-          null
+          if (ansiEnabled) {
+            throw new UnsupportedOperationException(s"invalid input syntax for type boolean: $s")
+          } else {
+            null
+          }
         }
       })
     case TimestampType =>
@@ -1318,7 +1322,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           if (Float.isNaN($c) || Float.isInfinite($c)) {
             $evNull = true;
           } else {
-            $evPrim = (long)($c * $MICROS_PER_SECOND);
+            $evPrim = (long)((double)$c * $MICROS_PER_SECOND);
           }
         """
   }
@@ -1349,13 +1353,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
+        val castFailureCode = if (ansiEnabled) {
+          val errorMessage = s""""invalid input syntax for type boolean: " + $c"""
+          s"throw new java.lang.UnsupportedOperationException($errorMessage);"
+        } else {
+          s"$evNull = true;"
+        }
         code"""
           if ($stringUtils.isTrueString($c)) {
             $evPrim = true;
           } else if ($stringUtils.isFalseString($c)) {
             $evPrim = false;
           } else {
-            $evNull = true;
+            $castFailureCode
           }
         """
     case TimestampType =>
@@ -1863,6 +1873,8 @@ object AnsiCast {
 
     case (NullType, _) => true
 
+    case (_, StringType) => true
+
     case (StringType, _: BinaryType) => true
 
     case (StringType, BooleanType) => true
@@ -1879,13 +1891,6 @@ object AnsiCast {
     case (_: NumericType, _: NumericType) => true
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
-
-    case (_: NumericType, StringType) => true
-    case (_: DateType, StringType) => true
-    case (_: TimestampType, StringType) => true
-    case (_: CalendarIntervalType, StringType) => true
-    case (BooleanType, StringType) => true
-    case (BinaryType, StringType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&

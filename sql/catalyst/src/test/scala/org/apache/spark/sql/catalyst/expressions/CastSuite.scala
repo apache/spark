@@ -60,7 +60,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
-    atomicTypes.foreach(dt => checkNullCast(dt, StringType))
+    (atomicTypes -- Set(
+      // TODO(SPARK-34668): Support casting of day-time intervals to strings
+      DayTimeIntervalType,
+      // TODO(SPARK-34667): Support casting of year-month intervals to strings
+      YearMonthIntervalType)).foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
@@ -352,12 +356,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(ArrayType(StringType), ArrayType(IntegerType))
 
     {
-      val ret = cast(array, ArrayType(BooleanType, containsNull = true))
-      assert(ret.resolved)
-      checkEvaluation(ret, Seq(null, true, false, null))
-    }
-
-    {
       val array = Literal.create(Seq.empty, ArrayType(NullType, containsNull = false))
       val ret = cast(array, ArrayType(IntegerType, containsNull = false))
       assert(ret.resolved)
@@ -369,11 +367,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(ret.resolved === false)
     }
 
-    {
-      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = true))
-      assert(ret.resolved)
-      checkEvaluation(ret, Seq(null, true, false))
-    }
     {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
       assert(ret.resolved === false)
@@ -396,22 +389,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(MapType(StringType, IntegerType), MapType(StringType, StringType))
 
     {
-      val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
-      assert(ret.resolved)
-      checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
-    }
-    {
       val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = false))
       assert(ret.resolved === false)
     }
     {
       val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
       assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
-      assert(ret.resolved)
-      checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
     }
     {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
@@ -462,28 +445,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       val ret = cast(struct, StructType(Seq(
         StructField("a", BooleanType, nullable = true),
         StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = true),
-        StructField("d", BooleanType, nullable = true))))
-      assert(ret.resolved)
-      checkEvaluation(ret, InternalRow(null, true, false, null))
-    }
-    {
-      val ret = cast(struct, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
         StructField("c", BooleanType, nullable = false),
         StructField("d", BooleanType, nullable = true))))
       assert(ret.resolved === false)
     }
 
-    {
-      val ret = cast(struct_notNull, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = true))))
-      assert(ret.resolved)
-      checkEvaluation(ret, InternalRow(null, true, false))
-    }
     {
       val ret = cast(struct_notNull, StructType(Seq(
         StructField("a", BooleanType, nullable = true),
@@ -571,9 +537,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("n", false)
     checkCast("no", false)
     checkCast("0", false)
-
-    checkEvaluation(cast("abc", BooleanType), null)
-    checkEvaluation(cast("", BooleanType), null)
   }
 
   protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
@@ -721,6 +684,117 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
     Seq("nan", "nAn", " nan ").foreach { value =>
       checkEvaluation(cast(value, DoubleType), Double.NaN)
+    }
+  }
+
+  test("SPARK-22825 Cast array to string") {
+    val ret1 = cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType)
+    checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
+    val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
+    checkEvaluation(ret2, "[ab, cde, f]")
+    Seq(false, true).foreach { omitNull =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
+        val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
+        checkEvaluation(ret3, s"[ab,${if (omitNull) "" else " null"}, c]")
+      }
+    }
+    val ret4 =
+      cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
+    checkEvaluation(ret4, "[ab, cde, f]")
+    val ret5 = cast(
+      Literal.create(Array("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf)),
+      StringType)
+    checkEvaluation(ret5, "[2014-12-03, 2014-12-04, 2014-12-06]")
+    val ret6 = cast(
+      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00")
+        .map(Timestamp.valueOf)),
+      StringType)
+    checkEvaluation(ret6, "[2014-12-03 13:01:00, 2014-12-04 15:05:00]")
+    val ret7 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
+    checkEvaluation(ret7, "[[1, 2, 3], [4, 5]]")
+    val ret8 = cast(
+      Literal.create(Array(Array(Array("a"), Array("b", "c")), Array(Array("d")))),
+      StringType)
+    checkEvaluation(ret8, "[[[a], [b, c]], [[d]]]")
+  }
+
+  test("SPARK-33291: Cast array with null elements to string") {
+    Seq(false, true).foreach { omitNull =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
+        val ret1 = cast(Literal.create(Array(null, null)), StringType)
+        checkEvaluation(
+          ret1,
+          s"[${if (omitNull) "" else "null"},${if (omitNull) "" else " null"}]")
+      }
+    }
+  }
+
+  test("SPARK-22973 Cast map to string") {
+    Seq(
+      false -> ("{", "}"),
+      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
+        val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
+        checkEvaluation(ret1, s"${lb}1 -> a, 2 -> b, 3 -> c$rb")
+        val ret2 = cast(
+          Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
+          StringType)
+        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " null"}, 3 -> c$rb")
+        val ret3 = cast(
+          Literal.create(Map(
+            1 -> Date.valueOf("2014-12-03"),
+            2 -> Date.valueOf("2014-12-04"),
+            3 -> Date.valueOf("2014-12-05"))),
+          StringType)
+        checkEvaluation(ret3, s"${lb}1 -> 2014-12-03, 2 -> 2014-12-04, 3 -> 2014-12-05$rb")
+        val ret4 = cast(
+          Literal.create(Map(
+            1 -> Timestamp.valueOf("2014-12-03 13:01:00"),
+            2 -> Timestamp.valueOf("2014-12-04 15:05:00"))),
+          StringType)
+        checkEvaluation(ret4, s"${lb}1 -> 2014-12-03 13:01:00, 2 -> 2014-12-04 15:05:00$rb")
+        val ret5 = cast(
+          Literal.create(Map(
+            1 -> Array(1, 2, 3),
+            2 -> Array(4, 5, 6))),
+          StringType)
+        checkEvaluation(ret5, s"${lb}1 -> [1, 2, 3], 2 -> [4, 5, 6]$rb")
+      }
+    }
+  }
+
+  test("SPARK-22981 Cast struct to string") {
+    Seq(
+      false -> ("{", "}"),
+      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
+        val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
+        checkEvaluation(ret1, s"${lb}1, a, 0.1$rb")
+        val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
+        checkEvaluation(ret2, s"${lb}1,${if (legacyCast) "" else " null"}, a$rb")
+        val ret3 = cast(Literal.create(
+          (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
+        checkEvaluation(ret3, s"${lb}2014-12-03, 2014-12-03 15:05:00$rb")
+        val ret4 = cast(Literal.create(((1, "a"), 5, 0.1)), StringType)
+        checkEvaluation(ret4, s"$lb${lb}1, a$rb, 5, 0.1$rb")
+        val ret5 = cast(Literal.create((Seq(1, 2, 3), "a", 0.1)), StringType)
+        checkEvaluation(ret5, s"$lb[1, 2, 3], a, 0.1$rb")
+        val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
+        checkEvaluation(ret6, s"${lb}1, ${lb}1 -> a, 2 -> b, 3 -> c$rb$rb")
+      }
+    }
+  }
+
+  test("SPARK-33291: Cast struct with null elements to string") {
+    Seq(
+      false -> ("{", "}"),
+      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
+        val ret1 = cast(Literal.create(Tuple2[String, String](null, null)), StringType)
+        checkEvaluation(
+          ret1,
+          s"$lb${if (legacyCast) "" else "null"},${if (legacyCast) "" else " null"}$rb")
+      }
     }
   }
 }
@@ -888,12 +962,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     assert(cast(booleanLiteral, DateType).checkInputDataTypes().isFailure)
   }
 
-  test("ANSI mode: disallow casting complex types as String type") {
-    verifyCastFailure(cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType))
-    verifyCastFailure(cast(Literal.create(Map(1 -> "a")), StringType))
-    verifyCastFailure(cast(Literal.create((1, "a", 0.1)), StringType))
-  }
-
   test("cast from invalid string to numeric should throw NumberFormatException") {
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
@@ -955,8 +1023,115 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       "invalid input syntax for type numeric")
   }
 
+  protected def checkCastToBooleanError(l: Literal, to: DataType): Unit = {
+    checkExceptionInExpression[UnsupportedOperationException](
+      cast(l, to), s"invalid input syntax for type boolean")
+  }
+
+  test("ANSI mode: cast string to boolean with parse error") {
+    checkCastToBooleanError(Literal("abc"), BooleanType)
+    checkCastToBooleanError(Literal(""), BooleanType)
+  }
+
+  test("cast from array II") {
+    val array = Literal.create(Seq("123", "true", "f", null),
+      ArrayType(StringType, containsNull = true))
+    val array_notNull = Literal.create(Seq("123", "true", "f"),
+      ArrayType(StringType, containsNull = false))
+
+    {
+      val to: DataType = ArrayType(BooleanType, containsNull = true)
+      val ret = cast(array, to)
+      assert(ret.resolved)
+      checkCastToBooleanError(array, to)
+    }
+
+    {
+      val to: DataType = ArrayType(BooleanType, containsNull = true)
+      val ret = cast(array_notNull, to)
+      assert(ret.resolved)
+      checkCastToBooleanError(array_notNull, to)
+    }
+  }
+
+  test("cast from map II") {
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f", "d" -> null),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val map_notNull = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      MapType(StringType, StringType, valueContainsNull = false))
+
+    checkNullCast(MapType(StringType, IntegerType), MapType(StringType, StringType))
+
+    {
+      val to: DataType = MapType(StringType, BooleanType, valueContainsNull = true)
+      val ret = cast(map, to)
+      assert(ret.resolved)
+      checkCastToBooleanError(map, to)
+    }
+
+    {
+      val to: DataType = MapType(StringType, BooleanType, valueContainsNull = true)
+      val ret = cast(map_notNull, to)
+      assert(ret.resolved)
+      checkCastToBooleanError(map_notNull, to)
+    }
+  }
+
+  test("cast from struct II") {
+    checkNullCast(
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType))),
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", StringType))))
+
+    val struct = Literal.create(
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("true"),
+        UTF8String.fromString("f"),
+        null),
+      StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true),
+        StructField("c", StringType, nullable = true),
+        StructField("d", StringType, nullable = true))))
+    val struct_notNull = Literal.create(
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("true"),
+        UTF8String.fromString("f")),
+      StructType(Seq(
+        StructField("a", StringType, nullable = false),
+        StructField("b", StringType, nullable = false),
+        StructField("c", StringType, nullable = false))))
+
+    {
+      val to: DataType = StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true),
+        StructField("d", BooleanType, nullable = true)))
+      val ret = cast(struct, to)
+      assert(ret.resolved)
+      checkCastToBooleanError(struct, to)
+    }
+
+    {
+      val to: DataType = StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true)))
+      val ret = cast(struct_notNull, to)
+      assert(ret.resolved)
+      checkCastToBooleanError(struct_notNull, to)
+    }
+  }
+
   test("ANSI mode: cast string to timestamp with parse error") {
-    val activeConf = conf
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
@@ -964,23 +1139,20 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
           s"Cannot cast $str to TimestampType.")
       }
 
-      SQLConf.withExistingConf(activeConf) {
-        checkCastWithParseError("123")
-        checkCastWithParseError("2015-03-18 123142")
-        checkCastWithParseError("2015-03-18T123123")
-        checkCastWithParseError("2015-03-18X")
-        checkCastWithParseError("2015/03/18")
-        checkCastWithParseError("2015.03.18")
-        checkCastWithParseError("20150318")
-        checkCastWithParseError("2015-031-8")
-        checkCastWithParseError("2015-03-18T12:03:17-0:70")
-        checkCastWithParseError("abdef")
-      }
+      checkCastWithParseError("123")
+      checkCastWithParseError("2015-03-18 123142")
+      checkCastWithParseError("2015-03-18T123123")
+      checkCastWithParseError("2015-03-18X")
+      checkCastWithParseError("2015/03/18")
+      checkCastWithParseError("2015.03.18")
+      checkCastWithParseError("20150318")
+      checkCastWithParseError("2015-031-8")
+      checkCastWithParseError("2015-03-18T12:03:17-0:70")
+      checkCastWithParseError("abdef")
     }
   }
 
   test("ANSI mode: cast string to date with parse error") {
-    val activeConf = conf
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
@@ -988,18 +1160,16 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
           s"Cannot cast $str to DateType.")
       }
 
-      SQLConf.withExistingConf(activeConf) {
-        checkCastWithParseError("12345")
-        checkCastWithParseError("12345-12-18")
-        checkCastWithParseError("2015-13-18")
-        checkCastWithParseError("2015-03-128")
-        checkCastWithParseError("2015/03/18")
-        checkCastWithParseError("2015.03.18")
-        checkCastWithParseError("20150318")
-        checkCastWithParseError("2015-031-8")
-        checkCastWithParseError("2015-03-18ABC")
-        checkCastWithParseError("abdef")
-      }
+      checkCastWithParseError("12345")
+      checkCastWithParseError("12345-12-18")
+      checkCastWithParseError("2015-13-18")
+      checkCastWithParseError("2015-03-128")
+      checkCastWithParseError("2015/03/18")
+      checkCastWithParseError("2015.03.18")
+      checkCastWithParseError("20150318")
+      checkCastWithParseError("2015-031-8")
+      checkCastWithParseError("2015-03-18ABC")
+      checkCastWithParseError("abdef")
     }
   }
 
@@ -1183,6 +1353,101 @@ class CastSuite extends CastSuiteBase {
     assert(Cast.canCast(
       StructType(StructField("a", NullType, false) :: Nil),
       StructType(StructField("a", IntegerType, true) :: Nil)))
+  }
+
+  test("cast string to boolean II") {
+    checkEvaluation(cast("abc", BooleanType), null)
+    checkEvaluation(cast("", BooleanType), null)
+  }
+
+  test("cast from array II") {
+    val array = Literal.create(Seq("123", "true", "f", null),
+      ArrayType(StringType, containsNull = true))
+    val array_notNull = Literal.create(Seq("123", "true", "f"),
+      ArrayType(StringType, containsNull = false))
+
+    {
+      val ret = cast(array, ArrayType(BooleanType, containsNull = true))
+      assert(ret.resolved)
+      checkEvaluation(ret, Seq(null, true, false, null))
+    }
+
+    {
+      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = true))
+      assert(ret.resolved)
+      checkEvaluation(ret, Seq(null, true, false))
+    }
+  }
+
+  test("cast from map II") {
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f", "d" -> null),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val map_notNull = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      MapType(StringType, StringType, valueContainsNull = false))
+
+    {
+      val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
+      assert(ret.resolved)
+      checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
+    }
+
+    {
+      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
+      assert(ret.resolved)
+      checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
+    }
+  }
+
+  test("cast from struct II") {
+    checkNullCast(
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType))),
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", StringType))))
+
+    val struct = Literal.create(
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("true"),
+        UTF8String.fromString("f"),
+        null),
+      StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true),
+        StructField("c", StringType, nullable = true),
+        StructField("d", StringType, nullable = true))))
+    val struct_notNull = Literal.create(
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("true"),
+        UTF8String.fromString("f")),
+      StructType(Seq(
+        StructField("a", StringType, nullable = false),
+        StructField("b", StringType, nullable = false),
+        StructField("c", StringType, nullable = false))))
+
+    {
+      val ret = cast(struct, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true),
+        StructField("d", BooleanType, nullable = true))))
+      assert(ret.resolved)
+      checkEvaluation(ret, InternalRow(null, true, false, null))
+    }
+
+    {
+      val ret = cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = true))))
+      assert(ret.resolved)
+      checkEvaluation(ret, InternalRow(null, true, false))
+    }
   }
 
   test("SPARK-31227: Non-nullable null type should not coerce to nullable type") {
@@ -1409,117 +1674,6 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast("abcd", DecimalType(38, 1)), null)
   }
 
-  test("SPARK-22825 Cast array to string") {
-    val ret1 = cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType)
-    checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
-    val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
-    checkEvaluation(ret2, "[ab, cde, f]")
-    Seq(false, true).foreach { omitNull =>
-      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
-        val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
-        checkEvaluation(ret3, s"[ab,${if (omitNull) "" else " null"}, c]")
-      }
-    }
-    val ret4 =
-      cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
-    checkEvaluation(ret4, "[ab, cde, f]")
-    val ret5 = cast(
-      Literal.create(Array("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf)),
-      StringType)
-    checkEvaluation(ret5, "[2014-12-03, 2014-12-04, 2014-12-06]")
-    val ret6 = cast(
-      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00")
-        .map(Timestamp.valueOf)),
-      StringType)
-    checkEvaluation(ret6, "[2014-12-03 13:01:00, 2014-12-04 15:05:00]")
-    val ret7 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
-    checkEvaluation(ret7, "[[1, 2, 3], [4, 5]]")
-    val ret8 = cast(
-      Literal.create(Array(Array(Array("a"), Array("b", "c")), Array(Array("d")))),
-      StringType)
-    checkEvaluation(ret8, "[[[a], [b, c]], [[d]]]")
-  }
-
-  test("SPARK-33291: Cast array with null elements to string") {
-    Seq(false, true).foreach { omitNull =>
-      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
-        val ret1 = cast(Literal.create(Array(null, null)), StringType)
-        checkEvaluation(
-          ret1,
-          s"[${if (omitNull) "" else "null"},${if (omitNull) "" else " null"}]")
-      }
-    }
-  }
-
-  test("SPARK-22973 Cast map to string") {
-    Seq(
-      false -> ("{", "}"),
-      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
-      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
-        val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
-        checkEvaluation(ret1, s"${lb}1 -> a, 2 -> b, 3 -> c$rb")
-        val ret2 = cast(
-          Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
-          StringType)
-        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " null"}, 3 -> c$rb")
-        val ret3 = cast(
-          Literal.create(Map(
-            1 -> Date.valueOf("2014-12-03"),
-            2 -> Date.valueOf("2014-12-04"),
-            3 -> Date.valueOf("2014-12-05"))),
-          StringType)
-        checkEvaluation(ret3, s"${lb}1 -> 2014-12-03, 2 -> 2014-12-04, 3 -> 2014-12-05$rb")
-        val ret4 = cast(
-          Literal.create(Map(
-            1 -> Timestamp.valueOf("2014-12-03 13:01:00"),
-            2 -> Timestamp.valueOf("2014-12-04 15:05:00"))),
-          StringType)
-        checkEvaluation(ret4, s"${lb}1 -> 2014-12-03 13:01:00, 2 -> 2014-12-04 15:05:00$rb")
-        val ret5 = cast(
-          Literal.create(Map(
-            1 -> Array(1, 2, 3),
-            2 -> Array(4, 5, 6))),
-          StringType)
-        checkEvaluation(ret5, s"${lb}1 -> [1, 2, 3], 2 -> [4, 5, 6]$rb")
-      }
-    }
-  }
-
-  test("SPARK-22981 Cast struct to string") {
-    Seq(
-      false -> ("{", "}"),
-      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
-      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
-        val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
-        checkEvaluation(ret1, s"${lb}1, a, 0.1$rb")
-        val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
-        checkEvaluation(ret2, s"${lb}1,${if (legacyCast) "" else " null"}, a$rb")
-        val ret3 = cast(Literal.create(
-          (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
-        checkEvaluation(ret3, s"${lb}2014-12-03, 2014-12-03 15:05:00$rb")
-        val ret4 = cast(Literal.create(((1, "a"), 5, 0.1)), StringType)
-        checkEvaluation(ret4, s"$lb${lb}1, a$rb, 5, 0.1$rb")
-        val ret5 = cast(Literal.create((Seq(1, 2, 3), "a", 0.1)), StringType)
-        checkEvaluation(ret5, s"$lb[1, 2, 3], a, 0.1$rb")
-        val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
-        checkEvaluation(ret6, s"${lb}1, ${lb}1 -> a, 2 -> b, 3 -> c$rb$rb")
-      }
-    }
-  }
-
-  test("SPARK-33291: Cast struct with null elements to string") {
-    Seq(
-      false -> ("{", "}"),
-      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
-      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
-        val ret1 = cast(Literal.create(Tuple2[String, String](null, null)), StringType)
-        checkEvaluation(
-          ret1,
-          s"$lb${if (legacyCast) "" else "null"},${if (legacyCast) "" else " null"}$rb")
-      }
-    }
-  }
-
   test("data type casting II") {
     checkEvaluation(
       cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
@@ -1536,6 +1690,10 @@ class CastSuite extends CastSuiteBase {
 
   test("Cast from double II") {
     checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
+  }
+
+  test("SPARK-34727: cast from float II") {
+    checkCast(16777215.0f, java.time.Instant.ofEpochSecond(16777215))
   }
 }
 

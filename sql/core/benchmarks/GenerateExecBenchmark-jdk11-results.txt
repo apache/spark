@@ -1,0 +1,12 @@
+================================================================================================
+GenerateExec benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.9+11-LTS on Mac OS X 10.16
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+GenerateExec Benchmark:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+GenerateExec Benchmark wholestage off             72694          72900         292          1.4         726.9       1.0X
+GenerateExec Benchmark wholestage on              29207          30182         562          3.4         292.1       2.5X
+
+

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.math.MathContext
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 
 import scala.collection.mutable
 import scala.util.{Random, Try}
@@ -271,6 +271,17 @@ object RandomDataGenerator {
         val days = rand.nextInt(10000)
         val ns = rand.nextLong()
         new CalendarInterval(months, days, ns)
+      })
+      case DayTimeIntervalType => Some(() => {
+        val maxSeconds = Duration.ofDays(106751991).getSeconds
+        val seconds = rand.nextLong() % maxSeconds
+        val nanoAdjustment = rand.nextLong() % 999999000
+        Duration.ofSeconds(seconds, nanoAdjustment)
+      })
+      case YearMonthIntervalType => Some(() => {
+        val years = rand.nextInt() % 178956970
+        val months = rand.nextInt() % 12
+        Period.of(years, months, 0)
       })
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(

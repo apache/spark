@@ -483,7 +483,7 @@ object SQLConf {
 
   val COALESCE_PARTITIONS_INITIAL_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.initialPartitionNum")
-      .doc("The initial number of shuffle partitions before coalescing. By default it equals to " +
+      .doc("The initial number of shuffle partitions before coalescing. If not set, it equals to " +
         s"${SHUFFLE_PARTITIONS.key}. This configuration only has an effect when " +
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and '${COALESCE_PARTITIONS_ENABLED.key}' " +
         "are both true.")
@@ -500,8 +500,8 @@ object SQLConf {
         "reduce IO and improve performance. Note, multiple contiguous blocks exist in single " +
         s"fetch request only happen when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true. This feature also depends " +
-        "on a relocatable serializer, the concatenation support codec in use and the new version " +
-        "shuffle fetch protocol.")
+        "on a relocatable serializer, the concatenation support codec in use, the new version " +
+        "shuffle fetch protocol and io encryption is disabled.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -863,7 +863,9 @@ object SQLConf {
       .doc("The threshold of set size for InSet predicate when pruning partitions through Hive " +
         "Metastore. When the set size exceeds the threshold, we rewrite the InSet predicate " +
         "to be greater than or equal to the minimum value in set and less than or equal to the " +
-        "maximum value in set. Larger values may cause Hive Metastore stack overflow.")
+        "maximum value in set. Larger values may cause Hive Metastore stack overflow. But for " +
+        "InSet inside Not with values exceeding the threshold, we won't push it to Hive Metastore."
+      )
       .version("3.1.0")
       .internal()
       .intConf

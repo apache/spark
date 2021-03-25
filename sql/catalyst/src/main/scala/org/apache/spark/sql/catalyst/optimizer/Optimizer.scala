@@ -78,6 +78,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
         LimitPushDown,
+        LimitPushDownThroughWindow,
         ColumnPruning,
         // Operator combine
         CollapseRepartition,
@@ -111,6 +112,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RewriteCorrelatedScalarSubquery,
         EliminateSerialization,
         RemoveRedundantAliases,
+        RemoveRedundantAggregates,
         UnwrapCastInBinaryComparison,
         RemoveNoopOperators,
         OptimizeUpdateFields,
@@ -157,8 +159,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       RemoveNoopOperators,
-      RemoveNoopUnion,
-      CombineUnions) ::
+      CombineUnions,
+      RemoveNoopUnion) ::
     Batch("OptimizeLimitZero", Once,
       OptimizeLimitZero) ::
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
@@ -496,6 +498,50 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 }
 
 /**
+ * Remove redundant aggregates from a query plan. A redundant aggregate is an aggregate whose
+ * only goal is to keep distinct values, while its parent aggregate would ignore duplicate values.
+ */
+object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
+      val aliasMap = getAliasMap(lower)
+
+      val newAggregate = upper.copy(
+        child = lower.child,
+        groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
+        aggregateExpressions = upper.aggregateExpressions.map(
+          replaceAliasButKeepName(_, aliasMap))
+      )
+
+      // We might have introduces non-deterministic grouping expression
+      if (newAggregate.groupingExpressions.exists(!_.deterministic)) {
+        PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
+      } else {
+        newAggregate
+      }
+  }
+
+  private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
+    val upperHasNoAggregateExpressions = !upper.aggregateExpressions.exists(isAggregate)
+
+    lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
+      lower
+        .aggregateExpressions
+        .filter(_.deterministic)
+        .filter(!isAggregate(_))
+        .map(_.toAttribute)
+    ))
+
+    upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
+  }
+
+  private def isAggregate(expr: Expression): Boolean = {
+    expr.find(e => e.isInstanceOf[AggregateExpression] ||
+      PythonUDF.isGroupedAggPandasUDF(e)).isDefined
+  }
+}
+
+/**
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
@@ -509,7 +555,8 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
 }
 
 /**
- * Remove no-op `Union` from the query plan that do not make any modifications.
+ * Smplify the children of `Union` or remove no-op `Union` from the query plan that
+ * do not make any modifications to the query.
  */
 object RemoveNoopUnion extends Rule[LogicalPlan] {
   /**
@@ -532,21 +579,29 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
     case _ => plan
   }
 
-  private def removeUnion(u: Union): Option[LogicalPlan] = {
-    val unionChildren = u.children.map(removeAliasOnlyProject)
-    if (unionChildren.tail.forall(unionChildren.head.sameResult(_))) {
-      Some(u.children.head)
+  private def simplifyUnion(u: Union): LogicalPlan = {
+    val uniqueChildren = mutable.ArrayBuffer.empty[LogicalPlan]
+    val uniqueChildrenKey = mutable.HashSet.empty[LogicalPlan]
+
+    u.children.foreach { c =>
+      val key = removeAliasOnlyProject(c).canonicalized
+      if (!uniqueChildrenKey.contains(key)) {
+        uniqueChildren += c
+        uniqueChildrenKey += key
+      }
+    }
+    if (uniqueChildren.size == 1) {
+      u.children.head
     } else {
-      None
+      u.copy(children = uniqueChildren.toSeq)
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case d @ Distinct(u: Union) =>
-      removeUnion(u).map(c => d.withNewChildren(Seq(c))).getOrElse(d)
-
+      d.withNewChildren(Seq(simplifyUnion(u)))
     case d @ Deduplicate(_, u: Union) =>
-      removeUnion(u).map(c => d.withNewChildren(Seq(c))).getOrElse(d)
+      d.withNewChildren(Seq(simplifyUnion(u)))
   }
 }
 
@@ -994,7 +1049,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   with PredicateHelper with ConstraintHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (SQLConf.get.constraintPropagationEnabled) {
+    if (conf.constraintPropagationEnabled) {
       inferFilters(plan)
     } else {
       plan
@@ -1549,7 +1604,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
 /**
  * This rule optimizes Limit operators by:
- * 1. Eliminate [[Limit]] operators if it's child max row <= limit.
+ * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
  * 2. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
  */
@@ -1560,6 +1615,8 @@ object EliminateLimits extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case Limit(l, child) if canEliminate(l, child) =>
+      child
+    case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
@@ -1601,7 +1658,7 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan =
-    if (SQLConf.get.crossJoinEnabled) {
+    if (conf.crossJoinEnabled) {
       plan
     } else plan transform {
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _)
@@ -1643,7 +1700,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
             we.copy(windowFunction = ae.copy(aggregateFunction = Average(UnscaledValue(e))))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4), Option(SQLConf.get.sessionLocalTimeZone))
+            DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
 
         case _ => we
       }
@@ -1655,7 +1712,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
           val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4), Option(SQLConf.get.sessionLocalTimeZone))
+            DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
 
         case _ => ae
       }

@@ -18,12 +18,14 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * The base trait for DML - insert syntax
+ * The base trait for SQL INSERT.
  */
 trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
 
@@ -209,6 +211,52 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-33474: Support typed literals as partition spec values") {
+    withTable("t1") {
+      val binaryStr = "Spark SQL"
+      val binaryHexStr = Hex.hex(UTF8String.fromString(binaryStr).getBytes).toString
+      sql(
+        """
+          | CREATE TABLE t1(name STRING, part1 DATE, part2 TIMESTAMP, part3 BINARY,
+          |  part4 STRING, part5 STRING, part6 STRING, part7 STRING)
+          | USING PARQUET PARTITIONED BY (part1, part2, part3, part4, part5, part6, part7)
+         """.stripMargin)
+
+      sql(
+        s"""
+           | INSERT OVERWRITE t1 PARTITION(
+           | part1 = date'2019-01-01',
+           | part2 = timestamp'2019-01-01 11:11:11',
+           | part3 = X'$binaryHexStr',
+           | part4 = 'p1',
+           | part5 = date'2019-01-01',
+           | part6 = timestamp'2019-01-01 11:11:11',
+           | part7 = X'$binaryHexStr'
+           | ) VALUES('a')
+        """.stripMargin)
+      checkAnswer(sql(
+        """
+          | SELECT
+          |   name,
+          |   CAST(part1 AS STRING),
+          |   CAST(part2 as STRING),
+          |   CAST(part3 as STRING),
+          |   part4,
+          |   part5,
+          |   part6,
+          |   part7
+          | FROM t1
+        """.stripMargin),
+        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "p1",
+          "2019-01-01", "2019-01-01 11:11:11", "Spark SQL"))
+
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t2(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
+      }.getMessage
+      assert(e.contains("Cannot use interval"))
+    }
+  }
+
   test("SPARK-34556: " +
     "checking duplicate static partition columns should respect case sensitive conf") {
     withTable("t") {
@@ -226,6 +274,33 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           sql(s"CREATE TABLE t(i int, c string, C string) USING PARQUET PARTITIONED BY (c, C)")
           sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
           checkAnswer(spark.table("t"), Row(1, "2", "3"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
+    val testingPolicies = if (format == "foo") {
+      // DS v2 doesn't support the legacy policy
+      Seq(SQLConf.StoreAssignmentPolicy.ANSI, SQLConf.StoreAssignmentPolicy.STRICT)
+    } else {
+      SQLConf.StoreAssignmentPolicy.values
+    }
+    testingPolicies.foreach { policy =>
+      withSQLConf(
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
+        withTable("t") {
+          sql("create table t(a int, b string) using parquet partitioned by (a)")
+          policy match {
+            case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+              val errorMsg = intercept[NumberFormatException] {
+                sql("insert into t partition(a='ansi') values('ansi')")
+              }.getMessage
+              assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+            case SQLConf.StoreAssignmentPolicy.LEGACY =>
+              sql("insert into t partition(a='ansi') values('ansi')")
+              checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+          }
         }
       }
     }

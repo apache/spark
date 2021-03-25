@@ -1091,6 +1091,25 @@ class DataFrameAggregateSuite extends QueryTest
     val df = spark.sql(query)
     checkAnswer(df, Row(0, "0", 0, 0) :: Row(-1, "1", 1, 1) :: Row(-2, "2", 2, 2) :: Nil)
   }
+
+  test("SPARK-34713: group by CreateStruct with ExtractValue") {
+    val structDF = Seq(Tuple1(1 -> 1)).toDF("col")
+    checkAnswer(structDF.groupBy(struct($"col._1")).count().select("count"), Row(1))
+
+    val arrayOfStructDF = Seq(Tuple1(Seq(1 -> 1))).toDF("col")
+    checkAnswer(arrayOfStructDF.groupBy(struct($"col._1")).count().select("count"), Row(1))
+
+    val mapDF = Seq(Tuple1(Map("a" -> "a"))).toDF("col")
+    checkAnswer(mapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+
+    val nonStringMapDF = Seq(Tuple1(Map(1 -> 1))).toDF("col")
+    // Spark implicit casts string literal "a" to int to match the key type.
+    checkAnswer(nonStringMapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+
+    val arrayDF = Seq(Tuple1(Seq(1))).toDF("col")
+    val e = intercept[AnalysisException](arrayDF.groupBy(struct($"col.a")).count())
+    assert(e.message.contains("requires integral type"))
+  }
 }
 
 case class B(c: Option[Double])
