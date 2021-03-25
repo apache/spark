@@ -48,8 +48,8 @@ import org.apache.spark.sql.util.SchemaUtils
  * @param properties the properties of this view.
  * @param originalText the original SQL text of this view, can be None if this view is created via
  *                     Dataset API.
- * @param child the logical plan that represents the view; this is used to generate the logical
- *              plan for temporary view and the view schema.
+ * @param analyzedPlan the logical plan that represents the view; this is used to generate the
+ *                     logical plan for temporary view and the view schema.
  * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
  *                already exists, throws analysis exception.
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
@@ -62,7 +62,7 @@ case class CreateViewCommand(
     comment: Option[String],
     properties: Map[String, String],
     originalText: Option[String],
-    child: LogicalPlan,
+    analyzedPlan: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
     viewType: ViewType)
@@ -70,7 +70,7 @@ case class CreateViewCommand(
 
   import ViewHelper._
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(child)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(analyzedPlan)
 
   if (viewType == PersistedView) {
     require(originalText.isDefined, "'originalText' must be provided to create permanent view")
@@ -96,11 +96,6 @@ case class CreateViewCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // If the plan cannot be analyzed, throw an exception and don't proceed.
-    val qe = sparkSession.sessionState.executePlan(child)
-    qe.assertAnalyzed()
-    val analyzedPlan = qe.analyzed
-
     if (userSpecifiedColumns.nonEmpty &&
         userSpecifiedColumns.length != analyzedPlan.output.length) {
       throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
@@ -250,7 +245,7 @@ case class AlterViewAsCommand(
 
   private def alterTemporaryView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
     val catalog = session.sessionState.catalog
-    val getRawTempView: String => Option[LogicalPlan] = if (name.database.isEmpty) {
+    val getRawTempView: String => Option[TemporaryViewRelation] = if (name.database.isEmpty) {
       catalog.getRawTempView
     } else {
       catalog.getRawGlobalTempView
@@ -588,7 +583,7 @@ object ViewHelper extends SQLConfHelper with Logging {
       name: TableIdentifier,
       session: SparkSession,
       replace: Boolean,
-      getRawTempView: String => Option[LogicalPlan],
+      getRawTempView: String => Option[TemporaryViewRelation],
       originalText: Option[String],
       analyzedPlan: LogicalPlan,
       aliasedPlan: LogicalPlan): TemporaryViewRelation = {
@@ -619,14 +614,13 @@ object ViewHelper extends SQLConfHelper with Logging {
    * Checks if need to uncache the temp view being replaced.
    */
   private def needsToUncache(
-      rawTempView: LogicalPlan,
-      aliasedPlan: LogicalPlan): Boolean = rawTempView match {
-    // If TemporaryViewRelation doesn't store the analyzed view, always uncache.
-    case TemporaryViewRelation(_, None) => true
+      rawTempView: TemporaryViewRelation,
+      aliasedPlan: LogicalPlan): Boolean = rawTempView.plan match {
     // Do not need to uncache if the to-be-replaced temp view plan and the new plan are the
     // same-result plans.
-    case TemporaryViewRelation(_, Some(p)) => !p.sameResult(aliasedPlan)
-    case p => !p.sameResult(aliasedPlan)
+    case Some(p) => !p.sameResult(aliasedPlan)
+    // If TemporaryViewRelation doesn't store the analyzed view, always uncache.
+    case None => true
   }
 
   /**

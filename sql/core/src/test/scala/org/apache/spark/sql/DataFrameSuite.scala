@@ -2738,6 +2738,31 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.select(col2), Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
+  test("SPARK-34763: col(), $\"<name>\", df(\"name\") should handle quoted column name properly") {
+    val df1 = spark.sql("SELECT 'col1' AS `a``b.c`")
+    checkAnswer(df1.selectExpr("`a``b.c`"), Row("col1"))
+    checkAnswer(df1.select(df1("`a``b.c`")), Row("col1"))
+    checkAnswer(df1.select(col("`a``b.c`")), Row("col1"))
+    checkAnswer(df1.select($"`a``b.c`"), Row("col1"))
+
+    val df2 = df1.as("d.e`f")
+    checkAnswer(df2.selectExpr("`a``b.c`"), Row("col1"))
+    checkAnswer(df2.select(df2("`a``b.c`")), Row("col1"))
+    checkAnswer(df2.select(col("`a``b.c`")), Row("col1"))
+    checkAnswer(df2.select($"`a``b.c`"), Row("col1"))
+
+    checkAnswer(df2.selectExpr("`d.e``f`.`a``b.c`"), Row("col1"))
+    checkAnswer(df2.select(df2("`d.e``f`.`a``b.c`")), Row("col1"))
+    checkAnswer(df2.select(col("`d.e``f`.`a``b.c`")), Row("col1"))
+    checkAnswer(df2.select($"`d.e``f`.`a``b.c`"), Row("col1"))
+
+    val df3 = df1.as("*-#&% ?")
+    checkAnswer(df3.selectExpr("`*-#&% ?`.`a``b.c`"), Row("col1"))
+    checkAnswer(df3.select(df3("*-#&% ?.`a``b.c`")), Row("col1"))
+    checkAnswer(df3.select(col("*-#&% ?.`a``b.c`")), Row("col1"))
+    checkAnswer(df3.select($"*-#&% ?.`a``b.c`"), Row("col1"))
+  }
+
   test("SPARK-34776: Nested column pruning should not prune Window produced attributes") {
     val df = Seq(
       ("t1", "123", "bob"),

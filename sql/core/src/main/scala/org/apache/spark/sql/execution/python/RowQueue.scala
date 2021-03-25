@@ -174,7 +174,7 @@ private[python] case class HybridRowQueue(
     tempDir: File,
     numFields: Int,
     serMgr: SerializerManager)
-  extends MemoryConsumer(memManager) with RowQueue {
+  extends MemoryConsumer(memManager, memManager.getTungstenMemoryMode) with RowQueue {
 
   // Each buffer should have at least one row
   private var queues = new java.util.LinkedList[RowQueue]()
