@@ -82,6 +82,8 @@ private[history] class ApplicationCache(
       // SPARK-34309: Use custom Executor to compatible with
       // the data eviction behavior of Guava cache
       .executor((command: Runnable) => command.run())
+    // Wrapping as CaffeinatedGuava to be compatible with
+    // the exception behavior of Guava cache
     CaffeinatedGuava.build(builder, appLoader)
   }
 

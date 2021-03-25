@@ -148,7 +148,8 @@ class SessionCatalog(
     if (cacheTTL > 0) {
       builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
     }
-
+    // Wrapping as CaffeinatedGuava to be compatible with
+    // the get(key, valueLoader) API of Guava cache
     CaffeinatedGuava.build(builder)
   }
 
