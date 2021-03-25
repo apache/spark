@@ -182,7 +182,7 @@ Input [2]: [d_date_sk#16, d_date#17]
 
 (16) Filter [codegen id : 5]
 Input [2]: [d_date_sk#16, d_date#17]
-Condition : (((isnotnull(d_date#17) AND (d_date#17 >= 11192)) AND (d_date#17 <= 11222)) AND isnotnull(d_date_sk#16))
+Condition : (((isnotnull(d_date#17) AND (d_date#17 >= 2000-08-23)) AND (d_date#17 <= 2000-09-22)) AND isnotnull(d_date_sk#16))
 
 (17) Project [codegen id : 5]
 Output [1]: [d_date_sk#16]

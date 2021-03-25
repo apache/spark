@@ -111,13 +111,13 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
       // The whole resolution is somewhat difficult to understand here due to too much abstractions.
       // We should probably rewrite the following at some point. Reynold was just here to improve
       // error messages and didn't have time to do a proper rewrite.
-      val resolvedFunc = builtinFunctions.get(u.functionName.toLowerCase(Locale.ROOT)) match {
+      val resolvedFunc = builtinFunctions.get(u.name.funcName.toLowerCase(Locale.ROOT)) match {
         case Some(tvf) =>
 
           def failAnalysis(): Nothing = {
             val argTypes = u.functionArgs.map(_.dataType.typeName).mkString(", ")
             u.failAnalysis(
-              s"""error: table-valued function ${u.functionName} with alternatives:
+              s"""error: table-valued function ${u.name} with alternatives:
                  |${tvf.keys.map(_.toString).toSeq.sorted.map(x => s" ($x)").mkString("\n")}
                  |cannot be applied to: ($argTypes)""".stripMargin)
           }
@@ -139,7 +139,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
             failAnalysis()
           }
         case _ =>
-          u.failAnalysis(s"could not resolve `${u.functionName}` to a table-valued function")
+          u.failAnalysis(s"could not resolve `${u.name}` to a table-valued function")
       }
 
       // If alias names assigned, add `Project` with the aliases
@@ -148,7 +148,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
         // Checks if the number of the aliases is equal to expected one
         if (u.outputNames.size != outputAttrs.size) {
           u.failAnalysis(s"Number of given aliases does not match number of output columns. " +
-            s"Function name: ${u.functionName}; number of aliases: " +
+            s"Function name: ${u.name}; number of aliases: " +
             s"${u.outputNames.size}; number of output columns: ${outputAttrs.size}.")
         }
         val aliases = outputAttrs.zip(u.outputNames).map {

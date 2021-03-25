@@ -455,18 +455,25 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private def testMerge(originalCond: Expression, expectedCond: Expression): Unit = {
-    val func = (rel: LogicalPlan, expr: Expression) => {
-      val assignments = Seq(
+    val func = (target: LogicalPlan, source: LogicalPlan, expr: Expression) => {
+      val matchedAssignments = Seq(
         Assignment('i, 'i),
         Assignment('b, 'b),
         Assignment('a, 'a),
         Assignment('m, 'm)
       )
-      val matchedActions = UpdateAction(Some(expr), assignments) :: DeleteAction(Some(expr)) :: Nil
-      val notMatchedActions = InsertAction(Some(expr), assignments) :: Nil
-      MergeIntoTable(rel, rel, mergeCondition = expr, matchedActions, notMatchedActions)
+      val notMatchedAssignments = Seq(
+        Assignment('i, 'd)
+      )
+      val matchedActions = UpdateAction(Some(expr), matchedAssignments) ::
+        DeleteAction(Some(expr)) :: Nil
+      val notMatchedActions = InsertAction(None, notMatchedAssignments) :: Nil
+      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
     }
-    test(func, originalCond, expectedCond)
+    val originalPlan = func(testRelation, anotherTestRelation, originalCond).analyze
+    val optimizedPlan = Optimize.execute(originalPlan)
+    val expectedPlan = func(testRelation, anotherTestRelation, expectedCond).analyze
+    comparePlans(optimizedPlan, expectedPlan)
   }
 
   private def testHigherOrderFunc(

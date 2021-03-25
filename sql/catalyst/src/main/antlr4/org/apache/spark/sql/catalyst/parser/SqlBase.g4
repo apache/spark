@@ -705,7 +705,7 @@ inlineTable
     ;
 
 functionTable
-    : funcName=errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
+    : funcName=functionName '(' (expression (',' expression)*)? ')' tableAlias
     ;
 
 tableAlias

@@ -393,6 +393,22 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(dateAddMonths(input, -13) === days(1996, 1, 28))
   }
 
+  test("SPARK-34739: timestamp add months") {
+    outstandingZoneIds.foreach { zid =>
+      Seq(
+        (date(2021, 3, 13, 21, 28, 13, 123456, zid), 0, date(2021, 3, 13, 21, 28, 13, 123456, zid)),
+        (date(2021, 3, 31, 0, 0, 0, 123, zid), -1, date(2021, 2, 28, 0, 0, 0, 123, zid)),
+        (date(2020, 2, 29, 1, 2, 3, 4, zid), 12, date(2021, 2, 28, 1, 2, 3, 4, zid)),
+        (date(1, 1, 1, 0, 0, 0, 1, zid), 2020 * 12, date(2021, 1, 1, 0, 0, 0, 1, zid)),
+        (date(1581, 10, 7, 23, 59, 59, 999, zid), 12, date(1582, 10, 7, 23, 59, 59, 999, zid)),
+        (date(9999, 12, 31, 23, 59, 59, 999999, zid), -11,
+          date(9999, 1, 31, 23, 59, 59, 999999, zid))
+      ).foreach { case (timestamp, months, expected) =>
+        assert(timestampAddMonths(timestamp, months, zid) === expected)
+      }
+    }
+  }
+
   test("date add interval with day precision") {
     val input = days(1997, 2, 28)
     assert(dateAddInterval(input, new CalendarInterval(36, 0, 0)) === days(2000, 2, 28))
@@ -401,7 +417,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     intercept[IllegalArgumentException](dateAddInterval(input, new CalendarInterval(36, 47, 1)))
   }
 
-  test("timestamp add months") {
+  test("timestamp add interval") {
     val ts1 = date(1997, 2, 28, 10, 30, 0)
     val ts2 = date(2000, 2, 28, 10, 30, 0, 123000)
     assert(timestampAddInterval(ts1, 36, 0, 123000, defaultZoneId) === ts2)
@@ -694,5 +710,40 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(getDayOfWeekFromString(UTF8String.fromString("MONDAY")) == 4)
     intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("xx")))
     intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("\"quote")))
+  }
+
+  test("SPARK-34761: timestamp add day-time interval") {
+    // transit from Pacific Standard Time to Pacific Daylight Time
+    assert(timestampAddDayTime(
+      // 2019-3-9 is the end of Pacific Standard Time
+      date(2019, 3, 9, 12, 0, 0, 123000, LA),
+      MICROS_PER_DAY, LA) ===
+      // 2019-3-10 is the start of Pacific Daylight Time
+      date(2019, 3, 10, 12, 0, 0, 123000, LA))
+    // just normal days
+    outstandingZoneIds.foreach { zid =>
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 100000, zid), 0, zid) ===
+        date(2021, 3, 18, 19, 44, 1, 100000, zid))
+      assert(timestampAddDayTime(
+        date(2021, 1, 19, 0, 0, 0, 0, zid), -18 * MICROS_PER_DAY, zid) ===
+        date(2021, 1, 1, 0, 0, 0, 0, zid))
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 999999, zid), 10 * MICROS_PER_MINUTE, zid) ===
+        date(2021, 3, 18, 19, 54, 1, 999999, zid))
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 1, zid), -MICROS_PER_DAY - 1, zid) ===
+        date(2021, 3, 17, 19, 44, 1, 0, zid))
+      assert(timestampAddDayTime(
+        date(2019, 5, 9, 12, 0, 0, 123456, zid), 2 * MICROS_PER_DAY + 1, zid) ===
+        date(2019, 5, 11, 12, 0, 0, 123457, zid))
+    }
+    // transit from Pacific Daylight Time to Pacific Standard Time
+    assert(timestampAddDayTime(
+      // 2019-11-2 is the end of Pacific Daylight Time
+      date(2019, 11, 2, 12, 0, 0, 123000, LA),
+      MICROS_PER_DAY, LA) ===
+      // 2019-11-3 is the start of Pacific Standard Time
+      date(2019, 11, 3, 12, 0, 0, 123000, LA))
   }
 }

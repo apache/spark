@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
-import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_CREATED_FROM_DATAFRAME
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -462,7 +462,7 @@ case class View(
     desc: CatalogTable,
     isTempView: Boolean,
     child: LogicalPlan) extends UnaryNode {
-  require(!isDataFrameTempView || child.resolved)
+  require(!isTempViewStoringAnalyzedPlan || child.resolved)
 
   override def output: Seq[Attribute] = child.output
 
@@ -475,8 +475,8 @@ case class View(
     case _ => child.canonicalized
   }
 
-  def isDataFrameTempView: Boolean =
-    isTempView && desc.properties.contains(VIEW_CREATED_FROM_DATAFRAME)
+  def isTempViewStoringAnalyzedPlan: Boolean =
+    isTempView && desc.properties.contains(VIEW_STORING_ANALYZED_PLAN)
 
   // When resolving a SQL view, we use an extra Project to add cast and alias to make sure the view
   // output schema doesn't change even if the table referenced by the view is changed after view
@@ -624,7 +624,7 @@ case class Range(
  *
  * @param groupingExpressions expressions for grouping keys
  * @param aggregateExpressions expressions for a project list, which could contain
- *                             [[AggregateFunction]]s.
+ *                             [[AggregateExpression]]s.
  *
  * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
  * separating projection from grouping and aggregate, we should avoid expression-level optimization
@@ -669,6 +669,8 @@ case class Window(
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
+
+  override def producedAttributes: AttributeSet = windowOutputSet
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 }
@@ -1024,7 +1026,7 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     optNumPartitions: Option[Int]) extends RepartitionOperation {
 
-  val numPartitions = optNumPartitions.getOrElse(SQLConf.get.numShufflePartitions)
+  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   val partitioning: Partitioning = {

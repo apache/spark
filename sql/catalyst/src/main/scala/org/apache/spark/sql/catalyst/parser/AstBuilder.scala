@@ -509,10 +509,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   protected def visitStringConstant(
       ctx: ConstantContext,
       legacyNullAsString: Boolean): String = withOrigin(ctx) {
-    ctx match {
-      case _: NullLiteralContext if !legacyNullAsString => null
-      case s: StringLiteralContext => createString(s)
-      case o => o.getText
+    expression(ctx) match {
+      case Literal(null, _) if !legacyNullAsString => null
+      case l @ Literal(null, _) => l.toString
+      case l: Literal =>
+        // TODO For v2 commands, we will cast the string back to its actual value,
+        //  which is a waste and can be improved in the future.
+        Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
+      case other =>
+        throw new IllegalArgumentException(s"Only literals are allowed in the " +
+          s"partition spec, but got ${other.sql}")
     }
   }
 
@@ -1021,7 +1027,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       // scalastyle:off caselocale
       Some(ctx.tblName.getText.toLowerCase),
       // scalastyle:on caselocale
-      ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply).toSeq,
+      ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.quoted).toSeq,
       query)
   }
 
@@ -1170,9 +1176,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       Seq.empty
     }
+    val name = getFunctionIdentifier(func.functionName)
+    if (name.database.nonEmpty) {
+      operationNotAllowed(s"table valued function cannot specify database name: $name", ctx)
+    }
 
     val tvf = UnresolvedTableValuedFunction(
-      func.funcName.getText, func.expression.asScala.map(expression).toSeq, aliases)
+      name, func.expression.asScala.map(expression).toSeq, aliases)
     tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
@@ -2014,9 +2024,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     try {
       valueType match {
         case "DATE" =>
-          toLiteral(stringToDate(_, getZoneId(SQLConf.get.sessionLocalTimeZone)), DateType)
+          toLiteral(stringToDate(_, getZoneId(conf.sessionLocalTimeZone)), DateType)
         case "TIMESTAMP" =>
-          val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
+          val zoneId = getZoneId(conf.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
         case "INTERVAL" =>
           val interval = try {
