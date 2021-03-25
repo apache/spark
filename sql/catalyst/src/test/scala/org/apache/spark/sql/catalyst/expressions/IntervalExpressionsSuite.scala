@@ -344,4 +344,37 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         DayTimeIntervalType, numType)
     }
   }
+
+  test("SPARK-34868: divide year-month interval by numeric") {
+    Seq(
+      (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
+      (Period.ofMonths(0), 10) -> Period.ofMonths(0),
+      (Period.ofMonths(200), Double.PositiveInfinity) -> Period.ofMonths(0),
+      (Period.ofMonths(-200), Float.NegativeInfinity) -> Period.ofMonths(0),
+      (Period.ofYears(100), -1.toByte) -> Period.ofYears(-100),
+      (Period.ofYears(1), 2.toShort) -> Period.ofMonths(6),
+      (Period.ofYears(-1), -3) -> Period.ofMonths(4),
+      (Period.ofMonths(-1000), 0.5f) -> Period.ofMonths(-2000),
+      (Period.ofYears(1000), 100d) -> Period.ofYears(10),
+      (Period.ofMonths(2), BigDecimal(0.1)) -> Period.ofMonths(20)
+    ).foreach { case ((period, num), expected) =>
+      checkEvaluation(DivideYMInterval(Literal(period), Literal(num)), expected)
+    }
+
+    Seq(
+      (Period.ofMonths(1), 0) -> "/ by zero",
+      (Period.ofMonths(Int.MinValue), 0d) -> "input is infinite or NaN",
+      (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN"
+    ).foreach { case ((period, num), expectedErrMsg) =>
+      checkExceptionInExpression[ArithmeticException](
+        DivideYMInterval(Literal(period), Literal(num)),
+        expectedErrMsg)
+    }
+
+    numericTypes.foreach { numType =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (interval: Expression, num: Expression) => DivideYMInterval(interval, num),
+        YearMonthIntervalType, numType)
+    }
+  }
 }

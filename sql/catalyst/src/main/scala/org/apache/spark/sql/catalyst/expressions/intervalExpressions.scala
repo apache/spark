@@ -22,7 +22,7 @@ import java.util.Locale
 
 import com.google.common.math.{DoubleMath, IntMath, LongMath}
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -356,7 +356,7 @@ case class DivideYMInterval(
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
     case LongType => (months: Int, num) =>
-      Math.toIntExact(LongMath.divide(months, num.asInstanceOf[Long], RoundingMode.HALF_UP))
+      LongMath.divide(months, num.asInstanceOf[Long], RoundingMode.HALF_UP).toInt
     case _: IntegralType => (months: Int, num) =>
       IntMath.divide(months, num.asInstanceOf[Number].intValue(), RoundingMode.HALF_UP)
     case _: DecimalType => (months: Int, num) =>
@@ -373,14 +373,15 @@ case class DivideYMInterval(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
     case LongType =>
       val math = classOf[LongMath].getName
+      val javaType = CodeGenerator.javaType(dataType)
       defineCodeGen(ctx, ev, (m, n) =>
-        s"java.lang.Math.toIntExact($math.divide($m, $n, java.math.RoundingMode.HALF_UP))")
+        s"($javaType)($math.divide($m, $n, java.math.RoundingMode.HALF_UP))")
     case _: IntegralType =>
       val math = classOf[IntMath].getName
       defineCodeGen(ctx, ev, (m, n) => s"$math.divide($m, $n, java.math.RoundingMode.HALF_UP)")
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
-        s"((new Decimal()).set($m).$$divide($n)).toJavaBigDecimal()" +
+        s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
         ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
     case _: FractionalType =>
       val math = classOf[DoubleMath].getName
