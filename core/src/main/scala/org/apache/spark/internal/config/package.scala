@@ -2117,12 +2117,4 @@ package object config {
       // batch of block will be loaded in memory with memory mapping, which has higher overhead
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")
-
-  private[spark] val MARK_FILE_LOST_ON_EXECUTOR_LOST =
-    ConfigBuilder("spark.shuffle.markFileLostOnExecutorLost")
-      .doc("Mark shuffle file lost when executor is lost. People could set this to false when " +
-       "using remote shuffle services because the shuffle file is not stored on the executor.")
-      .version("3.2.0")
-      .booleanConf
-      .createWithDefault(true)
 }
