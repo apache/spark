@@ -600,7 +600,7 @@ public class VectorizedColumnReader {
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.LongType) {
       // In `ParquetToSparkSchemaConverter`, we map parquet UINT32 to our LongType.
-      // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary fall backs.
+      // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary fallbacks.
       // We read them as long values.
       defColumn.readUnsignedIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
@@ -632,6 +632,9 @@ public class VectorizedColumnReader {
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn,
         DecimalType.is32BitDecimalType(column.dataType()));
     } else if (originalType == OriginalType.UINT_64) {
+      // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
+      // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary fallbacks.
+      // We read them as decimal values.
       defColumn.readUnsignedLongs(num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
       if ("CORRECTED".equals(datetimeRebaseMode)) {
