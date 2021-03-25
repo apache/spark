@@ -37,12 +37,13 @@ private[v1] class StagesResource extends BaseAppResource {
   def stageData(
       @PathParam("stageId") stageId: Int,
       @QueryParam("details") @DefaultValue("true") details: Boolean,
+      @QueryParam("taskStatus") taskStatus: JList[TaskStatus],
       @QueryParam("withSummaries") @DefaultValue("false") withSummaries: Boolean,
       @QueryParam("quantiles") @DefaultValue("0.0,0.25,0.5,0.75,1.0") quantileString: String):
   Seq[StageData] = {
     withUI { ui =>
       val quantiles = parseQuantileString(quantileString)
-      val ret = ui.store.stageData(stageId, details = details,
+      val ret = ui.store.stageData(stageId, details = details, taskStatus = taskStatus,
         withSummaries = withSummaries, unsortedQuantiles = quantiles)
       if (ret.nonEmpty) {
         ret
@@ -58,12 +59,13 @@ private[v1] class StagesResource extends BaseAppResource {
       @PathParam("stageId") stageId: Int,
       @PathParam("stageAttemptId") stageAttemptId: Int,
       @QueryParam("details") @DefaultValue("true") details: Boolean,
+      @QueryParam("taskStatus") taskStatus: JList[TaskStatus],
       @QueryParam("withSummaries") @DefaultValue("false") withSummaries: Boolean,
       @QueryParam("quantiles") @DefaultValue("0.0,0.25,0.5,0.75,1.0") quantileString: String):
   StageData = withUI { ui =>
     try {
       val quantiles = parseQuantileString(quantileString)
-      ui.store.stageAttempt(stageId, stageAttemptId, details = details,
+      ui.store.stageAttempt(stageId, stageAttemptId, details = details, taskStatus = taskStatus,
         withSummaries = withSummaries, unsortedQuantiles = quantiles)._1
     } catch {
       case _: NoSuchElementException =>
