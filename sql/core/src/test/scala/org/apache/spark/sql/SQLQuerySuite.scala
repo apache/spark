@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.{LogicalRelation, SchemaColumn
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -4095,6 +4096,48 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
       assert(pushedLocalLimits2.length === 1)
       checkAnswer(df2, Seq(Row(2, 1, 1), Row(4, 2, 2)))
+    }
+  }
+
+  test("SPARK-34796: Avoid code-gen compilation error for LIMIT query") {
+    withTable("left_table", "empty_right_table", "output_table") {
+      spark.range(5).toDF("k").write.saveAsTable("left_table")
+      spark.range(0).toDF("k").write.saveAsTable("empty_right_table")
+
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        spark.sql("CREATE TABLE output_table (k INT) USING parquet")
+        spark.sql(
+          """
+            |INSERT INTO TABLE output_table
+            |SELECT t1.k FROM left_table t1
+            |JOIN empty_right_table t2
+            |ON t1.k = t2.k
+            |LIMIT 3
+          """.stripMargin)
+      }
+    }
+  }
+
+  test("SPARK-33482: Fix FileScan canonicalization") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(5).toDF().write.mode("overwrite").parquet(path.toString)
+        withTempView("t") {
+          spark.read.parquet(path.toString).createOrReplaceTempView("t")
+          val df = sql(
+            """
+              |SELECT *
+              |FROM t AS t1
+              |JOIN t AS t2 ON t2.id = t1.id
+              |JOIN t AS t3 ON t3.id = t2.id
+              |""".stripMargin)
+          df.collect()
+          val reusedExchanges = collect(df.queryExecution.executedPlan) {
+            case r: ReusedExchangeExec => r
+          }
+          assert(reusedExchanges.size == 1)
+        }
+      }
     }
   }
 }

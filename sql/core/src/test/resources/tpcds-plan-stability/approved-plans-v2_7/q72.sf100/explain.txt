@@ -100,7 +100,7 @@ Condition : ((((isnotnull(cs_quantity#7) AND isnotnull(cs_item_sk#4)) AND isnotn
 Output [2]: [hd_demo_sk#9, hd_buy_potential#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_buy_potential), EqualTo(hd_buy_potential,1001-5000), IsNotNull(hd_demo_sk)]
+PushedFilters: [IsNotNull(hd_buy_potential), EqualTo(hd_buy_potential,1001-5000      ), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -108,7 +108,7 @@ Input [2]: [hd_demo_sk#9, hd_buy_potential#10]
 
 (6) Filter [codegen id : 1]
 Input [2]: [hd_demo_sk#9, hd_buy_potential#10]
-Condition : ((isnotnull(hd_buy_potential#10) AND (hd_buy_potential#10 = 1001-5000)) AND isnotnull(hd_demo_sk#9))
+Condition : ((isnotnull(hd_buy_potential#10) AND (hd_buy_potential#10 = 1001-5000      )) AND isnotnull(hd_demo_sk#9))
 
 (7) Project [codegen id : 1]
 Output [1]: [hd_demo_sk#9]

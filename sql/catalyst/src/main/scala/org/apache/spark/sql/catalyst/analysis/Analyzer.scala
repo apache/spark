@@ -342,11 +342,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           case (YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
           case (TimestampType, YearMonthIntervalType) => TimestampAddYMInterval(l, r)
           case (YearMonthIntervalType, TimestampType) => TimestampAddYMInterval(r, l)
-          case (CalendarIntervalType, CalendarIntervalType) => a
+          case (CalendarIntervalType, CalendarIntervalType) |
+               (DayTimeIntervalType, DayTimeIntervalType) => a
           case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
-          case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
+          case (_, CalendarIntervalType | DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, DateType) => DateAddInterval(r, l, ansiEnabled = f)
-          case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
+          case (CalendarIntervalType | DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
           case (DateType, dt) if dt != StringType => DateAdd(l, r)
           case (dt, DateType) if dt != StringType => DateAdd(r, l)
           case _ => a
@@ -356,10 +357,11 @@ class Analyzer(override val catalogManager: CatalogManager)
             DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
           case (TimestampType, YearMonthIntervalType) =>
             DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, f)))
-          case (CalendarIntervalType, CalendarIntervalType) => s
+          case (CalendarIntervalType, CalendarIntervalType) |
+               (DayTimeIntervalType, DayTimeIntervalType) => s
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
-          case (_, CalendarIntervalType) =>
+          case (_, CalendarIntervalType | DayTimeIntervalType) =>
             Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, f))), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
@@ -370,6 +372,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         case m @ Multiply(l, r, f) if m.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _) => MultiplyInterval(l, r, f)
           case (_, CalendarIntervalType) => MultiplyInterval(r, l, f)
+          case (YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
+          case (_, YearMonthIntervalType) => MultiplyYMInterval(r, l)
           case _ => m
         }
         case d @ Divide(l, r, f) if d.childrenResolved => (l.dataType, r.dataType) match {
@@ -1669,6 +1673,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         // implementation and should be resolved based on the table schema.
         o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
 
+      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _) if !m.duplicateResolved =>
+        m.copy(sourceTable = dedupRight(targetTable, sourceTable))
+
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
 
@@ -1715,7 +1722,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case h: UnresolvedHaving => h
 
       case q: LogicalPlan =>
-        logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
+        logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
         q.mapExpressions(resolveExpressionByPlanChildren(_, q))
     }
 
@@ -1860,25 +1867,13 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Literal functions do not require the user to specify braces when calling them
    * When an attributes is not resolvable, we try to resolve it as a literal function.
    */
-  private def resolveLiteralFunction(
-      nameParts: Seq[String],
-      attribute: UnresolvedAttribute,
-      plan: LogicalPlan): Option[Expression] = {
+  private def resolveLiteralFunction(nameParts: Seq[String]): Option[NamedExpression] = {
     if (nameParts.length != 1) return None
-    val isNamedExpression = plan match {
-      case Aggregate(_, aggregateExpressions, _) => aggregateExpressions.contains(attribute)
-      case GroupingSets(_, _, _, aggregateExpressions) => aggregateExpressions.contains(attribute)
-      case Project(projectList, _) => projectList.contains(attribute)
-      case Window(windowExpressions, _, _, _) => windowExpressions.contains(attribute)
-      case _ => false
-    }
-    val wrapper: (Expression, String) => Expression =
-      if (isNamedExpression) (f, n) => Alias(f, n)() else (f, _) => f
     val name = nameParts.head
-    val func = literalFunctions.find { case (fn, _, _) => caseInsensitiveResolution(fn, name) }
-    func.map { case (_, f, fn) =>
-      val funcExpr = f()
-      wrapper(funcExpr, fn(funcExpr))
+    literalFunctions.find(func => caseInsensitiveResolution(func._1, name)).map {
+      case (_, getFuncExpr, getAliasName) =>
+        val funcExpr = getFuncExpr()
+        Alias(funcExpr, getAliasName(funcExpr))()
     }
   }
 
@@ -1895,28 +1890,42 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   private def resolveExpression(
       expr: Expression,
-      plan: LogicalPlan,
       resolveColumnByName: Seq[String] => Option[Expression],
-      resolveColumnByOrdinal: Int => Attribute,
+      getAttrCandidates: () => Seq[Attribute],
       throws: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
       if (e.resolved) return e
       e match {
         case f: LambdaFunction if !f.bound => f
-        case GetColumnByOrdinal(ordinal, _) => resolveColumnByOrdinal(ordinal)
+
+        case GetColumnByOrdinal(ordinal, _) =>
+          val attrCandidates = getAttrCandidates()
+          assert(ordinal >= 0 && ordinal < attrCandidates.length)
+          attrCandidates(ordinal)
+
+        case GetViewColumnByNameAndOrdinal(viewName, colName, ordinal, expectedNumCandidates) =>
+          val attrCandidates = getAttrCandidates()
+          val matched = attrCandidates.filter(a => resolver(a.name, colName))
+          if (matched.length != expectedNumCandidates) {
+            throw QueryCompilationErrors.incompatibleViewSchemaChange(
+              viewName, colName, expectedNumCandidates, matched)
+          }
+          matched(ordinal)
+
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
-            resolveColumnByName(nameParts).map {
+            resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
               // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
               // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
               // can trim the top-level alias if it's safe to do so. Since we will call
               // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
               case Alias(child, _) if !isTopLevel => child
               case other => other
-            }.orElse(resolveLiteralFunction(nameParts, u, plan)).getOrElse(u)
+            }.getOrElse(u)
           }
           logDebug(s"Resolving $u to $result")
           result
+
         case u @ UnresolvedExtractValue(child, fieldName) =>
           val newChild = innerResolve(child, isTopLevel = false)
           if (newChild.resolved) {
@@ -1924,6 +1933,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           } else {
             u.copy(child = newChild)
           }
+
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
     }
@@ -1953,14 +1963,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       throws: Boolean = false): Expression = {
     resolveExpression(
       expr,
-      plan,
       resolveColumnByName = nameParts => {
         plan.resolve(nameParts, resolver)
       },
-      resolveColumnByOrdinal = ordinal => {
-        assert(ordinal >= 0 && ordinal < plan.output.length)
-        plan.output(ordinal)
-      },
+      getAttrCandidates = () => plan.output,
       throws = throws)
   }
 
@@ -1977,14 +1983,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       q: LogicalPlan): Expression = {
     resolveExpression(
       e,
-      q,
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, resolver)
       },
-      resolveColumnByOrdinal = ordinal => {
+      getAttrCandidates = () => {
         assert(q.children.length == 1)
-        assert(ordinal >= 0 && ordinal < q.children.head.output.length)
-        q.children.head.output(ordinal)
+        q.children.head.output
       },
       throws = true)
   }
@@ -3125,56 +3129,6 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
-   * put them into an inner Project and finally project them away at the outer Project.
-   */
-  object PullOutNondeterministic extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case p if !p.resolved => p // Skip unresolved nodes.
-      case p: Project => p
-      case f: Filter => f
-
-      case a: Aggregate if a.groupingExpressions.exists(!_.deterministic) =>
-        val nondeterToAttr = getNondeterToAttr(a.groupingExpressions)
-        val newChild = Project(a.child.output ++ nondeterToAttr.values, a.child)
-        a.transformExpressions { case e =>
-          nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
-        }.copy(child = newChild)
-
-      // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
-      // and we want to retain them inside the aggregate functions.
-      case m: CollectMetrics => m
-
-      // todo: It's hard to write a general rule to pull out nondeterministic expressions
-      // from LogicalPlan, currently we only do it for UnaryNode which has same output
-      // schema with its child.
-      case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
-        val nondeterToAttr = getNondeterToAttr(p.expressions)
-        val newPlan = p.transformExpressions { case e =>
-          nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
-        }
-        val newChild = Project(p.child.output ++ nondeterToAttr.values, p.child)
-        Project(p.output, newPlan.withNewChildren(newChild :: Nil))
-    }
-
-    private def getNondeterToAttr(exprs: Seq[Expression]): Map[Expression, NamedExpression] = {
-      exprs.filterNot(_.deterministic).flatMap { expr =>
-        val leafNondeterministic = expr.collect {
-          case n: Nondeterministic => n
-          case udf: UserDefinedExpression if !udf.deterministic => udf
-        }
-        leafNondeterministic.distinct.map { e =>
-          val ne = e match {
-            case n: NamedExpression => n
-            case _ => Alias(e, "_nondeterministic")()
-          }
-          e -> ne
-        }
-      }.toMap
-    }
-  }
-
-  /**
    * Set the seed for random number generation.
    */
   object ResolveRandomSeed extends Rule[LogicalPlan] {
@@ -3594,7 +3548,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           child
 
         case UpCast(child, target: AtomicType, _)
-            if SQLConf.get.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
+            if conf.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
               child.dataType == StringType =>
           Cast(child, target.asNullable)
 
@@ -3973,8 +3927,6 @@ object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
       val children = e.children.grouped(2).flatMap {
         case Seq(NamePlaceholder, e: NamedExpression) if e.resolved =>
           Seq(Literal(e.name), e)
-        case Seq(NamePlaceholder, e: ExtractValue) if e.resolved && e.name.isDefined =>
-          Seq(Literal(e.name.get), e)
         case kv =>
           kv
       }
@@ -4056,16 +4008,28 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case operator if operator.resolved => operator.transformExpressionsUp {
+      case operator => operator.transformExpressionsUp {
+        case e if !e.childrenResolved => e
+
         // String literal is treated as char type when it's compared to a char type column.
         // We should pad the shorter one to the longer length.
         case b @ BinaryComparison(attr: Attribute, lit) if lit.foldable =>
-          padAttrLitCmp(attr, lit).map { newChildren =>
+          padAttrLitCmp(attr, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren)
           }.getOrElse(b)
 
         case b @ BinaryComparison(lit, attr: Attribute) if lit.foldable =>
-          padAttrLitCmp(attr, lit).map { newChildren =>
+          padAttrLitCmp(attr, attr.metadata, lit).map { newChildren =>
+            b.withNewChildren(newChildren.reverse)
+          }.getOrElse(b)
+
+        case b @ BinaryComparison(or @ OuterReference(attr: Attribute), lit) if lit.foldable =>
+          padAttrLitCmp(or, attr.metadata, lit).map { newChildren =>
+            b.withNewChildren(newChildren)
+          }.getOrElse(b)
+
+        case b @ BinaryComparison(lit, or @ OuterReference(attr: Attribute)) if lit.foldable =>
+          padAttrLitCmp(or, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren.reverse)
           }.getOrElse(b)
 
@@ -4089,6 +4053,12 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         case b @ BinaryComparison(left: Attribute, right: Attribute) =>
           b.withNewChildren(CharVarcharUtils.addPaddingInStringComparison(Seq(left, right)))
 
+        case b @ BinaryComparison(OuterReference(left: Attribute), right: Attribute) =>
+          b.withNewChildren(padOuterRefAttrCmp(left, right))
+
+        case b @ BinaryComparison(left: Attribute, OuterReference(right: Attribute)) =>
+          b.withNewChildren(padOuterRefAttrCmp(right, left).reverse)
+
         case i @ In(attr: Attribute, list) if list.forall(_.isInstanceOf[Attribute]) =>
           val newChildren = CharVarcharUtils.addPaddingInStringComparison(
             attr +: list.map(_.asInstanceOf[Attribute]))
@@ -4097,9 +4067,12 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     }
   }
 
-  private def padAttrLitCmp(attr: Attribute, lit: Expression): Option[Seq[Expression]] = {
-    if (attr.dataType == StringType) {
-      CharVarcharUtils.getRawType(attr.metadata).flatMap {
+  private def padAttrLitCmp(
+      expr: Expression,
+      metadata: Metadata,
+      lit: Expression): Option[Seq[Expression]] = {
+    if (expr.dataType == StringType) {
+      CharVarcharUtils.getRawType(metadata).flatMap {
         case CharType(length) =>
           val str = lit.eval().asInstanceOf[UTF8String]
           if (str == null) {
@@ -4107,9 +4080,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           } else {
             val stringLitLen = str.numChars()
             if (length < stringLitLen) {
-              Some(Seq(StringRPad(attr, Literal(stringLitLen)), lit))
+              Some(Seq(StringRPad(expr, Literal(stringLitLen)), lit))
             } else if (length > stringLitLen) {
-              Some(Seq(attr, StringRPad(lit, Literal(length))))
+              Some(Seq(expr, StringRPad(lit, Literal(length))))
             } else {
               None
             }
@@ -4119,6 +4092,14 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     } else {
       None
     }
+  }
+
+  private def padOuterRefAttrCmp(outerAttr: Attribute, attr: Attribute): Seq[Expression] = {
+    val Seq(r, newAttr) = CharVarcharUtils.addPaddingInStringComparison(Seq(outerAttr, attr))
+    val newOuterRef = r.transform {
+      case ar: Attribute if ar.semanticEquals(outerAttr) => OuterReference(ar)
+    }
+    Seq(newOuterRef, newAttr)
   }
 
   private def addPadding(expr: Expression, charLength: Int, targetLength: Int): Expression = {

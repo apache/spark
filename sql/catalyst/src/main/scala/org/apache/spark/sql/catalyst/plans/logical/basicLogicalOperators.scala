@@ -624,7 +624,7 @@ case class Range(
  *
  * @param groupingExpressions expressions for grouping keys
  * @param aggregateExpressions expressions for a project list, which could contain
- *                             [[AggregateFunction]]s.
+ *                             [[AggregateExpression]]s.
  *
  * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
  * separating projection from grouping and aggregate, we should avoid expression-level optimization
@@ -669,6 +669,8 @@ case class Window(
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
+
+  override def producedAttributes: AttributeSet = windowOutputSet
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 }
@@ -1050,7 +1052,7 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     optNumPartitions: Option[Int]) extends RepartitionOperation {
 
-  val numPartitions = optNumPartitions.getOrElse(SQLConf.get.numShufflePartitions)
+  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   val partitioning: Partitioning = {
