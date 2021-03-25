@@ -23,6 +23,7 @@ import scala.util.Properties
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.FileUtils
 import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
@@ -36,7 +37,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveContext}
-import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_TIME_PARSER_POLICY, SHUFFLE_PARTITIONS}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
@@ -337,6 +338,30 @@ class HiveSparkSubmitSuite
       unusedJar.toString)
     runSparkSubmit(argsForShowTables)
   }
+
+  test("SPARK-34772: RebaseDateTime loadRebaseRecords should use Spark classloader " +
+    "instead of context") {
+    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+
+    // We need to specify the metastore database location in case of conflict with other hive
+    // versions.
+    withTempDir { file =>
+      file.delete()
+      val metastore = s"jdbc:derby:;databaseName=${file.getAbsolutePath};create=true"
+
+      val args = Seq(
+        "--class", SPARK_34772.getClass.getName.stripSuffix("$"),
+        "--name", "SPARK-34772",
+        "--master", "local-cluster[2,1,1024]",
+        "--conf", s"${LEGACY_TIME_PARSER_POLICY.key}=LEGACY",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+        "--conf", s"spark.hadoop.javax.jdo.option.ConnectionURL=$metastore",
+        unusedJar.toString)
+      runSparkSubmit(args)
+    }
+  }
 }
 
 object SetMetastoreURLTest extends Logging {
@@ -408,10 +433,11 @@ object SetWarehouseLocationTest extends Logging {
 
     }
 
-    if (sparkSession.conf.get(WAREHOUSE_PATH.key) != expectedWarehouseLocation) {
+    val qualifiedWHPath = FileUtils.makeQualified(
+      new Path(expectedWarehouseLocation), sparkSession.sparkContext.hadoopConfiguration).toString
+    if (sparkSession.conf.get(WAREHOUSE_PATH.key) != qualifiedWHPath) {
       throw new Exception(
-        s"${WAREHOUSE_PATH.key} is not set to the expected warehouse location " +
-        s"$expectedWarehouseLocation.")
+        s"${WAREHOUSE_PATH.key} is not set to the expected warehouse location $qualifiedWHPath.")
     }
 
     val catalog = sparkSession.sessionState.catalog
@@ -424,7 +450,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        CatalogUtils.stringToURI(s"file:${expectedWarehouseLocation.toString}/testlocation")
+        CatalogUtils.stringToURI(s"$qualifiedWHPath/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -440,7 +466,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
       val expectedLocation = CatalogUtils.stringToURI(
-        s"file:${expectedWarehouseLocation.toString}/testlocationdb.db/testlocation")
+        s"$qualifiedWHPath/testlocationdb.db/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -711,7 +737,7 @@ object SPARK_9757 extends QueryTest {
         val df =
           hiveContext
             .range(10)
-            .select(callUDF("struct", ($"id" + 0.2) cast DecimalType(10, 3)) as "dec_struct")
+            .select(call_udf("struct", ($"id" + 0.2) cast DecimalType(10, 3)) as "dec_struct")
         df.write.option("path", dir.getCanonicalPath).mode("overwrite").saveAsTable("t")
         checkAnswer(hiveContext.table("t"), df)
       }
@@ -842,6 +868,21 @@ object SPARK_18989_DESC_TABLE {
       spark.sql("DESC base64_tbl")
     } finally {
       spark.sql("DROP TABLE IF EXISTS base64_tbl")
+    }
+  }
+}
+
+object SPARK_34772 {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+      .config(UI_ENABLED.key, "false")
+      .enableHiveSupport()
+      .getOrCreate()
+    try {
+      spark.sql("CREATE TABLE t (c int) PARTITIONED BY (p date)")
+      spark.sql("SELECT * FROM t WHERE p='2021-01-01'").collect()
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS t")
     }
   }
 }

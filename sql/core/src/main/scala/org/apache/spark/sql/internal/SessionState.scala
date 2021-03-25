@@ -119,10 +119,6 @@ private[sql] class SessionState(
   // ------------------------------------------------------
 
   def executePlan(plan: LogicalPlan): QueryExecution = createQueryExecution(plan)
-
-  def refreshTable(tableName: String): Unit = {
-    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
-  }
 }
 
 private[sql] object SessionState {
@@ -139,10 +135,9 @@ private[sql] object SessionState {
 @Unstable
 class SessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState],
-    options: Map[String, String])
-  extends BaseSessionStateBuilder(session, parentState, options) {
-  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _, Map.empty)
+    parentState: Option[SessionState])
+  extends BaseSessionStateBuilder(session, parentState) {
+  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
 }
 
 /**

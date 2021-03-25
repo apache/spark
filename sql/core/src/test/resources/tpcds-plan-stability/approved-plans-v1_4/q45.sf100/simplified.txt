@@ -20,10 +20,12 @@ TakeOrderedAndProject [ca_zip,ca_city,sum(ws_sales_price)]
                                       BroadcastHashJoin [ws_item_sk,i_item_sk]
                                         Project [ws_item_sk,ws_bill_customer_sk,ws_sales_price]
                                           BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                            Filter [ws_bill_customer_sk,ws_sold_date_sk,ws_item_sk]
+                                            Filter [ws_bill_customer_sk,ws_item_sk]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_bill_customer_sk,ws_sales_price]
+                                                  Scan parquet default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_sales_price,ws_sold_date_sk]
+                                                    SubqueryBroadcast [d_date_sk] #1
+                                                      ReusedExchange [d_date_sk] #3
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)

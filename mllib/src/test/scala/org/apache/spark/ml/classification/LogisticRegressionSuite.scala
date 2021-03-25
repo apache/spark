@@ -28,7 +28,6 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix, Vector, Vectors}
-import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.stat.MultiClassSummarizer
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
@@ -630,32 +629,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val blrModel = blr.fit(smallBinaryDataset)
     assert(blrModel.coefficients.size === 1)
     assert(blrModel.intercept !== 0.0)
-  }
-
-  test("sparse coefficients in LogisticAggregator") {
-    val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
-    val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val binaryAgg = new LogisticAggregator(bcFeaturesStd, 2,
-      fitIntercept = true, multinomial = false)(bcCoefficientsBinary)
-    val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
-      intercept[IllegalArgumentException] {
-        binaryAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
-      }
-    }
-    assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
-
-    val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
-    val multinomialAgg = new LogisticAggregator(bcFeaturesStd, 3,
-      fitIntercept = true, multinomial = true)(bcCoefficientsMulti)
-    val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
-      intercept[IllegalArgumentException] {
-        multinomialAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
-      }
-    }
-    assert(thrown.getMessage.contains("coefficients only supports dense"))
-    bcCoefficientsBinary.destroy()
-    bcFeaturesStd.destroy()
-    bcCoefficientsMulti.destroy()
   }
 
   test("overflow prediction for multiclass") {

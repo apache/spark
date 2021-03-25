@@ -32,7 +32,7 @@ import org.apache.spark.serializer._
 import org.apache.spark.shuffle.ShufflePartitionPairsWriter
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
-import org.apache.spark.util.{Utils => TryUtils}
+import org.apache.spark.util.{CompletionIterator, Utils => TryUtils}
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -670,6 +670,22 @@ private[spark] class ExternalSorter[K, V, C](
   def iterator: Iterator[Product2[K, C]] = {
     isShuffleSort = false
     partitionedIterator.flatMap(pair => pair._2)
+  }
+
+  /**
+   * Insert all records, updates related task metrics, and return a completion iterator
+   * over all the data written to this object, aggregated by our aggregator.
+   * On task completion (success, failure, or cancellation), it releases resources by
+   * calling `stop()`.
+   */
+  def insertAllAndUpdateMetrics(records: Iterator[Product2[K, V]]): Iterator[Product2[K, C]] = {
+    insertAll(records)
+    context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
+    context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
+    // Use completion callback to stop sorter if task was finished/cancelled.
+    context.addTaskCompletionListener[Unit](_ => stop())
+    CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](iterator, stop())
   }
 
   /**

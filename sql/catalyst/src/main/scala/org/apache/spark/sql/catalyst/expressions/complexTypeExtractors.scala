@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -65,13 +66,8 @@ object ExtractValue {
       case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
 
       case (otherType, _) =>
-        val errorMsg = otherType match {
-          case StructType(_) =>
-            s"Field name should be String Literal, but it's $extraction"
-          case other =>
-            s"Can't extract value from $child: need struct type but got ${other.catalogString}"
-        }
-        throw new AnalysisException(errorMsg)
+        throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
+          otherType, extraction, child)
     }
   }
 
@@ -257,8 +253,7 @@ case class GetArrayItem(
     val index = ordinal.asInstanceOf[Number].intValue()
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
-        throw new ArrayIndexOutOfBoundsException(
-          s"Invalid index: $index, numElements: ${baseValue.numElements()}")
+        throw QueryExecutionErrors.invalidArrayIndexError(index, baseValue.numElements)
       } else {
         null
       }
@@ -282,10 +277,7 @@ case class GetArrayItem(
       }
 
       val indexOutOfBoundBranch = if (failOnError) {
-        s"""throw new ArrayIndexOutOfBoundsException(
-           |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
-           |);
-         """.stripMargin
+        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -359,7 +351,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
     if (!found) {
       if (failOnError) {
-        throw new NoSuchElementException(s"Key $ordinal does not exist.")
+        throw QueryExecutionErrors.mapKeyNotExistError(ordinal)
       } else {
         null
       }
@@ -394,7 +386,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
-        s"""throw new java.util.NoSuchElementException("Key " + $eval2 + " does not exist.");"""
+        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2);"
       } else {
         s"${ev.isNull} = true;"
       }

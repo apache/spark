@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateView, MultiInstanceRelation}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -217,7 +218,7 @@ object Union {
 }
 
 /**
- * Logical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
  *
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,
@@ -443,52 +444,54 @@ case class InsertIntoDir(
 }
 
 /**
- * A container for holding the view description(CatalogTable), and the output of the view. The
- * child should be a logical plan parsed from the `CatalogTable.viewText`, should throw an error
- * if the `viewText` is not defined.
+ * A container for holding the view description(CatalogTable) and info whether the view is temporary
+ * or not. If it's a SQL (temp) view, the child should be a logical plan parsed from the
+ * `CatalogTable.viewText`. Otherwise, the view is a temporary one created from a dataframe and the
+ * view description should contain a `VIEW_CREATED_FROM_DATAFRAME` property; in this case, the child
+ * must be already resolved.
+ *
  * This operator will be removed at the end of analysis stage.
  *
  * @param desc A view description(CatalogTable) that provides necessary information to resolve the
  *             view.
- * @param output The output of a view operator, this is generated during planning the view, so that
- *               we are able to decouple the output from the underlying structure.
- * @param child The logical plan of a view operator, it should be a logical plan parsed from the
- *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
+ * @param isTempView A flag to indicate whether the view is temporary or not.
+ * @param child The logical plan of a view operator. If the view description is available, it should
+ *              be a logical plan parsed from the `CatalogTable.viewText`.
  */
 case class View(
     desc: CatalogTable,
     isTempView: Boolean,
-    output: Seq[Attribute],
-    child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
+    child: LogicalPlan) extends UnaryNode {
+  require(!isTempViewStoringAnalyzedPlan || child.resolved)
 
-  override def producedAttributes: AttributeSet = outputSet
-
-  override lazy val resolved: Boolean = child.resolved
-
-  override def children: Seq[LogicalPlan] = child :: Nil
-
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+  override def output: Seq[Attribute] = child.output
 
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
 
-  override def doCanonicalize(): LogicalPlan = {
-    def sameOutput(
-      outerProject: Seq[NamedExpression], innerProject: Seq[NamedExpression]): Boolean = {
-      outerProject.length == innerProject.length &&
-        outerProject.zip(innerProject).forall {
-          case(outer, inner) => outer.name == inner.name && outer.dataType == inner.dataType
-        }
-    }
+  override def doCanonicalize(): LogicalPlan = child match {
+    case p: Project if p.resolved && canRemoveProject(p) => p.child.canonicalized
+    case _ => child.canonicalized
+  }
 
-    val eliminated = EliminateView(this) match {
-      case Project(viewProjectList, child @ Project(queryProjectList, _))
-        if sameOutput(viewProjectList, queryProjectList) =>
-        child
-      case other => other
+  def isTempViewStoringAnalyzedPlan: Boolean =
+    isTempView && desc.properties.contains(VIEW_STORING_ANALYZED_PLAN)
+
+  // When resolving a SQL view, we use an extra Project to add cast and alias to make sure the view
+  // output schema doesn't change even if the table referenced by the view is changed after view
+  // creation. We should remove this extra Project during canonicalize if it does nothing.
+  // See more details in `SessionCatalog.fromCatalogTable`.
+  private def canRemoveProject(p: Project): Boolean = {
+    p.output.length == p.child.output.length && p.projectList.zip(p.child.output).forall {
+      case (Alias(cast: CastBase, name), childAttr) =>
+        cast.child match {
+          case a: AttributeReference =>
+            a.dataType == cast.dataType && a.name == name && childAttr.semanticEquals(a)
+          case _ => false
+        }
+      case _ => false
     }
-    eliminated.canonicalized
   }
 }
 
@@ -621,7 +624,7 @@ case class Range(
  *
  * @param groupingExpressions expressions for grouping keys
  * @param aggregateExpressions expressions for a project list, which could contain
- *                             [[AggregateFunction]]s.
+ *                             [[AggregateExpression]]s.
  *
  * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
  * separating projection from grouping and aggregate, we should avoid expression-level optimization
@@ -666,6 +669,8 @@ case class Window(
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
+
+  override def producedAttributes: AttributeSet = windowOutputSet
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 }
@@ -1047,16 +1052,7 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     optNumPartitions: Option[Int]) extends RepartitionOperation {
 
-  val numPartitions = if (optNumPartitions.nonEmpty) {
-    optNumPartitions.get
-  } else {
-    if (partitionExpressions.forall(_.foldable)) {
-      1
-    } else {
-      SQLConf.get.numShufflePartitions
-    }
-  }
-
+  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   val partitioning: Partitioning = {

@@ -187,10 +187,9 @@ object ResolveHints {
       def createRepartitionByExpression(
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
         val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
-        if (sortOrders.nonEmpty) throw new IllegalArgumentException(
-          s"""Invalid partitionExprs specified: $sortOrders
-             |For range partitioning use REPARTITION_BY_RANGE instead.
-           """.stripMargin)
+        if (sortOrders.nonEmpty) {
+          throw QueryCompilationErrors.invalidRepartitionExpressionsError(sortOrders)
+        }
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
           throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)

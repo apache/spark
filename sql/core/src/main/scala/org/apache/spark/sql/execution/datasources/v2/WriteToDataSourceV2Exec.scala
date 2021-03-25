@@ -26,7 +26,6 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -34,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, V1Write, Write, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, V1Write, Write, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -130,7 +129,6 @@ case class AtomicCreateTableAsSelectExec(
  * ReplaceTableAsSelectStagingExec.
  */
 case class ReplaceTableAsSelectExec(
-    session: SparkSession,
     catalog: TableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
@@ -138,7 +136,8 @@ case class ReplaceTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    orCreate: Boolean) extends TableWriteExecHelper {
+    orCreate: Boolean,
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
@@ -151,7 +150,7 @@ case class ReplaceTableAsSelectExec(
     // 3. The table returned by catalog.createTable doesn't support writing.
     if (catalog.tableExists(ident)) {
       val table = catalog.loadTable(ident)
-      uncacheTable(session, catalog, table, ident)
+      invalidateCache(catalog, table, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
       throw new CannotReplaceMissingTableException(ident)
@@ -176,7 +175,6 @@ case class ReplaceTableAsSelectExec(
  * is left untouched.
  */
 case class AtomicReplaceTableAsSelectExec(
-    session: SparkSession,
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
@@ -184,13 +182,14 @@ case class AtomicReplaceTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    orCreate: Boolean) extends TableWriteExecHelper {
+    orCreate: Boolean,
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
     if (catalog.tableExists(ident)) {
       val table = catalog.loadTable(ident)
-      uncacheTable(session, catalog, table, ident)
+      invalidateCache(catalog, table, ident)
     }
     val staged = if (orCreate) {
       catalog.stageCreateOrReplace(
@@ -216,11 +215,9 @@ case class AtomicReplaceTableAsSelectExec(
  * Rows in the output data set are appended.
  */
 case class AppendDataExec(
-    table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
+    write: Write) extends V2ExistingTableWriteExec
 
 /**
  * Physical plan node for overwrite into a v2 table.
@@ -233,11 +230,9 @@ case class AppendDataExec(
  * AlwaysTrue to delete all rows.
  */
 case class OverwriteByExpressionExec(
-    table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
+    write: Write) extends V2ExistingTableWriteExec
 
 /**
  * Physical plan node for dynamic partition overwrite into a v2 table.
@@ -249,37 +244,16 @@ case class OverwriteByExpressionExec(
  * are not modified.
  */
 case class OverwritePartitionsDynamicExec(
-    table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
+    write: Write) extends V2ExistingTableWriteExec
 
 case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
     query: SparkPlan) extends V2TableWriteExec {
 
-  def writeOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
-
   override protected def run(): Seq[InternalRow] = {
     writeWithV2(batchWrite)
-  }
-}
-
-/**
- * Helper for physical plans that build batch writes.
- */
-trait BatchWriteHelper {
-  def table: SupportsWrite
-  def query: SparkPlan
-  def writeOptions: CaseInsensitiveStringMap
-
-  def newWriteBuilder(): WriteBuilder = {
-    val info = LogicalWriteInfoImpl(
-      queryId = UUID.randomUUID().toString,
-      query.schema,
-      writeOptions)
-    table.newWriteBuilder(info)
   }
 }
 
@@ -363,15 +337,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
     }
 
     Nil
-  }
-
-  protected def uncacheTable(
-      session: SparkSession,
-      catalog: TableCatalog,
-      table: Table,
-      ident: Identifier): Unit = {
-    val plan = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
-    session.sharedState.cacheManager.uncacheQuery(session, plan, cascade = true)
   }
 }
 

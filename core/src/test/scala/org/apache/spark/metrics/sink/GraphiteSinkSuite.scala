@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import com.codahale.metrics._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 
 class GraphiteSinkSuite extends SparkFunSuite {
 
@@ -32,9 +32,8 @@ class GraphiteSinkSuite extends SparkFunSuite {
     props.put("host", "127.0.0.1")
     props.put("port", "54321")
     val registry = new MetricRegistry
-    val securityMgr = new SecurityManager(new SparkConf(false))
 
-    val sink = new GraphiteSink(props, registry, securityMgr)
+    val sink = new GraphiteSink(props, registry)
 
     val gauge = new Gauge[Double] {
       override def getValue: Double = 1.23
@@ -55,9 +54,8 @@ class GraphiteSinkSuite extends SparkFunSuite {
     props.put("port", "54321")
     props.put("regex", "local-[0-9]+.driver.(CodeGenerator|BlockManager)")
     val registry = new MetricRegistry
-    val securityMgr = new SecurityManager(new SparkConf(false))
 
-    val sink = new GraphiteSink(props, registry, securityMgr)
+    val sink = new GraphiteSink(props, registry)
 
     val gauge = new Gauge[Double] {
       override def getValue: Double = 1.23
