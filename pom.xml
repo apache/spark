@@ -3001,6 +3001,7 @@
               <include>org.jpmml:*</include>
             </includes>
           </artifactSet>
+
           <relocations>
             <relocation>
               <pattern>org.eclipse.jetty</pattern>
@@ -3012,6 +3013,9 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+              <excludes>
+                <exclude>com.google.common.cache.**</exclude>
+              </excludes>
             </relocation>
             <relocation>
               <pattern>org.dmg.pmml</pattern>
