@@ -19,19 +19,18 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.math.Ordering
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, EqualTo, ExpectsInputTypes, Expression, NamedExpression, NamedLambdaVariable, TaggingExpression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, ExpectsInputTypes, Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator.{getValue, javaType}
 import org.apache.spark.sql.catalyst.expressions.codegen.ExprCode
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Distinct, LogicalPlan, Project, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, MapData, TypeUtils}
 import org.apache.spark.sql.types.{AbstractDataType, DataType, MapType}
 
-case class KeyOrderedMap(child: Expression) extends TaggingExpression
-
 /**
+ * For two
  * Spark SQL turns grouping/join/window partition keys into binary `UnsafeRow` and compare the
  * binary data directly instead of using MapType's ordering. So in order to make sure two maps
  * have the same key value pairs but with different key ordering generate right result, we have
@@ -54,42 +53,16 @@ object NormalizeMapType extends Rule[LogicalPlan] {
         case (l, r) => EqualTo(l, r)
       } ++ condition
       j.copy(condition = Some(newConditions.reduce(And)))
-
-    case agg: Aggregate if agg.aggregateExpressions.exists(needNormalize) =>
-      val replacements = agg.groupingExpressions.collect {
-        case e if needNormalize(e) => e
-      }
-
-      agg.transformExpressionsUp {
-        case e =>
-          replacements
-            .find(_.semanticEquals(e))
-            .map(_ => normalize(e))
-            .getOrElse(e)
-      }
-
-    case Distinct(child) if child.output.exists(needNormalize) =>
-      val projectList = child.output.map(normalize).asInstanceOf[Seq[NamedExpression]]
-      Distinct(Project(projectList, child))
   }
 
   private def needNormalize(expr: Expression): Boolean = expr match {
     case ReorderMapKey(_) => false
-    case Alias(ReorderMapKey(_), _) => false
     case e if e.dataType.isInstanceOf[MapType] => true
     case _ => false
   }
 
   private[sql] def normalize(expr: Expression): Expression = expr match {
     case _ if !needNormalize(expr) => expr
-    case a: Attribute if a.dataType.isInstanceOf[MapType] =>
-      val newAttr = a.withExprId(NamedExpression.newExprId)
-      Alias(ReorderMapKey(newAttr), a.name)(exprId = a.exprId, qualifier = a.qualifier)
-    case a: Alias =>
-      a.withNewChildren(Seq(ReorderMapKey(a.child)))
-    case a: NamedLambdaVariable =>
-      val newNLV = a.copy(exprId = NamedExpression.newExprId)
-      Alias(ReorderMapKey(newNLV), a.name)(exprId = a.exprId, qualifier = a.qualifier)
     case e if e.dataType.isInstanceOf[MapType] =>
       ReorderMapKey(e)
   }

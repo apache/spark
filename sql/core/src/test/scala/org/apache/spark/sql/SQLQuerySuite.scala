@@ -4226,8 +4226,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
             checkAnswer(
               sql("select m from t where m = map('b', 2, 'a', 1, 'c', 3)"),
-              Row(Map('a' -> 1, 'b' -> 2, 'c' -> 3)) ::
-                Row(Map('c' -> 3, 'b' -> 2, 'a' -> 3)) :: Nil
+              Row(Map("a" -> 1, "b" -> 2, "c" -> 3)) ::
+                Row(Map("c" -> 3, "b" -> 2, "a" -> 1)) :: Nil
             )
           }
         }
