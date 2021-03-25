@@ -50,13 +50,19 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 * **GROUPING SETS**
 
-    Groups the rows for each subset of the expressions specified in the grouping sets. For example,
+    Groups the rows for each grouping set specified after GROUPING SETS. For example,
     `GROUP BY GROUPING SETS ((warehouse), (product))` is semantically equivalent
     to union of results of `GROUP BY warehouse` and `GROUP BY product`. This clause
     is a shorthand for a `UNION ALL` where each leg of the `UNION ALL`
     operator performs aggregation of subset of the columns specified in the `GROUPING SETS` clause.
-    `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically equivalent to union
-    of results of `GROUP BY warehouse, product`, `GROUP BY warehouse` and `GROUP BY ()`.
+    Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
+    equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY warehouse`
+    and global aggregate.
+    
+    GROUPING SETS can be followed with normal expressions as well, such as
+    `GROUP BY GROUPING SETS (warehouse, product)`. It generates one grouping set
+    per non-empty subset of the given expressions, so `GROUP BY GROUPING SETS (warehouse, product)`
+    is equivalent to `GROUP BY GROUPING SETS ((warehouse), (product))`.
 
 * **ROLLUP**
 
@@ -78,7 +84,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
     A grouping set is specified by zero or more comma-separated expressions in parentheses.
 
-    **Syntax:** `( [ expression [ , ... ] ] )`
+    **Syntax:** `{ ( [ expression [ , ... ] ] ) | expression }`
 
 * **aggregate_name**
 
