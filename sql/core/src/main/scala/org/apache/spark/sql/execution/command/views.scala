@@ -48,8 +48,8 @@ import org.apache.spark.sql.util.SchemaUtils
  * @param properties the properties of this view.
  * @param originalText the original SQL text of this view, can be None if this view is created via
  *                     Dataset API.
- * @param child the logical plan that represents the view; this is used to generate the logical
- *              plan for temporary view and the view schema.
+ * @param analyzedPlan the logical plan that represents the view; this is used to generate the
+ *                     logical plan for temporary view and the view schema.
  * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
  *                already exists, throws analysis exception.
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
@@ -62,7 +62,7 @@ case class CreateViewCommand(
     comment: Option[String],
     properties: Map[String, String],
     originalText: Option[String],
-    child: LogicalPlan,
+    analyzedPlan: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
     viewType: ViewType)
@@ -70,7 +70,7 @@ case class CreateViewCommand(
 
   import ViewHelper._
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(child)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(analyzedPlan)
 
   if (viewType == PersistedView) {
     require(originalText.isDefined, "'originalText' must be provided to create permanent view")
@@ -96,11 +96,6 @@ case class CreateViewCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // If the plan cannot be analyzed, throw an exception and don't proceed.
-    val qe = sparkSession.sessionState.executePlan(child)
-    qe.assertAnalyzed()
-    val analyzedPlan = qe.analyzed
-
     if (userSpecifiedColumns.nonEmpty &&
         userSpecifiedColumns.length != analyzedPlan.output.length) {
       throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
