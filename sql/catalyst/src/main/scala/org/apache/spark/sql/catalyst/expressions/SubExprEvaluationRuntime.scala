@@ -42,6 +42,8 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 
   private[sql] val cache: LoadingCache[ExpressionProxy, ResultProxy] = {
     val builder = Caffeine.newBuilder().maximumSize(cacheMaxEntries)
+      // SPARK-34309: Use custom Executor to compatible with
+      // the data eviction behavior of Guava cache
       .executor((command: Runnable) => command.run())
     CaffeinatedGuava.build(builder, new CacheLoader[ExpressionProxy, ResultProxy]() {
       override def load(expr: ExpressionProxy): ResultProxy = {

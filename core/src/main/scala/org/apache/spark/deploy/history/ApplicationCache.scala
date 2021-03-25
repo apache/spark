@@ -60,7 +60,7 @@ private[history] class ApplicationCache(
 
   }
 
-  private val evictionListener = new RemovalListener[CacheKey, CacheEntry] {
+  private val removalListener = new RemovalListener[CacheKey, CacheEntry] {
 
     /**
      * Removal event notifies the provider to detach the UI.
@@ -78,7 +78,9 @@ private[history] class ApplicationCache(
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
     val builder = Caffeine.newBuilder()
       .maximumSize(retainedApplications)
-      .evictionListener(evictionListener)
+      .removalListener(removalListener)
+      // SPARK-34309: Use custom Executor to compatible with
+      // the data eviction behavior of Guava cache
       .executor((command: Runnable) => command.run())
     CaffeinatedGuava.build(builder, appLoader)
   }
@@ -227,10 +229,7 @@ private[history] class ApplicationCache(
     }
   }
 
-  def invalidate(key: CacheKey): Unit = appCache.asMap().computeIfPresent(key, (key, value) => {
-    evictionListener.onRemoval(key, value, RemovalCause.EXPLICIT)
-    null
-  })
+  def invalidate(key: CacheKey): Unit = appCache.invalidate(key)
 
 }
 
