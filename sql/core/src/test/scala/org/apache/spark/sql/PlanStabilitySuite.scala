@@ -44,6 +44,9 @@ import org.apache.spark.sql.internal.SQLConf
  *   actual explain plan: /path/to/tmp/q1.actual.explain.txt
  *   [actual simplified plan]
  *
+ * The explain files are saved to help debug later, they are not checked. Only the simplified
+ * plans are checked (by string comparison).
+ *
  *
  * To run the entire test suite:
  * {{{
@@ -98,13 +101,10 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     new File(goldenFilePath, name)
   }
 
-  private def isApproved(
-      dir: File, actualSimplifiedPlan: String, actualExplain: String): Boolean = {
-    val simplifiedFile = new File(dir, "simplified.txt")
-    val expectedSimplified = FileUtils.readFileToString(simplifiedFile, StandardCharsets.UTF_8)
-    lazy val explainFile = new File(dir, "explain.txt")
-    lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
-    expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
+  private def isApproved(dir: File, actualSimplifiedPlan: String): Boolean = {
+    val file = new File(dir, "simplified.txt")
+    val expected = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
+    expected == actualSimplifiedPlan
   }
 
   /**
@@ -119,7 +119,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
   private def generateGoldenFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
-    val foundMatch = dir.exists() && isApproved(dir, simplified, explain)
+    val foundMatch = dir.exists() && isApproved(dir, simplified)
 
     if (!foundMatch) {
       FileUtils.deleteDirectory(dir)
@@ -137,7 +137,7 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val dir = getDirForTest(name)
     val tempDir = FileUtils.getTempDirectory
     val actualSimplified = getSimplifiedPlan(plan)
-    val foundMatch = isApproved(dir, actualSimplified, explain)
+    val foundMatch = isApproved(dir, actualSimplified)
 
     if (!foundMatch) {
       // show diff with last approved
