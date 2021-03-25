@@ -104,13 +104,8 @@ ReadSchema: struct<d_date_sk:int,d_date:date>
 Input [2]: [d_date_sk#11, d_date#12]
 
 (16) Filter [codegen id : 2]
-<<<<<<< HEAD
 Input [2]: [d_date_sk#11, d_date#12]
 Condition : (((isnotnull(d_date#12) AND (d_date#12 >= 2000-01-27)) AND (d_date#12 <= 2000-04-26)) AND isnotnull(d_date_sk#11))
-=======
-Input [2]: [d_date_sk#8, d_date#9]
-Condition : (((isnotnull(d_date#9) AND (d_date#9 >= 2000-01-27)) AND (d_date#9 <= 2000-04-26)) AND isnotnull(d_date_sk#8))
->>>>>>> abfd9b23cd7c21e9525df85a16e0611ef0f35908
 
 (17) Project [codegen id : 2]
 Output [1]: [d_date_sk#11]
