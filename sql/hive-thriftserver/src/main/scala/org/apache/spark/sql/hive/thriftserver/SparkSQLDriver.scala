@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Dataset, SQLContext}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
@@ -64,11 +64,16 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
         new VariableSubstitution().substitute(command)
       }
       context.sparkContext.setJobDescription(substitutorCommand)
-      val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
-      hiveResponse = SQLExecution.withNewExecutionId(execution) {
+      val logicalPlan = context.sql(command).logicalPlan
+      val eagerRun = logicalPlan.getTagValue(Dataset.DATASET_EAGER_RUN_TAG).getOrElse(false)
+      val execution = context.sessionState.executePlan(logicalPlan)
+      hiveResponse = if (eagerRun) {
         hiveResultString(execution.executedPlan)
+      } else {
+        SQLExecution.withNewExecutionId(execution) {
+          hiveResultString(execution.executedPlan)
+        }
       }
-      tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
         case ae: AnalysisException =>
