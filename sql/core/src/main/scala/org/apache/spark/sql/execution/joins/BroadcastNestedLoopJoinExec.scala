@@ -396,7 +396,8 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   override def supportCodegen: Boolean = (joinType, buildSide) match {
-    case (_: InnerLike, _) | (LeftSemi | LeftAnti, BuildRight) => true
+    case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
+         (LeftSemi | LeftAnti, BuildRight) => true
     case _ => false
   }
 
@@ -413,6 +414,7 @@ case class BroadcastNestedLoopJoinExec(
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     (joinType, buildSide) match {
       case (_: InnerLike, _) => codegenInner(ctx, input)
+      case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) => codegenOuter(ctx, input)
       case (LeftSemi, BuildRight) => codegenLeftExistence(ctx, input, exists = true)
       case (LeftAnti, BuildRight) => codegenLeftExistence(ctx, input, exists = false)
       case _ =>
@@ -456,6 +458,49 @@ case class BroadcastNestedLoopJoinExec(
        |  }
        |}
      """.stripMargin
+  }
+
+  private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val (buildRowArray, buildRowArrayTerm) = prepareBroadcast(ctx)
+    val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
+    val buildVars = genBuildSideVars(ctx, buildRow, broadcast)
+
+    val resultVars = buildSide match {
+      case BuildLeft => buildVars ++ input
+      case BuildRight => input ++ buildVars
+    }
+    val arrayIndex = ctx.freshName("arrayIndex")
+    val shouldOutputRow = ctx.freshName("shouldOutputRow")
+    val foundMatch = ctx.freshName("foundMatch")
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
+    if (buildRowArray.isEmpty) {
+      s"""
+         |UnsafeRow $buildRow = null;
+         |$numOutput.add(1);
+         |${consume(ctx, resultVars)}
+       """.stripMargin
+    } else {
+      s"""
+         |boolean $foundMatch = false;
+         |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
+         |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
+         |  boolean $shouldOutputRow = false;
+         |  $checkCondition {
+         |    $shouldOutputRow = true;
+         |    $foundMatch = true;
+         |  }
+         |  if ($arrayIndex == $buildRowArrayTerm.length - 1 && !$foundMatch) {
+         |    $buildRow = null;
+         |    $shouldOutputRow = true;
+         |  }
+         |  if ($shouldOutputRow) {
+         |    $numOutput.add(1);
+         |    ${consume(ctx, resultVars)}
+         |  }
+         |}
+       """.stripMargin
+    }
   }
 
   private def codegenLeftExistence(

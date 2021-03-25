@@ -211,6 +211,53 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("Left/Right outer BroadcastNestedLoopJoinExec should be included in WholeStageCodegen") {
+    val df1 = spark.range(4).select($"id".as("k1"))
+    val df2 = spark.range(3).select($"id".as("k2"))
+    val df3 = spark.range(2).select($"id".as("k3"))
+    val df4 = spark.range(0).select($"id".as("k4"))
+
+    Seq(true, false).foreach { codegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
+        // test left outer join
+        val leftOuterJoinDF = df1.join(df2, $"k1" > $"k2", "left_outer")
+        var hasJoinInCodegen = leftOuterJoinDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: BroadcastNestedLoopJoinExec) => true
+        }.size === 1
+        assert(hasJoinInCodegen == codegenEnabled)
+        checkAnswer(leftOuterJoinDF,
+          Seq(Row(0, null), Row(1, 0), Row(2, 0), Row(2, 1), Row(3, 0), Row(3, 1), Row(3, 2)))
+
+        // test right outer join
+        val rightOuterJoinDF = df1.join(df2, $"k1" < $"k2", "right_outer")
+        hasJoinInCodegen = rightOuterJoinDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: BroadcastNestedLoopJoinExec) => true
+        }.size === 1
+        assert(hasJoinInCodegen == codegenEnabled)
+        checkAnswer(rightOuterJoinDF, Seq(Row(null, 0), Row(0, 1), Row(0, 2), Row(1, 2)))
+
+        // test a combination of left outer and right outer joins
+        val twoJoinsDF = df1.join(df2, $"k1" > $"k2" + 1, "right_outer")
+          .join(df3, $"k1" <= $"k3", "left_outer")
+        hasJoinInCodegen = twoJoinsDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(BroadcastNestedLoopJoinExec(
+            _: BroadcastNestedLoopJoinExec, _, _, _, _)) => true
+        }.size === 1
+        assert(hasJoinInCodegen == codegenEnabled)
+        checkAnswer(twoJoinsDF,
+          Seq(Row(2, 0, null), Row(3, 0, null), Row(3, 1, null), Row(null, 2, null)))
+
+        // test build side is empty
+        val buildSideIsEmptyDF = df3.join(df4, $"k3" > $"k4", "left_outer")
+        hasJoinInCodegen = buildSideIsEmptyDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_: BroadcastNestedLoopJoinExec) => true
+        }.size === 1
+        assert(hasJoinInCodegen == codegenEnabled)
+        checkAnswer(buildSideIsEmptyDF, Seq(Row(0, null), Row(1, null)))
+      }
+    }
+  }
+
   test("Left semi/anti BroadcastNestedLoopJoinExec should be included in WholeStageCodegen") {
     val df1 = spark.range(4).select($"id".as("k1"))
     val df2 = spark.range(3).select($"id".as("k2"))

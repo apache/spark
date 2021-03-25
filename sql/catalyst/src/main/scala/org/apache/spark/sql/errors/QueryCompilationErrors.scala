@@ -1087,4 +1087,14 @@ private[spark] object QueryCompilationErrors {
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
     new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
   }
+
+  def incompatibleViewSchemaChange(
+      viewName: String,
+      colName: String,
+      expectedNum: Int,
+      actualCols: Seq[Attribute]): Throwable = {
+    new AnalysisException(s"The SQL query of view $viewName has an incompatible schema change " +
+      s"and column $colName cannot be resolved. Expected $expectedNum columns named $colName but " +
+      s"got ${actualCols.map(_.name).mkString("[", ",", "]")}")
+  }
 }
