@@ -152,7 +152,7 @@ Input [2]: [d_date_sk#17, d_date#18]
 
 (24) Filter [codegen id : 9]
 Input [2]: [d_date_sk#17, d_date#18]
-Condition : (((isnotnull(d_date#18) AND (d_date#18 >= 10623)) AND (d_date#18 <= 10683)) AND isnotnull(d_date_sk#17))
+Condition : (((isnotnull(d_date#18) AND (d_date#18 >= 1999-02-01)) AND (d_date#18 <= 1999-04-02)) AND isnotnull(d_date_sk#17))
 
 (25) Project [codegen id : 9]
 Output [1]: [d_date_sk#17]
@@ -206,7 +206,7 @@ Input [6]: [ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_
 Output [2]: [web_site_sk#23, web_company_name#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_site]
-PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri), IsNotNull(web_site_sk)]
+PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk)]
 ReadSchema: struct<web_site_sk:int,web_company_name:string>
 
 (37) ColumnarToRow [codegen id : 11]
@@ -214,7 +214,7 @@ Input [2]: [web_site_sk#23, web_company_name#24]
 
 (38) Filter [codegen id : 11]
 Input [2]: [web_site_sk#23, web_company_name#24]
-Condition : ((isnotnull(web_company_name#24) AND (web_company_name#24 = pri)) AND isnotnull(web_site_sk#23))
+Condition : ((isnotnull(web_company_name#24) AND (web_company_name#24 = pri                                               )) AND isnotnull(web_site_sk#23))
 
 (39) Project [codegen id : 11]
 Output [1]: [web_site_sk#23]
