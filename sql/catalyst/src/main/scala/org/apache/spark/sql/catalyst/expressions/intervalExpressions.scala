@@ -271,7 +271,7 @@ case class MultiplyYMInterval(
     case LongType => (months: Int, num) =>
       Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
     case FloatType | DoubleType => (months: Int, num) =>
-      Math.toIntExact(Math.round(months * num.asInstanceOf[Number].doubleValue()))
+      DoubleMath.roundToInt(months * num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
     case _: DecimalType => (months: Int, num) =>
       val decimalRes = ((new Decimal).set(months) * num.asInstanceOf[Decimal]).toJavaBigDecimal
       decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
@@ -288,8 +288,9 @@ case class MultiplyYMInterval(
       val jlm = classOf[Math].getName
       defineCodeGen(ctx, ev, (m, n) => s"$jlm.toIntExact($jlm.multiplyExact($m, $n))")
     case FloatType | DoubleType =>
-      val jlm = classOf[Math].getName
-      defineCodeGen(ctx, ev, (m, n) => s"$jlm.toIntExact($jlm.round($m * (double)$n))")
+      val dm = classOf[DoubleMath].getName
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"$dm.roundToInt($m * (double)$n, java.math.RoundingMode.HALF_UP)")
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
         s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +

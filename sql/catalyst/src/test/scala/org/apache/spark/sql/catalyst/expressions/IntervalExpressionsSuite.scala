@@ -281,7 +281,6 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-34824: multiply year-month interval by numeric") {
     Seq(
-      (Period.ofMonths(-100), Float.NaN) -> Period.ofMonths(0),
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
       (Period.ofMonths(0), 10) -> Period.ofMonths(0),
       (Period.ofMonths(10), 0L) -> Period.ofMonths(0),
@@ -295,13 +294,15 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     Seq(
-      (Period.ofMonths(2), Int.MaxValue),
-      (Period.ofMonths(Int.MinValue), 10d),
-      (Period.ofMonths(200), Double.PositiveInfinity),
-      (Period.ofMonths(-200), Float.NegativeInfinity)
-    ).foreach { case (period, num) =>
+      (Period.ofMonths(2), Int.MaxValue) -> "overflow",
+      (Period.ofMonths(Int.MinValue), 10d) -> "not in range",
+      (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN",
+      (Period.ofMonths(200), Double.PositiveInfinity) -> "input is infinite or NaN",
+      (Period.ofMonths(-200), Float.NegativeInfinity) -> "input is infinite or NaN"
+    ).foreach { case ((period, num), expectedErrMsg) =>
       checkExceptionInExpression[ArithmeticException](
-        MultiplyYMInterval(Literal(period), Literal(num)), "overflow")
+        MultiplyYMInterval(Literal(period), Literal(num)),
+        expectedErrMsg)
     }
 
     numericTypes.foreach { numType =>
