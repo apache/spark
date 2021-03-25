@@ -635,7 +635,8 @@ public class VectorizedColumnReader {
       // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
       // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary fallbacks.
       // We read them as decimal values.
-      defColumn.readUnsignedLongs(num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+      defColumn.readUnsignedLongs(
+        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
       if ("CORRECTED".equals(datetimeRebaseMode)) {
         defColumn.readLongs(
