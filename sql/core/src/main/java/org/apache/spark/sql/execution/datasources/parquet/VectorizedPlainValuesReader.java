@@ -83,6 +83,15 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
+  @Override
+  public final void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    for (int i = 0; i < total; i += 1) {
+      c.putLong(rowId + i, Integer.toUnsignedLong(buffer.getInt()));
+    }
+  }
+
   // A fork of `readIntegers` to rebase the date values. For performance reasons, this method
   // iterates the values twice: check if we need to rebase first, then go to the optimized branch
   // if rebase is not needed.
