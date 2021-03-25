@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.guava.CaffeinatedGuava
-import com.google.common.cache.{CacheLoader, LoadingCache}
+import com.google.common.cache.CacheLoader
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
@@ -86,8 +86,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   }
 
   // Cache of preferred locations of checkpointed files.
-  @transient
-  private[spark] lazy val cachedPreferredLocations: LoadingCache[Partition, Seq[String]] = {
+  @transient private[spark] lazy val cachedPreferredLocations = {
     val builder = Caffeine.newBuilder()
       .expireAfterWrite(
         SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME).get,
