@@ -41,7 +41,7 @@ class MicroBatchExecution(
     extraOptions: Map[String, String],
     plan: WriteToStream)
   extends StreamExecution(
-    sparkSession, plan.name, plan.checkpointLocation, plan.inputQuery, plan.sink, trigger,
+    sparkSession, plan.name, plan.resolvedCheckpointLocation, plan.inputQuery, plan.sink, trigger,
     triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
