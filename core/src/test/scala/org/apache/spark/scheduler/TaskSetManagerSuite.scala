@@ -377,7 +377,7 @@ class TaskSetManagerSuite
 
     // offers not accepted due to task set zombies are not delay schedule rejects
     manager.isZombie = true
-    val (taskDescription, delayReject) = manager.resourceOffer("exec2", "host2", ANY)
+    val (taskDescription, delayReject, _) = manager.resourceOffer("exec2", "host2", ANY)
     assert(taskDescription.isEmpty)
     assert(delayReject === false)
     manager.isZombie = false
@@ -387,7 +387,7 @@ class TaskSetManagerSuite
     val excludelist = mock(classOf[TaskSetExcludelist])
     when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(excludelist))
     when(excludelist.isNodeExcludedForTaskSet(any())).thenReturn(true)
-    val (task, taskReject) = tsmSpy.resourceOffer("exec2", "host2", ANY)
+    val (task, taskReject, _) = tsmSpy.resourceOffer("exec2", "host2", ANY)
     assert(task.isEmpty)
     assert(taskReject === false)
 
@@ -395,7 +395,7 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("exec2", "host2", ANY)._1.get.index === 3)
 
     // offers not accepted due to no pending tasks are not delay schedule rejects
-    val (noPendingTask, noPendingReject) = manager.resourceOffer("exec2", "host2", ANY)
+    val (noPendingTask, noPendingReject, _) = manager.resourceOffer("exec2", "host2", ANY)
     assert(noPendingTask.isEmpty)
     assert(noPendingReject === false)
   }
@@ -1901,7 +1901,8 @@ class TaskSetManagerSuite
       speculationQuantile: Double,
       numTasks: Int,
       numExecutorCores: Int,
-      numCoresPerTask: Int): (TaskSetManager, ManualClock) = {
+      numCoresPerTask: Int,
+      speculationMinimumThreshold: Option[String]): (TaskSetManager, ManualClock) = {
     val conf = new SparkConf()
     conf.set(config.SPECULATION_ENABLED, true)
     conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
@@ -1910,6 +1911,9 @@ class TaskSetManagerSuite
     conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
     if (speculationThresholdOpt.isDefined) {
       conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, speculationThresholdOpt.get)
+    }
+    if (speculationMinimumThreshold.isDefined) {
+      conf.set(config.SPECULATION_MIN_THRESHOLD.key, speculationMinimumThreshold.get)
     }
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
@@ -1937,7 +1941,8 @@ class TaskSetManagerSuite
       speculationQuantile = 1.0,
       numTasks,
       numSlots,
-      numCoresPerTask = 1
+      numCoresPerTask = 1,
+      None
     )
 
     // if the time threshold has not been exceeded, no speculative run should be triggered
@@ -2091,7 +2096,8 @@ class TaskSetManagerSuite
       speculationQuantile = 0.5,
       numTasks = 2,
       numExecutorCores = 2,
-      numCoresPerTask = 1
+      numCoresPerTask = 1,
+      None
     )
 
     // Task duration can't be 0, advance 1 sec
@@ -2210,6 +2216,31 @@ class TaskSetManagerSuite
       assert(manager.invokePrivate(numFailures())(index0) === 0)
       assert(manager.invokePrivate(numFailures())(index1) === 1)
     }
+  }
+
+  test("SPARK-33741 Test minimum amount of time a task runs " +
+    "before being considered for speculation") {
+    val (manager, clock) = testSpeculationDurationSetup(
+      None,
+      speculationQuantile = 0.5,
+      numTasks = 2,
+      numExecutorCores = 2,
+      numCoresPerTask = 1,
+      Some("3000") // spark.speculation.min.threshold
+    )
+    // Task duration can't be 0, advance 1 sec
+    clock.advance(1000)
+    // Mark one of the task succeeded, which should satisfy the quantile
+    manager.handleSuccessfulTask(0, createTaskResult(0))
+    // Advance 1 more second so the remaining task takes longer
+    clock.advance(1000)
+    manager.checkSpeculatableTasks(sched.MIN_TIME_TO_SPECULATION)
+    // The task is not considered as speculative task due to minimum threshold interval of 3s
+    assert(sched.speculativeTasks.size == 0)
+    clock.advance(2000)
+    manager.checkSpeculatableTasks(sched.MIN_TIME_TO_SPECULATION)
+    // After 3s have elapsed now the task is marked as speculative task
+    assert(sched.speculativeTasks.size == 1)
   }
 }
 

@@ -74,7 +74,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
   ).foreach { case (jt, correctAnswer) =>
       test(s"Limit 0: for join type $jt") {
         val query = testRelation1
-          .join(testRelation2.limit(0), joinType = jt, condition = Some('a.attr == 'b.attr))
+          .join(testRelation2.limit(0), joinType = jt, condition = Some('a.attr === 'b.attr))
 
         val optimized = Optimize.execute(query.analyze)
 
@@ -86,9 +86,9 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val testRelation3 = LocalRelation.fromExternalRows(Seq('c.int), data = Seq(Row(1)))
 
     val subJoinQuery = testRelation1
-      .join(testRelation2, joinType = Inner, condition = Some('a.attr == 'b.attr))
+      .join(testRelation2, joinType = Inner, condition = Some('a.attr === 'b.attr))
     val query = subJoinQuery
-      .join(testRelation3.limit(0), joinType = Inner, condition = Some('a.attr == 'c.attr))
+      .join(testRelation3.limit(0), joinType = Inner, condition = Some('a.attr === 'c.attr))
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int)

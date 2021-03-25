@@ -185,6 +185,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "multiple resource profiles" -> "applications/application_1578436911597_0052/environment",
     "stage list with peak metrics" -> "applications/app-20200706201101-0003/stages",
     "stage with peak metrics" -> "applications/app-20200706201101-0003/stages/2/0",
+    "stage with summaries" -> "applications/app-20200706201101-0003/stages/2/0?withSummaries=true",
 
     "app environment" -> "applications/app-20161116163331-0000/environment",
 
@@ -203,7 +204,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       errOpt should be (None)
 
       val exp = IOUtils.toString(new FileInputStream(
-        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
+        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")),
+        StandardCharsets.UTF_8)
       // compare the ASTs so formatting differences don't cause failures
       import org.json4s._
       import org.json4s.jackson.JsonMethods._
@@ -717,7 +719,7 @@ object HistoryServerSuite {
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
     val (code, in, errString) = connectAndGetInputStream(url)
-    val inString = in.map(IOUtils.toString)
+    val inString = in.map(IOUtils.toString(_, StandardCharsets.UTF_8))
     (code, inString, errString)
   }
 
@@ -733,7 +735,7 @@ object HistoryServerSuite {
     }
     val errString = try {
       val err = Option(connection.getErrorStream())
-      err.map(IOUtils.toString)
+      err.map(IOUtils.toString(_, StandardCharsets.UTF_8))
     } catch {
       case io: IOException => None
     }

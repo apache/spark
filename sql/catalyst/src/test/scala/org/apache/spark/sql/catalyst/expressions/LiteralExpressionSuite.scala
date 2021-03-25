@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
@@ -336,5 +336,53 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(Array(1.toByte, 2.toByte, 3.toByte), BinaryType))
     assert(Literal(Array("1", "2", "3")) ==
       Literal.create(Array("1", "2", "3"), ArrayType(StringType)))
+  }
+
+  test("SPARK-34342: Date/Timestamp toString") {
+    assert(Literal.default(DateType).toString === "1970-01-01")
+    assert(Literal.default(TimestampType).toString === "1969-12-31 16:00:00")
+    withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
+      val timestamp = LocalDateTime.of(2021, 2, 3, 16, 50, 3, 456000000)
+        .atZone(ZoneOffset.UTC)
+        .toInstant
+      val literalStr = Literal.create(timestamp).toString
+      assert(literalStr === "2021-02-03 17:50:03.456")
+    }
+  }
+
+  test("SPARK-34605: construct literals from java.time.Duration") {
+    Seq(
+      Duration.ofNanos(0),
+      Duration.ofSeconds(-1),
+      Duration.ofNanos(123456000),
+      Duration.ofDays(106751991),
+      Duration.ofDays(-106751991)).foreach { duration =>
+      checkEvaluation(Literal(duration), duration)
+    }
+  }
+
+  test("SPARK-34605: construct literals from arrays of java.time.Duration") {
+    val duration0 = Duration.ofDays(2).plusHours(3).plusMinutes(4)
+    checkEvaluation(Literal(Array(duration0)), Array(duration0))
+    val duration1 = Duration.ofHours(-1024)
+    checkEvaluation(Literal(Array(duration0, duration1)), Array(duration0, duration1))
+  }
+
+  test("SPARK-34615: construct literals from java.time.Period") {
+    Seq(
+      Period.ofYears(0),
+      Period.of(-1, 11, 0),
+      Period.of(1, -11, 0),
+      Period.ofMonths(Int.MaxValue),
+      Period.ofMonths(Int.MinValue)).foreach { period =>
+      checkEvaluation(Literal(period), period)
+    }
+  }
+
+  test("SPARK-34615: construct literals from arrays of java.time.Period") {
+    val period0 = Period.ofYears(123).withMonths(456)
+    checkEvaluation(Literal(Array(period0)), Array(period0))
+    val period1 = Period.ofMonths(-1024)
+    checkEvaluation(Literal(Array(period0, period1)), Array(period0, period1))
   }
 }

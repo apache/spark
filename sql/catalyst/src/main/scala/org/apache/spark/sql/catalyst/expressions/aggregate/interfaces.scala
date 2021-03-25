@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -421,10 +422,10 @@ abstract class DeclarativeAggregate
   }
 
   final override def eval(input: InternalRow = null): Any =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
 

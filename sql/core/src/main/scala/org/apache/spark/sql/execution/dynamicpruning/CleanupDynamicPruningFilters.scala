@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  *  Removes the filter nodes with dynamic pruning that were not pushed down to the scan.
@@ -33,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!SQLConf.get.dynamicPartitionPruningEnabled) {
+    if (!conf.dynamicPartitionPruningEnabled) {
       return plan
     }
 

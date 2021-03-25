@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.time.Period
+
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
@@ -24,7 +26,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{Decimal, DecimalType, YearMonthIntervalType}
+import org.apache.spark.sql.types.DataTypeTestUtils.numericTypes
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -272,6 +275,38 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       checkException(years = Int.MaxValue)
       checkException(weeks = Int.MaxValue)
+    }
+  }
+
+  test("SPARK-34824: multiply year-month interval by numeric") {
+    Seq(
+      (Period.ofMonths(-100), Float.NaN) -> Period.ofMonths(0),
+      (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
+      (Period.ofMonths(0), 10) -> Period.ofMonths(0),
+      (Period.ofMonths(10), 0L) -> Period.ofMonths(0),
+      (Period.ofYears(100), -1.toByte) -> Period.ofYears(-100),
+      (Period.ofMonths(12), 0.3f) -> Period.ofMonths(4),
+      (Period.ofYears(-1000), 0.3d) -> Period.ofYears(-300),
+      (Period.ofYears(9999), 0.0001d) -> Period.ofYears(1),
+      (Period.ofYears(9999), BigDecimal(0.0001)) -> Period.ofYears(1)
+    ).foreach { case ((period, num), expected) =>
+      checkEvaluation(MultiplyYMInterval(Literal(period), Literal(num)), expected)
+    }
+
+    Seq(
+      (Period.ofMonths(2), Int.MaxValue),
+      (Period.ofMonths(Int.MinValue), 10d),
+      (Period.ofMonths(200), Double.PositiveInfinity),
+      (Period.ofMonths(-200), Float.NegativeInfinity)
+    ).foreach { case (period, num) =>
+      checkExceptionInExpression[ArithmeticException](
+        MultiplyYMInterval(Literal(period), Literal(num)), "overflow")
+    }
+
+    numericTypes.foreach { numType =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (interval: Expression, num: Expression) => MultiplyYMInterval(interval, num),
+        YearMonthIntervalType, numType)
     }
   }
 }

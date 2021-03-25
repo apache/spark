@@ -46,12 +46,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       ifExists: String,
       specs: Map[String, Any]*): Unit = {
     checkPartitions(t, specs.map(_.mapValues(_.toString).toMap): _*)
-    val specStr = specs.map(
-      _.map {
-        case (k, v: String) => s"$k = '$v'"
-        case (k, v) => s"$k = $v"
-      }.mkString("PARTITION (", ", ", ")"))
-      .mkString(", ")
+    val specStr = specs.map(partSpecToString).mkString(", ")
     sql(s"ALTER TABLE $t DROP $ifExists $specStr")
     checkPartitions(t)
   }
@@ -178,6 +173,70 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       sql(s"ALTER TABLE $t ADD PARTITION (p1 = null)")
       checkPartitions(t, Map("p1" -> nullPartitionValue))
       sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      checkPartitions(t)
+    }
+  }
+
+  test("SPARK-33591, SPARK-34203: insert and drop partitions with null values") {
+    def insertAndDropNullPart(t: String, insertCmd: String): Unit = {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(insertCmd)
+      checkPartitions(t, Map("p1" -> nullPartitionValue))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      checkPartitions(t)
+    }
+
+    withNamespaceAndTable("ns", "tbl") { t =>
+      insertAndDropNullPart(t, s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+    }
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        insertAndDropNullPart(t, s"INSERT OVERWRITE TABLE $t VALUES (0, null)")
+      }
+    }
+  }
+
+  test("SPARK-34161, SPARK-34138, SPARK-34099: keep dependents cached after table altering") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+      sql(s"INSERT INTO $t PARTITION (part=2) SELECT 2")
+      sql(s"INSERT INTO $t PARTITION (part=3) SELECT 3")
+      cacheRelation(t)
+      checkCachedRelation(t, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3)))
+
+      withView("v0") {
+        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        cacheRelation("v0")
+        sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
+        checkCachedRelation("v0", Seq(Row(0, 0), Row(2, 2), Row(3, 3)))
+      }
+
+      withTempView("v1") {
+        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        cacheRelation("v1")
+        sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
+        checkCachedRelation("v1", Seq(Row(0, 0), Row(3, 3)))
+      }
+
+      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      withGlobalTempView("v2") {
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        cacheRelation(v2)
+        sql(s"ALTER TABLE $t DROP PARTITION (part=3)")
+        checkCachedRelation(v2, Seq(Row(0, 0)))
+      }
+    }
+  }
+
+  test("SPARK-33474: Support typed literals as partition spec values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
+      sql(s"ALTER TABLE $t ADD PARTITION(part = date'2020-01-01')")
+      checkPartitions(t, Map("part" -> "2020-01-01"))
+      sql(s"ALTER TABLE $t DROP PARTITION (part = date'2020-01-01')")
       checkPartitions(t)
     }
   }

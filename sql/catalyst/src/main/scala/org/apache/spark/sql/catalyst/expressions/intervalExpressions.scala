@@ -249,3 +249,49 @@ case class MakeInterval(
 
   override def prettyName: String = "make_interval"
 }
+
+// Multiply an year-month interval by a numeric
+case class MultiplyYMInterval(
+    interval: Expression,
+    num: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  override def left: Expression = interval
+  override def right: Expression = num
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
+  override def dataType: DataType = YearMonthIntervalType
+
+  @transient
+  private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
+    case ByteType | ShortType | IntegerType => (months: Int, num) =>
+      Math.multiplyExact(months, num.asInstanceOf[Number].intValue())
+    case LongType => (months: Int, num) =>
+      Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
+    case FloatType | DoubleType => (months: Int, num) =>
+      Math.toIntExact(Math.round(months * num.asInstanceOf[Number].doubleValue()))
+    case _: DecimalType => (months: Int, num) =>
+      val decimalRes = ((new Decimal).set(months) * num.asInstanceOf[Decimal]).toJavaBigDecimal
+      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
+  }
+
+  override def nullSafeEval(interval: Any, num: Any): Any = {
+    evalFunc(interval.asInstanceOf[Int], num)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
+    case ByteType | ShortType | IntegerType =>
+      defineCodeGen(ctx, ev, (m, n) => s"java.lang.Math.multiplyExact($m, $n)")
+    case LongType =>
+      val jlm = classOf[Math].getName
+      defineCodeGen(ctx, ev, (m, n) => s"$jlm.toIntExact($jlm.multiplyExact($m, $n))")
+    case FloatType | DoubleType =>
+      val jlm = classOf[Math].getName
+      defineCodeGen(ctx, ev, (m, n) => s"$jlm.toIntExact($jlm.round($m * (double)$n))")
+    case _: DecimalType =>
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
+        ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
+  }
+
+  override def toString: String = s"($left * $right)"
+}

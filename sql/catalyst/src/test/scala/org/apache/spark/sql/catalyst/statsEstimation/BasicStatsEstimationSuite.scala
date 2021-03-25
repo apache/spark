@@ -152,6 +152,17 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
   }
 
+  test("SPARK-34121: Intersect operator missing rowCount when enable CBO") {
+    val intersect = Intersect(plan, plan, false)
+    val childrenSize = intersect.children.size
+    val sizeInBytes = plan.size.get
+    val rowCount = Some(plan.rowCount)
+    checkStats(
+      intersect,
+      expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
+      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+  }
+
   /** Check estimated stats when cbo is turned on/off. */
   private def checkStats(
       plan: LogicalPlan,

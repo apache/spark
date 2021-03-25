@@ -421,7 +421,7 @@ case class FileSourceScanExec(
   }
 
   /** SQL metrics generated only for scans using dynamic partition pruning. */
-  private lazy val staticMetrics = if (partitionFilters.filter(isDynamicPruningFilter).nonEmpty) {
+  private lazy val staticMetrics = if (partitionFilters.exists(isDynamicPruningFilter)) {
     Map("staticFilesNum" -> SQLMetrics.createMetric(sparkContext, "static number of files read"),
       "staticFilesSize" -> SQLMetrics.createSizeMetric(sparkContext, "static size of files read"))
   } else {
@@ -434,7 +434,7 @@ case class FileSourceScanExec(
       static: Boolean): Unit = {
     val filesNum = partitions.map(_.files.size.toLong).sum
     val filesSize = partitions.map(_.files.map(_.getLen).sum).sum
-    if (!static || partitionFilters.filter(isDynamicPruningFilter).isEmpty) {
+    if (!static || !partitionFilters.exists(isDynamicPruningFilter)) {
       driverMetrics("numFiles") = filesNum
       driverMetrics("filesSize") = filesSize
     } else {
@@ -542,10 +542,9 @@ case class FileSourceScanExec(
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(new Path(f.filePath).getName)
-          .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
+          .getOrElse(throw new IllegalStateException(s"Invalid bucket file ${f.filePath}"))
       }
 
-    // TODO(SPARK-32985): Decouple bucket filter pruning and bucketed table scan
     val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
       val bucketSet = optionalBucketSet.get
       filesGroupedToBuckets.filter {
@@ -591,20 +590,41 @@ case class FileSourceScanExec(
     logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
+    // Filter files with bucket pruning if possible
+    val bucketingEnabled = fsRelation.sparkSession.sessionState.conf.bucketingEnabled
+    val shouldProcess: Path => Boolean = optionalBucketSet match {
+      case Some(bucketSet) if bucketingEnabled =>
+        filePath => {
+          BucketingUtils.getBucketId(filePath.getName) match {
+            case Some(id) => bucketSet.get(id)
+            case None =>
+              // Do not prune the file if bucket file name is invalid
+              true
+          }
+        }
+      case _ =>
+        _ => true
+    }
+
     val splitFiles = selectedPartitions.flatMap { partition =>
       partition.files.flatMap { file =>
         // getPath() is very expensive so we only want to call it once in this block:
         val filePath = file.getPath
-        val isSplitable = relation.fileFormat.isSplitable(
-          relation.sparkSession, relation.options, filePath)
-        PartitionedFileUtil.splitFiles(
-          sparkSession = relation.sparkSession,
-          file = file,
-          filePath = filePath,
-          isSplitable = isSplitable,
-          maxSplitBytes = maxSplitBytes,
-          partitionValues = partition.values
-        )
+
+        if (shouldProcess(filePath)) {
+          val isSplitable = relation.fileFormat.isSplitable(
+            relation.sparkSession, relation.options, filePath)
+          PartitionedFileUtil.splitFiles(
+            sparkSession = relation.sparkSession,
+            file = file,
+            filePath = filePath,
+            isSplitable = isSplitable,
+            maxSplitBytes = maxSplitBytes,
+            partitionValues = partition.values
+          )
+        } else {
+          Seq.empty
+        }
       }
     }.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
 

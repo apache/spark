@@ -133,7 +133,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 
-    SharedState.loadHiveConfFile(sparkConf, conf)
+    val warehousePath = SharedState.resolveWarehousePath(sparkConf, conf)
+    val qualified = SharedState.qualifyWarehousePath(conf, warehousePath)
+    SharedState.setWarehousePathConf(sparkConf, conf, qualified)
     SessionState.start(sessionState)
 
     // Clean up after we exit
@@ -404,7 +406,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           val res = new JArrayList[String]()
 
-          if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
+          if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER) ||
+              SparkSQLEnv.sqlContext.conf.cliPrintHeader) {
             // Print the column names.
             Option(driver.getSchema.getFieldSchemas).foreach { fields =>
               out.println(fields.asScala.map(_.getName).mkString("\t"))
