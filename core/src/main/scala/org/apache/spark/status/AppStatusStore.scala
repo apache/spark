@@ -152,7 +152,7 @@ private[spark] class AppStatusStore(
       unsortedQuantiles: Array[Double] = Array.empty[Double]): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
     val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
-    val stage = newStageData(stageDataWrapper.info, withDetail = details,
+    val stage = newStageData(stageDataWrapper.info, withDetail = details, taskStatus = taskStatus,
       withSummaries = withSummaries, unsortedQuantiles = unsortedQuantiles)
     (stage, stageDataWrapper.jobIds.toSeq)
   }
