@@ -30,10 +30,13 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, MapData, TypeUt
 import org.apache.spark.sql.types.{AbstractDataType, DataType, MapType}
 
 /**
- * For two
- * Spark SQL turns grouping/join/window partition keys into binary `UnsafeRow` and compare the
- * binary data directly instead of using MapType's ordering. So in order to make sure two maps
- * have the same key value pairs but with different key ordering generate right result, we have
+ * When comparing two maps, we have to make sure two maps have the same key value pairs but
+ * with different key ordering are equal.
+ * For example, Map('a' -> 1, 'b' -> 2) equals to Map('b' -> 2, 'a' -> 1).
+ *
+ * We have to specially handle this in grouping/join/window because Spark SQL turns
+ * grouping/join/window partition keys into binary `UnsafeRow` and compare the
+ * binary data directly instead of using MapType's ordering. So in these cases, we have
  * to insert an expression to sort map entries by key.
  *
  * Note that, this rule must be executed at the end of optimizer, because the optimizer may create
@@ -56,7 +59,7 @@ object NormalizeMapType extends Rule[LogicalPlan] {
   }
 
   private def needNormalize(expr: Expression): Boolean = expr match {
-    case ReorderMapKey(_) => false
+    case SortMapKey(_) => false
     case e if e.dataType.isInstanceOf[MapType] => true
     case _ => false
   }
@@ -64,11 +67,11 @@ object NormalizeMapType extends Rule[LogicalPlan] {
   private[sql] def normalize(expr: Expression): Expression = expr match {
     case _ if !needNormalize(expr) => expr
     case e if e.dataType.isInstanceOf[MapType] =>
-      ReorderMapKey(e)
+      SortMapKey(e)
   }
 }
 
-case class ReorderMapKey(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class SortMapKey(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   private lazy val MapType(keyType, valueType, valueContainsNull) = dataType.asInstanceOf[MapType]
   private lazy val keyOrdering: Ordering[Any] = TypeUtils.getInterpretedOrdering(keyType)
   private lazy val mapBuilder = new ArrayBasedMapBuilder(keyType, valueType)

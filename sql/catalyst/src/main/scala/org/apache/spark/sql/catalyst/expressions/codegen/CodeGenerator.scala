@@ -731,8 +731,8 @@ class CodegenContext extends Logging {
            |
            |   @Override
            |   public int compare(Object a, Object b) {
-           |     Integer indexA = (Integer)a;
-           |     Integer indexB = (Integer)b;
+           |     int indexA = ((Integer)a).intValue();
+           |     int indexB = ((Integer)b).intValue();
            |     ${javaType(keyType)} keyA = ${getValue("array", keyType, "indexA")};
            |     ${javaType(keyType)} keyB = ${getValue("array", keyType, "indexB")};
            |     return ${genComp(keyType, "keyA", "keyB")};

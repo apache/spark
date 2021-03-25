@@ -333,8 +333,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
 
-        // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
-        // `groupingExpressions` is not extracted during logical phase.
+        // Ideally this should be done in `NormalizeFloatingNumbers` and `NormalizeMapType`,
+        // but we do it here because `groupingExpressions` is not extracted during logical phase.
         val normalizedGroupingExpressions = namedGroupingExpressions.map { e =>
           NormalizeFloatingNumbers.normalize(e) match {
             case n: NamedExpression => n
@@ -446,8 +446,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               "Spark user mailing list.")
         }
 
-        // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
-        // `groupingExpressions` is not extracted during logical phase.
+        // Ideally this should be done in `NormalizeFloatingNumbers` and `NormalizeMapType`,
+        // but we do it here because `groupingExpressions` is not extracted during logical phase.
         val normalizedGroupingExpressions = groupingExpressions.map { e =>
           NormalizeFloatingNumbers.normalize(e) match {
             case n: NamedExpression => n
@@ -478,8 +478,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             val distinctExpressions =
               functionsWithDistinct.head.aggregateFunction.children.filterNot(_.foldable)
             val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
-              // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here
-              // because `distinctExpressions` is not extracted during logical phase.
+              // Ideally this should be done in `NormalizeFloatingNumbers` and `NormalizeMapType`,
+              // but we do it here because `distinctExpressions` is not extracted during
+              // logical phase.
               NormalizeFloatingNumbers.normalize(e) match {
                 case ne: NamedExpression => ne
                 case other =>
