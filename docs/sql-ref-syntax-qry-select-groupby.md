@@ -32,7 +32,7 @@ When a FILTER clause is attached to an aggregate function, only the matching row
 GROUP BY group_expression [ , group_expression [ , ... ] ]
     [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
 
-GROUP BY GROUPING SETS (grouping_set [ , ...])
+GROUP BY group_expression_with_grouping_analytics [ , group_expression_with_grouping_analytics [ , ... ] ]
 ```
 
 While aggregate functions are defined as
@@ -42,6 +42,21 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 ### Parameters
 
+* **grouping_expression**
+
+    Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
+    result values of the grouping expressions. A grouping expression may be a column alias, a column position
+    or an expression.
+    
+* **group_expression_with_grouping_analytics**    
+
+    Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
+    result values of the grouping expressions with grouping analytics. A grouping expression with grouping analytics
+    may be a column alias, a column position, an expression or a grouping analytics. A grouping analytics can be
+     `ROLLUP(grouping_set)` `CUBE(grouping_set)` or `GROUPING SETS(grouping_set)`.
+
+    **Syntax:** `{ group_expression | { ROLLUP | CUBE | GROUPING SETS } (grouping_set [ , ...]) }`
+    
 * **GROUPING SETS**
 
     Groups the rows for each subset of the expressions specified in the grouping sets. For example,
@@ -50,33 +65,27 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     is a shorthand for a `UNION ALL` where each leg of the `UNION ALL`
     operator performs aggregation of subset of the columns specified in the `GROUPING SETS` clause.
 
-* **grouping_set**
-
-    A grouping set is specified by zero or more comma-separated expressions in parentheses.
-
-    **Syntax:** `( [ expression [ , ... ] ] )`
-
-* **grouping_expression**
-
-    Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
-    result values of the grouping expressions. A grouping expression may be a column alias, a column position
-    or an expression.
-
 * **ROLLUP**
 
     Specifies multiple levels of aggregations in a single statement. This clause is used to compute aggregations
     based on multiple grouping sets. `ROLLUP` is a shorthand for `GROUPING SETS`. For example,
-    `GROUP BY warehouse, product WITH ROLLUP` is equivalent to `GROUP BY GROUPING SETS
-    ((warehouse, product), (warehouse), ())`.
+    `GROUP BY warehouse, product WITH ROLLUP` is equivalent to `GROUP BY ROLLUP(warehouse, product)` or
+    `GROUP BY GROUPING SETS((warehouse, product), (warehouse), ())`.
     The N elements of a `ROLLUP` specification results in N+1 `GROUPING SETS`.
 
 * **CUBE**
 
     `CUBE` clause is used to perform aggregations based on combination of grouping columns specified in the
     `GROUP BY` clause. `CUBE` is a shorthand for `GROUPING SETS`. For example,
-    `GROUP BY warehouse, product WITH CUBE` is equivalent to `GROUP BY GROUPING SETS
-    ((warehouse, product), (warehouse), (product), ())`.
+    `GROUP BY warehouse, product WITH CUBE` is equivalent to `GROUP BY CUBE(warehouse, product)` or 
+    `GROUP BY GROUPING SETS((warehouse, product), (warehouse), (product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
+
+* **grouping_set**
+
+    A grouping set is specified by zero or more comma-separated expressions in parentheses.
+
+    **Syntax:** `( [ expression [ , ... ] ] )`
 
 * **aggregate_name**
 
