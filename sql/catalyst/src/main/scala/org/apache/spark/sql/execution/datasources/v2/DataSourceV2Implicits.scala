@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsDelete, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability, TruncatableTable}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -35,7 +35,7 @@ object DataSourceV2Implicits {
         case support: SupportsRead =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support reads: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportReadsError(table)
       }
     }
 
@@ -44,7 +44,7 @@ object DataSourceV2Implicits {
         case support: SupportsWrite =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support writes: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportWritesError(table)
       }
     }
 
@@ -53,7 +53,7 @@ object DataSourceV2Implicits {
         case support: SupportsDelete =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support deletes: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
       }
     }
 
@@ -61,7 +61,7 @@ object DataSourceV2Implicits {
       table match {
         case t: TruncatableTable => t
         case _ =>
-          throw new AnalysisException(s"Table does not support truncates: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportTruncatesError(table)
       }
     }
 
@@ -70,8 +70,7 @@ object DataSourceV2Implicits {
         case support: SupportsPartitionManagement =>
           support
         case _ =>
-          throw new AnalysisException(
-            s"Table does not support partition management: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportPartitionManagementError(table)
       }
     }
 
@@ -80,8 +79,7 @@ object DataSourceV2Implicits {
         case support: SupportsAtomicPartitionManagement =>
           support
         case _ =>
-          throw new AnalysisException(
-            s"Table does not support atomic partition management: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportAtomicPartitionManagementError(table)
       }
     }
 
