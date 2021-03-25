@@ -205,11 +205,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   // A fork of `readIntegers`, reading the signed integers as unsigned in long type
   public void readUnsignedIntegers(
-    int total,
-    WritableColumnVector c,
-    int rowId,
-    int level,
-    VectorizedValuesReader data) throws IOException {
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      int level,
+      VectorizedValuesReader data) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
