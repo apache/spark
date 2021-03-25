@@ -4050,7 +4050,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           }.getOrElse(i)
 
         // For char type column or inner field comparison, pad the shorter one to the longer length.
-        case b @ BinaryComparison(e1 @ AttrOrOuterRef(left), e2 @ AttrOrOuterRef(right)) =>
+        case b @ BinaryComparison(e1 @ AttrOrOuterRef(left), e2 @ AttrOrOuterRef(right))
+            // For the same attribute, they must be the same length and no padding is needed.
+            if !left.semanticEquals(right) =>
           val outerRefs = (e1, e2) match {
             case (_: OuterReference, _: OuterReference) => Seq(left, right)
             case (_: OuterReference, _) => Seq(left)
