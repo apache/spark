@@ -20,9 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 
-import com.google.common.primitives.UnsignedLong;
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesUtils;
