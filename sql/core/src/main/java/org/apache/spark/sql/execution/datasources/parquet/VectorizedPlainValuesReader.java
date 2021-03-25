@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -138,6 +139,17 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       }
     }
   }
+
+  @Override
+  public final void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 8;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    for (int i = 0; i < total; i += 1) {
+      c.putByteArray(
+        rowId + i, new BigInteger(Long.toUnsignedString(buffer.getLong())).toByteArray());
+    }
+  }
+
 
   // A fork of `readLongs` to rebase the timestamp values. For performance reasons, this method
   // iterates the values twice: check if we need to rebase first, then go to the optimized branch
