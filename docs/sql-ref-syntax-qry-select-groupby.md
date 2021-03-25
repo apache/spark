@@ -45,18 +45,18 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 * **grouping_expression**
 
     Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
-    result values of the grouping expressions. A grouping expression may be a column alias like `GROUP BY a`, a column position like
+    result values of the grouping expressions. A grouping expression may be a column name like `GROUP BY a`, a column position like
     `GROUP BY 0`, or an expression like `GROUP BY a + b`.
-   
+
 * **GROUPING SETS**
 
     Groups the rows for each subset of the expressions specified in the grouping sets. For example,
-    `GROUP BY GROUPING SETS (warehouse, product)` is semantically equivalent
-    to union of results of `GROUP BY warehouse` and `GROUP BY product`. 
-    `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically equivalent to union
-    of results of `GROUP BY warehouse, product`, `GROUP BY warehouse` and `GROUP BY ()`. This clause
+    `GROUP BY GROUPING SETS ((warehouse), (product))` is semantically equivalent
+    to union of results of `GROUP BY warehouse` and `GROUP BY product`. This clause
     is a shorthand for a `UNION ALL` where each leg of the `UNION ALL`
     operator performs aggregation of subset of the columns specified in the `GROUPING SETS` clause.
+    `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically equivalent to union
+    of results of `GROUP BY warehouse, product`, `GROUP BY warehouse` and `GROUP BY ()`.
 
 * **ROLLUP**
 
