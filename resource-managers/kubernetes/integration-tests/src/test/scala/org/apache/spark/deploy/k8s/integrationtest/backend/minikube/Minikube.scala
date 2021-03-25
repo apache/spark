@@ -126,7 +126,7 @@ private[spark] object Minikube extends Logging {
     }
   }
 
-  def describePods(labels:String): Seq[String] =
+  def describePods(labels: String): Seq[String] =
     Minikube.executeMinikube(false, "kubectl", "--", "describe", "pods", "--all-namespaces",
       "-l", labels)
 
