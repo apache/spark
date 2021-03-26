@@ -182,8 +182,7 @@ abstract class AggregateFunction extends Expression {
   def inputAggBufferAttributes: Seq[AttributeReference]
 
   /**
-   * Result of the aggregate function when the input is empty. This is currently only used for the
-   * proper rewriting of distinct aggregate functions.
+   * Result of the aggregate function when the input is empty.
    */
   def defaultResult: Option[Literal] = None
 
