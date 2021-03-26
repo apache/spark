@@ -124,10 +124,10 @@ case class ScalaUDF(
     val toRow = enc.createSerializer().asInstanceOf[Any => Any]
     if (enc.isSerializedAsStructForTopLevel) {
       value: Any =>
-        if (value == null) null else toRow(value).asInstanceOf[InternalRow].copy()
+        if (value == null) null else toRow(value).asInstanceOf[InternalRow]
     } else {
       value: Any =>
-        if (value == null) null else toRow(value).asInstanceOf[InternalRow].copy().get(0, dataType)
+        if (value == null) null else toRow(value).asInstanceOf[InternalRow].get(0, dataType)
     }
   }.getOrElse(createToCatalystConverter(dataType))
 
