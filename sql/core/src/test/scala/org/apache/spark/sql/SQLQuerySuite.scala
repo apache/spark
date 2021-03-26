@@ -513,7 +513,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row("1"))
   }
 
-  def sorttest(): Unit = {
+  def sortTest(): Unit = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
@@ -556,7 +556,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("external sorting") {
-    sorttest()
+    sortTest()
   }
 
   test("CTE feature") {
@@ -4119,7 +4119,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
-  
+
   test("SPARK-33482: Fix FileScan canonicalization") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
@@ -4147,8 +4147,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     Seq(CodegenObjectFactoryMode.CODEGEN_ONLY.toString,
       CodegenObjectFactoryMode.NO_CODEGEN.toString).foreach {
       case codegenMode =>
-        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode,
-          SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
           withTable("t", "t2") {
             val df = Seq(
               Map("a" -> 1, "b" -> 2, "c" -> 3),
@@ -4156,9 +4155,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
               Map("d" -> 4),
               Map("a" -> 1, "e" -> 2),
               Map("d" -> 4),
-              Map("d" -> 5)).toDF("m")
+              Map("d" -> 5)
+            ).toDF("m")
             val df2 = Seq(
-              Map("b" -> 2, "a" -> 1, "c" -> 3),
+              Map("b" -> 2, "a" -> 1, "c" -> 3)
             ).toDF("m2")
             df.createOrReplaceTempView("t")
             df2.createOrReplaceTempView("t2")
@@ -4210,7 +4210,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
                   |)
                   |group by m2
                   |""".stripMargin),
-                Row(Map("a" -> 1, "b" -> 2, "c" -> 3), 6, 1.0)
+                Row(Map("a" -> 1, "b" -> 2, "c" -> 3), 6, 1.0) :: Nil
             )
 
             checkAnswer(
