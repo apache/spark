@@ -263,6 +263,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveAggAliasInGroupBy ::
       ResolveMissingReferences ::
+      ResolveProjectFromNaturalAndUsingJoin ::
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -2086,6 +2087,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
@@ -2110,13 +2112,29 @@ class Analyzer(override val catalogManager: CatalogManager)
           val newFilter = Filter(newCond.head, newChild)
           Project(child.output, newFilter)
         }
+
+      case j @ Join(left, right, _, Some(condition), _) =>
+        val (newLeftCond, newLeft) = resolveExprsAndAddMissingAttrs(Seq(condition), left)
+        val (newRightCond, newRight) = resolveExprsAndAddMissingAttrs(Seq(condition), right)
+        val newJoin = if (newLeftCond.head.resolved) {
+          j.copy(left = newLeft, right = newRight, condition = Some(newLeftCond.head))
+        } else if (newRightCond.head.resolved) {
+          j.copy(left = newLeft, right = newRight, condition = Some(newRightCond.head))
+        } else {
+          j.copy(left = newLeft, right = newRight)
+        }
+        if (j.output == newJoin.output) {
+          newJoin
+        } else {
+          Project(j.output, newJoin)
+        }
     }
 
     /**
-     * This method tries to resolve expressions and find missing attributes recursively. Specially,
-     * when the expressions used in `Sort` or `Filter` contain unresolved attributes or resolved
-     * attributes which are missed from child output. This method tries to find the missing
-     * attributes out and add into the projection.
+     * This method tries to resolve expressions and find missing attributes recursively.
+     * Specifically, when the expressions used in `Sort` or `Filter` contain unresolved attributes
+     * or resolved attributes which are missing from child output. This method tries to find the
+     * missing attributes and add them into the projection.
      */
     private def resolveExprsAndAddMissingAttrs(
         exprs: Seq[Expression], plan: LogicalPlan): (Seq[Expression], LogicalPlan) = {
@@ -2160,9 +2178,97 @@ class Analyzer(override val catalogManager: CatalogManager)
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child)
             (newExprs, u.withNewChildren(Seq(newChild)))
 
+          case j @ Join(left, right, _, _, _) =>
+            val maybeResolvedExprs = exprs.map {
+              case u @ UnresolvedAttribute(nameParts) =>
+                val maybeResolved = j.output.resolve(nameParts, resolver).getOrElse(u)
+                maybeResolved
+              case e => e
+            }
+            val (newLeftExprs, newLeft) = resolveExprsAndAddMissingAttrs(
+              maybeResolvedExprs, left)
+            val (newRightExprs, newRight) = resolveExprsAndAddMissingAttrs(
+              maybeResolvedExprs, right)
+            val newExprs = newLeftExprs.zip(newRightExprs).map { case (l, r) =>
+              if (l.resolved) {
+                l
+              } else {
+                r
+              }
+            }
+            (newExprs, j.copy(left = newLeft, right = newRight))
+
           // For other operators, we can't recursively resolve and add attributes via its children.
           case other =>
             (exprs.map(resolveExpressionByPlanOutput(_, other)), other)
+        }
+      }
+    }
+  }
+
+  object ResolveProjectFromNaturalAndUsingJoin extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case p @ Project(projectList, child)
+          if (!p.resolved || p.missingInput.nonEmpty) && child.resolved =>
+        val (newProjectList, newChild) = resolveExprsAndAddMissingAttrs(projectList, child)
+        p.copy(newProjectList, newChild)
+    }
+
+    private def resolveExprsAndAddMissingAttrs(
+        exprs: Seq[NamedExpression], plan: LogicalPlan): (Seq[NamedExpression], LogicalPlan) = {
+      // Missing attributes can be unresolved attributes or resolved attributes which are not in
+      // the output attributes of the plan.
+      if (exprs.forall(e => e.resolved && e.references.subsetOf(plan.outputSet))) {
+        (exprs, plan)
+      } else {
+        plan match {
+          case p @ Project(projectList, child) =>
+            val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(exprs, child)
+            val missingAttrs = (AttributeSet(newExprs) -- p.outputSet).intersect(newChild.outputSet)
+            (newExprs, p.copy(projectList ++ missingAttrs, newChild))
+
+          case a @ Aggregate(groupExprs, aggExprs, child) =>
+            val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(exprs, child)
+            val missingAttrs = (AttributeSet(newExprs) -- a.outputSet).intersect(newChild.outputSet)
+            if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
+              // All the missing attributes are grouping expressions, valid case.
+              (newExprs, a.copy(aggregateExpressions = aggExprs ++ missingAttrs, child = newChild))
+            } else {
+              // Need to add non-grouping attributes, invalid case.
+              (exprs, a)
+            }
+
+          case g: Generate =>
+            val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(exprs, g.child)
+            (newExprs, g.copy(unrequiredChildIndex = Nil, child = newChild))
+
+          // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
+          // via its children.
+          case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias] =>
+            val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(exprs, u.child)
+            (newExprs, u.withNewChildren(Seq(newChild)))
+
+          case j @ Join(left, right, _, _, _) =>
+            val maybeResolvedExprs = exprs.map {
+                case u @ UnresolvedAttribute(nameParts) =>
+                  val maybeResolved = j.output.resolve(nameParts, resolver).getOrElse(u)
+                  maybeResolved
+                case e => e
+              }
+            val (newLeftExprs, newLeft) = resolveExprsAndAddMissingAttrs(
+              maybeResolvedExprs, left)
+            val (newRightExprs, newRight) = resolveExprsAndAddMissingAttrs(
+              maybeResolvedExprs, right)
+            val newExprs = newLeftExprs.zip(newRightExprs).map { case (l, r) =>
+              if (l.resolved) {
+                l
+              } else {
+                r
+              }
+            }
+            (newExprs, j.copy(left = newLeft, right = newRight))
+
+          case other => (exprs, other)
         }
       }
     }
