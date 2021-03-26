@@ -156,6 +156,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
 
+  /** A single SQL query's output. */
+  protected case class QueryOutput(sql: String, schema: String, output: String) {
+    override def toString: String = {
+      // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
+      s"-- !query\n" +
+        sql + "\n" +
+        s"-- !query schema\n" +
+        schema + "\n" +
+        s"-- !query output\n" +
+        output
+    }
+  }
+
   /** A test case. */
   protected trait TestCase {
     val name: String

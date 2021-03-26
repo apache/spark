@@ -33,20 +33,7 @@ trait SQLQueryTestHelper {
   private val clsName = this.getClass.getCanonicalName
   protected val emptySchema = StructType(Seq.empty).catalogString
 
-  /** A single SQL query's output. */
-  protected case class QueryOutput(sql: String, schema: String, output: String) {
-    override def toString: String = {
-      // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
-      s"-- !query\n" +
-        sql + "\n" +
-        s"-- !query schema\n" +
-        schema + "\n" +
-        s"-- !query output\n" +
-        output
-    }
-  }
-
-  protected def replaceNotIncludedMsg(line: String): String = {
+  private def replaceNotIncludedMsg(line: String): String = {
     line.replaceAll("#\\d+", "#x")
       .replaceAll(
         s"Location.*$clsName/",
@@ -58,6 +45,7 @@ trait SQLQueryTestHelper {
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
   }
 
+
   /** Executes a query and returns the result as (schema of the output, normalized output). */
   protected def getNormalizedResult(session: SparkSession, sql: String): (String, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
@@ -68,7 +56,7 @@ trait SQLQueryTestHelper {
           | _: DescribeRelation
           | _: DescribeColumn => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
-      case _ => false
+      case _ => plan.children.iterator.exists(isSorted)
     }
 
     val df = session.sql(sql)
