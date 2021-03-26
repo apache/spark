@@ -17,9 +17,11 @@ select position('bar' in 'foobarbar'), position(null, 'foobarbar'), position('aa
 
 -- left && right
 select left("abcd", 2), left("abcd", 5), left("abcd", '2'), left("abcd", null);
-select left(null, -2), left("abcd", -2), left("abcd", 0), left("abcd", 'a');
+select left(null, -2);
+select left("abcd", -2), left("abcd", 0), left("abcd", 'a');
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null);
-select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a');
+select right(null, -2);
+select right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 
 -- split function
 SELECT split('aa1cc2ee3', '[1-9]+');

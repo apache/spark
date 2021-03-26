@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -42,7 +43,7 @@ case class ReplaceTableExec(
       invalidateCache(catalog, table, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
-      throw new CannotReplaceMissingTableException(ident)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
     catalog.createTable(ident, tableSchema, partitioning.toArray, tableProperties.asJava)
     Seq.empty
@@ -74,10 +75,10 @@ case class AtomicReplaceTableExec(
           identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
       } catch {
         case e: NoSuchTableException =>
-          throw new CannotReplaceMissingTableException(identifier, Some(e))
+          throw QueryCompilationErrors.cannotReplaceMissingTableError(identifier, Some(e))
       }
     } else {
-      throw new CannotReplaceMissingTableException(identifier)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(identifier)
     }
     commitOrAbortStagedChanges(staged)
     Seq.empty

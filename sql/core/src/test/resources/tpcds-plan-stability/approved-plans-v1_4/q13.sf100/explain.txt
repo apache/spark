@@ -58,7 +58,7 @@ Condition : (((((isnotnull(ss_store_sk#4) AND isnotnull(ss_addr_sk#3)) AND isnot
 Output [3]: [cd_demo_sk#12, cd_marital_status#13, cd_education_status#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [IsNotNull(cd_demo_sk), Or(Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Advanced Degree)),And(EqualTo(cd_marital_status,S),EqualTo(cd_education_status,College))),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,2 yr Degree)))]
+PushedFilters: [IsNotNull(cd_demo_sk), Or(Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Advanced Degree     )),And(EqualTo(cd_marital_status,S),EqualTo(cd_education_status,College             ))),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,2 yr Degree         )))]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -66,7 +66,7 @@ Input [3]: [cd_demo_sk#12, cd_marital_status#13, cd_education_status#14]
 
 (6) Filter [codegen id : 1]
 Input [3]: [cd_demo_sk#12, cd_marital_status#13, cd_education_status#14]
-Condition : (isnotnull(cd_demo_sk#12) AND ((((cd_marital_status#13 = M) AND (cd_education_status#14 = Advanced Degree)) OR ((cd_marital_status#13 = S) AND (cd_education_status#14 = College))) OR ((cd_marital_status#13 = W) AND (cd_education_status#14 = 2 yr Degree))))
+Condition : (isnotnull(cd_demo_sk#12) AND ((((cd_marital_status#13 = M) AND (cd_education_status#14 = Advanced Degree     )) OR ((cd_marital_status#13 = S) AND (cd_education_status#14 = College             ))) OR ((cd_marital_status#13 = W) AND (cd_education_status#14 = 2 yr Degree         ))))
 
 (7) BroadcastExchange
 Input [3]: [cd_demo_sk#12, cd_marital_status#13, cd_education_status#14]
@@ -75,7 +75,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (8) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_cdemo_sk#1]
 Right keys [1]: [cd_demo_sk#12]
-Join condition: ((((((cd_marital_status#13 = M) AND (cd_education_status#14 = Advanced Degree)) AND (ss_sales_price#6 >= 100.00)) AND (ss_sales_price#6 <= 150.00)) OR ((((cd_marital_status#13 = S) AND (cd_education_status#14 = College)) AND (ss_sales_price#6 >= 50.00)) AND (ss_sales_price#6 <= 100.00))) OR ((((cd_marital_status#13 = W) AND (cd_education_status#14 = 2 yr Degree)) AND (ss_sales_price#6 >= 150.00)) AND (ss_sales_price#6 <= 200.00)))
+Join condition: ((((((cd_marital_status#13 = M) AND (cd_education_status#14 = Advanced Degree     )) AND (ss_sales_price#6 >= 100.00)) AND (ss_sales_price#6 <= 150.00)) OR ((((cd_marital_status#13 = S) AND (cd_education_status#14 = College             )) AND (ss_sales_price#6 >= 50.00)) AND (ss_sales_price#6 <= 100.00))) OR ((((cd_marital_status#13 = W) AND (cd_education_status#14 = 2 yr Degree         )) AND (ss_sales_price#6 >= 150.00)) AND (ss_sales_price#6 <= 200.00)))
 
 (9) Project [codegen id : 6]
 Output [11]: [ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_quantity#5, ss_sales_price#6, ss_ext_sales_price#7, ss_ext_wholesale_cost#8, ss_net_profit#9, ss_sold_date_sk#10, cd_marital_status#13, cd_education_status#14]
@@ -102,7 +102,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (14) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_hdemo_sk#2]
 Right keys [1]: [hd_demo_sk#16]
-Join condition: (((((((cd_marital_status#13 = M) AND (cd_education_status#14 = Advanced Degree)) AND (ss_sales_price#6 >= 100.00)) AND (ss_sales_price#6 <= 150.00)) AND (hd_dep_count#17 = 3)) OR (((((cd_marital_status#13 = S) AND (cd_education_status#14 = College)) AND (ss_sales_price#6 >= 50.00)) AND (ss_sales_price#6 <= 100.00)) AND (hd_dep_count#17 = 1))) OR (((((cd_marital_status#13 = W) AND (cd_education_status#14 = 2 yr Degree)) AND (ss_sales_price#6 >= 150.00)) AND (ss_sales_price#6 <= 200.00)) AND (hd_dep_count#17 = 1)))
+Join condition: (((((((cd_marital_status#13 = M) AND (cd_education_status#14 = Advanced Degree     )) AND (ss_sales_price#6 >= 100.00)) AND (ss_sales_price#6 <= 150.00)) AND (hd_dep_count#17 = 3)) OR (((((cd_marital_status#13 = S) AND (cd_education_status#14 = College             )) AND (ss_sales_price#6 >= 50.00)) AND (ss_sales_price#6 <= 100.00)) AND (hd_dep_count#17 = 1))) OR (((((cd_marital_status#13 = W) AND (cd_education_status#14 = 2 yr Degree         )) AND (ss_sales_price#6 >= 150.00)) AND (ss_sales_price#6 <= 200.00)) AND (hd_dep_count#17 = 1)))
 
 (15) Project [codegen id : 6]
 Output [7]: [ss_addr_sk#3, ss_store_sk#4, ss_quantity#5, ss_ext_sales_price#7, ss_ext_wholesale_cost#8, ss_net_profit#9, ss_sold_date_sk#10]

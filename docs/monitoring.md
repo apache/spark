@@ -479,11 +479,27 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
     <td>
       A list of all attempts for the given stage.
+        <br><code>?details=true</code> lists all attempts with the task data for the given stage.
+        <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution of each attempt.
+        <br><code>?quantiles=0.1,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
+      <br>Example:
+        <br><code>?details=true</code>
+        <br><code>?withSummaries=true</code>
+        <br><code>?details=true&withSummaries=true&quantiles=0.01,0.5,0.99</code>
     </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
-    <td>Details for the given stage attempt.</td>
+    <td>
+      Details for the given stage attempt.
+        <br><code>?details=true</code> lists all task data for the given stage attempt.
+        <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution for the given stage attempt.
+        <br><code>?quantiles=0.1,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
+      <br>Example:
+        <br><code>?details=true</code>
+        <br><code>?withSummaries=true</code>
+        <br><code>?details=true&withSummaries=true&quantiles=0.01,0.5,0.99</code>
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>

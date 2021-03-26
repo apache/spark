@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
+
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
@@ -24,7 +27,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
+import org.apache.spark.sql.types.DataTypeTestUtils.numericTypes
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -272,6 +276,72 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       checkException(years = Int.MaxValue)
       checkException(weeks = Int.MaxValue)
+    }
+  }
+
+  test("SPARK-34824: multiply year-month interval by numeric") {
+    Seq(
+      (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
+      (Period.ofMonths(0), 10) -> Period.ofMonths(0),
+      (Period.ofMonths(10), 0L) -> Period.ofMonths(0),
+      (Period.ofYears(100), -1.toByte) -> Period.ofYears(-100),
+      (Period.ofMonths(12), 0.3f) -> Period.ofMonths(4),
+      (Period.ofYears(-1000), 0.3d) -> Period.ofYears(-300),
+      (Period.ofYears(9999), 0.0001d) -> Period.ofYears(1),
+      (Period.ofYears(9999), BigDecimal(0.0001)) -> Period.ofYears(1)
+    ).foreach { case ((period, num), expected) =>
+      checkEvaluation(MultiplyYMInterval(Literal(period), Literal(num)), expected)
+    }
+
+    Seq(
+      (Period.ofMonths(2), Int.MaxValue) -> "overflow",
+      (Period.ofMonths(Int.MinValue), 10d) -> "not in range",
+      (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN",
+      (Period.ofMonths(200), Double.PositiveInfinity) -> "input is infinite or NaN",
+      (Period.ofMonths(-200), Float.NegativeInfinity) -> "input is infinite or NaN"
+    ).foreach { case ((period, num), expectedErrMsg) =>
+      checkExceptionInExpression[ArithmeticException](
+        MultiplyYMInterval(Literal(period), Literal(num)),
+        expectedErrMsg)
+    }
+
+    numericTypes.foreach { numType =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (interval: Expression, num: Expression) => MultiplyYMInterval(interval, num),
+        YearMonthIntervalType, numType)
+    }
+  }
+
+  test("SPARK-34850: multiply day-time interval by numeric") {
+    Seq(
+      (Duration.ofHours(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
+      (Duration.ofMinutes(0), 10) -> Duration.ofMinutes(0),
+      (Duration.ofSeconds(10), 0L) -> Duration.ofSeconds(0),
+      (Duration.ofMillis(100), -1.toByte) -> Duration.ofMillis(-100),
+      (Duration.ofDays(12), 0.3d) -> Duration.ofDays(12).multipliedBy(3).dividedBy(10),
+      (Duration.of(-1000, ChronoUnit.MICROS), 0.3f) -> Duration.of(-300, ChronoUnit.MICROS),
+      (Duration.ofDays(9999), 0.0001d) -> Duration.ofDays(9999).dividedBy(10000),
+      (Duration.ofDays(9999), BigDecimal(0.0001)) -> Duration.ofDays(9999).dividedBy(10000)
+    ).foreach { case ((duration, num), expected) =>
+      checkEvaluation(MultiplyDTInterval(Literal(duration), Literal(num)), expected)
+    }
+
+    Seq(
+      (Duration.ofDays(-100), Float.NaN) -> "input is infinite or NaN",
+      (Duration.ofDays(2), Int.MaxValue) -> "overflow",
+      (Duration.ofHours(Int.MinValue), Short.MinValue) -> "overflow",
+      (Duration.ofDays(10), BigDecimal(Long.MinValue)) -> "Overflow",
+      (Duration.ofDays(200), Double.PositiveInfinity) -> "input is infinite or NaN",
+      (Duration.ofDays(-200), Float.NegativeInfinity) -> "input is infinite or NaN"
+    ).foreach { case ((duration, num), expectedErrMsg) =>
+      checkExceptionInExpression[ArithmeticException](
+        MultiplyDTInterval(Literal(duration), Literal(num)), expectedErrMsg)
+    }
+
+    numericTypes.foreach { numType =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (interval: Expression, num: Expression) => MultiplyDTInterval(interval, num),
+        DayTimeIntervalType, numType)
     }
   }
 }

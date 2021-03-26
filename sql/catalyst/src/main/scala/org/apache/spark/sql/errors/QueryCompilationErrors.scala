@@ -21,13 +21,13 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
-import org.apache.spark.sql.connector.catalog.{TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, Table, TableCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -35,8 +35,9 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StructField, StructType}
 
 /**
- * Object for grouping all error messages of the query compilation.
- * Currently it includes all AnalysisExceptions.
+ * Object for grouping error messages from exceptions thrown during query compilation.
+ * As commands are executed eagerly, this also includes errors thrown during the execution of
+ * commands, which users can see immediately.
  */
 private[spark] object QueryCompilationErrors {
 
@@ -744,6 +745,205 @@ private[spark] object QueryCompilationErrors {
       "Use sparkSession.udf.register(...) instead.")
   }
 
+  def batchWriteCapabilityError(
+      table: Table, v2WriteClassName: String, v1WriteClassName: String): Throwable = {
+    new AnalysisException(
+      s"Table ${table.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
+        s"$v2WriteClassName is not an instance of $v1WriteClassName")
+  }
+
+  def unsupportedDeleteByConditionWithSubqueryError(condition: Option[Expression]): Throwable = {
+    new AnalysisException(
+      s"Delete by condition with subquery is not supported: $condition")
+  }
+
+  def cannotTranslateExpressionToSourceFilterError(f: Expression): Throwable = {
+    new AnalysisException("Exec update failed:" +
+      s" cannot translate expression to source filter: $f")
+  }
+
+  def cannotDeleteTableWhereFiltersError(table: Table, filters: Array[Filter]): Throwable = {
+    new AnalysisException(
+      s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
+  }
+
+  def deleteOnlySupportedWithV2TablesError(): Throwable = {
+    new AnalysisException("DELETE is only supported with v2 tables.")
+  }
+
+  def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
+    new AnalysisException("DESCRIBE does not support partition for v2 tables.")
+  }
+
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier)
+  }
+
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier, cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier, cause)
+  }
+
+  def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
+    new AnalysisException(s"Table ${table.name} does not support $cmd.")
+  }
+
+  def unsupportedBatchReadError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "batch scan")
+  }
+
+  def unsupportedMicroBatchOrContinuousScanError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "either micro-batch or continuous scan")
+  }
+
+  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "append in batch mode")
+  }
+
+  def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "dynamic overwrite in batch mode")
+  }
+
+  def unsupportedTruncateInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "truncate in batch mode")
+  }
+
+  def unsupportedOverwriteByFilterInBatchModeError(table: Table): Throwable = {
+    unsupportedTableOperationError(table, "overwrite by filter in batch mode")
+  }
+
+  def streamingSourcesDoNotSupportCommonExecutionModeError(
+      microBatchSources: Seq[String],
+      continuousSources: Seq[String]): Throwable = {
+    new AnalysisException(
+      "The streaming sources in a query do not have a common supported execution mode.\n" +
+        "Sources support micro-batch: " + microBatchSources.mkString(", ") + "\n" +
+        "Sources support continuous: " + continuousSources.mkString(", "))
+  }
+
+  def noSuchTableError(ident: Identifier): Throwable = {
+    new NoSuchTableException(ident)
+  }
+
+  def noSuchNamespaceError(namespace: Array[String]): Throwable = {
+    new NoSuchNamespaceException(namespace)
+  }
+
+  def tableAlreadyExistsError(ident: Identifier): Throwable = {
+    new TableAlreadyExistsException(ident)
+  }
+
+  def requiresSinglePartNamespaceError(ident: Identifier): Throwable = {
+    new NoSuchTableException(
+      s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
+  }
+
+  def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
+    new NamespaceAlreadyExistsException(namespace)
+  }
+
+  private def notSupportedInJDBCCatalog(cmd: String): Throwable = {
+    new AnalysisException(s"$cmd is not supported in JDBC catalog.")
+  }
+
+  def cannotCreateJDBCTableUsingProviderError(): Throwable = {
+    notSupportedInJDBCCatalog("CREATE TABLE ... USING ...")
+  }
+
+  def cannotCreateJDBCTableUsingLocationError(): Throwable = {
+    notSupportedInJDBCCatalog("CREATE TABLE ... LOCATION ...")
+  }
+
+  def cannotCreateJDBCNamespaceUsingProviderError(): Throwable = {
+    notSupportedInJDBCCatalog("CREATE NAMESPACE ... LOCATION ...")
+  }
+
+  def cannotCreateJDBCNamespaceWithPropertyError(k: String): Throwable = {
+    notSupportedInJDBCCatalog(s"CREATE NAMESPACE with property $k")
+  }
+
+  def cannotSetJDBCNamespaceWithPropertyError(k: String): Throwable = {
+    notSupportedInJDBCCatalog(s"SET NAMESPACE with property $k")
+  }
+
+  def cannotUnsetJDBCNamespaceWithPropertyError(k: String): Throwable = {
+    notSupportedInJDBCCatalog(s"Remove NAMESPACE property $k")
+  }
+
+  def unsupportedJDBCNamespaceChangeInCatalogError(changes: Seq[NamespaceChange]): Throwable = {
+    new AnalysisException(s"Unsupported NamespaceChange $changes in JDBC catalog.")
+  }
+
+  private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
+    new AnalysisException(s"Table does not support $cmd: ${table.name}")
+  }
+
+  def tableDoesNotSupportReadsError(table: Table): Throwable = {
+    tableDoesNotSupportError("reads", table)
+  }
+
+  def tableDoesNotSupportWritesError(table: Table): Throwable = {
+    tableDoesNotSupportError("writes", table)
+  }
+
+  def tableDoesNotSupportDeletesError(table: Table): Throwable = {
+    tableDoesNotSupportError("deletes", table)
+  }
+
+  def tableDoesNotSupportTruncatesError(table: Table): Throwable = {
+    tableDoesNotSupportError("truncates", table)
+  }
+
+  def tableDoesNotSupportPartitionManagementError(table: Table): Throwable = {
+    tableDoesNotSupportError("partition management", table)
+  }
+
+  def tableDoesNotSupportAtomicPartitionManagementError(table: Table): Throwable = {
+    tableDoesNotSupportError("atomic partition management", table)
+  }
+
+  def cannotRenameTableWithAlterViewError(): Throwable = {
+    new AnalysisException(
+      "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
+  }
+
+  private def notSupportedForV2TablesError(cmd: String): Throwable = {
+    new AnalysisException(s"$cmd is not supported for v2 tables.")
+  }
+
+  def analyzeTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ANALYZE TABLE")
+  }
+
+  def alterTableRecoverPartitionsNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ALTER TABLE ... RECOVER PARTITIONS")
+  }
+
+  def alterTableSerDePropertiesNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+  }
+
+  def loadDataNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("LOAD DATA")
+  }
+
+  def showCreateTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW CREATE TABLE")
+  }
+
+  def truncateTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("TRUNCATE TABLE")
+  }
+
+  def showColumnsNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW COLUMNS")
+  }
+
+  def repairTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("MSCK REPAIR TABLE")
+  }
+
   def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
     new AnalysisException("Database from v1 session catalog is not specified")
   }
@@ -1086,5 +1286,15 @@ private[spark] object QueryCompilationErrors {
 
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
     new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
+  }
+
+  def incompatibleViewSchemaChange(
+      viewName: String,
+      colName: String,
+      expectedNum: Int,
+      actualCols: Seq[Attribute]): Throwable = {
+    new AnalysisException(s"The SQL query of view $viewName has an incompatible schema change " +
+      s"and column $colName cannot be resolved. Expected $expectedNum columns named $colName but " +
+      s"got ${actualCols.map(_.name).mkString("[", ",", "]")}")
   }
 }

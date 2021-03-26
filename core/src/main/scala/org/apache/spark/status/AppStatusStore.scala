@@ -113,10 +113,15 @@ private[spark] class AppStatusStore(
     }
   }
 
-  def stageData(stageId: Int, details: Boolean = false): Seq[v1.StageData] = {
+  def stageData(
+    stageId: Int,
+    details: Boolean = false,
+    withSummaries: Boolean = false,
+    unsortedQuantiles: Array[Double] = Array.empty[Double]): Seq[v1.StageData] = {
     store.view(classOf[StageDataWrapper]).index("stageId").first(stageId).last(stageId)
       .asScala.map { s =>
-        if (details) stageWithDetails(s.info) else s.info
+        newStageData(s.info, withDetail = details, withSummaries = withSummaries,
+          unsortedQuantiles = unsortedQuantiles)
       }.toSeq
   }
 
@@ -138,11 +143,15 @@ private[spark] class AppStatusStore(
     }
   }
 
-  def stageAttempt(stageId: Int, stageAttemptId: Int,
-      details: Boolean = false): (v1.StageData, Seq[Int]) = {
+  def stageAttempt(
+      stageId: Int, stageAttemptId: Int,
+      details: Boolean = false,
+      withSummaries: Boolean = false,
+      unsortedQuantiles: Array[Double] = Array.empty[Double]): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
     val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
-    val stage = if (details) stageWithDetails(stageDataWrapper.info) else stageDataWrapper.info
+    val stage = newStageData(stageDataWrapper.info, withDetail = details,
+      withSummaries = withSummaries, unsortedQuantiles = unsortedQuantiles)
     (stage, stageDataWrapper.jobIds.toSeq)
   }
 
@@ -453,61 +462,138 @@ private[spark] class AppStatusStore(
     }
   }
 
-  private def stageWithDetails(stage: v1.StageData): v1.StageData = {
-    val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
-      .map { t => (t.taskId, t) }
-      .toMap
+  def newStageData(
+    stage: v1.StageData,
+    withDetail: Boolean = false,
+    withSummaries: Boolean = false,
+    unsortedQuantiles: Array[Double] = Array.empty[Double]): v1.StageData = {
+    if (!withDetail && !withSummaries) {
+      stage
+    } else {
+      val quantiles = unsortedQuantiles.sorted
+      val tasks: Option[Map[Long, v1.TaskData]] = if (withDetail) {
+        val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
+          .map { t => (t.taskId, t) }
+          .toMap
+        Some(tasks)
+      } else {
+        None
+      }
+      val executorSummaries: Option[Map[String, v1.ExecutorStageSummary]] = if (withDetail) {
+        Some(executorSummary(stage.stageId, stage.attemptId))
+      } else {
+        None
+      }
+      val taskMetricsDistribution: Option[v1.TaskMetricDistributions] = if (withSummaries) {
+        taskSummary(stage.stageId, stage.attemptId, quantiles)
+      } else {
+        None
+      }
+      val executorMetricsDistributions: Option[v1.ExecutorMetricsDistributions] =
+        if (withSummaries) {
+          stageExecutorSummary(stage.stageId, stage.attemptId, quantiles)
+        } else {
+          None
+        }
 
-    new v1.StageData(
-      status = stage.status,
-      stageId = stage.stageId,
-      attemptId = stage.attemptId,
-      numTasks = stage.numTasks,
-      numActiveTasks = stage.numActiveTasks,
-      numCompleteTasks = stage.numCompleteTasks,
-      numFailedTasks = stage.numFailedTasks,
-      numKilledTasks = stage.numKilledTasks,
-      numCompletedIndices = stage.numCompletedIndices,
-      submissionTime = stage.submissionTime,
-      firstTaskLaunchedTime = stage.firstTaskLaunchedTime,
-      completionTime = stage.completionTime,
-      failureReason = stage.failureReason,
-      executorDeserializeTime = stage.executorDeserializeTime,
-      executorDeserializeCpuTime = stage.executorDeserializeCpuTime,
-      executorRunTime = stage.executorRunTime,
-      executorCpuTime = stage.executorCpuTime,
-      resultSize = stage.resultSize,
-      jvmGcTime = stage.jvmGcTime,
-      resultSerializationTime = stage.resultSerializationTime,
-      memoryBytesSpilled = stage.memoryBytesSpilled,
-      diskBytesSpilled = stage.diskBytesSpilled,
-      peakExecutionMemory = stage.peakExecutionMemory,
-      inputBytes = stage.inputBytes,
-      inputRecords = stage.inputRecords,
-      outputBytes = stage.outputBytes,
-      outputRecords = stage.outputRecords,
-      shuffleRemoteBlocksFetched = stage.shuffleRemoteBlocksFetched,
-      shuffleLocalBlocksFetched = stage.shuffleLocalBlocksFetched,
-      shuffleFetchWaitTime = stage.shuffleFetchWaitTime,
-      shuffleRemoteBytesRead = stage.shuffleRemoteBytesRead,
-      shuffleRemoteBytesReadToDisk = stage.shuffleRemoteBytesReadToDisk,
-      shuffleLocalBytesRead = stage.shuffleLocalBytesRead,
-      shuffleReadBytes = stage.shuffleReadBytes,
-      shuffleReadRecords = stage.shuffleReadRecords,
-      shuffleWriteBytes = stage.shuffleWriteBytes,
-      shuffleWriteTime = stage.shuffleWriteTime,
-      shuffleWriteRecords = stage.shuffleWriteRecords,
-      name = stage.name,
-      description = stage.description,
-      details = stage.details,
-      schedulingPool = stage.schedulingPool,
-      rddIds = stage.rddIds,
-      accumulatorUpdates = stage.accumulatorUpdates,
-      tasks = Some(tasks),
-      executorSummary = Some(executorSummary(stage.stageId, stage.attemptId)),
-      killedTasksSummary = stage.killedTasksSummary,
-      resourceProfileId = stage.resourceProfileId,
-      peakExecutorMetrics = stage.peakExecutorMetrics)
+      new v1.StageData(
+        status = stage.status,
+        stageId = stage.stageId,
+        attemptId = stage.attemptId,
+        numTasks = stage.numTasks,
+        numActiveTasks = stage.numActiveTasks,
+        numCompleteTasks = stage.numCompleteTasks,
+        numFailedTasks = stage.numFailedTasks,
+        numKilledTasks = stage.numKilledTasks,
+        numCompletedIndices = stage.numCompletedIndices,
+        submissionTime = stage.submissionTime,
+        firstTaskLaunchedTime = stage.firstTaskLaunchedTime,
+        completionTime = stage.completionTime,
+        failureReason = stage.failureReason,
+        executorDeserializeTime = stage.executorDeserializeTime,
+        executorDeserializeCpuTime = stage.executorDeserializeCpuTime,
+        executorRunTime = stage.executorRunTime,
+        executorCpuTime = stage.executorCpuTime,
+        resultSize = stage.resultSize,
+        jvmGcTime = stage.jvmGcTime,
+        resultSerializationTime = stage.resultSerializationTime,
+        memoryBytesSpilled = stage.memoryBytesSpilled,
+        diskBytesSpilled = stage.diskBytesSpilled,
+        peakExecutionMemory = stage.peakExecutionMemory,
+        inputBytes = stage.inputBytes,
+        inputRecords = stage.inputRecords,
+        outputBytes = stage.outputBytes,
+        outputRecords = stage.outputRecords,
+        shuffleRemoteBlocksFetched = stage.shuffleRemoteBlocksFetched,
+        shuffleLocalBlocksFetched = stage.shuffleLocalBlocksFetched,
+        shuffleFetchWaitTime = stage.shuffleFetchWaitTime,
+        shuffleRemoteBytesRead = stage.shuffleRemoteBytesRead,
+        shuffleRemoteBytesReadToDisk = stage.shuffleRemoteBytesReadToDisk,
+        shuffleLocalBytesRead = stage.shuffleLocalBytesRead,
+        shuffleReadBytes = stage.shuffleReadBytes,
+        shuffleReadRecords = stage.shuffleReadRecords,
+        shuffleWriteBytes = stage.shuffleWriteBytes,
+        shuffleWriteTime = stage.shuffleWriteTime,
+        shuffleWriteRecords = stage.shuffleWriteRecords,
+        name = stage.name,
+        description = stage.description,
+        details = stage.details,
+        schedulingPool = stage.schedulingPool,
+        rddIds = stage.rddIds,
+        accumulatorUpdates = stage.accumulatorUpdates,
+        tasks = tasks,
+        executorSummary = executorSummaries,
+        killedTasksSummary = stage.killedTasksSummary,
+        resourceProfileId = stage.resourceProfileId,
+        peakExecutorMetrics = stage.peakExecutorMetrics,
+        taskMetricsDistributions = taskMetricsDistribution,
+        executorMetricsDistributions = executorMetricsDistributions)
+    }
+  }
+
+  def stageExecutorSummary(
+    stageId: Int,
+    stageAttemptId: Int,
+    unsortedQuantiles: Array[Double]): Option[v1.ExecutorMetricsDistributions] = {
+    val quantiles = unsortedQuantiles.sorted
+    val summary = executorSummary(stageId, stageAttemptId)
+    if (summary.isEmpty) {
+      None
+    } else {
+      val values = summary.values.toIndexedSeq
+      Some(new v1.ExecutorMetricsDistributions(
+        quantiles = quantiles,
+        taskTime = getQuantilesValue(values.map(_.taskTime.toDouble).sorted, quantiles),
+        failedTasks = getQuantilesValue(values.map(_.failedTasks.toDouble).sorted, quantiles),
+        succeededTasks = getQuantilesValue(values.map(_.succeededTasks.toDouble).sorted, quantiles),
+        killedTasks = getQuantilesValue(values.map(_.killedTasks.toDouble).sorted, quantiles),
+        inputBytes = getQuantilesValue(values.map(_.inputBytes.toDouble).sorted, quantiles),
+        inputRecords = getQuantilesValue(values.map(_.inputRecords.toDouble).sorted, quantiles),
+        outputBytes = getQuantilesValue(values.map(_.outputBytes.toDouble).sorted, quantiles),
+        outputRecords = getQuantilesValue(values.map(_.outputRecords.toDouble).sorted, quantiles),
+        shuffleRead = getQuantilesValue(values.map(_.shuffleRead.toDouble).sorted, quantiles),
+        shuffleReadRecords =
+          getQuantilesValue(values.map(_.shuffleReadRecords.toDouble).sorted, quantiles),
+        shuffleWrite = getQuantilesValue(values.map(_.shuffleWrite.toDouble).sorted, quantiles),
+        shuffleWriteRecords =
+          getQuantilesValue(values.map(_.shuffleWriteRecords.toDouble).sorted, quantiles),
+        memoryBytesSpilled =
+          getQuantilesValue(values.map(_.memoryBytesSpilled.toDouble).sorted, quantiles),
+        diskBytesSpilled =
+          getQuantilesValue(values.map(_.diskBytesSpilled.toDouble).sorted, quantiles),
+        peakMemoryMetrics =
+          new v1.ExecutorPeakMetricsDistributions(quantiles,
+            values.flatMap(_.peakMemoryMetrics))
+      ))
+    }
+  }
+
+  def getQuantilesValue(
+    values: IndexedSeq[Double],
+    quantiles: Array[Double]): IndexedSeq[Double] = {
+    val count = values.size
+    val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
+    indices.map(i => values(i.toInt)).toIndexedSeq
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {

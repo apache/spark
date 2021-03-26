@@ -203,6 +203,41 @@ public final class VectorizedRleValuesReader extends ValuesReader
     }
   }
 
+  // A fork of `readIntegers`, reading the signed integers as unsigned in long type
+  public void readUnsignedIntegers(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      int level,
+      VectorizedValuesReader data) throws IOException {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readUnsignedIntegers(n, c, rowId);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putLong(rowId + i, Integer.toUnsignedLong(data.readInteger()));
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
   // A fork of `readIntegers`, which rebases the date int value (days) before filling
   // the Spark column vector.
   public void readIntegersWithRebase(
@@ -600,6 +635,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       left -= n;
       currentCount -= n;
     }
+  }
+
+  @Override
+  public void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
   }
 
   @Override
