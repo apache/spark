@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import java.math.RoundingMode
 import java.util.Locale
 
-import com.google.common.math.DoubleMath
+import com.google.common.math.{DoubleMath, IntMath, LongMath}
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -340,4 +340,54 @@ case class MultiplyDTInterval(
   }
 
   override def toString: String = s"($left * $right)"
+}
+
+// Divide an year-month interval by a numeric
+case class DivideYMInterval(
+    interval: Expression,
+    num: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  override def left: Expression = interval
+  override def right: Expression = num
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
+  override def dataType: DataType = YearMonthIntervalType
+
+  @transient
+  private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
+    case LongType => (months: Int, num) =>
+      LongMath.divide(months, num.asInstanceOf[Long], RoundingMode.HALF_UP).toInt
+    case _: IntegralType => (months: Int, num) =>
+      IntMath.divide(months, num.asInstanceOf[Number].intValue(), RoundingMode.HALF_UP)
+    case _: DecimalType => (months: Int, num) =>
+      val decimalRes = ((new Decimal).set(months) / num.asInstanceOf[Decimal]).toJavaBigDecimal
+      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
+    case _: FractionalType => (months: Int, num) =>
+      DoubleMath.roundToInt(months / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
+  }
+
+  override def nullSafeEval(interval: Any, num: Any): Any = {
+    evalFunc(interval.asInstanceOf[Int], num)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
+    case LongType =>
+      val math = classOf[LongMath].getName
+      val javaType = CodeGenerator.javaType(dataType)
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"($javaType)($math.divide($m, $n, java.math.RoundingMode.HALF_UP))")
+    case _: IntegralType =>
+      val math = classOf[IntMath].getName
+      defineCodeGen(ctx, ev, (m, n) => s"$math.divide($m, $n, java.math.RoundingMode.HALF_UP)")
+    case _: DecimalType =>
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
+        ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
+    case _: FractionalType =>
+      val math = classOf[DoubleMath].getName
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"$math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP)")
+  }
+
+  override def toString: String = s"($left / $right)"
 }
