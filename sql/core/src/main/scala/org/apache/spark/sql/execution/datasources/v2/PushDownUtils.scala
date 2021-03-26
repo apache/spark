@@ -20,11 +20,13 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.Aggregation
 import org.apache.spark.sql.types.StructType
 
 object PushDownUtils extends PredicateHelper {
@@ -67,6 +69,43 @@ object PushDownUtils extends PredicateHelper {
         (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
 
       case _ => (Nil, filters)
+    }
+  }
+
+  /**
+   * Pushes down aggregates to the data source reader
+   *
+   * @return pushed aggregation.
+   */
+  def pushAggregates(
+      scanBuilder: ScanBuilder,
+      aggregates: Seq[AggregateExpression],
+      groupBy: Seq[Expression]): Aggregation = {
+
+    def columnAsString(e: Expression): String = e match {
+      case AttributeReference(name, _, _, _) => name
+      case _ => ""
+    }
+
+    scanBuilder match {
+      case r: SupportsPushDownAggregates =>
+        val translatedAggregates = mutable.ArrayBuffer.empty[sources.AggregateFunc]
+
+        for (aggregateExpr <- aggregates) {
+          val translated = DataSourceStrategy.translateAggregate(aggregateExpr)
+          if (translated.isEmpty) {
+            return Aggregation.empty
+          } else {
+            translatedAggregates += translated.get
+          }
+        }
+        val groupByCols = groupBy.map(columnAsString(_))
+        if (!groupByCols.exists(_.isEmpty)) {
+          r.pushAggregation(Aggregation(translatedAggregates, groupByCols))
+        }
+        r.pushedAggregation
+
+      case _ => Aggregation.empty
     }
   }
 

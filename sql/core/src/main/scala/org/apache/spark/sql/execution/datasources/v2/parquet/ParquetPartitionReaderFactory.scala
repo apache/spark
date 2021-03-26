@@ -39,8 +39,8 @@ import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
-import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.sources.{Aggregation, Count, Filter, Max, Min}
+import org.apache.spark.sql.types.{AtomicType, LongType, StructField, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.SerializableConfiguration
 
@@ -53,6 +53,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param readDataSchema Required schema of Parquet files.
  * @param partitionSchema Schema of partitions.
  * @param filters Filters to be pushed down in the batch scan.
+ * @param aggregation Aggregation to be pushed down in the batch scan.
  * @param parquetOptions The options of Parquet datasource that are set for the read.
  */
 case class ParquetPartitionReaderFactory(
@@ -62,9 +63,16 @@ case class ParquetPartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType,
     filters: Array[Filter],
+    aggregation: Aggregation,
     parquetOptions: ParquetOptions) extends FilePartitionReaderFactory with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-  private val resultSchema = StructType(partitionSchema.fields ++ readDataSchema.fields)
+  private val aggSchema = buildAggSchema
+  private val newReadDataSchema = if (aggregation.aggregateExpressions.isEmpty) {
+    readDataSchema
+  } else {
+    aggSchema
+  }
+  private val resultSchema = StructType(partitionSchema.fields ++ newReadDataSchema.fields)
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
   private val enableVectorizedReader: Boolean = sqlConf.parquetVectorizedReaderEnabled &&
     resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
@@ -80,6 +88,31 @@ case class ParquetPartitionReaderFactory(
   private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
 
+  private def buildAggSchema: StructType = {
+    var aggSchema = new StructType()
+    for (i <- 0 until aggregation.aggregateExpressions.size) {
+      var index = 0
+      aggregation.aggregateExpressions(i) match {
+        case Max(col, _) =>
+          index = dataSchema.fieldNames.toList.indexOf(col)
+          val field = dataSchema.fields(index)
+          aggSchema = aggSchema.add(field.copy("max(" + field.name + ")"))
+        case Min(col, _) =>
+          index = dataSchema.fieldNames.toList.indexOf(col)
+          val field = dataSchema.fields(index)
+          aggSchema = aggSchema.add(field.copy("min(" + field.name + ")"))
+        case Count(col, _, _) =>
+          if (col.equals("1")) {
+            aggSchema = aggSchema.add(new StructField("count(*)", LongType))
+          } else {
+            aggSchema = aggSchema.add(new StructField("count(" + col + ")", LongType))
+          }
+        case _ =>
+      }
+    }
+    aggSchema
+  }
+
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.parquetVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
       resultSchema.length <= sqlConf.wholeStageMaxNumFields &&
@@ -87,36 +120,83 @@ case class ParquetPartitionReaderFactory(
   }
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
-    val reader = if (enableVectorizedReader) {
-      createVectorizedReader(file)
+    val fileReader = if (aggregation.aggregateExpressions.isEmpty) {
+
+      val reader = if (enableVectorizedReader) {
+        createVectorizedReader(file)
+      } else {
+        createRowBaseReader(file)
+      }
+
+      new PartitionReader[InternalRow] {
+        override def next(): Boolean = reader.nextKeyValue()
+
+        override def get(): InternalRow = reader.getCurrentValue.asInstanceOf[InternalRow]
+
+        override def close(): Unit = reader.close()
+      }
     } else {
-      createRowBaseReader(file)
+      new PartitionReader[InternalRow] {
+        var count = 0
+
+        override def next(): Boolean = {
+          val hasNext = if (count == 0) true else false
+          count += 1
+          hasNext
+        }
+
+        override def get(): InternalRow = {
+          val conf = broadcastedConf.value.value
+          val filePath = new Path(new URI(file.filePath))
+          val (parquetTypes, values) =
+            ParquetUtils.getPushedDownAggResult(conf, filePath, dataSchema, aggregation)
+          ParquetUtils.aggResultToSparkInternalRows(parquetTypes, values, aggSchema)
+        }
+
+        override def close(): Unit = return
+      }
     }
 
-    val fileReader = new PartitionReader[InternalRow] {
-      override def next(): Boolean = reader.nextKeyValue()
-
-      override def get(): InternalRow = reader.getCurrentValue.asInstanceOf[InternalRow]
-
-      override def close(): Unit = reader.close()
-    }
-
-    new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
+    new PartitionReaderWithPartitionValues(fileReader, newReadDataSchema,
       partitionSchema, file.partitionValues)
   }
 
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
-    val vectorizedReader = createVectorizedReader(file)
-    vectorizedReader.enableReturningBatches()
+    val fileReader = if (aggregation.aggregateExpressions.isEmpty) {
+      val vectorizedReader = createVectorizedReader(file)
+      vectorizedReader.enableReturningBatches()
 
-    new PartitionReader[ColumnarBatch] {
-      override def next(): Boolean = vectorizedReader.nextKeyValue()
+      new PartitionReader[ColumnarBatch] {
+        override def next(): Boolean = vectorizedReader.nextKeyValue()
 
-      override def get(): ColumnarBatch =
-        vectorizedReader.getCurrentValue.asInstanceOf[ColumnarBatch]
+        override def get(): ColumnarBatch =
+          vectorizedReader.getCurrentValue.asInstanceOf[ColumnarBatch]
 
-      override def close(): Unit = vectorizedReader.close()
+        override def close(): Unit = vectorizedReader.close()
+      }
+    } else {
+      new PartitionReader[ColumnarBatch] {
+        var count = 0
+
+        override def next(): Boolean = {
+          val hasNext = if (count == 0) true else false
+          count += 1
+          hasNext
+        }
+
+        override def get(): ColumnarBatch = {
+          val conf = broadcastedConf.value.value
+          val filePath = new Path(new URI(file.filePath))
+          val (parquetTypes, values) =
+            ParquetUtils.getPushedDownAggResult(conf, filePath, dataSchema, aggregation)
+          ParquetUtils.aggResultToSparkColumnarBatch(parquetTypes, values, aggSchema,
+            enableOffHeapColumnVector)
+        }
+
+        override def close(): Unit = return
+      }
     }
+    fileReader
   }
 
   private def buildReaderBase[T](

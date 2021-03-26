@@ -50,6 +50,54 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("test aggregate pushdown") {
+    spark.conf.set(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key, "true")
+    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
+      (9, "mno", 7), (2, null, 6))
+    spark.createDataFrame(data).toDF("c1", "c2", "c3").createOrReplaceTempView("tmp")
+    withParquetTable(data, "t") {
+      sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
+      val selectAgg = sql("SELECT min(_3), min(_3), max(_3), min(_1), max(_1), max(_1)," +
+        " count(*), count(_1), count(_2), count(_3) FROM t")
+      // selectAgg.explain(true)
+      // scalastyle:off line.size.limit
+      // == Parsed Logical Plan ==
+      // 'Project [unresolvedalias('min('_3), None), unresolvedalias('min('_3), None), unresolvedalias('max('_3), None), unresolvedalias('min('_1), None), unresolvedalias('max('_1), None), unresolvedalias('max('_1), None), unresolvedalias('count(1), None), unresolvedalias('count('_1), None), unresolvedalias('count('_2), None), unresolvedalias('count('_3), None)]
+      // +- 'UnresolvedRelation [t], [], false
+      //
+      // == Analyzed Logical Plan ==
+      // min(_3): int, min(_3): int, max(_3): int, min(_1): int, max(_1): int, max(_1): int, count(1): bigint, count(_1): bigint, count(_2): bigint, count(_3): bigint
+      // Aggregate [min(_3#23) AS min(_3)#43, min(_3#23) AS min(_3)#44, max(_3#23) AS max(_3)#45, min(_1#21) AS min(_1)#46, max(_1#21) AS max(_1)#47, max(_1#21) AS max(_1)#48, count(1) AS count(1)#49L, count(_1#21) AS count(_1)#50L, count(_2#22) AS count(_2)#51L, count(_3#23) AS count(_3)#52L]
+      // +- SubqueryAlias t
+      // +- View (`t`, [_1#21,_2#22,_3#23])
+      // +- RelationV2[_1#21, _2#22, _3#23] parquet file:/private/var/folders/hm/dghdj3hn791fd9bfmwnl12km0000gn/T/spark-6609ad86-7ff5-4f83-96e2-fea5f2c85646
+      //
+      // == Optimized Logical Plan ==
+      // Aggregate [min(Min(_3,IntegerType)#66) AS min(_3)#43, min(Min(_3,IntegerType)#67) AS min(_3)#44, max(Max(_3,IntegerType)#68) AS max(_3)#45, min(Min(_1,IntegerType)#69) AS min(_1)#46, max(Max(_1,IntegerType)#70) AS max(_1)#47, max(Max(_1,IntegerType)#71) AS max(_1)#48, count(Count(1,LongType,false)#72L) AS count(1)#49L, count(Count(_1,LongType,false)#73L) AS count(_1)#50L, count(Count(_2,LongType,false)#74L) AS count(_2)#51L, count(Count(_3,LongType,false)#75L) AS count(_3)#52L]
+      // +- RelationV2[Min(_3,IntegerType)#66, Min(_3,IntegerType)#67, Max(_3,IntegerType)#68, Min(_1,IntegerType)#69, Max(_1,IntegerType)#70, Max(_1,IntegerType)#71, Count(1,LongType,false)#72L, Count(_1,LongType,false)#73L, Count(_2,LongType,false)#74L, Count(_3,LongType,false)#75L] parquet file:/private/var/folders/hm/dghdj3hn791fd9bfmwnl12km0000gn/T/spark-6609ad86-7ff5-4f83-96e2-fea5f2c85646
+      //
+      // == Physical Plan ==
+      //   AdaptiveSparkPlan isFinalPlan=false
+      // +- HashAggregate(keys=[], functions=[min(Min(_3,IntegerType)#66), min(Min(_3,IntegerType)#67), max(Max(_3,IntegerType)#68), min(Min(_1,IntegerType)#69), max(Max(_1,IntegerType)#70), max(Max(_1,IntegerType)#71), count(Count(1,LongType,false)#72L), count(Count(_1,LongType,false)#73L), count(Count(_2,LongType,false)#74L), count(Count(_3,LongType,false)#75L)], output=[min(_3)#43, min(_3)#44, max(_3)#45, min(_1)#46, max(_1)#47, max(_1)#48, count(1)#49L, count(_1)#50L, count(_2)#51L, count(_3)#52L])
+      // +- HashAggregate(keys=[], functions=[partial_min(Min(_3,IntegerType)#66), partial_min(Min(_3,IntegerType)#67), partial_max(Max(_3,IntegerType)#68), partial_min(Min(_1,IntegerType)#69), partial_max(Max(_1,IntegerType)#70), partial_max(Max(_1,IntegerType)#71), partial_count(Count(1,LongType,false)#72L), partial_count(Count(_1,LongType,false)#73L), partial_count(Count(_2,LongType,false)#74L), partial_count(Count(_3,LongType,false)#75L)], output=[min#86, min#87, max#88, min#89, max#90, max#91, count#92L, count#93L, count#94L, count#95L])
+      // +- Project [Min(_3,IntegerType)#66, Min(_3,IntegerType)#67, Max(_3,IntegerType)#68, Min(_1,IntegerType)#69, Max(_1,IntegerType)#70, Max(_1,IntegerType)#71, Count(1,LongType,false)#72L, Count(_1,LongType,false)#73L, Count(_2,LongType,false)#74L, Count(_3,LongType,false)#75L]
+      // +- BatchScan[Min(_3,IntegerType)#66, Min(_3,IntegerType)#67, Max(_3,IntegerType)#68, Min(_1,IntegerType)#69, Max(_1,IntegerType)#70, Max(_1,IntegerType)#71, Count(1,LongType,false)#72L, Count(_1,LongType,false)#73L, Count(_2,LongType,false)#74L, Count(_3,LongType,false)#75L] ParquetScan DataFilters: [], Format: parquet, Location: InMemoryFileIndex(1 paths)[file:/private/var/folders/hm/dghdj3hn791fd9bfmwnl12km0000gn/T/spark-66..., PartitionFilters: [], PushedFilters: [], ReadSchema: struct<_1:int,_2:string,_3:int>, PushedFilters: []
+      // scalastyle:on line.size.limit
+
+      // selectAgg.show()
+      // +-------+-------+-------+-------+-------+-------+--------+---------+---------+---------+
+      // |min(_3)|min(_3)|max(_3)|min(_1)|max(_1)|max(_1)|count(1)|count(_1)|count(_2)|count(_3)|
+      // +-------+-------+-------+-------+-------+-------+--------+---------+---------+---------+
+      // |      2|      2|     19|     -2|      9|      9|       6|        6|        4|        6|
+      // +-------+-------+-------+-------+-------+-------+--------+---------+---------+---------+
+
+      checkAnswer(selectAgg, Seq(Row(2, 2, 19, -2, 9, 9, 6, 6, 4, 6)))
+    }
+    spark.sessionState.catalog.dropTable(
+      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
+    spark.conf.unset(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key)
+  }
+
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
     spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")

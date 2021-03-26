@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.datasources.v2.parquet
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
+import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.{Aggregation, Count, Filter, Min, Max}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -34,7 +34,8 @@ case class ParquetScanBuilder(
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters
+    with SupportsPushDownAggregates {
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -70,8 +71,32 @@ case class ParquetScanBuilder(
   // All filters that can be converted to Parquet are pushed down.
   override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
+  private var pushedAggregations = Aggregation.empty
+
+  override def pushAggregation(aggregation: Aggregation): Unit = {
+    if (!sparkSession.sessionState.conf.parquetAggregatePushDown ||
+      aggregation.groupByExpressions.nonEmpty) {
+      Aggregation.empty
+      return
+    }
+
+    aggregation.aggregateExpressions.foreach { agg =>
+      if (!agg.isInstanceOf[Max] && !agg.isInstanceOf[Min] && !agg.isInstanceOf[Count]) {
+        Aggregation.empty
+        return
+      } else if (agg.isInstanceOf[Count] && agg.asInstanceOf[Count].isDistinct) {
+        // parquet's statistics doesn't have distinct count info
+        Aggregation.empty
+        return
+      }
+    }
+    this.pushedAggregations = aggregation
+  }
+
+  override def pushedAggregation(): Aggregation = pushedAggregations
+
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
-      readPartitionSchema(), pushedParquetFilters, options)
+      readPartitionSchema(), pushedParquetFilters, pushedAggregations, options)
   }
 }

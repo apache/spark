@@ -16,11 +16,26 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuilder
+import scala.language.existentials
+
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileWriter
+import org.apache.parquet.hadoop.metadata.{ColumnChunkMetaData, ParquetMetadata}
+import org.apache.parquet.schema.PrimitiveType
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
+import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.sources.{Aggregation, Count, Max, Min}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 object ParquetUtils {
   def inferSchema(
@@ -126,5 +141,162 @@ object ParquetUtils {
   private def isSummaryFile(file: Path): Boolean = {
     file.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE ||
       file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
+  }
+
+  private[sql] def aggResultToSparkInternalRows(
+      parquetTypes: Seq[PrimitiveType.PrimitiveTypeName],
+      values: Seq[Any],
+      dataSchema: StructType): InternalRow = {
+    val mutableRow = new SpecificInternalRow(dataSchema.fields.map(x => x.dataType))
+
+    parquetTypes.zipWithIndex.map {
+      case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
+        mutableRow.setInt(i, values(i).asInstanceOf[Int])
+      case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
+        mutableRow.setLong(i, values(i).asInstanceOf[Long])
+      case (PrimitiveType.PrimitiveTypeName.INT96, i) =>
+        mutableRow.setLong(i, values(i).asInstanceOf[Long])
+      case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
+        mutableRow.setFloat(i, values(i).asInstanceOf[Float])
+      case (PrimitiveType.PrimitiveTypeName.DOUBLE, i) =>
+        mutableRow.setDouble(i, values(i).asInstanceOf[Double])
+      case (PrimitiveType.PrimitiveTypeName.BINARY, i) =>
+        mutableRow.update(i, values(i).asInstanceOf[Array[Byte]])
+      case (PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, i) =>
+        mutableRow.update(i, values(i).asInstanceOf[Array[Byte]])
+      case _ =>
+        throw new IllegalArgumentException("Unexpected parquet type name")
+    }
+    mutableRow
+  }
+
+  private[sql] def aggResultToSparkColumnarBatch(
+      parquetTypes: Seq[PrimitiveType.PrimitiveTypeName],
+      values: Seq[Any],
+      readDataSchema: StructType,
+      offHeap: Boolean): ColumnarBatch = {
+    val capacity = 4 * 1024
+    val columnVectors = if (offHeap) {
+      OffHeapColumnVector.allocateColumns(capacity, readDataSchema)
+    } else {
+      OnHeapColumnVector.allocateColumns(capacity, readDataSchema)
+    }
+
+    parquetTypes.zipWithIndex.map {
+      case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
+        columnVectors(i).appendInt(values(i).asInstanceOf[Int])
+      case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
+        columnVectors(i).appendLong(values(i).asInstanceOf[Long])
+      case (PrimitiveType.PrimitiveTypeName.INT96, i) =>
+        columnVectors(i).appendLong(values(i).asInstanceOf[Long])
+      case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
+        columnVectors(i).appendFloat(values(i).asInstanceOf[Float])
+      case (PrimitiveType.PrimitiveTypeName.DOUBLE, i) =>
+        columnVectors(i).appendDouble(values(i).asInstanceOf[Double])
+      case (PrimitiveType.PrimitiveTypeName.BINARY, i) =>
+        val byteArray = values(i).asInstanceOf[Array[Byte]]
+        columnVectors(i).appendBytes(byteArray.length, byteArray, 0)
+      case (PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, i) =>
+        val byteArray = values(i).asInstanceOf[Array[Byte]]
+        columnVectors(i).appendBytes(byteArray.length, byteArray, 0)
+      case _ =>
+        throw new IllegalArgumentException("Unexpected parquet type name")
+    }
+    new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)
+  }
+
+  private[sql] def getPushedDownAggResult(
+      conf: Configuration,
+      file: Path,
+      dataSchema: StructType,
+      aggregation: Aggregation)
+  : (Array[PrimitiveType.PrimitiveTypeName], Array[Any]) = {
+
+    val footer = ParquetFooterReader.readFooter(conf, file, NO_FILTER)
+    val fields = footer.getFileMetaData.getSchema.getFields
+    val typesBuilder = ArrayBuilder.make[PrimitiveType.PrimitiveTypeName]
+    val valuesBuilder = ArrayBuilder.make[Any]
+    val blocks = footer.getBlocks()
+
+    blocks.forEach { block =>
+      val columns = block.getColumns()
+      for (i <- 0 until aggregation.aggregateExpressions.size) {
+        var index = 0
+        aggregation.aggregateExpressions(i) match {
+          case Max(col, _) =>
+            index = dataSchema.fieldNames.toList.indexOf(col)
+            valuesBuilder += getPushedDownMaxMin(footer, columns, index, true)
+            typesBuilder += fields.get(index).asPrimitiveType.getPrimitiveTypeName
+          case Min(col, _) =>
+            index = dataSchema.fieldNames.toList.indexOf(col)
+            valuesBuilder += getPushedDownMaxMin(footer, columns, index, false)
+            typesBuilder += fields.get(index).asPrimitiveType.getPrimitiveTypeName
+          case Count(col, _, _) =>
+            index = dataSchema.fieldNames.toList.indexOf(col)
+            var rowCount = getRowCountFromParquetMetadata(footer)
+            if (!col.equals("1")) {  // count(*)
+              rowCount -= getNumNulls(footer, columns, index)
+            }
+            valuesBuilder += rowCount
+            typesBuilder += PrimitiveType.PrimitiveTypeName.INT96
+          case _ =>
+        }
+      }
+    }
+    (typesBuilder.result(), valuesBuilder.result())
+  }
+
+  private def getPushedDownMaxMin(
+      footer: ParquetMetadata,
+      columnChunkMetaData: util.List[ColumnChunkMetaData],
+      i: Int,
+      isMax: Boolean) = {
+    val parquetType = footer.getFileMetaData.getSchema.getType(i)
+    if (!parquetType.isPrimitive) {
+      throw new IllegalArgumentException("Unsupported type : " + parquetType.toString)
+    }
+    var value: Any = None
+    val statistics = columnChunkMetaData.get(i).getStatistics()
+    if (isMax) {
+      val currentMax = statistics.genericGetMax()
+      if (currentMax != None &&
+        (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0)) {
+        value = currentMax
+      }
+    } else {
+      val currentMin = statistics.genericGetMin()
+      if (currentMin != None &&
+        (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0)) {
+        value = currentMin
+      }
+    }
+    value
+  }
+
+  private def getRowCountFromParquetMetadata(footer: ParquetMetadata): Long = {
+    var rowCount: Long = 0
+    for (blockMetaData <- footer.getBlocks.asScala) {
+      rowCount += blockMetaData.getRowCount
+    }
+    rowCount
+  }
+
+  private def getNumNulls(
+      footer: ParquetMetadata,
+      columnChunkMetaData: util.List[ColumnChunkMetaData],
+      i: Int): Long = {
+    val parquetType = footer.getFileMetaData.getSchema.getType(i)
+    if (!parquetType.isPrimitive) {
+      throw new IllegalArgumentException("Unsupported type : " + parquetType.toString)
+    }
+    var numNulls: Long = 0;
+    val statistics = columnChunkMetaData.get(i).getStatistics()
+    if (!statistics.isNumNullsSet()) {
+      throw new UnsupportedOperationException("Number of nulls not set for parquet file." +
+        " Set session property hive.pushdown_partial_aggregations_into_scan=false and execute" +
+        " query again");
+    }
+    numNulls += statistics.getNumNulls();
+    numNulls
   }
 }

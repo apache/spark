@@ -80,15 +80,25 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
 
   override def defaultResult: Option[Literal] = Option(Literal(0L))
 
+  private[sql] var pushDown: Boolean = false
+
   override lazy val updateExpressions = {
-    val nullableChildren = children.filter(_.nullable)
-    if (nullableChildren.isEmpty) {
-      Seq(
-        /* count = */ count + 1L
-      )
+    if (!pushDown) {
+      val nullableChildren = children.filter(_.nullable)
+      if (nullableChildren.isEmpty) {
+        Seq(
+          /* count = */ count + 1L
+        )
+      } else {
+        Seq(
+          /* count = */ If(nullableChildren.map(IsNull).reduce(Or), count, count + 1L)
+        )
+      }
     } else {
       Seq(
-        /* count = */ If(nullableChildren.map(IsNull).reduce(Or), count, count + 1L)
+        // if count is pushed down to Data Source layer, add the count result retrieved from
+        // Data Source
+        /* count = */ count + children.head
       )
     }
   }

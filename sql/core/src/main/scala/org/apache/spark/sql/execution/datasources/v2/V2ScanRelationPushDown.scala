@@ -17,38 +17,133 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, ProjectionOverSchema, SubqueryExpression}
+import scala.collection.mutable.ArrayBuilder
+
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.read.{Scan, V1Scan}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.types.StructType
 
-object V2ScanRelationPushDown extends Rule[LogicalPlan] {
+object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case Aggregate(groupingExpressions, resultExpressions, child) =>
+      child match {
+        case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
+          val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
+
+          val aliasMap = getAliasMap(project)
+          var aggregates = resultExpressions.flatMap { expr =>
+            expr.collect {
+              case agg: AggregateExpression =>
+                replaceAlias(agg, aliasMap).asInstanceOf[AggregateExpression]
+            }
+          }
+          aggregates = DataSourceStrategy.normalizeExprs(aggregates, relation.output)
+            .asInstanceOf[Seq[AggregateExpression]]
+
+          val groupingExpressionsWithoutAlias = groupingExpressions.flatMap{ expr =>
+            expr.collect {
+              case e: Expression => replaceAlias(e, aliasMap)
+            }
+          }
+          val normalizedGroupingExpressions =
+            DataSourceStrategy.normalizeExprs(groupingExpressionsWithoutAlias, relation.output)
+
+          var newFilters = filters
+          aggregates.foreach(agg =>
+            if (agg.filter.nonEmpty)  {
+              // handle agg filter the same way as other filters
+              newFilters = newFilters :+ agg.filter.get
+            }
+          )
+
+          val (pushedFilters, postScanFilters) = pushDownFilter(scanBuilder, newFilters, relation)
+          if (postScanFilters.nonEmpty) {
+            Aggregate(groupingExpressions, resultExpressions, child)
+          } else { // only push down aggregate if all the filers can be push down
+            val aggregation = PushDownUtils.pushAggregates(scanBuilder, aggregates,
+              normalizedGroupingExpressions)
+
+            val (scan, output, normalizedProjects) =
+              processFilterAndColumn(scanBuilder, project, postScanFilters, relation)
+
+            logInfo(
+              s"""
+                 |Pushing operators to ${relation.name}
+                 |Pushed Filters: ${pushedFilters.mkString(", ")}
+                 |Post-Scan Filters: ${postScanFilters.mkString(",")}
+                 |Pushed Aggregate Functions: ${aggregation.aggregateExpressions.mkString(", ")}
+                 |Pushed Groupby: ${aggregation.groupByExpressions.mkString(", ")}
+                 |Output: ${output.mkString(", ")}
+             """.stripMargin)
+
+            val wrappedScan = scan match {
+              case v1: V1Scan =>
+                val translated = newFilters.flatMap(DataSourceStrategy.translateFilter(_, true))
+                V1ScanWrapper(v1, translated, pushedFilters, aggregation)
+              case _ => scan
+            }
+
+            if (aggregation.aggregateExpressions.isEmpty) {
+              Aggregate(groupingExpressions, resultExpressions, child)
+            } else {
+              val aggOutputBuilder = ArrayBuilder.make[AttributeReference]
+              for (i <- 0 until aggregates.length) {
+                aggOutputBuilder += AttributeReference(
+                  aggregation.aggregateExpressions(i).toString, aggregates(i).dataType)()
+              }
+              groupingExpressions.foreach{
+                case a@AttributeReference(_, _, _, _) => aggOutputBuilder += a
+                case _ =>
+              }
+              val aggOutput = aggOutputBuilder.result
+
+              val r = buildLogicalPlan(aggOutput, relation, wrappedScan, aggOutput,
+                normalizedProjects, postScanFilters)
+              val plan = Aggregate(groupingExpressions, resultExpressions, r)
+
+              var i = 0
+              plan.transformExpressions {
+                case agg: AggregateExpression =>
+                  i += 1
+                  val aggFunction: aggregate.AggregateFunction = {
+                    if (agg.aggregateFunction.isInstanceOf[aggregate.Max]) {
+                      aggregate.Max(aggOutput(i - 1))
+                    } else if (agg.aggregateFunction.isInstanceOf[aggregate.Min]) {
+                      aggregate.Min(aggOutput(i - 1))
+                    } else if (agg.aggregateFunction.isInstanceOf[aggregate.Average]) {
+                      aggregate.Average(aggOutput(i - 1))
+                    } else if (agg.aggregateFunction.isInstanceOf[aggregate.Sum]) {
+                      aggregate.Sum(aggOutput(i - 1))
+                    } else if (agg.aggregateFunction.isInstanceOf[aggregate.Count]) {
+                      val count = aggregate.Count(aggOutput(i - 1))
+                      count.pushDown = true
+                      count
+                    } else {
+                      agg.aggregateFunction
+                    }
+                  }
+                  agg.copy(aggregateFunction = aggFunction, filter = None)
+              }
+            }
+          }
+
+        case _ => Aggregate(groupingExpressions, resultExpressions, child)
+      }
     case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
+      val (pushedFilters, postScanFilters) = pushDownFilter (scanBuilder, filters, relation)
+      val (scan, output, normalizedProjects) =
+        processFilterAndColumn(scanBuilder, project, postScanFilters, relation)
 
-      val normalizedFilters = DataSourceStrategy.normalizeExprs(filters, relation.output)
-      val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
-        normalizedFilters.partition(SubqueryExpression.hasSubquery)
-
-      // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
-      // `postScanFilters` need to be evaluated after the scan.
-      // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        scanBuilder, normalizedFiltersWithoutSubquery)
-      val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
-
-      val normalizedProjects = DataSourceStrategy
-        .normalizeExprs(project, relation.output)
-        .asInstanceOf[Seq[NamedExpression]]
-      val (scan, output) = PushDownUtils.pruneColumns(
-        scanBuilder, relation, normalizedProjects, postScanFilters)
       logInfo(
         s"""
            |Pushing operators to ${relation.name}
@@ -60,31 +155,72 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
       val wrappedScan = scan match {
         case v1: V1Scan =>
           val translated = filters.flatMap(DataSourceStrategy.translateFilter(_, true))
-          V1ScanWrapper(v1, translated, pushedFilters)
+          V1ScanWrapper(v1, translated, pushedFilters,
+            Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]))
+
         case _ => scan
       }
 
-      val scanRelation = DataSourceV2ScanRelation(relation, wrappedScan, output)
+      buildLogicalPlan(project, relation, wrappedScan, output, normalizedProjects, postScanFilters)
+  }
 
-      val projectionOverSchema = ProjectionOverSchema(output.toStructType)
-      val projectionFunc = (expr: Expression) => expr transformDown {
-        case projectionOverSchema(newExpr) => newExpr
-      }
+  private def pushDownFilter(
+      scanBuilder: ScanBuilder,
+      filters: Seq[Expression],
+      relation: DataSourceV2Relation): (Seq[sources.Filter], Seq[Expression]) = {
+    val normalizedFilters = DataSourceStrategy.normalizeExprs(filters, relation.output)
+    val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
+      normalizedFilters.partition(SubqueryExpression.hasSubquery)
 
-      val filterCondition = postScanFilters.reduceLeftOption(And)
-      val newFilterCondition = filterCondition.map(projectionFunc)
-      val withFilter = newFilterCondition.map(Filter(_, scanRelation)).getOrElse(scanRelation)
+    // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
+    // `postScanFilters` need to be evaluated after the scan.
+    // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
+    val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
+      scanBuilder, normalizedFiltersWithoutSubquery)
+    val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+    (pushedFilters, postScanFilters)
+  }
 
-      val withProjection = if (withFilter.output != project) {
-        val newProjects = normalizedProjects
-          .map(projectionFunc)
-          .asInstanceOf[Seq[NamedExpression]]
-        Project(newProjects, withFilter)
-      } else {
-        withFilter
-      }
+  private def processFilterAndColumn(
+      scanBuilder: ScanBuilder,
+      project: Seq[NamedExpression],
+      postScanFilters: Seq[Expression],
+      relation: DataSourceV2Relation):
+  (Scan, Seq[AttributeReference], Seq[NamedExpression]) = {
+    val normalizedProjects = DataSourceStrategy
+      .normalizeExprs(project, relation.output)
+      .asInstanceOf[Seq[NamedExpression]]
+    val (scan, output) = PushDownUtils.pruneColumns(
+      scanBuilder, relation, normalizedProjects, postScanFilters)
+    (scan, output, normalizedProjects)
+  }
 
-      withProjection
+  private def buildLogicalPlan(
+      project: Seq[NamedExpression],
+      relation: DataSourceV2Relation,
+      wrappedScan: Scan,
+      output: Seq[AttributeReference],
+      normalizedProjects: Seq[NamedExpression],
+      postScanFilters: Seq[Expression]): LogicalPlan = {
+    val scanRelation = DataSourceV2ScanRelation(relation, wrappedScan, output)
+    val projectionOverSchema = ProjectionOverSchema(output.toStructType)
+    val projectionFunc = (expr: Expression) => expr transformDown {
+      case projectionOverSchema(newExpr) => newExpr
+    }
+
+    val filterCondition = postScanFilters.reduceLeftOption(And)
+    val newFilterCondition = filterCondition.map(projectionFunc)
+    val withFilter = newFilterCondition.map(Filter(_, scanRelation)).getOrElse(scanRelation)
+
+    val withProjection = if (withFilter.output != project) {
+      val newProjects = normalizedProjects
+        .map(projectionFunc)
+        .asInstanceOf[Seq[NamedExpression]]
+      Project(newProjects, withFilter)
+    } else {
+      withFilter
+    }
+    withProjection
   }
 }
 
@@ -93,6 +229,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
 case class V1ScanWrapper(
     v1Scan: V1Scan,
     translatedFilters: Seq[sources.Filter],
-    handledFilters: Seq[sources.Filter]) extends Scan {
+    handledFilters: Seq[sources.Filter],
+    pushedAggregates: sources.Aggregation) extends Scan {
   override def readSchema(): StructType = v1Scan.readSchema()
 }
