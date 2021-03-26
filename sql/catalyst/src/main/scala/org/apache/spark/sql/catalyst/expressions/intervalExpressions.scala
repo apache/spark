@@ -377,6 +377,8 @@ case class DivideYMInterval(
       val math = classOf[LongMath].getName
       val javaType = CodeGenerator.javaType(dataType)
       defineCodeGen(ctx, ev, (m, n) =>
+        // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit to `Int`.
+        // Casting to `Int` is safe here.
         s"($javaType)($math.divide($m, $n, java.math.RoundingMode.HALF_UP))")
     case _: IntegralType =>
       val math = classOf[IntMath].getName
