@@ -562,7 +562,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (longValue == longValue.toInt) {
           longValue.toInt
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(t, Int.getClass.getName)
+          throw QueryExecutionErrors.castingCauseOverflowError(t, IntegerType.catalogString)
         }
       })
     case TimestampType =>
@@ -594,7 +594,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (longValue == longValue.toShort) {
           longValue.toShort
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(t, Short.getClass.getName)
+          throw QueryExecutionErrors.castingCauseOverflowError(t, ShortType.catalogString)
         }
       })
     case TimestampType =>
@@ -605,12 +605,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw QueryExecutionErrors.castingCauseOverflowError(b, Short.getClass.getName)
+            throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
         }
         if (intValue == intValue.toShort) {
           intValue.toShort
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(b, Short.getClass.getName)
+          throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
@@ -637,7 +637,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (longValue == longValue.toByte) {
           longValue.toByte
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(t, Byte.getClass.getName)
+          throw QueryExecutionErrors.castingCauseOverflowError(t, ShortType.catalogString)
         }
       })
     case TimestampType =>
@@ -648,12 +648,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw QueryExecutionErrors.castingCauseOverflowError(b, Byte.getClass.getName)
+            throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType.catalogString)
         }
         if (intValue == intValue.toByte) {
           intValue.toByte
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(b, Byte.getClass.getName)
+          throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType.catalogString)
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
@@ -1390,7 +1390,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           if ($longValue == ($integralType) $longValue) {
             $evPrim = ($integralType) $longValue;
           } else {
-            throw QueryExecutionErrors.castingCauseOverflowError($c, "$integralType");
+            throw QueryExecutionErrors.castingCauseOverflowError($c,
+             "${IntegerType.catalogString}");
           }
         """
     } else {
@@ -1415,7 +1416,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if ($c == ($integralType) $c) {
           $evPrim = ($integralType) $c;
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, "$integralType");
+          throw QueryExecutionErrors.castingCauseOverflowError($c, "${IntegerType.catalogString}");
         }
       """
   }
@@ -1444,7 +1445,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
           $evPrim = ($integralType) $c;
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, "$integralType");
+          throw QueryExecutionErrors.castingCauseOverflowError($c, "${IntegerType.catalogString}");
         }
       """
   }
