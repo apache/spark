@@ -143,7 +143,7 @@ case class CountMinSketchAgg(
   override def dataType: DataType = BinaryType
 
   override def defaultResult: Option[Literal] =
-    Option(Literal(eval(createAggregationBuffer()), dataType))
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   override def children: Seq[Expression] =
     Seq(child, epsExpression, confidenceExpression, seedExpression)
