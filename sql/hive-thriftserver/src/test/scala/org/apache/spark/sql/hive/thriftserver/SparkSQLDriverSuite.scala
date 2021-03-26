@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 
@@ -53,7 +52,7 @@ class SparkSQLDriverSuite extends SparkFunSuite {
     }
   }
 
-  class TestListener extends SparkListener with Logging {
+  class TestListener extends SparkListener {
     val sqlStartEvents = new ListBuffer[SparkListenerSQLExecutionStart]()
 
     override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
