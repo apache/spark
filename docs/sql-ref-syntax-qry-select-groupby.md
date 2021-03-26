@@ -54,9 +54,9 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     `GROUP BY GROUPING SETS ((warehouse), (product))` is semantically equivalent
     to union of results of `GROUP BY warehouse` and `GROUP BY product`. This clause
     is a shorthand for a `UNION ALL` where each leg of the `UNION ALL`
-    operator performs aggregation of subset of the columns specified in the `GROUPING SETS` clause.
+    operator performs aggregation of each grouping set specified in the `GROUPING SETS` clause.
     Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
-    equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY warehouse`
+    equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
     and global aggregate.
     
     GROUPING SETS can be followed with normal expressions as well, such as

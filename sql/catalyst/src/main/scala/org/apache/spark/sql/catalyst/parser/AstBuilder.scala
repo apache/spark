@@ -917,9 +917,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val groupByExpressions = expressionList(ctx.groupingExpressions)
       if (ctx.GROUPING != null) {
         // GROUP BY .... GROUPING SETS (...)
-        val selectedGroupByExprs =
+        val groupingSets =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-        Aggregate(Seq(GroupingSets(selectedGroupByExprs.toSeq, groupByExpressions)),
+        Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
           selectExpressions, query)
       } else {
         // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
@@ -938,26 +938,26 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           .map(groupByExpr => {
             val groupingAnalytics = groupByExpr.groupingAnalytics
             if (groupingAnalytics != null) {
-              val selectedGroupByExprs = groupingAnalytics.groupingSet.asScala
+              val groupingSets = groupingAnalytics.groupingSet.asScala
                 .map(_.expression.asScala.map(e => expression(e)).toSeq)
               if (groupingAnalytics.CUBE != null) {
                 // CUBE(A, B, (A, B), ()) is not supported.
-                if (selectedGroupByExprs.exists(_.isEmpty)) {
+                if (groupingSets.exists(_.isEmpty)) {
                   throw new ParseException("Empty set in CUBE grouping sets is not supported.",
                     groupingAnalytics)
                 }
-                Cube(selectedGroupByExprs.toSeq)
+                Cube(groupingSets.toSeq)
               } else if (groupingAnalytics.ROLLUP != null) {
                 // ROLLUP(A, B, (A, B), ()) is not supported.
-                if (selectedGroupByExprs.exists(_.isEmpty)) {
+                if (groupingSets.exists(_.isEmpty)) {
                   throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
                     groupingAnalytics)
                 }
-                Rollup(selectedGroupByExprs.toSeq)
+                Rollup(groupingSets.toSeq)
               } else {
                 assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-                GroupingSets(selectedGroupByExprs.toSeq,
-                  selectedGroupByExprs.flatten.distinct.toSeq)
+                GroupingSets(groupingSets.toSeq,
+                  groupingSets.flatten.distinct.toSeq)
               }
             } else {
               expression(groupByExpr.expression)
