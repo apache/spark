@@ -293,9 +293,11 @@ object GeneratorNestedColumnAliasing {
                 //       df.select(explode($"items.a").as("item"))
                 val rewrittenG = newG.transformExpressions {
                   case e: ExplodeBase =>
-                    val extractor = nestedFieldsOnGenerator.head._1.transform {
+                    val extractor = nestedFieldsOnGenerator.head._1.transformUp {
+                      case _: Attribute =>
+                        e.child
                       case g: GetStructField =>
-                        ExtractValue(e.child, Literal(g.extractFieldName), SQLConf.get.resolver)
+                        ExtractValue(g.child, Literal(g.extractFieldName), SQLConf.get.resolver)
                     }
                     e.withNewChildren(Seq(extractor))
                 }
