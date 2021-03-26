@@ -2681,4 +2681,39 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     assert(e.isInstanceOf[ArithmeticException])
     assert(e.getMessage.contains("/ by zero"))
   }
+
+  test("SPARK-34875: divide day-time interval by numeric") {
+    checkAnswer(
+      Seq((Duration.ZERO, 10.toByte)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ZERO))
+    checkAnswer(
+      Seq((Duration.ofDays(10), 3.toShort)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofDays(10).dividedBy(3)))
+    checkAnswer(
+      Seq((Duration.ofHours(1000), "2")).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofHours(500)))
+    checkAnswer(
+      Seq((Duration.of(1, ChronoUnit.MICROS).multipliedBy(Long.MaxValue), Long.MaxValue))
+        .toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.of(1, ChronoUnit.MICROS)))
+    checkAnswer(
+      Seq((Duration.ofMinutes(-1), 60L)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofSeconds(-1)))
+    checkAnswer(
+      Seq((Duration.ofDays(-1), 0.5f)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofDays(-2)))
+    checkAnswer(
+      Seq((Duration.ofMillis(10000000), 10000000d)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofMillis(1)))
+    checkAnswer(
+      Seq((Duration.of(-1, ChronoUnit.MICROS), BigDecimal(10000.0001)))
+        .toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.of(-1, ChronoUnit.MICROS).multipliedBy(10000).dividedBy(100000001)))
+
+    val e = intercept[SparkException] {
+      Seq((Duration.ofDays(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e.isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("/ by zero"))
+  }
 }
