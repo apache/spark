@@ -80,6 +80,9 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     `GROUP BY` clause. `CUBE` is a shorthand for `GROUPING SETS`. For example,
     `GROUP BY warehouse, product WITH CUBE` or `GROUP BY CUBE(warehouse, product)` is equivalent to 
     `GROUP BY GROUPING SETS((warehouse, product), (warehouse), (product), ())`.
+    `GROUP BY CUBE(warehouse, product, (warehouse, location))` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse, location),
+     (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
 
 * **grouping_set**
