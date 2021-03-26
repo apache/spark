@@ -3,6 +3,24 @@
 -- !query schema
 struct<substr(w_warehouse_name, 1, 20):string,sm_type:string,cc_name:string,30 days :bigint,31 - 60 days :bigint,61 - 90 days :bigint,91 - 120 days :bigint,>120 days :bigint>
 -- !query output
+NULL	EXPRESS                       	Mid Atlantic	1223	1314	1257	0	0
+NULL	EXPRESS                       	NY Metro	1274	1296	1286	0	0
+NULL	EXPRESS                       	North Midwest	1159	1329	1276	0	0
+NULL	LIBRARY                       	Mid Atlantic	941	978	948	0	0
+NULL	LIBRARY                       	NY Metro	886	1001	1009	0	0
+NULL	LIBRARY                       	North Midwest	917	943	991	0	0
+NULL	NEXT DAY                      	Mid Atlantic	1304	1264	1349	0	0
+NULL	NEXT DAY                      	NY Metro	1271	1251	1291	0	0
+NULL	NEXT DAY                      	North Midwest	1199	1233	1273	0	0
+NULL	OVERNIGHT                     	Mid Atlantic	965	989	967	0	0
+NULL	OVERNIGHT                     	NY Metro	979	993	1039	0	0
+NULL	OVERNIGHT                     	North Midwest	946	1016	905	0	0
+NULL	REGULAR                       	Mid Atlantic	933	994	997	0	0
+NULL	REGULAR                       	NY Metro	961	1022	1034	0	0
+NULL	REGULAR                       	North Midwest	893	921	949	0	0
+NULL	TWO DAY                       	Mid Atlantic	972	968	972	0	0
+NULL	TWO DAY                       	NY Metro	926	974	1004	0	0
+NULL	TWO DAY                       	North Midwest	941	921	981	0	0
 Bad cards must make.	EXPRESS                       	Mid Atlantic	1270	1318	1281	0	0
 Bad cards must make.	EXPRESS                       	NY Metro	1226	1287	1282	0	0
 Bad cards must make.	EXPRESS                       	North Midwest	1208	1242	1294	0	0
@@ -75,21 +93,3 @@ Important issues liv	REGULAR                       	North Midwest	905	947	941	0	
 Important issues liv	TWO DAY                       	Mid Atlantic	954	982	944	0	0
 Important issues liv	TWO DAY                       	NY Metro	844	972	1006	0	0
 Important issues liv	TWO DAY                       	North Midwest	914	969	960	0	0
-NULL	EXPRESS                       	Mid Atlantic	1223	1314	1257	0	0
-NULL	EXPRESS                       	NY Metro	1274	1296	1286	0	0
-NULL	EXPRESS                       	North Midwest	1159	1329	1276	0	0
-NULL	LIBRARY                       	Mid Atlantic	941	978	948	0	0
-NULL	LIBRARY                       	NY Metro	886	1001	1009	0	0
-NULL	LIBRARY                       	North Midwest	917	943	991	0	0
-NULL	NEXT DAY                      	Mid Atlantic	1304	1264	1349	0	0
-NULL	NEXT DAY                      	NY Metro	1271	1251	1291	0	0
-NULL	NEXT DAY                      	North Midwest	1199	1233	1273	0	0
-NULL	OVERNIGHT                     	Mid Atlantic	965	989	967	0	0
-NULL	OVERNIGHT                     	NY Metro	979	993	1039	0	0
-NULL	OVERNIGHT                     	North Midwest	946	1016	905	0	0
-NULL	REGULAR                       	Mid Atlantic	933	994	997	0	0
-NULL	REGULAR                       	NY Metro	961	1022	1034	0	0
-NULL	REGULAR                       	North Midwest	893	921	949	0	0
-NULL	TWO DAY                       	Mid Atlantic	972	968	972	0	0
-NULL	TWO DAY                       	NY Metro	926	974	1004	0	0
-NULL	TWO DAY                       	North Midwest	941	921	981	0	0

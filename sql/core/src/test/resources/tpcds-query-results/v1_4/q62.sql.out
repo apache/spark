@@ -3,6 +3,36 @@
 -- !query schema
 struct<substr(w_warehouse_name, 1, 20):string,sm_type:string,web_name:string,30 days :bigint,31 - 60 days :bigint,61 - 90 days :bigint,91 - 120 days :bigint,>120 days :bigint>
 -- !query output
+NULL	EXPRESS                       	site_0	260	283	296	314	0
+NULL	EXPRESS                       	site_1	330	285	315	329	0
+NULL	EXPRESS                       	site_2	283	291	318	333	0
+NULL	EXPRESS                       	site_3	274	280	277	258	0
+NULL	EXPRESS                       	site_4	247	244	268	259	0
+NULL	LIBRARY                       	site_0	197	180	203	180	0
+NULL	LIBRARY                       	site_1	208	205	185	211	0
+NULL	LIBRARY                       	site_2	258	230	267	243	0
+NULL	LIBRARY                       	site_3	243	204	241	252	0
+NULL	LIBRARY                       	site_4	211	213	216	206	0
+NULL	NEXT DAY                      	site_0	332	290	340	289	0
+NULL	NEXT DAY                      	site_1	297	292	275	334	0
+NULL	NEXT DAY                      	site_2	287	253	272	220	0
+NULL	NEXT DAY                      	site_3	255	252	243	264	0
+NULL	NEXT DAY                      	site_4	300	309	309	281	0
+NULL	OVERNIGHT                     	site_0	242	224	226	237	0
+NULL	OVERNIGHT                     	site_1	237	202	213	204	0
+NULL	OVERNIGHT                     	site_2	172	182	158	181	0
+NULL	OVERNIGHT                     	site_3	217	193	201	175	0
+NULL	OVERNIGHT                     	site_4	231	251	249	237	0
+NULL	REGULAR                       	site_0	227	216	199	193	0
+NULL	REGULAR                       	site_1	239	209	254	246	0
+NULL	REGULAR                       	site_2	235	241	259	219	0
+NULL	REGULAR                       	site_3	204	212	185	237	0
+NULL	REGULAR                       	site_4	171	176	182	163	0
+NULL	TWO DAY                       	site_0	189	201	202	218	0
+NULL	TWO DAY                       	site_1	199	170	177	174	0
+NULL	TWO DAY                       	site_2	200	202	181	179	0
+NULL	TWO DAY                       	site_3	237	234	233	253	0
+NULL	TWO DAY                       	site_4	233	229	234	238	0
 Bad cards must make.	EXPRESS                       	site_0	251	248	268	277	0
 Bad cards must make.	EXPRESS                       	site_1	262	304	290	267	0
 Bad cards must make.	EXPRESS                       	site_2	287	290	293	286	0
@@ -73,33 +103,3 @@ Doors canno	LIBRARY                       	site_1	239	217	208	206	0
 Doors canno	LIBRARY                       	site_2	229	233	244	241	0
 Doors canno	LIBRARY                       	site_3	216	198	182	222	0
 Doors canno	LIBRARY                       	site_4	176	163	170	216	0
-NULL	EXPRESS                       	site_0	260	283	296	314	0
-NULL	EXPRESS                       	site_1	330	285	315	329	0
-NULL	EXPRESS                       	site_2	283	291	318	333	0
-NULL	EXPRESS                       	site_3	274	280	277	258	0
-NULL	EXPRESS                       	site_4	247	244	268	259	0
-NULL	LIBRARY                       	site_0	197	180	203	180	0
-NULL	LIBRARY                       	site_1	208	205	185	211	0
-NULL	LIBRARY                       	site_2	258	230	267	243	0
-NULL	LIBRARY                       	site_3	243	204	241	252	0
-NULL	LIBRARY                       	site_4	211	213	216	206	0
-NULL	NEXT DAY                      	site_0	332	290	340	289	0
-NULL	NEXT DAY                      	site_1	297	292	275	334	0
-NULL	NEXT DAY                      	site_2	287	253	272	220	0
-NULL	NEXT DAY                      	site_3	255	252	243	264	0
-NULL	NEXT DAY                      	site_4	300	309	309	281	0
-NULL	OVERNIGHT                     	site_0	242	224	226	237	0
-NULL	OVERNIGHT                     	site_1	237	202	213	204	0
-NULL	OVERNIGHT                     	site_2	172	182	158	181	0
-NULL	OVERNIGHT                     	site_3	217	193	201	175	0
-NULL	OVERNIGHT                     	site_4	231	251	249	237	0
-NULL	REGULAR                       	site_0	227	216	199	193	0
-NULL	REGULAR                       	site_1	239	209	254	246	0
-NULL	REGULAR                       	site_2	235	241	259	219	0
-NULL	REGULAR                       	site_3	204	212	185	237	0
-NULL	REGULAR                       	site_4	171	176	182	163	0
-NULL	TWO DAY                       	site_0	189	201	202	218	0
-NULL	TWO DAY                       	site_1	199	170	177	174	0
-NULL	TWO DAY                       	site_2	200	202	181	179	0
-NULL	TWO DAY                       	site_3	237	234	233	253	0
-NULL	TWO DAY                       	site_4	233	229	234	238	0

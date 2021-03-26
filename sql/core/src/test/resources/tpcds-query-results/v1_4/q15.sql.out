@@ -3,6 +3,7 @@
 -- !query schema
 struct<ca_zip:string,sum(cs_sales_price):decimal(17,2)>
 -- !query output
+NULL	4723.12
 30059     	688.80
 30069     	323.60
 30150     	372.79
@@ -102,4 +103,3 @@ struct<ca_zip:string,sum(cs_sales_price):decimal(17,2)>
 38605     	189.50
 38721     	2085.27
 38828     	261.89
-NULL	4723.12
