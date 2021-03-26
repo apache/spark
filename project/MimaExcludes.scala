@@ -417,6 +417,9 @@ object MimaExcludes {
       case _ => true
     },
 
+    // [SPARK-34862][SQL] Support nested column in ORC vectorized reader
+    ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector"),
+
     // [SPARK-27521][SQL] Move data source v2 to catalyst module
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ColumnarBatch"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.vectorized.ArrowColumnVector"),
