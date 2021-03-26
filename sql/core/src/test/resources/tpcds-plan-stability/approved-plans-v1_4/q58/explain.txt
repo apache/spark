@@ -467,7 +467,7 @@ Input [2]: [d_date#8, d_week_seq#9]
 
 (82) Filter [codegen id : 1]
 Input [2]: [d_date#8, d_week_seq#9]
-Condition : (isnotnull(d_date#8) AND (d_date#8 = 10959))
+Condition : (isnotnull(d_date#8) AND (d_date#8 = 2000-01-03))
 
 (83) Project [codegen id : 1]
 Output [1]: [d_week_seq#9]

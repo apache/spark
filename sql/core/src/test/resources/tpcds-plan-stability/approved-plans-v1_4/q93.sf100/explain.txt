@@ -47,7 +47,7 @@ Input [5]: [sr_item_sk#1, sr_reason_sk#2, sr_ticket_number#3, sr_return_quantity
 Output [2]: [r_reason_sk#6, r_reason_desc#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/reason]
-PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28), IsNotNull(r_reason_sk)]
+PushedFilters: [IsNotNull(r_reason_desc), EqualTo(r_reason_desc,reason 28                                                                                           ), IsNotNull(r_reason_sk)]
 ReadSchema: struct<r_reason_sk:int,r_reason_desc:string>
 
 (6) ColumnarToRow [codegen id : 1]
@@ -55,7 +55,7 @@ Input [2]: [r_reason_sk#6, r_reason_desc#7]
 
 (7) Filter [codegen id : 1]
 Input [2]: [r_reason_sk#6, r_reason_desc#7]
-Condition : ((isnotnull(r_reason_desc#7) AND (r_reason_desc#7 = reason 28)) AND isnotnull(r_reason_sk#6))
+Condition : ((isnotnull(r_reason_desc#7) AND (r_reason_desc#7 = reason 28                                                                                           )) AND isnotnull(r_reason_sk#6))
 
 (8) Project [codegen id : 1]
 Output [1]: [r_reason_sk#6]

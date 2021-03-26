@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import com.google.common.primitives.UnsignedLong
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.parquet.column.{Encoding, ParquetProperties}
@@ -295,10 +296,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         |  required INT32 a(UINT_8);
         |  required INT32 b(UINT_16);
         |  required INT32 c(UINT_32);
+        |  required INT64 d(UINT_64);
         |}
       """.stripMargin)
 
-    val expectedSparkTypes = Seq(ShortType, IntegerType, LongType)
+    val expectedSparkTypes = Seq(ShortType, IntegerType, LongType, DecimalType.LongDecimal)
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
@@ -453,6 +455,40 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             Row(i % 100 + Byte.MaxValue,
               i % 100 + Short.MaxValue,
               i % 100 + Int.MaxValue.toLong)
+          })
+        }
+      }
+    }
+  }
+
+  test("SPARK-34817: Read UINT_64 as Decimal from parquet") {
+    Seq(true, false).foreach { dictionaryEnabled =>
+      def makeRawParquetFile(path: Path): Unit = {
+        val schemaStr =
+          """message root {
+            |  required INT64 a(UINT_64);
+            |}
+        """.stripMargin
+        val schema = MessageTypeParser.parseMessageType(schemaStr)
+
+        val writer = createParquetWriter(schema, path, dictionaryEnabled)
+
+        val factory = new SimpleGroupFactory(schema)
+        (-500 until 500).foreach { i =>
+          val group = factory.newGroup()
+            .append("a", i % 100L)
+          writer.write(group)
+        }
+        writer.close()
+      }
+
+      withTempDir { dir =>
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
+        makeRawParquetFile(path)
+        readParquetFile(path.toString) { df =>
+          checkAnswer(df, (-500 until 500).map { i =>
+            val bi = UnsignedLong.fromLongBits(i % 100L).bigIntegerValue()
+            Row(new java.math.BigDecimal(bi))
           })
         }
       }

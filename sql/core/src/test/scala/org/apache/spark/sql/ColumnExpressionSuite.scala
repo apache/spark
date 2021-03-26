@@ -2613,4 +2613,72 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     assert(e.isInstanceOf[ArithmeticException])
     assert(e.getMessage.contains("overflow"))
   }
+
+  test("SPARK-34850: multiply day-time interval by numeric") {
+    checkAnswer(
+      Seq((Duration.ofDays(0), 0)).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.ofDays(0)))
+    checkAnswer(
+      Seq((Duration.ofDays(0), 10.toByte)).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.ofDays(0)))
+    checkAnswer(
+      Seq((Duration.ofHours(12), 3.toShort)).toDF("i", "n").select($"n" * $"i"),
+      Row(Duration.ofDays(1).plusHours(12)))
+    checkAnswer(
+      Seq((Duration.ofMinutes(1000), "2")).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.ofMinutes(2000)))
+    checkAnswer(
+      Seq((Duration.ofSeconds(1), 60L)).toDF("i", "n").select($"n" * $"i"),
+      Row(Duration.ofMinutes(1)))
+    checkAnswer(
+      Seq((Duration.of(-1, ChronoUnit.MICROS), 0.499f)).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.of(0, ChronoUnit.MICROS)))
+    checkAnswer(
+      Seq((Duration.of(-1, ChronoUnit.MICROS), 0.51d)).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.of(-1, ChronoUnit.MICROS)))
+    checkAnswer(
+      Seq((Duration.of(-10000000, ChronoUnit.MICROS), BigDecimal(0.0000001d)))
+        .toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.of(-1, ChronoUnit.MICROS)))
+
+    val e = intercept[SparkException] {
+      Seq((Duration.ofDays(9999), Long.MinValue)).toDF("i", "n").select($"n" * $"i").collect()
+    }.getCause
+    assert(e.isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("overflow"))
+  }
+
+  test("SPARK-34868: divide year-month interval by numeric") {
+    checkAnswer(
+      Seq((Period.ofYears(0), 10.toByte)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofYears(0)))
+    checkAnswer(
+      Seq((Period.ofYears(10), 3.toShort)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofYears(3).plusMonths(4)))
+    checkAnswer(
+      Seq((Period.ofYears(1000), "2")).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofYears(500)))
+    checkAnswer(
+      Seq((Period.ofMonths(1).multipliedBy(Int.MaxValue), Int.MaxValue))
+        .toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(1)))
+    checkAnswer(
+      Seq((Period.ofYears(-1), 12L)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(-1)))
+    checkAnswer(
+      Seq((Period.ofMonths(-1), 0.499f)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(-2)))
+    checkAnswer(
+      Seq((Period.ofMonths(10000000), 10000000d)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(1)))
+    checkAnswer(
+      Seq((Period.ofMonths(-1), BigDecimal(0.5))).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(-2)))
+
+    val e = intercept[SparkException] {
+      Seq((Period.ofYears(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e.isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("/ by zero"))
+  }
 }

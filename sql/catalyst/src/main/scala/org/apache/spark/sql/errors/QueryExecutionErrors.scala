@@ -26,18 +26,23 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{SparkException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
+import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Object for grouping all error messages of the query runtime.
- * Currently it includes all SparkExceptions and RuntimeExceptions(e.g.
- * UnsupportedOperationException, IllegalStateException).
+ * Object for grouping error messages from (most) exceptions thrown during query execution.
+ * This does not include exceptions thrown during the eager execution of commands, which are
+ * grouped into [[QueryCompilationErrors]].
  */
 object QueryExecutionErrors {
 
@@ -328,6 +333,14 @@ object QueryExecutionErrors {
     new CompileException(failedToCompileMsg(e), e.getLocation)
   }
 
+  def unsupportedTableChangeError(e: IllegalArgumentException): Throwable = {
+    new SparkException(s"Unsupported table change: ${e.getMessage}", e)
+  }
+
+  def notADatasourceRDDPartitionError(split: Partition): Throwable = {
+    new SparkException(s"[BUG] Not a DataSourceRDDPartition: $split")
+  }
+
   def dataPathNotSpecifiedError(): Throwable = {
     new IllegalArgumentException("'path' is not specified")
   }
@@ -448,6 +461,104 @@ object QueryExecutionErrors {
 
   def endOfStreamError(): Throwable = {
     new NoSuchElementException("End of stream")
+  }
+
+  def fallbackV1RelationReportsInconsistentSchemaError(
+      v2Schema: StructType, v1Schema: StructType): Throwable = {
+    new IllegalArgumentException(
+      "The fallback v1 relation reports inconsistent schema:\n" +
+        "Schema of v2 scan:     " + v2Schema + "\n" +
+        "Schema of v1 relation: " + v1Schema)
+  }
+
+  def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
+    new SparkException(
+      s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
+        "Use CASCADE option to drop a non-empty namespace.")
+  }
+
+  def noRecordsFromEmptyDataReaderError(): Throwable = {
+    new IOException("No records should be returned from EmptyDataReader")
+  }
+
+  def fileNotFoundError(e: FileNotFoundException): Throwable = {
+    new FileNotFoundException(
+      e.getMessage + "\n" +
+        "It is possible the underlying files have been updated. " +
+        "You can explicitly invalidate the cache in Spark by " +
+        "recreating the Dataset/DataFrame involved.")
+  }
+
+  def unsupportedSchemaColumnConvertError(
+      filePath: String,
+      column: String,
+      logicalType: String,
+      physicalType: String,
+      e: Exception): Throwable = {
+    val message = "Parquet column cannot be converted in " +
+      s"file $filePath. Column: $column, " +
+      s"Expected: $logicalType, Found: $physicalType"
+    new QueryExecutionException(message, e)
+  }
+
+  def cannotReadParquetFilesError(e: Exception): Throwable = {
+    val message = "Encounter error while reading parquet files. " +
+      "One possible cause: Parquet column cannot be converted in the " +
+      "corresponding files. Details: "
+    new QueryExecutionException(message, e)
+  }
+
+  def cannotCreateColumnarReaderError(): Throwable = {
+    new UnsupportedOperationException("Cannot create columnar reader.")
+  }
+
+  def invalidNamespaceNameError(namespace: Array[String]): Throwable = {
+    new IllegalArgumentException(s"Invalid namespace name: ${namespace.quoted}")
+  }
+
+  def unsupportedPartitionTransformError(transform: Transform): Throwable = {
+    new UnsupportedOperationException(
+      s"SessionCatalog does not support partition transform: $transform")
+  }
+
+  def missingDatabaseLocationError(): Throwable = {
+    new IllegalArgumentException("Missing database location")
+  }
+
+  def cannotRemoveReservedPropertyError(property: String): Throwable = {
+    new UnsupportedOperationException(s"Cannot remove reserved property: $property")
+  }
+
+  def namespaceNotEmptyError(namespace: Array[String]): Throwable = {
+    new IllegalStateException(s"Namespace ${namespace.quoted} is not empty")
+  }
+
+  def writingJobFailedError(cause: Throwable): Throwable = {
+    new SparkException("Writing job failed.", cause)
+  }
+
+  def writingJobAbortedError(e: Throwable): Throwable = {
+    new SparkException("Writing job aborted.", e)
+  }
+
+  def commitDeniedError(
+      partId: Int, taskId: Long, attemptId: Int, stageId: Int, stageAttempt: Int): Throwable = {
+    val message = s"Commit denied for partition $partId (task $taskId, attempt $attemptId, " +
+      s"stage $stageId.$stageAttempt)"
+    new CommitDeniedException(message, stageId, partId, attemptId)
+  }
+
+  def unsupportedTableWritesError(ident: Identifier): Throwable = {
+    new SparkException(
+      s"Table implementation does not support writes: ${ident.quoted}")
+  }
+
+  def cannotCreateJDBCTableWithPartitionsError(): Throwable = {
+    new UnsupportedOperationException("Cannot create JDBC table with partition")
+  }
+
+  def unsupportedUserSpecifiedSchemaError(): Throwable = {
+    new UnsupportedOperationException("user-specified schema")
   }
 
   def writeUnsupportedForBinaryFileDataSourceError(): Throwable = {
