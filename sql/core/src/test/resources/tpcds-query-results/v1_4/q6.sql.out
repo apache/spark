@@ -3,8 +3,8 @@
 -- !query schema
 struct<state:string,cnt:bigint>
 -- !query output
-MA	10
 AK	10
+MA	10
 AZ	11
 ME	13
 VT	14
@@ -25,16 +25,16 @@ FL	51
 OK	53
 MT	53
 CO	57
-NY	58
 AR	58
+NY	58
 PA	62
 AL	63
 LA	63
 SD	70
 WI	80
 NULL	81
-MI	82
 NC	82
+MI	82
 MS	83
 CA	84
 MN	85

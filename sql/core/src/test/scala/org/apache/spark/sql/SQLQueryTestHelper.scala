@@ -33,7 +33,7 @@ trait SQLQueryTestHelper {
   private val clsName = this.getClass.getCanonicalName
   protected val emptySchema = StructType(Seq.empty).catalogString
 
-  private def replaceNotIncludedMsg(line: String): String = {
+  protected def replaceNotIncludedMsg(line: String): String = {
     line.replaceAll("#\\d+", "#x")
       .replaceAll(
         s"Location.*$clsName/",

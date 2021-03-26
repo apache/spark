@@ -20,7 +20,10 @@ package org.apache.spark.sql
 import java.io.File
 import java.nio.file.{Files, Paths}
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.util.{fileToString, resourceToString, stringToFile}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.TestSparkSession
 
 /**
  * End-to-end tests to check TPCDS query results.
@@ -52,6 +55,14 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
 
   private val tpcdsDataPath = System.getenv("SPARK_TPCDS_DATA")
   private val regenerateGoldenFiles = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+
+  // To make output results deterministic
+  protected override def sparkConf: SparkConf = super.sparkConf
+    .set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
+
+  protected override def createSparkSession: TestSparkSession = {
+    new TestSparkSession(new SparkContext("local[1]", this.getClass.getSimpleName, sparkConf))
+  }
 
   // We use SF=1 table data here, so we cannot use SF=100 stats
   protected override val injectStats: Boolean = false
