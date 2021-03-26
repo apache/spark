@@ -1698,10 +1698,18 @@ class CastSuite extends CastSuiteBase {
 
   test("SPARK-34744: Improve error message for casting cause overflow error") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val e = intercept[ArithmeticException] {
-        Cast(Literal(128), ByteType).eval()
+      val e1 = intercept[ArithmeticException] {
+        Cast(Literal(Byte.MaxValue.toInt + 1), ByteType).eval()
       }.getMessage
-      assert(e.contains("Casting 128 to tinyint causes overflow"))
+      assert(e1.contains("Casting 128 to tinyint causes overflow"))
+      val e2 = intercept[ArithmeticException] {
+        Cast(Literal(Short.MaxValue.toInt + 1), ShortType).eval()
+      }.getMessage
+      assert(e2.contains("Casting 32768 to smallint causes overflow"))
+      val e3 = intercept[ArithmeticException] {
+        Cast(Literal(Int.MaxValue.toLong + 1), IntegerType).eval()
+      }.getMessage
+      assert(e3.contains("Casting 2147483648 to int causes overflow"))
     }
   }
 }
