@@ -129,7 +129,7 @@ WHERE  NOT EXISTS (SELECT (SELECT max(t2b)
                                  WHERE  t2c = t3c)
                    AND    t3a = t1a);
 
--- Non-nullable aggregates should not return NULL in a correlated subquery
+-- SPARK-34876: Non-nullable aggregates should not return NULL in a correlated subquery
 SELECT t1a,
     (SELECT count(t2d) FROM t2 WHERE t2a = t1a) count_t2,
     (SELECT count_if(t2d > 0) FROM t2 WHERE t2a = t1a) count_if_t2,
