@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.sql.connector.CustomMetric
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
@@ -33,7 +34,10 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
  * the executor side are automatically propagated and shown in the SQL UI through metrics. Updates
  * on the driver side must be explicitly posted using [[SQLMetrics.postDriverMetricUpdates()]].
  */
-class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+class SQLMetric(
+    val metricType: String,
+    initValue: Long = 0L,
+    aggregateMethod: (Array[Long], Array[Long]) => String) extends AccumulatorV2[Long, Long] {
   // This is a workaround for SPARK-11013.
   // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
   // update it at the end of task and the value will be at least 0. Then we can filter out the -1
@@ -87,9 +91,18 @@ object SQLMetrics {
   private val TIMING_METRIC = "timing"
   private val NS_TIMING_METRIC = "nsTiming"
   private val AVERAGE_METRIC = "average"
+  private val V2_CUSTOM = "v2Custom"
 
   private val baseForAvgMetric: Int = 10
 
+  private def defaultAggregateMethod(metricType: String): (Array[Long], Array[Long]) => String = {
+    SQLMetrics.stringValue(metricType, _, _)
+  }
+
+  private def customAggregateMethod(
+      aggregator: (Array[Long]) => String): (Array[Long], Array[Long]) => String = {
+    (metrics, _) => aggregator(metrics)
+  }
   /**
    * Converts a double value to long value by multiplying a base integer, so we can store it in
    * `SQLMetrics`. It only works for average metrics. When showing the metrics on UI, we restore
@@ -102,8 +115,18 @@ object SQLMetrics {
   }
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
-    val acc = new SQLMetric(SUM_METRIC)
+    val acc = new SQLMetric(SUM_METRIC, aggregateMethod = defaultAggregateMethod(SUM_METRIC))
     acc.register(sc, name = Some(name), countFailedValues = false)
+    acc
+  }
+
+  /**
+   * Create a metric to report data source v2 custom metric.
+   */
+  def createV2CustomMetric(sc: SparkContext, customMetric: CustomMetric): SQLMetric = {
+    val acc = new SQLMetric(V2_CUSTOM,
+      aggregateMethod = customAggregateMethod(customMetric.aggregateTaskMetrics))
+    acc.register(sc, name = Some(customMetric.name()), countFailedValues = false)
     acc
   }
 
@@ -115,7 +138,8 @@ object SQLMetrics {
     // The final result of this metric in physical operator UI may look like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
-    val acc = new SQLMetric(SIZE_METRIC, -1)
+    val acc = new SQLMetric(SIZE_METRIC, -1,
+      aggregateMethod = defaultAggregateMethod(SIZE_METRIC))
     acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
@@ -124,14 +148,16 @@ object SQLMetrics {
     // The final result of this metric in physical operator UI may looks like:
     // duration total (min, med, max):
     // 5s (800ms, 1s, 2s)
-    val acc = new SQLMetric(TIMING_METRIC, -1)
+    val acc = new SQLMetric(TIMING_METRIC, -1,
+      aggregateMethod = defaultAggregateMethod(TIMING_METRIC))
     acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
 
   def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
     // Same with createTimingMetric, just normalize the unit of time to millisecond.
-    val acc = new SQLMetric(NS_TIMING_METRIC, -1)
+    val acc = new SQLMetric(NS_TIMING_METRIC, -1,
+      aggregateMethod = defaultAggregateMethod(NS_TIMING_METRIC))
     acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
@@ -146,7 +172,8 @@ object SQLMetrics {
     // The final result of this metric in physical operator UI may looks like:
     // probe avg (min, med, max):
     // (1.2, 2.2, 6.3)
-    val acc = new SQLMetric(AVERAGE_METRIC)
+    val acc = new SQLMetric(AVERAGE_METRIC,
+      aggregateMethod = defaultAggregateMethod(AVERAGE_METRIC))
     acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }

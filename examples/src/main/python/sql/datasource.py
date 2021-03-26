@@ -104,7 +104,7 @@ def basic_datasource_example(spark):
         .write
         .partitionBy("favorite_color")
         .bucketBy(42, "name")
-        .saveAsTable("people_partitioned_bucketed"))
+        .saveAsTable("users_partitioned_bucketed"))
     # $example off:write_partition_and_bucket$
 
     # $example on:manual_load_options$
@@ -135,7 +135,7 @@ def basic_datasource_example(spark):
     # $example off:direct_sql$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed")
-    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed")
+    spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed")
 
 
 def parquet_example(spark):

@@ -34,7 +34,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
 
   override lazy val metrics = {
     val customMetrics = scan.supportedCustomMetrics().map { customMetric =>
-      customMetric.getName -> SQLMetrics.createMetric(sparkContext, customMetric.getDescription)
+      customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
     }
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
       customMetrics

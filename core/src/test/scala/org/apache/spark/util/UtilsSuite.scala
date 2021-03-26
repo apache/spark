@@ -1024,11 +1024,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     // Set some secret keys
     val secretKeys = Seq(
       "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "spark.hadoop.fs.s3a.access.key",
       "spark.my.password",
       "spark.my.sECreT")
     secretKeys.foreach { key => sparkConf.set(key, "sensitive_value") }
     // Set a non-secret key
     sparkConf.set("spark.regular.property", "regular_value")
+    sparkConf.set("spark.hadoop.fs.s3a.access_key", "regular_value")
     // Set a property with a regular key but secret in the value
     sparkConf.set("spark.sensitive.property", "has_secret_in_value")
 
@@ -1039,7 +1041,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     secretKeys.foreach { key => assert(redactedConf(key) === Utils.REDACTION_REPLACEMENT_TEXT) }
     assert(redactedConf("spark.regular.property") === "regular_value")
     assert(redactedConf("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
-
+    assert(redactedConf("spark.hadoop.fs.s3a.access.key") === Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(redactedConf("spark.hadoop.fs.s3a.access_key") === "regular_value")
   }
 
   test("redact sensitive information in command line args") {
@@ -1304,10 +1307,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("pathsToMetadata") {
     val paths = (0 to 4).map(i => new Path(s"path$i"))
-    assert(Utils.buildLocationMetadata(paths, 5) == "[path0]")
-    assert(Utils.buildLocationMetadata(paths, 10) == "[path0, path1]")
-    assert(Utils.buildLocationMetadata(paths, 15) == "[path0, path1, path2]")
-    assert(Utils.buildLocationMetadata(paths, 25) == "[path0, path1, path2, path3]")
+    assert(Utils.buildLocationMetadata(paths, 10) == "(5 paths)[...]")
+    // 11 is the minimum threshold to print at least one path
+    assert(Utils.buildLocationMetadata(paths, 11) == "(5 paths)[path0, ...]")
+    // 11 + 5 + 2 = 18 is the minimum threshold to print two paths
+    assert(Utils.buildLocationMetadata(paths, 18) == "(5 paths)[path0, path1, ...]")
   }
 
   test("checkHost supports both IPV4 and IPV6") {

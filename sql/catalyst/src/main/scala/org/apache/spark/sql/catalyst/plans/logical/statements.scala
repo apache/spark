@@ -179,7 +179,10 @@ case class CreateViewStatement(
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewType: ViewType) extends ParsedStatement
+    viewType: ViewType) extends ParsedStatement {
+
+  override def children: Seq[LogicalPlan] = Seq(child)
+}
 
 /**
  * A REPLACE TABLE command, as parsed from SQL.
@@ -267,21 +270,6 @@ case class AlterTableRenameColumnStatement(
 case class AlterTableDropColumnsStatement(
     tableName: Seq[String],
     columnsToDrop: Seq[Seq[String]]) extends ParsedStatement
-
-/**
- * ALTER TABLE ... SET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterTableSetPropertiesStatement(
-    tableName: Seq[String],
-    properties: Map[String, String]) extends ParsedStatement
-
-/**
- * ALTER TABLE ... UNSET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterTableUnsetPropertiesStatement(
-    tableName: Seq[String],
-    propertyKeys: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
 
 /**
  * An INSERT INTO statement, as parsed from SQL.

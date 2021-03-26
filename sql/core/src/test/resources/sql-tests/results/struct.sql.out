@@ -83,7 +83,7 @@ struct<ID:int,NST:string>
 -- !query
 SELECT ID, STRUCT(ST.C as STC, ST.D as STD).STD FROM tbl_x
 -- !query schema
-struct<ID:int,struct(ST.C AS `C` AS `STC`, ST.D AS `D` AS `STD`).STD:string>
+struct<ID:int,struct(ST.C AS STC, ST.D AS STD).STD:string>
 -- !query output
 1	delta
 2	eta

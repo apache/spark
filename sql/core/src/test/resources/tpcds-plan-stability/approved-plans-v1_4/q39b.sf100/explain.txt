@@ -176,7 +176,7 @@ Results [5]: [w_warehouse_sk#12, i_item_sk#10, d_moy#8, stddev_samp(cast(inv_qua
 
 (26) Filter [codegen id : 5]
 Input [5]: [w_warehouse_sk#12, i_item_sk#10, d_moy#8, stdev#28, mean#29]
-Condition : (((((isnotnull(mean#29) AND isnotnull(stdev#28)) AND NOT (mean#29 = 0.0)) AND ((stdev#28 / mean#29) > 1.0)) AND NOT (mean#29 = 0.0)) AND ((stdev#28 / mean#29) > 1.5))
+Condition : ((isnotnull(mean#29) AND isnotnull(stdev#28)) AND ((NOT (mean#29 = 0.0) AND ((stdev#28 / mean#29) > 1.0)) AND ((stdev#28 / mean#29) > 1.5)))
 
 (27) Project [codegen id : 5]
 Output [5]: [w_warehouse_sk#12, i_item_sk#10, d_moy#8, mean#29, CASE WHEN (mean#29 = 0.0) THEN null ELSE (stdev#28 / mean#29) END AS cov#30]
@@ -280,7 +280,7 @@ Results [5]: [w_warehouse_sk#38, i_item_sk#37, d_moy#35, stddev_samp(cast(inv_qu
 
 (49) Filter [codegen id : 11]
 Input [5]: [w_warehouse_sk#38, i_item_sk#37, d_moy#35, stdev#53, mean#54]
-Condition : (((isnotnull(mean#54) AND isnotnull(stdev#53)) AND NOT (mean#54 = 0.0)) AND ((stdev#53 / mean#54) > 1.0))
+Condition : ((isnotnull(mean#54) AND isnotnull(stdev#53)) AND (NOT (mean#54 = 0.0) AND ((stdev#53 / mean#54) > 1.0)))
 
 (50) Project [codegen id : 11]
 Output [5]: [w_warehouse_sk#38, i_item_sk#37, d_moy#35, mean#54, CASE WHEN (mean#54 = 0.0) THEN null ELSE (stdev#53 / mean#54) END AS cov#55]

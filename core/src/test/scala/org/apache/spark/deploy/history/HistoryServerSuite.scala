@@ -181,6 +181,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "multiple resource profiles" -> "applications/application_1578436911597_0052/environment",
     "stage list with peak metrics" -> "applications/app-20200706201101-0003/stages",
     "stage with peak metrics" -> "applications/app-20200706201101-0003/stages/2/0",
+    "stage with summaries" -> "applications/app-20200706201101-0003/stages/2/0?withSummaries=true",
 
     "app environment" -> "applications/app-20161116163331-0000/environment",
 

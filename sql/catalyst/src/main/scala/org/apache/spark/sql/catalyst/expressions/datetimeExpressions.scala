@@ -502,7 +502,7 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
       input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
     case _: FloatType => input =>
       val f = input.asInstanceOf[Float]
-      if (f.isNaN || f.isInfinite) null else (f * MICROS_PER_SECOND).toLong
+      if (f.isNaN || f.isInfinite) null else (f.toDouble * MICROS_PER_SECOND).toLong
     case _: DoubleType => input =>
       val d = input.asInstanceOf[Double]
       if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
@@ -517,13 +517,14 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
       val operand = s"new java.math.BigDecimal($MICROS_PER_SECOND)"
       defineCodeGen(ctx, ev, c => s"$c.toJavaBigDecimal().multiply($operand).longValueExact()")
     case other =>
+      val castToDouble = if (other.isInstanceOf[FloatType]) "(double)" else ""
       nullSafeCodeGen(ctx, ev, c => {
         val typeStr = CodeGenerator.boxedType(other)
         s"""
            |if ($typeStr.isNaN($c) || $typeStr.isInfinite($c)) {
            |  ${ev.isNull} = true;
            |} else {
-           |  ${ev.value} = (long)($c * $MICROS_PER_SECOND);
+           |  ${ev.value} = (long)($castToDouble$c * $MICROS_PER_SECOND);
            |}
            |""".stripMargin
       })
@@ -1263,25 +1264,33 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TimestampType, TypeCollection(CalendarIntervalType, DayTimeIntervalType))
 
   override def dataType: DataType = TimestampType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(start: Any, interval: Any): Any = {
-    val itvl = interval.asInstanceOf[CalendarInterval]
-    DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], itvl.months, itvl.days, itvl.microseconds, zoneId)
+  override def nullSafeEval(start: Any, interval: Any): Any = right.dataType match {
+    case DayTimeIntervalType =>
+      timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneId)
+    case CalendarIntervalType =>
+      val i = interval.asInstanceOf[CalendarInterval]
+      timestampAddInterval(start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, $i.months, $i.days, $i.microseconds, $zid)"""
-    })
+    interval.dataType match {
+      case DayTimeIntervalType =>
+        defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampAddDayTime($sd, $dt, $zid)""")
+      case CalendarIntervalType =>
+        defineCodeGen(ctx, ev, (sd, i) => {
+          s"""$dtu.timestampAddInterval($sd, $i.months, $i.days, $i.microseconds, $zid)"""
+        })
+    }
   }
 }
 
@@ -1471,6 +1480,22 @@ case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimest
   override val prettyName: String = "to_utc_timestamp"
 }
 
+abstract class AddMonthsBase extends BinaryExpression with ImplicitCastInputTypes
+  with NullIntolerant {
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, months: Any): Any = {
+    DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (sd, m) => {
+      s"""$dtu.dateAddMonths($sd, $m)"""
+    })
+  }
+}
+
 /**
  * Returns the date that is num_months after start_date.
  */
@@ -1485,28 +1510,58 @@ case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimest
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class AddMonths(startDate: Expression, numMonths: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+case class AddMonths(startDate: Expression, numMonths: Expression) extends AddMonthsBase {
   override def left: Expression = startDate
   override def right: Expression = numMonths
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
 
-  override def dataType: DataType = DateType
+  override def prettyName: String = "add_months"
+}
 
-  override def nullSafeEval(start: Any, months: Any): Any = {
-    DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
+// Adds the year-month interval to the date
+case class DateAddYMInterval(date: Expression, interval: Expression) extends AddMonthsBase {
+  override def left: Expression = date
+  override def right: Expression = interval
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, YearMonthIntervalType)
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+}
+
+// Adds the year-month interval to the timestamp
+case class TimestampAddYMInterval(
+    timestamp: Expression,
+    interval: Expression,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
+
+  def this(timestamp: Expression, interval: Expression) = this(timestamp, interval, None)
+
+  override def left: Expression = timestamp
+  override def right: Expression = interval
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, YearMonthIntervalType)
+
+  override def dataType: DataType = TimestampType
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nullSafeEval(micros: Any, months: Any): Any = {
+    timestampAddMonths(micros.asInstanceOf[Long], months.asInstanceOf[Int], zoneId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, m) => {
-      s"""$dtu.dateAddMonths($sd, $m)"""
+    defineCodeGen(ctx, ev, (micros, months) => {
+      s"""$dtu.timestampAddMonths($micros, $months, $zid)"""
     })
   }
-
-  override def prettyName: String = "add_months"
 }
 
 /**

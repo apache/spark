@@ -223,8 +223,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
-  private def setupTaskSchedulerForLocalityTests(clock: ManualClock): TaskSchedulerImpl = {
-    val conf = new SparkConf()
+  private def setupTaskSchedulerForLocalityTests(
+      clock: ManualClock,
+      conf: SparkConf = new SparkConf()): TaskSchedulerImpl = {
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     val taskScheduler = new TaskSchedulerImpl(sc,
       sc.conf.get(config.TASK_MAX_FAILURES),
@@ -1917,6 +1918,81 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(taskDescriptions.size === 2)
     assert(taskDescriptions.map(_.index).sorted == Seq(0, 1))
     assert(manager.copiesRunning.take(2) === Array(1, 1))
+  }
+
+  test("SPARK-24818: test delay scheduling for barrier TaskSetManager") {
+    val clock = new ManualClock()
+    val conf = new SparkConf().set(config.LEGACY_LOCALITY_WAIT_RESET, false)
+    val sched = setupTaskSchedulerForLocalityTests(clock, conf)
+
+    // Call resourceOffers() first, so executor-0 can be used
+    // to calculate the locality levels of the TaskSetManager later
+    sched.resourceOffers(Seq(WorkerOffer("executor-0", "host1", 1, Some("host1"))).toIndexedSeq)
+
+    val prefLocs = Seq(TaskLocation("host1", "executor-0"))
+    val barrierTaskSet = FakeTask.createBarrierTaskSet(1, prefLocs)
+    sched.submitTasks(barrierTaskSet)
+
+    val tsm = sched.taskSetManagerForAttempt(0, 0).get
+    assert(tsm.myLocalityLevels ===
+      Array(TaskLocality.PROCESS_LOCAL, TaskLocality.NODE_LOCAL, TaskLocality.ANY))
+    val offers = Seq(WorkerOffer("executor-1", "host1", 1, Some("host1"))).toIndexedSeq
+    var tasks = sched.resourceOffers(offers).flatten
+    // The TaskSetManager prefers executor-0 for the PROCESS_LOCAL location but there's no
+    // available offer of executor-0 in this round, so task scheduling will be delayed first.
+    assert(tasks.length === 0)
+    // Advance the clock so the TaskSetManager can move to next locality level(NODE_LOCAL)
+    clock.advance(4000)
+    tasks = sched.resourceOffers(offers).flatten
+    assert(tasks.length === 1)
+    assert(tsm.taskInfos(tasks.head.taskId).taskLocality === TaskLocality.NODE_LOCAL)
+  }
+
+  test("SPARK-24818: test resource revert of barrier TaskSetManager") {
+    val clock = new ManualClock()
+    val conf = new SparkConf().set(config.LEGACY_LOCALITY_WAIT_RESET, false)
+    val sched = setupTaskSchedulerForLocalityTests(clock, conf)
+
+    // Call resourceOffers() first, so executors can be used
+    // to calculate the locality levels of the TaskSetManager later
+    sched.resourceOffers(Seq(WorkerOffer("executor-0", "host1", 1, Some("host1"))).toIndexedSeq)
+
+    val barrierTaskSet =
+      FakeTask.createBarrierTaskSet(2, 0, 0, 0, 0,
+        Seq(TaskLocation("host1", "executor-0")), Seq(TaskLocation("host1", "executor-1")))
+    val normalTaskSet = FakeTask.createTaskSet(2, 1, 0, 0, 0)
+
+    // Submit barrier task set first, so we can schedule it before the normal task set in order to
+    // test the resource revert behaviour of the barrier TaskSetManager
+    sched.submitTasks(barrierTaskSet)
+    sched.submitTasks(normalTaskSet)
+
+    val barrierTSM = sched.taskSetManagerForAttempt(0, 0).get
+    val normalTSM = sched.taskSetManagerForAttempt(1, 0).get
+    assert(barrierTSM.myLocalityLevels ===
+      Array(TaskLocality.PROCESS_LOCAL, TaskLocality.NODE_LOCAL, TaskLocality.ANY))
+    assert(normalTSM.myLocalityLevels ===  Array(TaskLocality.NO_PREF, TaskLocality.ANY))
+
+    // The barrier TaskSetManager can not launch all tasks because of delay scheduling.
+    // So it will revert assigned resources and let the normal TaskSetManager to schedule first.
+    var tasks = sched.resourceOffers(
+      Seq(WorkerOffer("executor-0", "host1", 1, Some("host1")),
+        WorkerOffer("executor-2", "host1", 1, Some("host1"))).toIndexedSeq).flatten
+    assert(tasks.length === 2)
+    var taskId = tasks.head.taskId
+    assert(!barrierTSM.runningTasksSet.contains(taskId))
+    assert(normalTSM.runningTasksSet.contains(taskId))
+
+    // Advance the clock so the TaskSetManager can move to next locality level(NODE_LOCAL)
+    // and launch all tasks.
+    clock.advance(4000)
+    tasks = sched.resourceOffers(
+      Seq(WorkerOffer("executor-0", "host1", 1, Some("host1")),
+        WorkerOffer("executor-2", "host1", 1, Some("host1"))).toIndexedSeq).flatten
+    assert(tasks.length === 2)
+    taskId = tasks.head.taskId
+    assert(barrierTSM.runningTasksSet.contains(taskId))
+    assert(!normalTSM.runningTasksSet.contains(taskId))
   }
 
   /**

@@ -49,10 +49,6 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   private val f: Expression = UnresolvedAttribute("f")
   private val b: Expression = UnresolvedAttribute("b")
 
-  before {
-    catalog.createTempView("table", relation, overrideIfExists = true)
-  }
-
   private def checkType(expression: Expression, expectedType: DataType): Unit = {
     val plan = Project(Seq(Alias(expression, "c")()), relation)
     assert(analyzer.execute(plan).schema.fields(0).dataType === expectedType)

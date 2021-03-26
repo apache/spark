@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -243,13 +244,19 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("Abs") {
-    testNumericDataTypes { convert =>
-      val input = Literal(convert(1))
-      val dataType = input.dataType
-      checkEvaluation(Abs(Literal(convert(0))), convert(0))
-      checkEvaluation(Abs(Literal(convert(1))), convert(1))
-      checkEvaluation(Abs(Literal(convert(-1))), convert(1))
-      checkEvaluation(Abs(Literal.create(null, dataType)), null)
+    // SPARK-34742: when the input is not MinValue of integral types, the results of function ABS
+    //              should be the same with/without ANSI mode on.
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        testNumericDataTypes { convert =>
+          val input = Literal(convert(1))
+          val dataType = input.dataType
+          checkEvaluation(Abs(Literal(convert(0))), convert(0))
+          checkEvaluation(Abs(Literal(convert(1))), convert(1))
+          checkEvaluation(Abs(Literal(convert(-1))), convert(1))
+          checkEvaluation(Abs(Literal.create(null, dataType)), null)
+        }
+      }
     }
     checkEvaluation(Abs(positiveShortLit), positiveShort)
     checkEvaluation(Abs(negativeShortLit), (- negativeShort).toShort)
@@ -259,7 +266,26 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Abs(negativeLongLit), - negativeLong)
 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Abs, tpe)
+      checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Abs(e, false), tpe)
+    }
+  }
+
+  test("SPARK-34742: Abs throws exception when input is out of range in ANSI mode") {
+    val minValues = Seq(
+      Literal(Byte.MinValue, ByteType),
+      Literal(Short.MinValue, ShortType),
+      Literal(Int.MinValue),
+      Literal(Long.MinValue)
+    )
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      minValues.foreach { v =>
+        checkExceptionInExpression[ArithmeticException](Abs(v), "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      minValues.foreach { v =>
+        checkEvaluation(Abs(v), v.value)
+      }
     }
   }
 
@@ -574,6 +600,45 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkExceptionInExpression[ArithmeticException](operator(one, zero), "divide by zero")
         }
       }
+    }
+  }
+
+  test("SPARK-34677: exact add and subtract of day-time and year-month intervals") {
+    Seq(true, false).foreach { failOnError =>
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
+          failOnError),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Subtract(
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          failOnError
+        ),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Add(
+          Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          failOnError
+        ),
+        "overflow")
+
+      checkExceptionInExpression[ArithmeticException](
+        Subtract(
+          Literal.create(Duration.ofDays(-106751991), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          failOnError
+        ),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Add(
+          Literal.create(Duration.ofDays(106751991), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          failOnError
+        ),
+        "overflow")
     }
   }
 }
