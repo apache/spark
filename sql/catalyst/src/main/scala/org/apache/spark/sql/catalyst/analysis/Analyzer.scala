@@ -27,6 +27,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations.hasConflictingAttrs
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions.{FrameLessOffsetWindowFunction, _}
@@ -1431,22 +1432,6 @@ class Analyzer(override val catalogManager: CatalogManager)
    * a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
-
-    private def hasConflictingAttrs(p: LogicalPlan): Boolean = {
-      p.children.length > 1 && {
-        // Note that duplicated attributes are allowed within a single node,
-        // e.g., df.select($"a", $"a"), so we should only check conflicting
-        // attributes between nodes.
-        val uniqueAttrs = mutable.HashSet[ExprId]()
-        p.children.head.outputSet.foreach(a => uniqueAttrs.add(a.exprId))
-        p.children.tail.exists { child =>
-          val uniqueSize = uniqueAttrs.size
-          val childSize = child.outputSet.size
-          child.outputSet.foreach(a => uniqueAttrs.add(a.exprId))
-          uniqueSize + childSize > uniqueAttrs.size
-        }
-      }
-    }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan if !p.childrenResolved => p
