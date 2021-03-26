@@ -63,6 +63,11 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     `GROUP BY GROUPING SETS (warehouse, product)`. It generates one grouping set
     per non-empty subset of the given expressions, so `GROUP BY GROUPING SETS (warehouse, product)`
     is equivalent to `GROUP BY GROUPING SETS ((warehouse), (product))`.
+    
+    `GROUP BY warehouse, product GROUPING SETS((warehouse, producets), (warehouse))` is semantically equivalent to
+    `GROUP BY GROUPING SETS((warehouse, produce), (warehouse))`. Under this grammar,
+    the fields appearing in `GROUPING SETS`'s grouping_set must be a subset of the columns
+    appearing in group by expression.
 
 * **ROLLUP**
 
