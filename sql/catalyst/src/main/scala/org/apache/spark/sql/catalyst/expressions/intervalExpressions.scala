@@ -356,6 +356,8 @@ case class DivideYMInterval(
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
     case LongType => (months: Int, num) =>
+      // Year-month interval has `Int` as the internal type. The result of the divide operation
+      // of `Int` by `Long` must fit to `Int`. So, the casting to `Int` cannot cause overflow.
       LongMath.divide(months, num.asInstanceOf[Long], RoundingMode.HALF_UP).toInt
     case _: IntegralType => (months: Int, num) =>
       IntMath.divide(months, num.asInstanceOf[Number].intValue(), RoundingMode.HALF_UP)
