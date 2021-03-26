@@ -71,7 +71,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     `GROUP BY warehouse, product WITH ROLLUP` or `GROUP BY ROLLUP(warehouse, product)` is equivalent to
     `GROUP BY GROUPING SETS((warehouse, product), (warehouse), ())`.
     `GROUP BY ROLLUP(warehouse, product, (warehouse, location))` is equivalent to
-    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse), ())`
+    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse), ())`.
     The N elements of a `ROLLUP` specification results in N+1 `GROUPING SETS`.
 
 * **CUBE**
