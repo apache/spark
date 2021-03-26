@@ -1437,12 +1437,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         // Note that duplicated attributes are allowed within a single node,
         // e.g., df.select($"a", $"a"), so we should only check conflicting
         // attributes between nodes.
-        val uniqueAttrs = mutable.HashSet[Attribute]()
-        p.children.head.outputSet.foreach(uniqueAttrs.add)
+        val uniqueAttrs = mutable.HashSet[ExprId]()
+        p.children.head.outputSet.foreach(a => uniqueAttrs.add(a.exprId))
         p.children.tail.exists { child =>
           val uniqueSize = uniqueAttrs.size
           val childSize = child.outputSet.size
-          child.outputSet.foreach(uniqueAttrs.add)
+          child.outputSet.foreach(a => uniqueAttrs.add(a.exprId))
           uniqueSize + childSize > uniqueAttrs.size
         }
       }
