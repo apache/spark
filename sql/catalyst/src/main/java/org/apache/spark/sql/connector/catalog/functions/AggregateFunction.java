@@ -28,7 +28,7 @@ import java.io.Serializable;
  * For each input row, Spark will call an update method that corresponds to the
  * {@link #inputTypes() input data types}. The expected JVM argument types must be the types used by
  * Spark's InternalRow API. If no direct method is found or when not using codegen, Spark will call
- * {@link #update(S, InternalRow)}.
+ * update with {@link InternalRow}.
  * <p>
  * The JVM type of result values produced by this function must be the type used by Spark's
  * InternalRow API for the {@link DataType SQL data type} returned by {@link #resultType()}.
@@ -39,7 +39,7 @@ import java.io.Serializable;
  * produce the result.
  * <p>
  * Intermediate aggregation state must be {@link Serializable} so that state produced by parallel
- * tasks can be sent to a single executor and merged to produce a final result.
+ * tasks can be serialized, shuffled, and then merged to produce a final result.
  *
  * @param <S> the JVM type for the aggregation's intermediate state; must be {@link Serializable}
  * @param <R> the JVM type of result values
@@ -53,9 +53,7 @@ public interface AggregateFunction<S extends Serializable, R> extends BoundFunct
    * aggregation state. More than one intermediate aggregation state variable may be used when the
    * aggregation is run in parallel tasks.
    * <p>
-   * The object returned may passed to {@link #update(S, InternalRow)},
-   * and {@link #produceResult(S)}. Implementations that return null must support null state
-   * passed into all other methods.
+   * Implementations that return null must support null state passed into all other methods.
    *
    * @return a state instance or null
    */

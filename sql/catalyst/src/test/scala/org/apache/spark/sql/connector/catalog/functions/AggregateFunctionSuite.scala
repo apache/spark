@@ -107,12 +107,8 @@ object IntAverage extends AggregateFunction[(Int, Int), Int] {
 
   override def update(state: (Int, Int), input: InternalRow): (Int, Int) = {
     val i = input.getInt(0)
-    state match {
-      case (_, 0) =>
-        (i, 1)
-      case (total, count) =>
-        (total + i, count + 1)
-    }
+    val (total, count) = state
+    (total + i, count + 1)
   }
 
   override def merge(leftState: (Int, Int), rightState: (Int, Int)): (Int, Int) = {
