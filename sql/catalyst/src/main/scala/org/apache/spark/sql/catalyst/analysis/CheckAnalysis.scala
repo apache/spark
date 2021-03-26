@@ -680,12 +680,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |Invalid expressions: [${invalidExprSqls.mkString(", ")}]""".stripMargin
             )
 
-          case c: Command =>
-            c.innerChildren.foreach {
-              case l: LogicalPlan => checkAnalysis(l)
-              case _ =>
-            }
-
           case _ => // Analysis successful!
         }
     }
