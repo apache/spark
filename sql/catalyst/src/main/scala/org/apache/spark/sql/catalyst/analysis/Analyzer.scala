@@ -372,10 +372,15 @@ class Analyzer(override val catalogManager: CatalogManager)
         case m @ Multiply(l, r, f) if m.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _) => MultiplyInterval(l, r, f)
           case (_, CalendarIntervalType) => MultiplyInterval(r, l, f)
+          case (YearMonthIntervalType, _) => MultiplyYMInterval(l, r)
+          case (_, YearMonthIntervalType) => MultiplyYMInterval(r, l)
+          case (DayTimeIntervalType, _) => MultiplyDTInterval(l, r)
+          case (_, DayTimeIntervalType) => MultiplyDTInterval(r, l)
           case _ => m
         }
         case d @ Divide(l, r, f) if d.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _) => DivideInterval(l, r, f)
+          case (YearMonthIntervalType, _) => DivideYMInterval(l, r)
           case _ => d
         }
       }
@@ -1889,13 +1894,27 @@ class Analyzer(override val catalogManager: CatalogManager)
   private def resolveExpression(
       expr: Expression,
       resolveColumnByName: Seq[String] => Option[Expression],
-      resolveColumnByOrdinal: Int => Attribute,
+      getAttrCandidates: () => Seq[Attribute],
       throws: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
       if (e.resolved) return e
       e match {
         case f: LambdaFunction if !f.bound => f
-        case GetColumnByOrdinal(ordinal, _) => resolveColumnByOrdinal(ordinal)
+
+        case GetColumnByOrdinal(ordinal, _) =>
+          val attrCandidates = getAttrCandidates()
+          assert(ordinal >= 0 && ordinal < attrCandidates.length)
+          attrCandidates(ordinal)
+
+        case GetViewColumnByNameAndOrdinal(viewName, colName, ordinal, expectedNumCandidates) =>
+          val attrCandidates = getAttrCandidates()
+          val matched = attrCandidates.filter(a => resolver(a.name, colName))
+          if (matched.length != expectedNumCandidates) {
+            throw QueryCompilationErrors.incompatibleViewSchemaChange(
+              viewName, colName, expectedNumCandidates, matched)
+          }
+          matched(ordinal)
+
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
             resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
@@ -1909,6 +1928,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
           logDebug(s"Resolving $u to $result")
           result
+
         case u @ UnresolvedExtractValue(child, fieldName) =>
           val newChild = innerResolve(child, isTopLevel = false)
           if (newChild.resolved) {
@@ -1916,6 +1936,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           } else {
             u.copy(child = newChild)
           }
+
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
     }
@@ -1948,10 +1969,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveColumnByName = nameParts => {
         plan.resolve(nameParts, resolver)
       },
-      resolveColumnByOrdinal = ordinal => {
-        assert(ordinal >= 0 && ordinal < plan.output.length)
-        plan.output(ordinal)
-      },
+      getAttrCandidates = () => plan.output,
       throws = throws)
   }
 
@@ -1971,10 +1989,9 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveColumnByName = nameParts => {
         q.resolveChildren(nameParts, resolver)
       },
-      resolveColumnByOrdinal = ordinal => {
+      getAttrCandidates = () => {
         assert(q.children.length == 1)
-        assert(ordinal >= 0 && ordinal < q.children.head.output.length)
-        q.children.head.output(ordinal)
+        q.children.head.output
       },
       throws = true)
   }
@@ -3992,22 +4009,32 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
  */
 object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
+  object AttrOrOuterRef {
+    def unapply(e: Expression): Option[Attribute] = e match {
+      case a: Attribute => Some(a)
+      case OuterReference(a: Attribute) => Some(a)
+      case _ => None
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
-      case operator if operator.resolved => operator.transformExpressionsUp {
+      case operator => operator.transformExpressionsUp {
+        case e if !e.childrenResolved => e
+
         // String literal is treated as char type when it's compared to a char type column.
         // We should pad the shorter one to the longer length.
-        case b @ BinaryComparison(attr: Attribute, lit) if lit.foldable =>
-          padAttrLitCmp(attr, lit).map { newChildren =>
+        case b @ BinaryComparison(e @ AttrOrOuterRef(attr), lit) if lit.foldable =>
+          padAttrLitCmp(e, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren)
           }.getOrElse(b)
 
-        case b @ BinaryComparison(lit, attr: Attribute) if lit.foldable =>
-          padAttrLitCmp(attr, lit).map { newChildren =>
+        case b @ BinaryComparison(lit, e @ AttrOrOuterRef(attr)) if lit.foldable =>
+          padAttrLitCmp(e, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren.reverse)
           }.getOrElse(b)
 
-        case i @ In(attr: Attribute, list)
+        case i @ In(e @ AttrOrOuterRef(attr), list)
           if attr.dataType == StringType && list.forall(_.foldable) =>
           CharVarcharUtils.getRawType(attr.metadata).flatMap {
             case CharType(length) =>
@@ -4016,7 +4043,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
               val literalCharLengths = literalChars.map(_.numChars())
               val targetLen = (length +: literalCharLengths).max
               Some(i.copy(
-                value = addPadding(attr, length, targetLen),
+                value = addPadding(e, length, targetLen),
                 list = list.zip(literalCharLengths).map {
                   case (lit, charLength) => addPadding(lit, charLength, targetLen)
                 } ++ nulls.map(Literal.create(_, StringType))))
@@ -4024,20 +4051,46 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           }.getOrElse(i)
 
         // For char type column or inner field comparison, pad the shorter one to the longer length.
-        case b @ BinaryComparison(left: Attribute, right: Attribute) =>
-          b.withNewChildren(CharVarcharUtils.addPaddingInStringComparison(Seq(left, right)))
+        case b @ BinaryComparison(e1 @ AttrOrOuterRef(left), e2 @ AttrOrOuterRef(right))
+            // For the same attribute, they must be the same length and no padding is needed.
+            if !left.semanticEquals(right) =>
+          val outerRefs = (e1, e2) match {
+            case (_: OuterReference, _: OuterReference) => Seq(left, right)
+            case (_: OuterReference, _) => Seq(left)
+            case (_, _: OuterReference) => Seq(right)
+            case _ => Nil
+          }
+          val newChildren = CharVarcharUtils.addPaddingInStringComparison(Seq(left, right))
+          if (outerRefs.nonEmpty) {
+            b.withNewChildren(newChildren.map(_.transform {
+              case a: Attribute if outerRefs.exists(_.semanticEquals(a)) => OuterReference(a)
+            }))
+          } else {
+            b.withNewChildren(newChildren)
+          }
 
-        case i @ In(attr: Attribute, list) if list.forall(_.isInstanceOf[Attribute]) =>
+        case i @ In(e @ AttrOrOuterRef(attr), list) if list.forall(_.isInstanceOf[Attribute]) =>
           val newChildren = CharVarcharUtils.addPaddingInStringComparison(
             attr +: list.map(_.asInstanceOf[Attribute]))
-          i.copy(value = newChildren.head, list = newChildren.tail)
+          if (e.isInstanceOf[OuterReference]) {
+            i.copy(
+              value = newChildren.head.transform {
+                case a: Attribute if a.semanticEquals(attr) => OuterReference(a)
+              },
+              list = newChildren.tail)
+          } else {
+            i.copy(value = newChildren.head, list = newChildren.tail)
+          }
       }
     }
   }
 
-  private def padAttrLitCmp(attr: Attribute, lit: Expression): Option[Seq[Expression]] = {
-    if (attr.dataType == StringType) {
-      CharVarcharUtils.getRawType(attr.metadata).flatMap {
+  private def padAttrLitCmp(
+      expr: Expression,
+      metadata: Metadata,
+      lit: Expression): Option[Seq[Expression]] = {
+    if (expr.dataType == StringType) {
+      CharVarcharUtils.getRawType(metadata).flatMap {
         case CharType(length) =>
           val str = lit.eval().asInstanceOf[UTF8String]
           if (str == null) {
@@ -4045,9 +4098,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           } else {
             val stringLitLen = str.numChars()
             if (length < stringLitLen) {
-              Some(Seq(StringRPad(attr, Literal(stringLitLen)), lit))
+              Some(Seq(StringRPad(expr, Literal(stringLitLen)), lit))
             } else if (length > stringLitLen) {
-              Some(Seq(attr, StringRPad(lit, Literal(length))))
+              Some(Seq(expr, StringRPad(lit, Literal(length))))
             } else {
               None
             }
@@ -4057,6 +4110,14 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     } else {
       None
     }
+  }
+
+  private def padOuterRefAttrCmp(outerAttr: Attribute, attr: Attribute): Seq[Expression] = {
+    val Seq(r, newAttr) = CharVarcharUtils.addPaddingInStringComparison(Seq(outerAttr, attr))
+    val newOuterRef = r.transform {
+      case ar: Attribute if ar.semanticEquals(outerAttr) => OuterReference(ar)
+    }
+    Seq(newOuterRef, newAttr)
   }
 
   private def addPadding(expr: Expression, charLength: Int, targetLength: Int): Expression = {

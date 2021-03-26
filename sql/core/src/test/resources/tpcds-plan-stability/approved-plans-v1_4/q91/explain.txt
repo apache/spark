@@ -183,7 +183,7 @@ Input [8]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_curre
 Output [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Unknown)),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,Advanced Degree))), IsNotNull(cd_demo_sk)]
+PushedFilters: [Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Unknown             )),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,Advanced Degree     ))), IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
 (31) ColumnarToRow [codegen id : 5]
@@ -191,7 +191,7 @@ Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
 
 (32) Filter [codegen id : 5]
 Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
-Condition : ((((cd_marital_status#24 = M) AND (cd_education_status#25 = Unknown)) OR ((cd_marital_status#24 = W) AND (cd_education_status#25 = Advanced Degree))) AND isnotnull(cd_demo_sk#23))
+Condition : ((((cd_marital_status#24 = M) AND (cd_education_status#25 = Unknown             )) OR ((cd_marital_status#24 = W) AND (cd_education_status#25 = Advanced Degree     ))) AND isnotnull(cd_demo_sk#23))
 
 (33) BroadcastExchange
 Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]

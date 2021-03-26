@@ -96,7 +96,7 @@ Arguments: [rank(rank_col#12) windowspecdefinition(rank_col#12 ASC NULLS FIRST, 
 
 (13) Filter [codegen id : 4]
 Input [3]: [item_sk#11, rank_col#12, rnk#17]
-Condition : ((isnotnull(rnk#17) AND (rnk#17 < 11)) AND isnotnull(item_sk#11))
+Condition : ((rnk#17 < 11) AND isnotnull(item_sk#11))
 
 (14) Project [codegen id : 4]
 Output [2]: [item_sk#11, rnk#17]
@@ -138,7 +138,7 @@ Arguments: [rank(rank_col#22) windowspecdefinition(rank_col#22 DESC NULLS LAST, 
 
 (23) Filter [codegen id : 8]
 Input [3]: [item_sk#21, rank_col#22, rnk#25]
-Condition : ((isnotnull(rnk#25) AND (rnk#25 < 11)) AND isnotnull(item_sk#21))
+Condition : ((rnk#25 < 11) AND isnotnull(item_sk#21))
 
 (24) Project [codegen id : 8]
 Output [2]: [item_sk#21, rnk#25]

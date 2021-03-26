@@ -183,7 +183,7 @@ Arguments: [rank(sumsales#38) windowspecdefinition(i_category#23, sumsales#38 DE
 
 (33) Filter [codegen id : 10]
 Input [10]: [i_category#23, i_class#24, i_brand#25, i_product_name#26, d_year#27, d_qoy#28, d_moy#29, s_store_id#30, sumsales#38, rk#40]
-Condition : (isnotnull(rk#40) AND (rk#40 <= 100))
+Condition : (rk#40 <= 100)
 
 (34) TakeOrderedAndProject
 Input [10]: [i_category#23, i_class#24, i_brand#25, i_product_name#26, d_year#27, d_qoy#28, d_moy#29, s_store_id#30, sumsales#38, rk#40]
