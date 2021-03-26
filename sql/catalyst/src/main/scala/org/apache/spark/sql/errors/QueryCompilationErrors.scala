@@ -1268,10 +1268,6 @@ private[spark] object QueryCompilationErrors {
       s"createTableColumnTypes option column $col not found in schema ${schema.catalogString}")
   }
 
-  def parquetTypeUnsupportedError(parquetType: String): Throwable = {
-    new AnalysisException(s"Parquet type not supported: $parquetType")
-  }
-
   def parquetTypeUnsupportedYetError(parquetType: String): Throwable = {
     new AnalysisException(s"Parquet type not yet supported: $parquetType")
   }

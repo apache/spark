@@ -285,6 +285,14 @@ private[parquet] class ParquetRowConverter(
             metadata.getPrecision, metadata.getScale, updater)
         }
 
+      // For unsigned int64
+      case _: DecimalType if parquetType.getOriginalType == OriginalType.UINT_64 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
+          }
+        }
+
       // For INT64 backed decimals
       case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
         val metadata = parquetType.asPrimitiveType().getDecimalMetadata
