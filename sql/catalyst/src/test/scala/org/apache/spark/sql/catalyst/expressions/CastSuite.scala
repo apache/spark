@@ -1695,6 +1695,15 @@ class CastSuite extends CastSuiteBase {
   test("SPARK-34727: cast from float II") {
     checkCast(16777215.0f, java.time.Instant.ofEpochSecond(16777215))
   }
+
+  test("SPARK-34744: Improve error message for casting cause overflow error") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[ArithmeticException] {
+        Cast(Literal(128), ByteType).eval()
+      }.getMessage
+      assert(e.contains("Casting 128 to tinyint causes overflow"))
+    }
+  }
 }
 
 /**
