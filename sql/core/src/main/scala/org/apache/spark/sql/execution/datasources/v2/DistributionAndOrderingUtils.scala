@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByEx
 import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, IdentityTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortValue}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 object DistributionAndOrderingUtils {
@@ -50,8 +51,7 @@ object DistributionAndOrderingUtils {
         // this allows RepartitionByExpression to pick either range or hash partitioning
         RepartitionByExpression(distribution, query, finalNumPartitions)
       } else if (numPartitions > 0) {
-        throw new AnalysisException("The number of partitions can't be specified with unspecified" +
-          " distribution. Invalid Sink requirements detected.")
+        throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
       } else {
         query
       }

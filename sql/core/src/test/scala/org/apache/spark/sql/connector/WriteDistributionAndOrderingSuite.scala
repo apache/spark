@@ -153,7 +153,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
     val clustering = Array[Expression](FieldReference("data"), FieldReference("id"))
-    val tableDistribution = clusteredTableDistribution(clustering)
+    val tableDistribution = Distributions.clustered(clustering)
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -218,7 +218,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
     val clustering = Array[Expression](FieldReference("data"))
-    val tableDistribution = clusteredTableDistribution(clustering)
+    val tableDistribution = Distributions.clustered(clustering)
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -582,7 +582,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = clusteredTableDistribution(Array(FieldReference("data")))
+    val tableDistribution = Distributions.clustered(Array(FieldReference("data")))
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -648,7 +648,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = clusteredTableDistribution(Array(FieldReference("data")))
+    val tableDistribution = Distributions.clustered(Array(FieldReference("data")))
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -789,22 +789,13 @@ class WriteDistributionAndOrderingSuite
   private def orderedWritePartitioning(
       writeOrdering: Seq[catalyst.expressions.SortOrder],
       targetNumPartitions: Option[Int]): physical.Partitioning = {
-    targetNumPartitions match {
-      case Some(parts) => RangePartitioning(writeOrdering, parts)
-      case _ => RangePartitioning(writeOrdering, conf.numShufflePartitions)
-    }
-  }
-
-  private def clusteredTableDistribution(clustering: Array[Expression]): Distribution = {
-    Distributions.clustered(clustering)
+    RangePartitioning(writeOrdering, targetNumPartitions.getOrElse(conf.numShufflePartitions))
   }
 
   private def clusteredWritePartitioning(
       writePartitioningExprs: Seq[catalyst.expressions.Expression],
       targetNumPartitions: Option[Int]): physical.Partitioning = {
-    targetNumPartitions match {
-      case Some(parts) => HashPartitioning(writePartitioningExprs, parts)
-      case _ => HashPartitioning(writePartitioningExprs, conf.numShufflePartitions)
-    }
+    HashPartitioning(writePartitioningExprs,
+      targetNumPartitions.getOrElse(conf.numShufflePartitions))
   }
 }
