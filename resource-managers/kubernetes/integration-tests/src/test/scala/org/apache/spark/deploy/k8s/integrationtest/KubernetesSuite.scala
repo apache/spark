@@ -75,9 +75,9 @@ class KubernetesSuite extends SparkFunSuite
 
   protected override def logForFailedTest(): Unit = {
     logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
-    logInfo("BEGIN driver DESCRIBE POD\n" +
-      Minikube.describePods(s"spark-app-locator=$appLocator,spark-role=driver").mkString("\n"))
-    logInfo("END driver DESCRIBE POD")
+    logInfo("BEGIN DESCRIBE PODS for application\n" +
+      Minikube.describePods(s"spark-app-locator=$appLocator").mkString("\n"))
+    logInfo("END DESCRIBE PODS for the application")
     val driverPodOption = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", appLocator)

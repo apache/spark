@@ -126,10 +126,6 @@ private[spark] object Minikube extends Logging {
     }
   }
 
-  def describePods(labels: String): Seq[String] =
-    Minikube.executeMinikube(false, "kubectl", "--", "describe", "pods", "--all-namespaces",
-      "-l", labels)
-
   def executeMinikube(logOutput: Boolean, action: String, args: String*): Seq[String] = {
     ProcessUtils.executeProcess(
       Array("bash", "-c", s"MINIKUBE_IN_STYLE=true minikube $action ${args.mkString(" ")}"),
@@ -142,6 +138,10 @@ private[spark] object Minikube extends Logging {
   def minikubeServiceAction(args: String*): String = {
     executeMinikube(true, "service", args: _*).head
   }
+
+  def describePods(labels: String): Seq[String] =
+    Minikube.executeMinikube(false, "kubectl", "--", "describe", "pods", "--all-namespaces",
+      "-l", labels)
 }
 
 private[spark] object MinikubeStatus extends Enumeration {
