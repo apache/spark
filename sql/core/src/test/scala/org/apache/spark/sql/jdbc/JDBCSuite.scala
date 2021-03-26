@@ -433,10 +433,10 @@ class JDBCSuite extends QueryTest
     assert(ids(2) === 3)
   }
 
-  test("SPARK-34843: columnPartition should generate a correct stride size") {
-
+  test("SPARK-34843: columnPartition should generate the correct stride size" +
+    " and also realign the first partition for better distribution") {
     val schema = StructType(Seq(
-      StructField("PartitionColumn", DateType, nullable = false)
+      StructField("PartitionColumn", DateType)
     ))
 
     val numPartitions = 1000
@@ -454,38 +454,13 @@ class JDBCSuite extends QueryTest
       new JDBCOptions(url, "table", partitionConfig)
     )
 
-    val lastPredicate = partitions(numPartitions - 1).asInstanceOf[JDBCPartition].whereClause
-    assert(lastPredicate == """"PartitionColumn" >= '2020-08-02'""")
-  }
-
-  test("SPARK-34843: columnPartition should realign the first partition for better distribution") {
-
-    val schema = StructType(Seq(
-      StructField("PartitionColumn", DateType, nullable = false)
-    ))
-
-    val numPartitions = 200
-    val partitionConfig = Map(
-      "lowerBound" -> "1930-01-01",
-      "upperBound" -> "2020-12-31",
-      "numPartitions" -> numPartitions.toString,
-      "partitionColumn" -> "PartitionColumn"
-    )
-
-    val partitions = JDBCRelation.columnPartition(
-      schema,
-      analysis.caseInsensitiveResolution,
-      TimeZone.getDefault.toZoneId.toString,
-      new JDBCOptions(url, "table", partitionConfig)
-    )
-
     val firstPredicate = partitions.head.asInstanceOf[JDBCPartition].whereClause
     val lastPredicate = partitions(numPartitions - 1).asInstanceOf[JDBCPartition].whereClause
 
-    // 184 days (exclusive) to lower bound
-    assert(firstPredicate == """"PartitionColumn" < '1930-07-05' or "PartitionColumn" is null""")
-    // 184 days (inclusive) to upper bound
-    assert(lastPredicate == """"PartitionColumn" >= '2020-06-30'""")
+    // 152 days (exclusive) to lower bound
+    assert(firstPredicate == """"PartitionColumn" < '1930-06-02' or "PartitionColumn" is null""")
+    // 152 days (inclusive) to upper bound
+    assert(lastPredicate == """"PartitionColumn" >= '2020-08-02'""")
   }
 
   test("overflow of partition bound difference does not give negative stride") {

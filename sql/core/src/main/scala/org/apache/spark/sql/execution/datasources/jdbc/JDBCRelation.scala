@@ -123,12 +123,12 @@ private[sql] object JDBCRelation extends Logging {
     // Overflow can happen if you subtract then divide. For example:
     // (Long.MaxValue - Long.MinValue) / (numPartitions - 2).
     // Also, using fixed-point decimals here to avoid possible inaccuracy from floating point.
-    val strideUpperCalculation = (upperBound / BigDecimal(numPartitions))
+    val upperStride = (upperBound / BigDecimal(numPartitions))
       .setScale(18, RoundingMode.HALF_EVEN)
-    val strideLowerCalculation = (lowerBound / BigDecimal(numPartitions))
+    val lowerStride = (lowerBound / BigDecimal(numPartitions))
       .setScale(18, RoundingMode.HALF_EVEN)
 
-    val preciseStride = strideUpperCalculation - strideLowerCalculation
+    val preciseStride = upperStride - lowerStride
     val stride = preciseStride.toLong
 
     // Determine the number of strides the last partition will fall short of compared to the
