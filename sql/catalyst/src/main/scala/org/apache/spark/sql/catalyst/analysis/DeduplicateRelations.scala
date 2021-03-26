@@ -131,8 +131,6 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           subquery.withNewPlan(renewed)
       }
       (planWithNewSubquery, relations)
-
-    case _ => (plan, Nil)
   }
 
   private def isDuplicated(
