@@ -391,3 +391,46 @@ case class DivideYMInterval(
 
   override def toString: String = s"($left / $right)"
 }
+
+// Divide a day-time interval by a numeric
+case class DivideDTInterval(
+    interval: Expression,
+    num: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  override def left: Expression = interval
+  override def right: Expression = num
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DayTimeIntervalType, NumericType)
+  override def dataType: DataType = DayTimeIntervalType
+
+  @transient
+  private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
+    case _: IntegralType => (micros: Long, num) =>
+      LongMath.divide(micros, num.asInstanceOf[Number].longValue(), RoundingMode.HALF_UP)
+    case _: DecimalType => (micros: Long, num) =>
+      val decimalRes = ((new Decimal).set(micros) / num.asInstanceOf[Decimal]).toJavaBigDecimal
+      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+    case _: FractionalType => (micros: Long, num) =>
+      DoubleMath.roundToLong(micros / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
+  }
+
+  override def nullSafeEval(interval: Any, num: Any): Any = {
+    evalFunc(interval.asInstanceOf[Long], num)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
+    case _: IntegralType =>
+      val math = classOf[LongMath].getName
+      defineCodeGen(ctx, ev, (m, n) => s"$math.divide($m, $n, java.math.RoundingMode.HALF_UP)")
+    case _: DecimalType =>
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
+        ".setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()")
+    case _: FractionalType =>
+      val math = classOf[DoubleMath].getName
+      defineCodeGen(ctx, ev, (m, n) =>
+        s"$math.roundToLong($m / (double)$n, java.math.RoundingMode.HALF_UP)")
+  }
+
+  override def toString: String = s"($left / $right)"
+}
