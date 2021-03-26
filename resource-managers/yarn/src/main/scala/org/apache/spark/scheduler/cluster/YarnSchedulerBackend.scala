@@ -335,7 +335,7 @@ private[spark] abstract class YarnSchedulerBackend(
         }
 
       case amInfo @ YarnAmInfo(time, hostName, logUrlInfo) =>
-        logInfo(s"Updating the yarn AM info for client mode")
+        logInfo(s"Sending the Spark AM info for yarn client mode")
         driverEndpoint.send(amInfo)
 
     }

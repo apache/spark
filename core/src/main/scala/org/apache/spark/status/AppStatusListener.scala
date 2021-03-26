@@ -1359,9 +1359,9 @@ private[spark] class AppStatusListener(
 
   /**
    *
-   * @param time yarn AM start time
-   * @param hostName yarn Am host Name
-   * @param urlInfo Url for yarn AM host(stderr, stdout)
+   * @param time Spark AM start time in client mode
+   * @param hostName Spark AM Host Name
+   * @param urlInfo Url for Spark AM host(stderr, stdout)
    */
   private def updateAMInfoInLiveExec(time: Long,
     hostName: String,

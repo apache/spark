@@ -124,7 +124,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
-  // Send AM container information between to the driver Yarn client mode
+  // Send AM container information to the driver for Yarn client mode
   case class YarnAmInfo(time: Long, hostName: String, logUrlInfo: Map[String, String])
     extends CoarseGrainedClusterMessage
 
