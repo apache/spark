@@ -48,6 +48,16 @@ case class AddFileCommand(path: String) extends RunnableCommand {
 }
 
 /**
+ * Adds an archive to the current session so it can be used.
+ */
+case class AddArchiveCommand(path: String) extends RunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sparkContext.addArchive(path)
+    Seq.empty[Row]
+  }
+}
+
+/**
  * Returns a list of file paths that are added to resources.
  * If file paths are provided, return the ones that are added to resources.
  */
@@ -91,6 +101,27 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends Runnab
       } yield Row(jarPath)
     } else {
       jarList.map(Row(_))
+    }
+  }
+}
+
+/**
+ * Returns a list of archive paths that are added to resources.
+ * If archive paths are provided, return the ones that are added to resources.
+ */
+case class ListArchivesCommand(archives: Seq[String] = Seq.empty[String]) extends RunnableCommand {
+  override val output: Seq[Attribute] = {
+    AttributeReference("Results", StringType, nullable = false)() :: Nil
+  }
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val archiveList = sparkSession.sparkContext.listArchives()
+    if (archives.nonEmpty) {
+      for {
+        archiveName <- archives.map(f => new Path(f).getName)
+        archivePath <- archiveList if archivePath.contains(archiveName)
+      } yield Row(archivePath)
+    } else {
+      archiveList.map(Row(_))
     }
   }
 }

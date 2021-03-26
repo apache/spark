@@ -108,6 +108,47 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (a("datecol", DateType) =!= Literal(Date.valueOf("2019-01-01"))) :: Nil,
     "datecol != 2019-01-01")
 
+  filterTest("not-in, string filter",
+    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"))))) :: Nil,
+    """(strcol != "a" and strcol != "b")""")
+
+  filterTest("not-in, string filter with null",
+    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"), Literal(null))))) :: Nil,
+    "")
+
+  filterTest("not-in, date filter",
+    (Not(In(a("datecol", DateType),
+      Seq(Literal(Date.valueOf("2021-01-01")), Literal(Date.valueOf("2021-01-02")))))) :: Nil,
+    """(datecol != 2021-01-01 and datecol != 2021-01-02)""")
+
+  filterTest("not-in, date filter with null",
+    (Not(In(a("datecol", DateType),
+      Seq(Literal(Date.valueOf("2021-01-01")), Literal(Date.valueOf("2021-01-02")),
+        Literal(null))))) :: Nil,
+    "")
+
+  filterTest("not-inset, string filter",
+    (Not(InSet(a("strcol", StringType), Set(Literal("a").eval(), Literal("b").eval())))) :: Nil,
+    """(strcol != "a" and strcol != "b")""")
+
+  filterTest("not-inset, string filter with null",
+    (Not(InSet(a("strcol", StringType),
+      Set(Literal("a").eval(), Literal("b").eval(), Literal(null).eval())))) :: Nil,
+    "")
+
+  filterTest("not-inset, date filter",
+    (Not(InSet(a("datecol", DateType),
+      Set(Literal(Date.valueOf("2020-01-01")).eval(),
+        Literal(Date.valueOf("2020-01-02")).eval())))) :: Nil,
+    """(datecol != 2020-01-01 and datecol != 2020-01-02)""")
+
+  filterTest("not-inset, date filter with null",
+    (Not(InSet(a("datecol", DateType),
+      Set(Literal(Date.valueOf("2020-01-01")).eval(),
+        Literal(Date.valueOf("2020-01-02")).eval(),
+        Literal(null).eval())))) :: Nil,
+    "")
+
   // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
   // will be applied by Catalyst, this filter converter does not need to account for this.
   filterTest("SPARK-24879 IN predicates with only NULLs will not cause a NPE",
@@ -184,6 +225,14 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
       val filter = InSet(a("p", IntegerType), Set(null, 1, 2))
       val converted = shim.convertFilters(testTable, Seq(filter), conf.sessionLocalTimeZone)
       assert(converted == "(p >= 1 and p <= 2)")
+    }
+  }
+
+  test("Don't push not inset if it's values exceeds the threshold") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "2") {
+      val filter = Not(InSet(a("p", IntegerType), Set(1, 2, 3)))
+      val converted = shim.convertFilters(testTable, Seq(filter), conf.sessionLocalTimeZone)
+      assert(converted.isEmpty)
     }
   }
 

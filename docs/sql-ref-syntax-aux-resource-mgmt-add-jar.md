@@ -63,3 +63,5 @@ ADD JAR "ivy://group:module:version?exclude=group:module&transitive=true"
 * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
 * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
 * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
+* [ADD ARCHIVE](sql-ref-syntax-aux-resource-mgmt-add-archive.html)
+* [LIST ARCHIVE](sql-ref-syntax-aux-resource-mgmt-list-archive.html)

@@ -671,6 +671,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
+  test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
+    val cond = 'a > 1
+    assertAnalysisError(
+      MergeIntoTable(
+        testRelation,
+        testRelation,
+        cond,
+        UpdateAction(Some(cond), Assignment('a, 'a) :: Nil) :: Nil,
+        Nil
+      ),
+      "Reference 'a' is ambiguous" :: Nil)
+  }
+
   test("SPARK-24488 Generator with multiple aliases") {
     assertAnalysisSuccess(
       listRelation.select(Explode($"list").as("first_alias").as("second_alias")))
@@ -697,7 +710,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("CTE with non-existing column alias") {
     assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      Seq("cannot resolve '`y`' given input columns: [x]"))
+      Seq("cannot resolve 'y' given input columns: [x]"))
   }
 
   test("CTE with non-matching column alias") {

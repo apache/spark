@@ -1089,7 +1089,8 @@ class CodegenContext extends Logging {
           // Generate the code for this expression tree and wrap it in a function.
           val fnName = freshName("subExpr")
           val inputVars = inputVarsForAllFuncs(i)
-          val argList = inputVars.map(v => s"${v.javaType.getName} ${v.variableName}")
+          val argList =
+            inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
           val returnType = javaType(expr.dataType)
           val fn =
             s"""
@@ -1812,7 +1813,7 @@ object CodeGenerator extends Logging {
     case BooleanType => JAVA_BOOLEAN
     case ByteType => JAVA_BYTE
     case ShortType => JAVA_SHORT
-    case IntegerType | DateType => JAVA_INT
+    case IntegerType | DateType | YearMonthIntervalType => JAVA_INT
     case LongType | TimestampType | DayTimeIntervalType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
@@ -1833,7 +1834,7 @@ object CodeGenerator extends Logging {
     case BooleanType => java.lang.Boolean.TYPE
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
-    case IntegerType | DateType => java.lang.Integer.TYPE
+    case IntegerType | DateType | YearMonthIntervalType => java.lang.Integer.TYPE
     case LongType | TimestampType | DayTimeIntervalType => java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE

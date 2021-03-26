@@ -610,7 +610,7 @@ select date_add('2011-11-11', str) from v
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(CAST('2011-11-11' AS DATE), v.`str`)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'v.`str`' is of string type.; line 1 pos 7
+cannot resolve 'date_add(CAST('2011-11-11' AS DATE), v.str)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'v.str' is of string type.; line 1 pos 7
 
 
 -- !query
@@ -619,7 +619,7 @@ select date_sub('2011-11-11', str) from v
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), v.`str`)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'v.`str`' is of string type.; line 1 pos 7
+cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), v.str)' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'v.str' is of string type.; line 1 pos 7
 
 
 -- !query
