@@ -214,9 +214,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
         makeOffers(executorId)
 
-      case YarnAmInfo(time: Long, hostName: String, logUrlInfo: Map[String, String]) =>
+      case MiscellaneousWorkerInfo(time: Long, hostName: String, logUrlInfo: Map[String, String]) =>
         listenerBus.post(
-          YarnAmInfoEvent(time, hostName, logUrlInfo))
+          MiscellaneousWorkerInfoEvent(time, hostName, logUrlInfo))
 
       case e =>
         logError(s"Received unexpected message. ${e}")

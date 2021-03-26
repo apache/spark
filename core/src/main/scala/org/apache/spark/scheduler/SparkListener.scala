@@ -228,7 +228,7 @@ case class SparkListenerUnschedulableTaskSetRemoved(
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
 
 @DeveloperApi
-case class YarnAmInfoEvent(time: Long,
+case class MiscellaneousWorkerInfoEvent(time: Long,
   hostName: String,
   urlInfo: Map[String, String]) extends SparkListenerEvent
 

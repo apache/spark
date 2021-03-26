@@ -109,7 +109,7 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
-    case YarnAmInfoEvent(time, hostName, urlInfo) =>
+    case MiscellaneousWorkerInfoEvent(time, hostName, urlInfo) =>
       updateAMInfoInLiveExec(time, hostName, urlInfo.toMap)
     case _ =>
   }

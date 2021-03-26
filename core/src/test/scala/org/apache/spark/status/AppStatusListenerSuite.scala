@@ -1796,21 +1796,35 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
-  test("check YarnAmInfoEvent is populated correctly") {
-    val listener = new AppStatusListener(store, conf, true)
-    val stdout = "http:yarnAmHost:2453/stdout"
-    val stderr = "http:yarnAmHost:2453/stderr"
-    val logUrlMap: Map[String, String] = Map("stdout" -> stdout,
-      "stderr" -> stderr)
-    val yarnHostName = "yarnAmHost:2453"
-    listener.onOtherEvent(YarnAmInfoEvent(123678L, yarnHostName, logUrlMap))
-    val yarnAmInfo = listener.liveExecutors.get(listener.yarnAMID)
-    assert(yarnAmInfo.isDefined)
-    yarnAmInfo.foreach { info =>
-      assert(info.executorId == listener.yarnAMID)
-      assert(info.isActive)
-      assert(info.executorLogs == logUrlMap)
+  test("SPARK-34877 - check YarnAmInfoEvent is populated correctly") {
+    def checkInfoPopulated(listener: AppStatusListener,
+      logUrlMap: Map[String, String]): Unit = {
+      val yarnAmInfo = listener.liveExecutors.get(listener.yarnAMID)
+      assert(yarnAmInfo.isDefined)
+      yarnAmInfo.foreach { info =>
+        assert(info.executorId == listener.yarnAMID)
+        assert(info.isActive)
+        assert(info.executorLogs == logUrlMap)
+      }
     }
+    val listener = new AppStatusListener(store, conf, true)
+    var stdout = "http:yarnAmHost:2453/con1/stdout"
+    var stderr = "http:yarnAmHost:2453/con2/stderr"
+    var logUrlMap: Map[String, String] = Map("stdout" -> stdout,
+      "stderr" -> stderr)
+    var yarnHostName = "yarnAmHost:2453"
+    listener.onOtherEvent(MiscellaneousWorkerInfoEvent(123678L, yarnHostName, logUrlMap))
+    checkInfoPopulated(listener, logUrlMap)
+
+    // Launch new AM in case of failure
+    // New container entry will be updated in this scenario
+    stdout = "http:yarnAmHost:2451/con1/stdout"
+    stderr = "http:yarnAmHost:2451/con2/stderr"
+    logUrlMap = Map("stdout" -> stdout,
+      "stderr" -> stderr)
+    yarnHostName = "yarnAmHost:2451"
+    listener.onOtherEvent(MiscellaneousWorkerInfoEvent(123678L, yarnHostName, logUrlMap))
+    checkInfoPopulated(listener, logUrlMap)
   }
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)

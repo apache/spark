@@ -785,7 +785,7 @@ private[spark] class ApplicationMaster(
       // then send the AM Log Info to spark driver
       if (!isClusterMode) {
         val hostName = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
-        driver.send(YarnAmInfo(System.currentTimeMillis(), hostName, extractLogUrls))
+        driver.send(MiscellaneousWorkerInfo(System.currentTimeMillis(), hostName, extractLogUrls))
       }
     }
 
