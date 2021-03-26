@@ -87,6 +87,8 @@ private[spark] class AppStatusListener(
   /** The last time when flushing `LiveEntity`s. This is to avoid flushing too frequently. */
   private var lastFlushTimeNs = System.nanoTime()
 
+  private[spark] lazy val yarnAMID = "yarn-am"
+
   kvstore.addTrigger(classOf[ExecutorSummaryWrapper], conf.get(MAX_RETAINED_DEAD_EXECUTORS))
     { count => cleanupExecutors(count) }
 
@@ -107,6 +109,8 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
+    case YarnAmInfoEvent(time, hostName, urlInfo) =>
+      updateAMInfoInLiveExec(time, hostName, urlInfo.toMap)
     case _ =>
   }
 
@@ -1351,6 +1355,22 @@ private[spark] class AppStatusListener(
     } else {
       0L
     }
+  }
+
+  /**
+   *
+   * @param time yarn AM start time
+   * @param hostName yarn Am host Name
+   * @param urlInfo Url for yarn AM host(stderr, stdout)
+   */
+  private def updateAMInfoInLiveExec(time: Long,
+    hostName: String,
+    urlInfo: Map[String, String]): Unit = {
+    val exec = getOrCreateExecutor(yarnAMID, time)
+    exec.executorLogs = urlInfo
+    exec.hostPort = hostName
+    exec.isActive = true
+    liveUpdate(exec, System.nanoTime())
   }
 
 }

@@ -124,6 +124,10 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
+  // Send AM container information between to the driver Yarn client mode
+  case class YarnAmInfo(time: Long, hostName: String, logUrlInfo: Map[String, String])
+    extends CoarseGrainedClusterMessage
+
   // Used by YARN's client mode AM to retrieve the current set of delegation tokens.
   object RetrieveDelegationTokens extends CoarseGrainedClusterMessage
 

@@ -333,6 +333,11 @@ private[spark] abstract class YarnSchedulerBackend(
           logWarning(s"Requesting driver to remove executor $executorId for reason $reason")
           driverEndpoint.send(r)
         }
+
+      case amInfo @ YarnAmInfo(time, hostName, logUrlInfo) =>
+        logInfo(s"Updating the yarn AM info for client mode")
+        driverEndpoint.send(amInfo)
+
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

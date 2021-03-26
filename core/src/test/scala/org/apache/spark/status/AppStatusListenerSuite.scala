@@ -1796,6 +1796,22 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("check YarnAmInfoEvent is populated correctly") {
+    val listener = new AppStatusListener(store, conf, true)
+    val stdout = "http:yarnAmHost:2453/stdout"
+    val stderr = "http:yarnAmHost:2453/stderr"
+    val logUrlMap: Map[String, String] = Map("stdout" -> stdout,
+      "stderr" -> stderr)
+    val yarnHostName = "yarnAmHost:2453"
+    listener.onOtherEvent(YarnAmInfoEvent(123678L, yarnHostName, logUrlMap))
+    val yarnAmInfo = listener.liveExecutors.get(listener.yarnAMID)
+    assert(yarnAmInfo.isDefined)
+    yarnAmInfo.foreach { info =>
+      assert(info.executorId == listener.yarnAMID)
+      assert(info.isActive)
+      assert(info.executorLogs == logUrlMap)
+    }
+  }
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
 

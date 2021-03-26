@@ -213,6 +213,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           data.freeCores = data.totalCores
         }
         makeOffers(executorId)
+
+      case YarnAmInfo(time: Long, hostName: String, logUrlInfo: Map[String, String]) =>
+        listenerBus.post(
+          YarnAmInfoEvent(time, hostName, logUrlInfo))
+
       case e =>
         logError(s"Received unexpected message. ${e}")
     }

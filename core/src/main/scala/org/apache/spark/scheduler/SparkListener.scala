@@ -227,6 +227,11 @@ case class SparkListenerUnschedulableTaskSetRemoved(
 @DeveloperApi
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
 
+@DeveloperApi
+case class YarnAmInfoEvent(time: Long,
+  hostName: String,
+  urlInfo: Map[String, String]) extends SparkListenerEvent
+
 /**
  * Periodic updates from executors.
  * @param execId executor id
