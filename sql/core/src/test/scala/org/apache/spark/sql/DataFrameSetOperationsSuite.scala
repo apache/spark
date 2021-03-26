@@ -348,22 +348,22 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-34819: set operations with map type") {
-    val df = spark.range(0, 2).select(map(lit("key"), $"id").as("m"))
-    val df2 = spark.range(1, 2).select(map(lit("key"), $"id").as("m"))
+    val df = Seq(Map("a" -> 1, "b" -> 2), Map("c" -> 3)).toDF("m")
+    val df2 = Seq(Map("b" -> 2, "a" -> 1), Map("c" -> 4)).toDF("m")
     checkAnswer(
       df.intersect(df2),
-      Row(Map("key" -> "1")) :: Nil
+      Row(Map("a" -> 1, "b" -> 2)) :: Nil
     )
 
     checkAnswer(
       df.except(df2),
-      Row(Map("key" -> "0")) :: Nil
+      Row(Map("c" -> 3)) :: Nil
     )
 
     checkAnswer(
       df.distinct(),
-      Row(Map("key" -> "0")) ::
-        Row(Map("key" -> "1")) :: Nil
+      Row(Map("a" -> 1, "b" -> 2)) ::
+        Row(Map("c" -> 3)) :: Nil
     )
   }
 

@@ -694,20 +694,28 @@ class CodegenContext extends Logging {
       val keyIndexComparator = freshName("keyIndexComparator")
       val compareKeyFunc = freshName("compareKey")
       val compareValueFunc = freshName("compareValue")
-      val nullValueCheck = if (valueContainsNull) {
+      val nullSafeCompare =
+        s"""
+           |${javaType(valueType)} left = ${getValue("leftArray", valueType, "leftIndex")};
+           |${javaType(valueType)} right = ${getValue("rightArray", valueType, "rightIndex")};
+           |return ${genComp(valueType, "left", "right")};
+           |""".stripMargin
+      val compareElement = if (valueContainsNull) {
         s"""
            |boolean isNullA = leftArray.isNullAt(leftIndex);
            |boolean isNullB = rightArray.isNullAt(rightIndex);
            |if (isNullA && isNullB) {
-           |  // do nothing
+           |  return 0;
            |} else if (isNullA) {
            |  return -1;
            |} else if (isNullB) {
            |  return 1;
+           |} else {
+           |  $nullSafeCompare
            |}
            |""".stripMargin
       } else {
-        ""
+        nullSafeCompare
       }
 
       addNewFunction(initIndexArrayFunc,
@@ -753,10 +761,7 @@ class CodegenContext extends Logging {
         s"""
            |private int $compareValueFunc(ArrayData leftArray, int leftIndex, ArrayData rightArray,
            |    int rightIndex) {
-           |  $nullValueCheck
-           |  ${javaType(valueType)} left = ${getValue("leftArray", valueType, "leftIndex")};
-           |  ${javaType(valueType)} right = ${getValue("rightArray", valueType, "rightIndex")};
-           |  return ${genComp(valueType, "left", "right")};
+           |  $compareElement
            |}
            |""".stripMargin)
 
