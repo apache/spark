@@ -47,6 +47,8 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   // actual order of input rows.
   override lazy val deterministic: Boolean = false
 
+  override def defaultResult: Option[Literal] = Option(Literal.create(Array(), dataType))
+
   protected def convertToBufferElement(value: Any): Any
 
   override def update(buffer: T, input: InternalRow): T = {

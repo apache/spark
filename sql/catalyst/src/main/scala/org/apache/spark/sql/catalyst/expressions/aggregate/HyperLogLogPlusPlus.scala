@@ -84,6 +84,8 @@ case class HyperLogLogPlusPlus(
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
+  override def defaultResult: Option[Literal] = Option(Literal.create(0L, dataType))
+
   val hllppHelper = new HyperLogLogPlusPlusHelper(relativeSD)
 
   /** Allocate enough words to store all registers. */
