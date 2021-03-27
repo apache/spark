@@ -49,8 +49,8 @@ case class BatchScanExec(
    * completely.
    */
   private def onOutputCompletion(reader: PartitionReader[_]) = {
-    reader.getCustomMetrics.foreach { metric =>
-      longMetric(metric.getName) += metric.getValue
+    reader.currentMetricsValues.foreach { metric =>
+      longMetric(metric.name()) += metric.value()
     }
   }
 
