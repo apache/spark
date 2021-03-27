@@ -921,7 +921,7 @@ object CollapseWindow extends Rule[LogicalPlan] {
     case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild)))
       if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
-        pl ++ we1.map(_.toAttribute),
+        pl ++ w1.windowOutputSet,
         w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
       )
   }
