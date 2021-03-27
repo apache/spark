@@ -49,7 +49,7 @@ the properties.
 
 #### Syntax
 ```sql
-ALTER VIEW view_identifier SET TBLPROPERTIES ( property_key = property_val [ , ... ] )
+ALTER VIEW view_identifier SET TBLPROPERTIES ( property_key [=] property_val [ , ... ] )
 ```
 
 #### Parameters

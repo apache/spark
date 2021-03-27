@@ -30,7 +30,7 @@ CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier
     USING data_source
     [ ROW FORMAT row_format ]
     [ STORED AS file_format ]
-    [ TBLPROPERTIES ( ( key1=val1, key2=val2, ... ) | ( key1 val1, key2 val2, ... ) ) ]
+    [ TBLPROPERTIES ( key1 [=] val1, key2 [=] val2, ... ) ]
     [ LOCATION path ]
 ```
 
