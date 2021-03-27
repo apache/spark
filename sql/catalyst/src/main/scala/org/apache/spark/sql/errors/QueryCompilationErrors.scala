@@ -1100,6 +1100,6 @@ private[spark] object QueryCompilationErrors {
 
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
     throw new AnalysisException("The number of partitions can't be specified with unspecified" +
-      " distribution. Invalid Sink requirements detected.")
+      " distribution. Invalid writer requirements detected.")
   }
 }
