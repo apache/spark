@@ -184,10 +184,10 @@ ALTER TABLE table_identifier UNSET TBLPROPERTIES [ IF EXISTS ] ( key1, key2, ...
 ```sql
 -- Set SERDE Properties
 ALTER TABLE table_identifier [ partition_spec ]
-    SET SERDEPROPERTIES ( ( key1 = val1, key2 = val2, ... ) | ( key1 val1, key2 val2, ... ) )
+    SET SERDEPROPERTIES ( key1 [=] val1, key2 [=] val2, ... )
 
 ALTER TABLE table_identifier [ partition_spec ] SET SERDE serde_class_name
-    [ WITH SERDEPROPERTIES ( ( key1 = val1, key2 = val2, ... ) | ( key1 val1, key2 val2, ... ) ) ]
+    [ WITH SERDEPROPERTIES ( key1 [=] val1, key2 [=] val2, ... ) ]
 ```
 
 #### SET LOCATION And SET FILE FORMAT
@@ -221,7 +221,7 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
-* **SERDEPROPERTIES ( ( key1 = val1, key2 = val2, ... ) | ( key1 val1, key2 val2, ... ) ) **
+* **SERDEPROPERTIES ( key1 [=] val1, key2 [=] val2, ... ) **
 
     Specifies the SERDE properties to be set.
 
