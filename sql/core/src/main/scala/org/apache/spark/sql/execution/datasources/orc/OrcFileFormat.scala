@@ -149,7 +149,8 @@ class OrcFileFormat
     val conf = sparkSession.sessionState.conf
     conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
-      schema.forall(s => supportDataType(s.dataType)) &&
+      schema.forall(s => supportDataType(s.dataType) &&
+        !s.dataType.isInstanceOf[UserDefinedType[_]]) &&
       supportBatchForNestedColumn(sparkSession, schema)
   }
 
