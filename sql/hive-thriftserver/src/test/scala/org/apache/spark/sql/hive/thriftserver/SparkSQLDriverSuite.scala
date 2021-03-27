@@ -35,6 +35,7 @@ class SparkSQLDriverSuite extends SparkFunSuite {
   override protected def afterEach(): Unit = {
     driver.destroy()
     driver.close()
+    SparkSQLEnv.stop()
   }
 
   test("Avoid wrapped in withNewExecutionId twice when run SQL with side effects") {
