@@ -169,7 +169,7 @@ this overrides the old value with the new one.
 
 ```sql
 -- Set Table Properties 
-ALTER TABLE table_identifier SET TBLPROPERTIES ( ( key1 [=] val1, key2 [=] val2, ... ) )
+ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 [=] val1, key2 [=] val2, ... )
 
 -- Unset Table Properties
 ALTER TABLE table_identifier UNSET TBLPROPERTIES [ IF EXISTS ] ( key1, key2, ... )
@@ -219,7 +219,7 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 
     Specifies the partition on which the property has to be set. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
 
-    **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
+    **Syntax:** `PARTITION ( partition_col_name = partition_col_val [ , ... ] )`
 
 * **SERDEPROPERTIES ( key1 [=] val1, key2 [=] val2, ... ) **
 
