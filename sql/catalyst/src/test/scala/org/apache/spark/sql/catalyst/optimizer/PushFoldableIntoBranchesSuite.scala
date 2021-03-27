@@ -284,16 +284,18 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(DateSub(Literal(d),
       If(a, Literal(1), Literal(2))),
       If(a, Literal(Date.valueOf("2020-12-31")), Literal(Date.valueOf("2020-12-30"))))
-    assertEquivalent(TimestampAddYMInterval(Literal(d.getTime, TimestampType),
+    assertEquivalent(TimestampAddYMInterval(
+      Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
       If(a, Literal.create(Period.ofMonths(1), YearMonthIntervalType),
         Literal.create(Period.ofMonths(2), YearMonthIntervalType))),
-      If(a, Literal.create(Timestamp.valueOf("1970-02-19 07:04:48"), TimestampType),
-        Literal.create(Timestamp.valueOf("1970-03-19 07:04:48"), TimestampType)))
-    assertEquivalent(TimeAdd(Literal(d.getTime, TimestampType),
+      If(a, Literal.create(Timestamp.valueOf("2021-02-01 00:00:00"), TimestampType),
+        Literal.create(Timestamp.valueOf("2021-03-01 00:00:00"), TimestampType)))
+    assertEquivalent(TimeAdd(
+      Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
       If(a, Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
         Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(456)))),
-      If(a, Literal.create(Timestamp.valueOf("1970-01-29 07:14:48.321"), TimestampType),
-        Literal.create(Timestamp.valueOf("1970-01-29 07:14:48.456"), TimestampType)))
+      If(a, Literal.create(Timestamp.valueOf("2021-01-11 00:10:00.321"), TimestampType),
+        Literal.create(Timestamp.valueOf("2021-01-11 00:10:00.456"), TimestampType)))
 
     // CaseWhen
     assertEquivalent(AddMonths(Literal(d),
@@ -322,16 +324,18 @@ class PushFoldableIntoBranchesSuite
       CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None)),
       CaseWhen(Seq((a, Literal(Date.valueOf("2020-12-31"))),
         (c, Literal(Date.valueOf("2020-12-30")))), None))
-    assertEquivalent(TimestampAddYMInterval(Literal(d.getTime, TimestampType),
+    assertEquivalent(TimestampAddYMInterval(
+      Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
       CaseWhen(Seq((a, Literal.create(Period.ofMonths(1), YearMonthIntervalType)),
         (c, Literal.create(Period.ofMonths(2), YearMonthIntervalType))), None)),
-      CaseWhen(Seq((a, Literal.create(Timestamp.valueOf("1970-02-19 07:04:48"), TimestampType)),
-        (c, Literal.create(Timestamp.valueOf("1970-03-19 07:04:48"), TimestampType))), None))
-    assertEquivalent(TimeAdd(Literal(d.getTime, TimestampType),
+      CaseWhen(Seq((a, Literal.create(Timestamp.valueOf("2021-02-01 00:00:00"), TimestampType)),
+        (c, Literal.create(Timestamp.valueOf("2021-03-01 00:00:00"), TimestampType))), None))
+    assertEquivalent(TimeAdd(
+      Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
       CaseWhen(Seq((a, Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321))),
         (c, Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(456)))), None)),
-      CaseWhen(Seq((a, Literal.create(Timestamp.valueOf("1970-01-29 07:14:48.321"), TimestampType)),
-        (c, Literal.create(Timestamp.valueOf("1970-01-29 07:14:48.456"), TimestampType))), None))
+      CaseWhen(Seq((a, Literal.create(Timestamp.valueOf("2021-01-11 00:10:00.321"), TimestampType)),
+        (c, Literal.create(Timestamp.valueOf("2021-01-11 00:10:00.456"), TimestampType))), None))
   }
 
   test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
