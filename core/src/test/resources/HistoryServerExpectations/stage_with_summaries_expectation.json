@@ -999,6 +999,7 @@
   },
   "taskMetricsDistributions" : {
     "quantiles" : [ 0.0, 0.25, 0.5, 0.75, 1.0 ],
+    "duration" : [ 1835.0, 1905.0, 1916.0, 1925.0, 1960.0 ],
     "executorDeserializeTime" : [ 213.0, 225.0, 254.0, 263.0, 271.0 ],
     "executorDeserializeCpuTime" : [ 4.7496E7, 5.4222E7, 5.8152E7, 6.438E7, 1.12849E8 ],
     "executorRunTime" : [ 1498.0, 1596.0, 1598.0, 1618.0, 1624.0 ],
