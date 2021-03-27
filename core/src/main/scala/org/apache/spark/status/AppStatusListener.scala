@@ -78,11 +78,13 @@ private[spark] class AppStatusListener(
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
   private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
+  private[spark] val liveWorker = new HashMap[String, LiveWorkers]()
 
   private val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   // Keep the active executor count as a separate variable to avoid having to do synchronization
   // around liveExecutors.
   @volatile private var activeExecutorCount = 0
+  @volatile private var activeWorkerCount = 0
 
   /** The last time when flushing `LiveEntity`s. This is to avoid flushing too frequently. */
   private var lastFlushTimeNs = System.nanoTime()
@@ -109,8 +111,8 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
-    case MiscellaneousWorkerInfoEvent(time, hostName, urlInfo) =>
-      updateAMInfoInLiveExec(time, hostName, urlInfo.toMap)
+    case MiscellaneousWorkerInfoEvent(time, cores, memory, hostName, urlInfo) =>
+      updateAMInfoInLiveWorker(time, cores, memory, hostName, urlInfo.toMap)
     case _ =>
   }
 
@@ -1128,6 +1130,13 @@ private[spark] class AppStatusListener(
     })
   }
 
+  private def getOrCreateWorker(workerId: String, addTime: Long): LiveWorkers = {
+    liveWorker.getOrElseUpdate(workerId, {
+      activeWorkerCount += 1
+      new LiveWorkers(workerId, addTime)
+    })
+  }
+
   private def updateStreamBlock(event: SparkListenerBlockUpdated, stream: StreamBlockId): Unit = {
     val storageLevel = event.blockUpdatedInfo.storageLevel
     if (storageLevel.isValid) {
@@ -1363,14 +1372,18 @@ private[spark] class AppStatusListener(
    * @param hostName Spark AM Host Name
    * @param urlInfo Url for Spark AM host(stderr, stdout)
    */
-  private def updateAMInfoInLiveExec(time: Long,
+  private def updateAMInfoInLiveWorker(time: Long,
+    cores: Int,
+    memory: Long,
     hostName: String,
     urlInfo: Map[String, String]): Unit = {
-    val exec = getOrCreateExecutor(yarnAMID, time)
-    exec.executorLogs = urlInfo
-    exec.hostPort = hostName
-    exec.isActive = true
-    liveUpdate(exec, System.nanoTime())
+    val worker = getOrCreateWorker(yarnAMID, time)
+    worker.workerLogs = urlInfo
+    worker.hostPort = hostName
+    worker.isActive = true
+    worker.totalCores = cores
+    worker.maxMemory = memory
+    update(worker, System.nanoTime())
   }
 
 }

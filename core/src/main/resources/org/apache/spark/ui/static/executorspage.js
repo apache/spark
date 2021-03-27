@@ -39,6 +39,13 @@ function formatStatus(status, type, row) {
     return "Dead"
 }
 
+function formatWorkerStatus(activeStatus) {
+    if (activeStatus) {
+        return "Active"
+    }
+    return "Dead"
+}
+
 function formatResourceCells(resources) {
     var result = ""
     var count = 0
@@ -548,7 +555,55 @@ $(document).ready(function () {
                 execDataTable.column('executorLogsCol:name').visible(logsExist(response));
                 execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
-    
+
+                 // This section should be visible once API gives the response.
+                 $('.active-worker-container').hide()
+                 var endPoint = createRESTEndPointForMiscellaneousWorkers(appId);
+                 $.getJSON(endPoint, function( response, status, jqXHR ) {
+                    if (response.length) {
+                        var workerSummaryResponse = response;
+                        var workerSummaryConf = {
+                            "data": workerSummaryResponse,
+                            "columns": [{
+                                    data: "id"
+                                },
+                                {
+                                    data: "hostPort"
+                                },
+                                {
+                                    data: function(row) {
+                                        return formatWorkerStatus(row.isActive);
+                                    }
+                                },
+                                {
+                                    data: function(row, type) {
+                                        return (formatBytes(row.memoryUsed, type) + ' / ' +
+                                            formatBytes(row.maxMemory, type));
+                                    }
+                                },
+                                {
+                                    data: "totalCores"
+                                },
+                                {
+                                    data: "workerLogs",
+                                    render: formatLogsCells
+                                },
+                            ],
+                            "deferRender": true,
+                            "order": [
+                                [0, "asc"]
+                            ],
+                            "bAutoWidth": false,
+                            "oLanguage": {
+                                "sEmptyTable": "No data to show yet"
+                            }
+                        };
+                        var workerSummaryTableSelector =
+                            $("#active-worker-table").DataTable(workerSummaryConf);
+                        $('.active-worker-container').show()
+                    }
+                 });
+
                 var sumSelector = "#summary-execs-table";
                 var sumConf = {
                     "data": [activeSummary, deadSummary, totalSummary],

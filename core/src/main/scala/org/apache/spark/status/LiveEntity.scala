@@ -915,3 +915,33 @@ private class RDDPartitionSeq extends Seq[v1.RDDPartitionInfo] {
   }
 
 }
+
+private[spark] class LiveWorkers(val workerId: String, _addTime: Long) extends LiveEntity {
+
+  var hostPort: String = null
+  var host: String = null
+  var isActive = true
+  var totalCores = 0
+  val addTime = new Date(_addTime)
+  var removeTime: Date = null
+  var memoryUsed = 0L
+  var maxMemory = 0L
+  var workerLogs = Map[String, String]()
+
+  def hostname: String = if (host != null) host else Utils.parseHostPort(hostPort)._1
+
+  override protected def doUpdate(): Any = {
+
+    val info = new v1.WorkerSummary(
+      workerId,
+      if (hostPort != null) hostPort else host,
+      isActive,
+      totalCores,
+      memoryUsed,
+      maxMemory,
+      addTime,
+      Option(removeTime),
+      workerLogs)
+    new WorkerSummaryWrapper(info)
+  }
+}

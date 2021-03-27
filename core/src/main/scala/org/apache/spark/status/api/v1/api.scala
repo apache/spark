@@ -486,3 +486,14 @@ case class ThreadStackTrace(
     val blockedByThreadId: Option[Long],
     val blockedByLock: String,
     val holdingLocks: Seq[String])
+
+class WorkerSummary private[spark](
+     val id: String,
+     val hostPort: String,
+     val isActive: Boolean,
+     val totalCores: Int,
+     val memoryUsed: Long,
+     val maxMemory: Long,
+     val addTime: Date,
+     val removeTime: Option[Date],
+     val workerLogs: Map[String, String])

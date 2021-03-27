@@ -229,6 +229,8 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
 
 @DeveloperApi
 case class MiscellaneousWorkerInfoEvent(time: Long,
+  cores: Int,
+  memory: Long,
   hostName: String,
   urlInfo: Map[String, String]) extends SparkListenerEvent
 

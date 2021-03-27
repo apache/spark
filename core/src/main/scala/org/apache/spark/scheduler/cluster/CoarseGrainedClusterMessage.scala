@@ -125,7 +125,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
   // Send Miscellaneous Worker information to the driver
-  case class MiscellaneousWorkerInfo(time: Long, hostName: String, logUrlInfo: Map[String, String])
+  case class MiscellaneousWorkerInfo(time: Long, cores: Int, memory: Long,
+      hostName: String, logUrlInfo: Map[String, String])
     extends CoarseGrainedClusterMessage
 
   // Used by YARN's client mode AM to retrieve the current set of delegation tokens.
