@@ -74,6 +74,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
           hiveResultString(execution.executedPlan)
         }
       }
+      tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
         case ae: AnalysisException =>
