@@ -257,32 +257,30 @@ private[jdbc] class JDBCRDD(
    */
   override def getPartitions: Array[Partition] = partitions
 
-  private var updatedSchema: StructType = new StructType()
+  private val (updatedSchema, updatedCol): (StructType, Array[String]) =
+    if (aggregation.aggregateExpressions.isEmpty) {
+      (schema, columns)
+    } else {
+      getAggregateSchemaAndCol
+    }
 
   /**
    * `columns`, but as a String suitable for injection into a SQL query.
    */
   private val columnList: String = {
     val sb = new StringBuilder()
-    if(aggregation.aggregateExpressions.isEmpty) {
-      updatedSchema = schema
-      columns.foreach(x => sb.append(",").append(x))
-    } else {
-      val (compiledAgg, aggDataType) =
-        JDBCRDD.compileAggregates(aggregation.aggregateExpressions, JdbcDialects.get(url))
-        getAggregateColumnsList(sb, compiledAgg, aggDataType)
-    }
-    if (sb.length == 0) "1" else sb.substring(1)
+    updatedCol.foreach(x => sb.append(",").append(x))
+    if (sb.isEmpty) "1" else sb.substring(1)
   }
 
-  /*
+  /**
    * Build the column lists for Aggregates push down:
    * each of the Aggregates + groupBy columns
    */
-  private def getAggregateColumnsList(
-      sb: StringBuilder,
-      compiledAgg: Array[String],
-      aggDataType: Array[DataType]): Unit = {
+  private def getAggregateSchemaAndCol(): (StructType, Array[String]) = {
+    var updatedSchema: StructType = new StructType()
+    val (compiledAgg, aggDataType) =
+      JDBCRDD.compileAggregates(aggregation.aggregateExpressions, JdbcDialects.get(url))
     val colDataTypeMap: Map[String, StructField] = columns.zip(schema.fields).toMap
     val newColsBuilder = ArrayBuilder.make[String]
     for ((col, dataType) <- compiledAgg.zip(aggDataType)) {
@@ -294,7 +292,7 @@ private[jdbc] class JDBCRDD(
       newColsBuilder += quotedGroupBy
       updatedSchema = updatedSchema.add(colDataTypeMap.get(quotedGroupBy).get)
     }
-    sb.append(", ").append(newColsBuilder.result.mkString(", "))
+    (updatedSchema, newColsBuilder.result)
   }
 
   /**

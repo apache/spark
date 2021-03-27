@@ -125,9 +125,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
                     } else if (agg.aggregateFunction.isInstanceOf[aggregate.Sum]) {
                       aggregate.Sum(aggOutput(i - 1))
                     } else if (agg.aggregateFunction.isInstanceOf[aggregate.Count]) {
-                      val count = aggregate.Count(aggOutput(i - 1))
-                      count.pushDown = true
-                      count
+                      aggregate.PushDownCount(aggOutput(i - 1))
                     } else {
                       agg.aggregateFunction
                     }

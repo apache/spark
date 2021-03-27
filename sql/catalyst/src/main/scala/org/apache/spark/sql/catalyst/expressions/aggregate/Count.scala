@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -44,62 +40,7 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "1.0.0")
 // scalastyle:on line.size.limit
-case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
-
-  override def nullable: Boolean = false
-
-  // Return data type.
-  override def dataType: DataType = LongType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.isEmpty && !SQLConf.get.getConf(SQLConf.ALLOW_PARAMETERLESS_COUNT)) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least one argument. " +
-        s"If you have to call the function $prettyName without arguments, set the legacy " +
-        s"configuration `${SQLConf.ALLOW_PARAMETERLESS_COUNT.key}` as true")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
-  }
-
-  protected lazy val count = AttributeReference("count", LongType, nullable = false)()
-
-  override lazy val aggBufferAttributes = count :: Nil
-
-  override lazy val initialValues = Seq(
-    /* count = */ Literal(0L)
-  )
-
-  override lazy val mergeExpressions = Seq(
-    /* count = */ count.left + count.right
-  )
-
-  override lazy val evaluateExpression = count
-
-  override def defaultResult: Option[Literal] = Option(Literal(0L))
-
-  private[sql] var pushDown: Boolean = false
-
-  override lazy val updateExpressions = {
-    if (!pushDown) {
-      val nullableChildren = children.filter(_.nullable)
-      if (nullableChildren.isEmpty) {
-        Seq(
-          /* count = */ count + 1L
-        )
-      } else {
-        Seq(
-          /* count = */ If(nullableChildren.map(IsNull).reduce(Or), count, count + 1L)
-        )
-      }
-    } else {
-      Seq(
-        // if count is pushed down to Data Source layer, add the count result retrieved from
-        // Data Source
-        /* count = */ count + children.head
-      )
-    }
-  }
-}
+case class Count(children: Seq[Expression]) extends CountBase(children)
 
 object Count {
   def apply(child: Expression): Count = Count(child :: Nil)

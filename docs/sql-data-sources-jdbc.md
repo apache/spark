@@ -211,6 +211,13 @@ the following case-insensitive options:
      Specifies kerberos principal name for the JDBC client. If both <code>keytab</code> and <code>principal</code> are defined then Spark tries to do kerberos authentication.
     </td>
   </tr>
+
+  <tr>
+    <td><code>pushDownAggregate</code></td>
+    <td>
+     The option to enable or disable aggregate push-down into the JDBC data source. The default value is false, in which case Spark will NOT push down aggregates to the JDBC data source. Otherwise, if set to true, aggregate will be pushed down to the JDBC data source and thus aggregates will be handled by data source instead of Spark. Aggregate push-down is usually turned off when the aggregate is performed faster by Spark than by the JDBC data source. Please note that aggregates are pushed down if and only if all the aggregates and the related filters can be pushed down.
+    </td>
+  </tr>
 </table>
 
 Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>
