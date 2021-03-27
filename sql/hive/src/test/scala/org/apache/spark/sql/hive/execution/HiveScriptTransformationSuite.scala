@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.sql.Timestamp
+import java.time.{Duration, Period}
 
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
@@ -527,5 +528,31 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       """.stripMargin)
     checkAnswer(query2, identity, Row("\\N,\\N,\\N") :: Nil)
 
+  }
+
+  test("SPARK-34879: Hive inspect support DayTimeIntervalType and YearMonthIntervalType") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (Duration.ofDays(10), Period.ofMonths(10)),
+        (Duration.ofDays(10), Period.ofMonths(10))
+      ).toDF("a", "b").select('a, 'b)
+      df.createTempView("v")
+
+      // Hive serde support ArrayType/MapType/StructType as input and output data type
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", DayTimeIntervalType)(),
+            AttributeReference("b", YearMonthIntervalType)()),
+          child = child,
+          ioschema = hiveIOSchema),
+        df.select('a, 'b).collect())
+    }
   }
 }
