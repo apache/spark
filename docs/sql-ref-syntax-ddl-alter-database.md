@@ -31,7 +31,7 @@ for a database and may be used for auditing purposes.
 
 ```sql
 ALTER { DATABASE | SCHEMA } database_name
-    SET DBPROPERTIES ( ( property_name [=] property_value [ , ... ] | ( property_name property_value [ , ... ] )
+    SET DBPROPERTIES ( property_name [=] property_value [ , ... ] )
 ```
 
 ### Parameters
