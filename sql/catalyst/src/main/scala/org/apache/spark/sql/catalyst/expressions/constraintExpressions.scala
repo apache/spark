@@ -39,9 +39,3 @@ case class KnownNotNull(child: Expression) extends TaggingExpression {
 }
 
 case class KnownFloatingPointNormalized(child: Expression) extends TaggingExpression
-
-/**
- * Wrapper expression to avoid further optimizations between the parent and child of this
- * expression.
- */
-case class GroupingExpression(child: Expression) extends TaggingExpression

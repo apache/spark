@@ -446,7 +446,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     } else {
       Alias(CreateStruct(groupingAttributes), "key")()
     }
-    val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
+    val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan, false)
     val execution = new QueryExecution(sparkSession, aggregate)
 
     new Dataset(execution, ExpressionEncoder.tuple(kExprEnc +: encoders))

@@ -72,7 +72,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
       }
     }
     // There is no Python UDF over aggregate expression
-    Project(projList.toSeq, agg.copy(aggregateExpressions = aggExpr.toSeq))
+    Project(projList.toSeq, Aggregate(agg.groupingExpressions, aggExpr.toSeq, agg.child))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -133,10 +133,7 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
           attributeMap.getOrElse(canonicalized, p)
       }.asInstanceOf[NamedExpression]
     }
-    agg.copy(
-      groupingExpressions = groupingExpr.toSeq,
-      aggregateExpressions = aggExpr,
-      child = Project((projList ++ agg.child.output).toSeq, agg.child))
+    Aggregate(groupingExpr.toSeq, aggExpr, Project((projList ++ agg.child.output).toSeq, agg.child))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {

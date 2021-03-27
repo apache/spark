@@ -405,14 +405,6 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val arrayAggRel = relation.groupBy(
       CreateArray(Seq('nullable_id)))(GetArrayItem(CreateArray(Seq('nullable_id)), 0))
     checkRule(arrayAggRel, arrayAggRel)
-
-    // This could be done if we had a more complex rule that checks that
-    // the CreateMap does not come from key.
-    val originalQuery = relation
-      .groupBy('id)(
-        GetMapValue(CreateMap(Seq('id, 'id + 1L)), 0L) as "a"
-      )
-    checkRule(originalQuery, originalQuery)
   }
 
   test("SPARK-23500: namedStruct and getField in the same Project #1") {

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.optimizer.EnforceGroupingReferencesInAggregates
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
@@ -407,7 +408,7 @@ package object dsl {
           case ne: NamedExpression => ne
           case e => Alias(e, e.toString)()
         }
-        Aggregate(groupingExprs, aliasedExprs, logicalPlan)
+        Aggregate(groupingExprs, aliasedExprs, logicalPlan, false)
       }
 
       def having(
@@ -466,7 +467,7 @@ package object dsl {
       def analyze: LogicalPlan = {
         val analyzed = analysis.SimpleAnalyzer.execute(logicalPlan)
         analysis.SimpleAnalyzer.checkAnalysis(analyzed)
-        EliminateSubqueryAliases(analyzed)
+        EnforceGroupingReferencesInAggregates(EliminateSubqueryAliases(analyzed))
       }
 
       def hint(name: String, parameters: Any*): LogicalPlan =

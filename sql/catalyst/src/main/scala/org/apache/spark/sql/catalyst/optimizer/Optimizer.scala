@@ -118,7 +118,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
-        CombineConcats) ++
+        CombineConcats,
+        UpdateGroupingExprRefNullability) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
@@ -147,7 +148,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
-      WrapGroupingExpressions,
+      EnforceGroupingReferencesInAggregates,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -507,7 +508,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
       val aliasMap = getAliasMap(lower)
 
-      val newAggregate = upper.copy(
+      val newAggregate = Aggregate(
         child = lower.child,
         groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
         aggregateExpressions = upper.aggregateExpressions.map(
@@ -751,8 +752,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
     case p @ Project(_, a: Aggregate) if !a.outputSet.subsetOf(p.references) =>
-      p.copy(
-        child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
+      p.copy(child =
+        a.copy(aggrExprWithGroupingRefs = a.aggrExprWithGroupingRefs.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
@@ -878,8 +879,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions)) {
         p
       } else {
-        agg.copy(aggregateExpressions = buildCleanedProjectList(
-          p.projectList, agg.aggregateExpressions))
+        Aggregate(agg.groupingExpressions,
+          buildCleanedProjectList(p.projectList, agg.aggregateExpressions), agg.child)
       }
     case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
         if isRenaming(l1, l2) =>
@@ -1249,6 +1250,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
 
     def checkValidAggregateExpression(expr: Expression): Boolean = expr match {
       case _: AttributeReference => true
+      case _: GroupingExprRef => true
       case ae: AggregateExpression => isOrderIrrelevantAggFunction(ae.aggregateFunction)
       case _: UserDefinedExpression => false
       case e => e.children.forall(checkValidAggregateExpression)
@@ -1980,7 +1982,18 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
     case a @ Aggregate(grouping, _, _) if grouping.nonEmpty =>
       val newGrouping = grouping.filter(!_.foldable)
       if (newGrouping.nonEmpty) {
-        a.copy(groupingExpressions = newGrouping)
+        val droppedGroupsBefore =
+          grouping.scanLeft(0)((n, e) => n + (if (e.foldable) 1 else 0)).toArray
+
+        val newAggrExprWithGroupingReferences =
+          a.aggrExprWithGroupingRefs.map(_.transform {
+            case g: GroupingExprRef if droppedGroupsBefore(g.ordinal) > 0 =>
+              g.copy(ordinal = g.ordinal - droppedGroupsBefore(g.ordinal))
+          }.asInstanceOf[NamedExpression])
+
+          a.copy(
+            groupingExpressions = newGrouping,
+            aggrExprWithGroupingRefs = newAggrExprWithGroupingReferences)
       } else {
         // All grouping expressions are literals. We should not drop them all, because this can
         // change the return semantics when the input of the Aggregate is empty (SPARK-17114). We
@@ -2001,7 +2014,25 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       if (newGrouping.size == grouping.size) {
         a
       } else {
-        a.copy(groupingExpressions = newGrouping)
+        var i = 0
+        val droppedGroupsBefore = grouping.scanLeft(0)((n, e) =>
+          n + (if (i >= newGrouping.size || e.eq(newGrouping(i))) {
+            i += 1
+            0
+          } else {
+            1
+          })
+        ).toArray
+
+        val newAggrExprWithGroupingReferences =
+          a.aggrExprWithGroupingRefs.map(_.transform {
+            case g: GroupingExprRef if droppedGroupsBefore(g.ordinal) > 0 =>
+              g.copy(ordinal = g.ordinal - droppedGroupsBefore(g.ordinal))
+          }.asInstanceOf[NamedExpression])
+
+        a.copy(
+          groupingExpressions = newGrouping,
+          aggrExprWithGroupingRefs = newAggrExprWithGroupingReferences)
       }
   }
 }

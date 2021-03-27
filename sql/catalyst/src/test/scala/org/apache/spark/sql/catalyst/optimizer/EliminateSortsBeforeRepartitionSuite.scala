@@ -34,7 +34,9 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   val anotherTestRelation = LocalRelation('d.int, 'e.int)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches =
+    val batches = {
+      Batch("Finish Analysis", Once,
+        EnforceGroupingReferencesInAggregates) ::
       Batch("Default", FixedPoint(10),
         FoldablePropagation,
         LimitPushDown) ::
@@ -42,6 +44,7 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
         EliminateSorts) ::
       Batch("Collapse Project", Once,
         CollapseProject) :: Nil
+    }
   }
 
   def repartition(plan: LogicalPlan): LogicalPlan = plan.repartition(10)
@@ -139,7 +142,8 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
     val optimizedPlan = testRelation.distribute('a)(2).where('a === 10)
     val aggPlan = plan.groupBy('a)(sum('b))
     val optimizedAggPlan = optimize(aggPlan)
-    val correctAggPlan = analyze(optimizedPlan.groupBy('a)(sum('b)))
+    val correctAggPlan =
+      EnforceGroupingReferencesInAggregates(analyze(optimizedPlan.groupBy('a)(sum('b))))
     comparePlans(optimizedAggPlan, correctAggPlan)
   }
 

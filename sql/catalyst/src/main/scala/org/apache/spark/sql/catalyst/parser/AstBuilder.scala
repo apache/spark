@@ -726,7 +726,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         Filter(predicate, createProject())
       } else {
         // According to SQL standard, HAVING without GROUP BY means global aggregate.
-        withHavingClause(havingClause, Aggregate(Nil, namedExpressions, withFilter))
+        withHavingClause(havingClause, Aggregate(Nil, namedExpressions, withFilter, false))
       }
     } else if (aggregationClause != null) {
       val aggregate = withAggregationClause(aggregationClause, namedExpressions, withFilter)
@@ -924,7 +924,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         val groupingSets =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
         Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
-          selectExpressions, query)
+          selectExpressions, query, false)
       } else {
         // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
         val mappedGroupByExpressions = if (ctx.CUBE != null) {
@@ -934,7 +934,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         } else {
           groupByExpressions
         }
-        Aggregate(mappedGroupByExpressions, selectExpressions, query)
+        Aggregate(mappedGroupByExpressions, selectExpressions, query, false)
       }
     } else {
       val groupByExpressions =
@@ -978,7 +978,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           "`GROUP BY CUBE(a, b), ROLLUP(a, c)` is not supported.",
           ctx)
       }
-      Aggregate(groupByExpressions.toSeq, selectExpressions, query)
+      Aggregate(groupByExpressions.toSeq, selectExpressions, query, false)
     }
   }
 

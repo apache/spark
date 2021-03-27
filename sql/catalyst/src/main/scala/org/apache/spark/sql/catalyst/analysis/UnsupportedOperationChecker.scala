@@ -107,7 +107,8 @@ object UnsupportedOperationChecker extends Logging {
         // Since the Distinct node will be replaced to Aggregate in the optimizer rule
         // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
         // assuming it as Aggregate.
-        case d @ Distinct(c: LogicalPlan) if d.isStreaming => Aggregate(c.output, c.output, c)
+        case d @ Distinct(c: LogicalPlan) if d.isStreaming =>
+          Aggregate(c.output, c.output, c, false)
       }
     }
 

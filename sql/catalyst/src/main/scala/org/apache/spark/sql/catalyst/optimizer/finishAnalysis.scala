@@ -67,41 +67,6 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
 }
 
 /**
- * Wrap some of the grouping expressions in aggregate expressions without aggregate functions into
- * `GroupingExpression` nodes so as to avoid optimizations between the expression and its parent.
- * This is required as optimizations could change these grouping expressions and so make the
- * aggregate expression invalid.
- * We only need to wrap complex expressions (expressions with children so they are more than just
- * an attribute or a literal) which can be subject of optimizations.
- *
- * For example, in the following query Spark shouldn't optimize the aggregate expression
- * `Not(IsNull(c))` to `IsNotNull(c)` as the grouping expression is `IsNull(c)`:
- * SELECT not(c IS NULL)
- * FROM t
- * GROUP BY c IS NULL
- * This rule changes the aggregate expression to `Not(GroupingExpression(IsNull(c)))`.
- */
-object WrapGroupingExpressions extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan transform {
-      case a: Aggregate =>
-        val complexGroupingExpressions =
-          ExpressionSet(a.groupingExpressions.filter(_.children.nonEmpty))
-
-        def wrapGroupingExpression(e: Expression): Expression = e match {
-          case _: GroupingExpression => e
-          case _: AggregateExpression => e
-          case _ if complexGroupingExpressions.contains(e) => GroupingExpression(e)
-          case _ => e.mapChildren(wrapGroupingExpression)
-        }
-
-        a.copy(aggregateExpressions =
-          a.aggregateExpressions.map(wrapGroupingExpression(_).asInstanceOf[NamedExpression]))
-    }
-  }
-}
-
-/**
  * Computes the current date and time to make sure we return the same result in a single query.
  */
 object ComputeCurrentTime extends Rule[LogicalPlan] {
