@@ -1660,6 +1660,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create a [[TryCast]] expression.
+   */
+  override def visitTryCast(ctx: TryCastContext): Expression = withOrigin(ctx) {
+    val rawDataType = typedVisit[DataType](ctx.dataType())
+    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
+    val tryCast = TryCast(expression(ctx.expression), dataType)
+    tryCast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    tryCast
+  }
+
+  /**
    * Create a [[CreateStruct]] expression.
    */
   override def visitStruct(ctx: StructContext): Expression = withOrigin(ctx) {
