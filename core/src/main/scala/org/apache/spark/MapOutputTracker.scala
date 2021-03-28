@@ -487,11 +487,11 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
-   * Called from executors upon fetch failure on an entire merged shuffle partition. Such failures
-   * can happen if the shuffle client fails to fetch the metadata for the given merged shuffle
-   * partition. This method is to get the server URIs and output sizes for each shuffle block that
-   * is merged in the specified merged shuffle block so fetch failure on a merged shuffle block can
-   * fall back to fetching the unmerged blocks.
+   * Called from executors upon fetch failure on an entire merged shuffle reduce partition.
+   * Such failures can happen if the shuffle client fails to fetch the metadata for the given
+   * merged shuffle partition. This method is to get the server URIs and output sizes for each
+   * shuffle block that is merged in the specified merged shuffle block so fetch failure on a
+   * merged shuffle block can fall back to fetching the unmerged blocks.
    *
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block ID, shuffle block size, map index)
@@ -502,10 +502,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       partitionId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
-   * Called from executors upon fetch failure on a merged shuffle partition chunk. This is to get
-   * the server URIs and output sizes for each shuffle block that is merged in the specified merged
-   * shuffle partition chunk so fetch failure on a merged shuffle block chunk can fall back to
-   * fetching the unmerged blocks.
+   * Called from executors upon fetch failure on a merged shuffle reduce partition chunk. This is
+   * to get the server URIs and output sizes for each shuffle block that is merged in the specified
+   * merged shuffle partition chunk so fetch failure on a merged shuffle block chunk can fall back
+   * to fetching the unmerged blocks.
    *
    * chunkBitMap tracks the mapIds which are part of the current merged chunk, this way if there is
    * a fetch failure on the merged chunk, it can fallback to fetching the corresponding original
@@ -601,6 +601,24 @@ private[spark] class MapOutputTrackerMaster(
 
   /** Message loop used for dispatching messages. */
   private class MessageLoop extends Runnable {
+    private def handleStatusMessage(
+        shuffleId: Int,
+        context: RpcCallContext,
+        isMapOutput: Boolean): Unit = {
+      val hostPort = context.senderAddress.hostPort
+      val shuffleStatus = shuffleStatuses.get(shuffleId).head
+      val mapOrMerge = if (isMapOutput) {
+        "map"
+      } else {
+        "merge"
+      }
+      logDebug(s"Handling request to send $mapOrMerge output locations" +
+        s" for shuffle $shuffleId to $hostPort")
+      context.reply(
+        shuffleStatus.serializedOutputStatus(broadcastManager, isLocal,
+          minSizeForBroadcast, conf, isMapOutput = isMapOutput))
+    }
+
     override def run(): Unit = {
       try {
         while (true) {
@@ -614,22 +632,9 @@ private[spark] class MapOutputTrackerMaster(
 
             data match {
               case GetMapStatusMessage(shuffleId, context) =>
-                val hostPort = context.senderAddress.hostPort
-                val shuffleStatus = shuffleStatuses.get(shuffleId).head
-                logDebug("Handling request to send map output locations for shuffle " + shuffleId +
-                  " to " + hostPort)
-                context.reply(
-                  shuffleStatus.serializedOutputStatus(broadcastManager, isLocal,
-                    minSizeForBroadcast, conf, isMapOutput = true))
-
+                handleStatusMessage(shuffleId, context, true)
               case GetMergeStatusMessage(shuffleId, context) =>
-                val hostPort = context.senderAddress.hostPort
-                val shuffleStatus = shuffleStatuses.get(shuffleId).head
-                logDebug("Handling request to send merge output locations for" +
-                  " shuffle " + shuffleId + " to " + hostPort)
-                context.reply(
-                  shuffleStatus.serializedOutputStatus(broadcastManager, isLocal,
-                    minSizeForBroadcast, conf, isMapOutput = false))
+                handleStatusMessage(shuffleId, context, false)
             }
           } catch {
             case NonFatal(e) => logError(e.getMessage, e)
@@ -1134,7 +1139,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     val mapOutputStatuses = mapStatuses.get(shuffleId).orNull
     val mergeResultStatuses = mergeStatuses.get(shuffleId).orNull
     if (mapOutputStatuses == null || (fetchMergeResult && mergeResultStatuses == null)) {
-      logInfo("Don't have map/merge outputs for shuffle " + shuffleId + ", fetching them")
+      logInfo(s"Don't have map/merge outputs for shuffle $shuffleId, fetching them")
       val startTimeNs = System.nanoTime()
       fetchingLock.withLock(shuffleId) {
         var fetchedMapStatuses = mapStatuses.get(shuffleId).orNull
@@ -1153,7 +1158,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           logInfo("Got the merge output locations")
           mergeStatuses.put(shuffleId, fetchedMergeStatues)
         }
-        logDebug(s"Fetching map/merge output statuses for shuffle $shuffleId took " +
+        logDebug(s"Fetching map ${if (fetchMergeResult) "/merge"} for shuffle $shuffleId took " +
           s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
         (fetchedMapStatuses, fetchedMergeStatues)
       }

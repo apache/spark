@@ -68,7 +68,7 @@ private[spark] class MergeStatus(
    * Get the number of missing map outputs for missing mapper partition blocks that are not merged.
    */
   def getNumMissingMapOutputs(numMaps: Int): Int = {
-    getMissingMaps(numMaps).length
+    (0 until numMaps).count(i => !mapTracker.contains(i))
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
