@@ -26,6 +26,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -534,25 +535,37 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
-        (Duration.ofDays(10), Period.ofMonths(10)),
-        (Duration.ofDays(10), Period.ofMonths(10))
-      ).toDF("a", "b").select('a, 'b)
+        (Duration.ofDays(1),
+          Duration.ofSeconds(100).plusNanos(123456),
+          Duration.ofSeconds(Long.MaxValue / DateTimeConstants.MICROS_PER_SECOND),
+          Period.ofMonths(10)),
+        (Duration.ofDays(1),
+          Duration.ofSeconds(100).plusNanos(1123456789),
+          Duration.ofSeconds(Long.MaxValue / DateTimeConstants.MICROS_PER_SECOND),
+          Period.ofMonths(10))
+      ).toDF("a", "b", "c", "d")
+        .select('a, 'b, 'c.cast(DayTimeIntervalType).as("c_1"), 'd)
       df.createTempView("v")
 
+      df.show()
       // Hive serde supports DayTimeIntervalType/YearMonthIntervalType as input and output data type
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
           input = Seq(
             df.col("a").expr,
-            df.col("b").expr),
+            df.col("b").expr,
+            df.col("c_1").expr,
+            df.col("d").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", DayTimeIntervalType)(),
-            AttributeReference("b", YearMonthIntervalType)()),
+            AttributeReference("b", DayTimeIntervalType)(),
+            AttributeReference("c_1", DayTimeIntervalType)(),
+            AttributeReference("d", YearMonthIntervalType)()),
           child = child,
           ioschema = hiveIOSchema),
-        df.select('a, 'b).collect())
+        df.select('a, 'b, 'c_1, 'd).collect())
     }
   }
 }

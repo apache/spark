@@ -351,7 +351,7 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => getDayTimeIntervalWritable(o))
       case _: HiveIntervalDayTimeObjectInspector =>
         withNullSafe(o => {
-          val duration = Duration.ofNanos(o.asInstanceOf[Long])
+          val duration = IntervalUtils.microsToDuration(o.asInstanceOf[Long])
           new HiveIntervalDayTime(duration.getSeconds, duration.getNano)
         })
       case _: HiveIntervalYearMonthObjectInspector if x.preferWritable() =>
@@ -529,7 +529,8 @@ private[hive] trait HiveInspectors {
         _ => null // always be null for void object inspector
       case ym: WritableConstantHiveIntervalDayTimeObjectInspector =>
         val constant = ym.getWritableConstantValue.asInstanceOf[HiveIntervalDayTime]
-        _ => constant.getTotalSeconds * DateTimeConstants.NANOS_PER_MICROS + constant.getNanos
+        _ => IntervalUtils.durationToMicros(
+          Duration.ofSeconds(constant.getTotalSeconds).plusNanos(constant.getNanos.toLong))
       case dt: WritableConstantHiveIntervalYearMonthObjectInspector =>
         val constant = dt.getWritableConstantValue.asInstanceOf[HiveIntervalYearMonth]
         _ => constant.getTotalMonths
@@ -672,7 +673,8 @@ private[hive] trait HiveInspectors {
           data: Any => {
             if (data != null) {
               val dayTime = dt.getPrimitiveWritableObject(data).getHiveIntervalDayTime
-              dayTime.getTotalSeconds * DateTimeConstants.NANOS_PER_SECOND + dayTime.getNanos
+              IntervalUtils.durationToMicros(
+                Duration.ofSeconds(dayTime.getTotalSeconds).plusNanos(dayTime.getNanos.toLong))
             } else {
               null
             }
@@ -680,8 +682,9 @@ private[hive] trait HiveInspectors {
         case dt: HiveIntervalDayTimeObjectInspector =>
           data: Any => {
             if (data != null) {
-              val dayTime = dt.getPrimitiveJavaObject(data).asInstanceOf[HiveIntervalDayTime]
-              dayTime.getTotalSeconds * DateTimeConstants.NANOS_PER_SECOND + dayTime.getNanos
+              val dayTime = dt.getPrimitiveJavaObject(data)
+              IntervalUtils.durationToMicros(
+                Duration.ofSeconds(dayTime.getTotalSeconds).plusNanos(dayTime.getNanos.toLong))
             } else {
               null
             }
@@ -697,7 +700,7 @@ private[hive] trait HiveInspectors {
         case ym: HiveIntervalYearMonthObjectInspector =>
           data: Any => {
             if (data != null) {
-              ym.getPrimitiveJavaObject(data).asInstanceOf[HiveIntervalYearMonth].getTotalMonths
+              ym.getPrimitiveJavaObject(data).getTotalMonths
             } else {
               null
             }
@@ -1103,7 +1106,7 @@ private[hive] trait HiveInspectors {
     if (value == null) {
       null
     } else {
-      val duration = Duration.ofNanos(value.asInstanceOf[Long])
+      val duration = IntervalUtils.microsToDuration(value.asInstanceOf[Long])
       new hiveIo.HiveIntervalDayTimeWritable(
         new HiveIntervalDayTime(duration.getSeconds, duration.getNano))
     }
