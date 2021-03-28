@@ -414,7 +414,7 @@ abstract class DynamicPartitionPruningSuiteBase
     DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.DYNAMIC_PARTITON_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
       Given("dynamic partition pruning disabled")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
         val df = sql(
@@ -1436,7 +1436,7 @@ abstract class DynamicPartitionPruningSuiteBase
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
-      SQLConf.DYNAMIC_PARTITON_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
 
       val sqlStr =
         """
