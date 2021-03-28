@@ -530,7 +530,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   }
 
-  test("SPARK-34879: Hive inspect support DayTimeIntervalType and YearMonthIntervalType") {
+  test("SPARK-34879: Hive inspect supports DayTimeIntervalType and YearMonthIntervalType") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
@@ -539,7 +539,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       ).toDF("a", "b").select('a, 'b)
       df.createTempView("v")
 
-      // Hive serde support ArrayType/MapType/StructType as input and output data type
+      // Hive serde supports DayTimeIntervalType/YearMonthIntervalType as input and output data type
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
