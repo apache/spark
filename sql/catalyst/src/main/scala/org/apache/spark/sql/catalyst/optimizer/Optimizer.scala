@@ -926,11 +926,11 @@ object CollapseWindow extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild))
-      if windowsCompatible(w1, w2) =>
+        if windowsCompatible(w1, w2) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
 
     case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild)))
-      if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
+        if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
         w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
