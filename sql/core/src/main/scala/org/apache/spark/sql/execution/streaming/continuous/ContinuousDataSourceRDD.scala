@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.streaming.continuous
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.ContinuousPartitionReaderFactory
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{CompletionIterator, NextIterator}
+import org.apache.spark.util.NextIterator
 
 class ContinuousDataSourceRDDPartition(
     val index: Int,
@@ -53,7 +54,7 @@ class ContinuousDataSourceRDD(
     private val inputPartitions: Seq[InputPartition],
     schema: StructType,
     partitionReaderFactory: ContinuousPartitionReaderFactory,
-    onCompletion: PartitionReader[_] => Unit = _ => {})
+    sqlMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -89,8 +90,12 @@ class ContinuousDataSourceRDD(
       partition.queueReader
     }
 
-    val nextIter = new NextIterator[InternalRow] {
+    val partitionReader = readerForPartition.getPartitionReader()
+    new NextIterator[InternalRow] {
       override def getNext(): InternalRow = {
+        partitionReader.currentMetricsValues.foreach { metric =>
+          sqlMetrics(metric.name()) += metric.value()
+        }
         readerForPartition.next() match {
           case null =>
             finished = true
@@ -101,12 +106,6 @@ class ContinuousDataSourceRDD(
 
       override def close(): Unit = {}
     }
-
-    def completionFunction = {
-      onCompletion(readerForPartition.getPartitionReader())
-    }
-    CompletionIterator[InternalRow, Iterator[InternalRow]](
-      nextIter, completionFunction)
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {

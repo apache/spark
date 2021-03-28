@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Scan}
+import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, Offset}
 import org.apache.spark.sql.execution.streaming.continuous._
 
@@ -47,16 +47,6 @@ case class ContinuousScanExec(
     stream.createContinuousReaderFactory()
   }
 
-  /**
-   * The callback function which is called when the output iterator of input RDD is consumed
-   * completely.
-   */
-  private def onOutputCompletion(reader: PartitionReader[_]) = {
-    reader.currentMetricsValues().foreach { metric =>
-      longMetric(metric.name()) += metric.value()
-    }
-  }
-
   override lazy val inputRDD: RDD[InternalRow] = {
     EpochCoordinatorRef.get(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
@@ -69,6 +59,6 @@ case class ContinuousScanExec(
       partitions,
       schema,
       readerFactory.asInstanceOf[ContinuousPartitionReaderFactory],
-      onOutputCompletion)
+      metrics)
   }
 }
