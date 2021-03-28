@@ -39,7 +39,7 @@ class DataSourceRDD(
     @transient private val inputPartitions: Seq[InputPartition],
     partitionReaderFactory: PartitionReaderFactory,
     columnarReads: Boolean,
-    sqlMetrics: Map[String, SQLMetric])
+    customMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -58,12 +58,12 @@ class DataSourceRDD(
     val (iter, reader) = if (columnarReads) {
       val batchReader = partitionReaderFactory.createColumnarReader(inputPartition)
       val iter = new MetricsBatchIterator(
-        new PartitionIterator[ColumnarBatch](batchReader, sqlMetrics))
+        new PartitionIterator[ColumnarBatch](batchReader, customMetrics))
       (iter, batchReader)
     } else {
       val rowReader = partitionReaderFactory.createReader(inputPartition)
       val iter = new MetricsRowIterator(
-        new PartitionIterator[InternalRow](rowReader, sqlMetrics))
+        new PartitionIterator[InternalRow](rowReader, customMetrics))
       (iter, rowReader)
     }
     context.addTaskCompletionListener[Unit](_ => reader.close())
@@ -78,7 +78,7 @@ class DataSourceRDD(
 
 private class PartitionIterator[T](
     reader: PartitionReader[T],
-    sqlMetrics: Map[String, SQLMetric]) extends Iterator[T] {
+    customMetrics: Map[String, SQLMetric]) extends Iterator[T] {
   private[this] var valuePrepared = false
 
   override def hasNext: Boolean = {
@@ -93,7 +93,7 @@ private class PartitionIterator[T](
       throw QueryExecutionErrors.endOfStreamError()
     }
     reader.currentMetricsValues.foreach { metric =>
-      sqlMetrics(metric.name()) += metric.value()
+      customMetrics(metric.name()) += metric.value()
     }
     valuePrepared = false
     reader.get()

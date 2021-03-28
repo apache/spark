@@ -59,6 +59,6 @@ case class ContinuousScanExec(
       partitions,
       schema,
       readerFactory.asInstanceOf[ContinuousPartitionReaderFactory],
-      metrics)
+      customMetrics)
   }
 }

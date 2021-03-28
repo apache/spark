@@ -54,7 +54,7 @@ class ContinuousDataSourceRDD(
     private val inputPartitions: Seq[InputPartition],
     schema: StructType,
     partitionReaderFactory: ContinuousPartitionReaderFactory,
-    sqlMetrics: Map[String, SQLMetric])
+    customMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -94,7 +94,7 @@ class ContinuousDataSourceRDD(
     new NextIterator[InternalRow] {
       override def getNext(): InternalRow = {
         partitionReader.currentMetricsValues.foreach { metric =>
-          sqlMetrics(metric.name()) += metric.value()
+          customMetrics(metric.name()) += metric.value()
         }
         readerForPartition.next() match {
           case null =>
