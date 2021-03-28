@@ -1007,8 +1007,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
       if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
-        w2.copy(child = w1.copy(child = grandChild))
-      )
+        w2.copy(child = w1.copy(child = grandChild)))
   }
 }
 
