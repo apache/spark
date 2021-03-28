@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -264,7 +263,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
           && !v.isInstanceOf[CreateNamedStruct]
           && !newList.head.isInstanceOf[CreateNamedStruct]) {
           EqualTo(v, newList.head)
-        } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
+        } else if (newList.length > conf.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
         } else if (newList.length < list.length) {
@@ -345,17 +344,18 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // Common factor elimination for conjunction
       case and @ (left And right) =>
         // 1. Split left and right to get the disjunctive predicates,
-        //   i.e. lhs = (a, b), rhs = (a, c)
+        //    i.e. lhs = (a || b), rhs = (a || c)
         // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
         // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-        // 4. Apply the formula, get the optimized predicate: common || (ldiff && rdiff)
+        // 4. If common is non-empty, apply the formula to get the optimized predicate:
+        //    common || (ldiff && rdiff)
+        // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+        //    for example lhs = (a && b), rhs = (a && c) => all = (a, b, a, c), distinct = (a, b, c)
+        //    optimized predicate: (a && b && c)
         val lhs = splitDisjunctivePredicates(left)
         val rhs = splitDisjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (common.isEmpty) {
-          // No common factors, return the original predicate
-          and
-        } else {
+        if (common.nonEmpty) {
           val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
@@ -363,25 +363,37 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             common.reduce(Or)
           } else {
             // (a || b || c || ...) && (a || b || d || ...) =>
-            // ((c || ...) && (d || ...)) || a || b
+            // a || b || ((c || ...) && (d || ...))
             (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
+          }
+        } else {
+          // No common factors from disjunctive predicates, reduce common factor from conjunction
+          val all = splitConjunctivePredicates(left) ++ splitConjunctivePredicates(right)
+          val distinct = ExpressionSet(all)
+          if (all.size == distinct.size) {
+            // No common factors, return the original predicate
+            and
+          } else {
+            // (a && b) && a && (a && c) => a && b && c
+            buildBalancedPredicate(distinct.toSeq, And)
           }
         }
 
       // Common factor elimination for disjunction
       case or @ (left Or right) =>
         // 1. Split left and right to get the conjunctive predicates,
-        //   i.e.  lhs = (a, b), rhs = (a, c)
+        //    i.e.  lhs = (a && b), rhs = (a && c)
         // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
         // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-        // 4. Apply the formula, get the optimized predicate: common && (ldiff || rdiff)
+        // 4. If common is non-empty, apply the formula to get the optimized predicate:
+        //    common && (ldiff || rdiff)
+        // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+        // for example lhs = (a || b), rhs = (a || c) => all = (a, b, a, c), distinct = (a, b, c)
+        // optimized predicate: (a || b || c)
         val lhs = splitConjunctivePredicates(left)
         val rhs = splitConjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (common.isEmpty) {
-          // No common factors, return the original predicate
-          or
-        } else {
+        if (common.nonEmpty) {
           val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
@@ -389,8 +401,19 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             common.reduce(And)
           } else {
             // (a && b && c && ...) || (a && b && d && ...) =>
-            // ((c && ...) || (d && ...)) && a && b
+            // a && b && ((c && ...) || (d && ...))
             (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
+          }
+        } else {
+          // No common factors in conjunctive predicates, reduce common factor from disjunction
+          val all = splitDisjunctivePredicates(left) ++ splitDisjunctivePredicates(right)
+          val distinct = ExpressionSet(all)
+          if (all.size == distinct.size) {
+            // No common factors, return the original predicate
+            or
+          } else {
+            // (a || b) || a || (a || c) => a || b || c
+            buildBalancedPredicate(distinct.toSeq, Or)
           }
         }
 
@@ -570,7 +593,8 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
     case _: BinaryArithmetic => true
     case _: BinaryMathExpression => true
-    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub => true
+    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd => true
     case _: FindInSet | _: RoundBase => true
     case _ => false
   }
@@ -715,9 +739,9 @@ object NullPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
-        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case e @ AggregateExpression(Count(exprs), _, _, _, _) if exprs.forall(isNullLiteral) =>
-        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case ae @ AggregateExpression(Count(exprs), _, false, _, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))

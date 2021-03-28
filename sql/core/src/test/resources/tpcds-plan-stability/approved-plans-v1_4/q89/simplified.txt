@@ -18,7 +18,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_cla
                                   BroadcastHashJoin [ss_store_sk,s_store_sk]
                                     Project [i_brand,i_class,i_category,ss_store_sk,ss_sales_price,d_moy]
                                       BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                        Project [i_brand,i_class,i_category,ss_sold_date_sk,ss_store_sk,ss_sales_price]
+                                        Project [i_brand,i_class,i_category,ss_store_sk,ss_sales_price,ss_sold_date_sk]
                                           BroadcastHashJoin [i_item_sk,ss_item_sk]
                                             Filter [i_category,i_class,i_item_sk]
                                               ColumnarToRow
@@ -27,10 +27,12 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_cla
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)
-                                                  Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
+                                                  Filter [ss_item_sk,ss_store_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_sales_price]
+                                                        Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                                                          SubqueryBroadcast [d_date_sk] #1
+                                                            ReusedExchange [d_date_sk,d_moy] #4
                                         InputAdapter
                                           BroadcastExchange #4
                                             WholeStageCodegen (2)

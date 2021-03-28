@@ -248,4 +248,13 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val ds_id2 = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
     assert(ds_id1 === ds_id2)
   }
+
+  test("SPARK-34200: ambiguous column reference should consider attribute availability") {
+    withTable("t") {
+      sql("CREATE TABLE t USING json AS SELECT 1 a, 2 b")
+      val df1 = spark.table("t")
+      val df2 = df1.select("a")
+      checkAnswer(df1.join(df2, df1("b") === 2), Row(1, 2, 1))
+    }
+  }
 }

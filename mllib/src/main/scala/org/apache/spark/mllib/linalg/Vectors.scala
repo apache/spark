@@ -956,7 +956,7 @@ class SparseVector @Since("1.0.0") (
       currentIdx += 1
       i_v
     }.unzip
-    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
+    new SparseVector(selectedIndices.length, sliceInds, sliceVals)
   }
 
   @Since("1.6.0")

@@ -43,12 +43,20 @@ case class RenameTableExec(
     val optOldStorageLevel = invalidateCache()
     catalog.invalidateTable(oldIdent)
 
-    catalog.renameTable(oldIdent, newIdent)
+    // If new identifier consists of a table name only, the table should be renamed in place.
+    // Such behavior matches to the v1 implementation of table renaming in Spark and other DBMSs.
+    val qualifiedNewIdent = if (newIdent.namespace.isEmpty) {
+      Identifier.of(oldIdent.namespace, newIdent.name)
+    } else newIdent
+    catalog.renameTable(oldIdent, qualifiedNewIdent)
 
     optOldStorageLevel.foreach { oldStorageLevel =>
-      val tbl = catalog.loadTable(newIdent)
-      val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(newIdent))
-      cacheTable(sqlContext.sparkSession, newRelation, Some(newIdent.quoted), oldStorageLevel)
+      val tbl = catalog.loadTable(qualifiedNewIdent)
+      val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(qualifiedNewIdent))
+      cacheTable(
+        sqlContext.sparkSession,
+        newRelation,
+        Some(qualifiedNewIdent.quoted), oldStorageLevel)
     }
     Seq.empty
   }

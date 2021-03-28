@@ -98,7 +98,7 @@ private[v1] class StagesResource extends BaseAppResource {
     } catch {
       case _: NoSuchElementException =>
         // Change the message depending on whether there are any attempts for the requested stage.
-        val all = ui.store.stageData(stageId)
+        val all = ui.store.stageData(stageId, false, taskStatus)
         val msg = if (all.nonEmpty) {
           val ids = all.map(_.attemptId)
           s"unknown attempt for stage $stageId.  Found attempts: [${ids.mkString(",")}]"

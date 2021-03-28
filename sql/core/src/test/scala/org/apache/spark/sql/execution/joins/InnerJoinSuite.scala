@@ -153,7 +153,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-    test(s"$testName using ShuffledHashJoin (build=left)") {
+    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin (build=left)") { _ =>
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
@@ -165,7 +165,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-    test(s"$testName using ShuffledHashJoin (build=right)") {
+    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin (build=right)") { _ =>
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
@@ -198,7 +198,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-    test(s"$testName using BroadcastNestedLoopJoin build left") {
+    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastNestedLoopJoin build left") { _ =>
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           BroadcastNestedLoopJoinExec(left, right, BuildLeft, Inner, Some(condition())),
@@ -207,7 +207,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-    test(s"$testName using BroadcastNestedLoopJoin build right") {
+    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastNestedLoopJoin build right") { _ =>
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           BroadcastNestedLoopJoinExec(left, right, BuildRight, Inner, Some(condition())),

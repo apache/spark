@@ -131,9 +131,9 @@ private[spark] class AppStatusStore(
     unsortedQuantiles: Array[Double] = Array.empty[Double]): Seq[v1.StageData] = {
     store.view(classOf[StageDataWrapper]).index("stageId").first(stageId).last(stageId)
       .asScala.map { s =>
-      newStageData(s.info, withDetail = details, taskStatus = taskStatus,
-        withSummaries = withSummaries, unsortedQuantiles = unsortedQuantiles)
-    }.toSeq
+        newStageData(s.info, withDetail = details, taskStatus = taskStatus,
+          withSummaries = withSummaries, unsortedQuantiles = unsortedQuantiles)
+      }.toSeq
   }
 
   def lastStageAttempt(stageId: Int): v1.StageData = {
@@ -155,11 +155,11 @@ private[spark] class AppStatusStore(
   }
 
   def stageAttempt(
-    stageId: Int, stageAttemptId: Int,
-    details: Boolean = false,
-    taskStatus: JList[v1.TaskStatus] = List().asJava,
-    withSummaries: Boolean = false,
-    unsortedQuantiles: Array[Double] = Array.empty[Double]): (v1.StageData, Seq[Int]) = {
+      stageId: Int, stageAttemptId: Int,
+      details: Boolean = false,
+      taskStatus: JList[v1.TaskStatus] = List().asJava,
+      withSummaries: Boolean = false,
+      unsortedQuantiles: Array[Double] = Array.empty[Double]): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
     val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
     val stage = newStageData(stageDataWrapper.info, withDetail = details, taskStatus = taskStatus,
@@ -228,6 +228,7 @@ private[spark] class AppStatusStore(
 
       val distributions = new v1.TaskMetricDistributions(
         quantiles = quantiles,
+        duration = toValues(_.duration),
         executorDeserializeTime = toValues(_.executorDeserializeTime),
         executorDeserializeCpuTime = toValues(_.executorDeserializeCpuTime),
         executorRunTime = toValues(_.executorRunTime),
@@ -297,6 +298,9 @@ private[spark] class AppStatusStore(
 
     val computedQuantiles = new v1.TaskMetricDistributions(
       quantiles = quantiles,
+      duration = scanTasks(TaskIndexNames.DURATION) { t =>
+        t.duration
+      },
       executorDeserializeTime = scanTasks(TaskIndexNames.DESER_TIME) { t =>
         t.executorDeserializeTime
       },
@@ -348,6 +352,7 @@ private[spark] class AppStatusStore(
       .filter { case (q, _) => quantiles.contains(q) && shouldCacheQuantile(q) }
       .foreach { case (q, idx) =>
         val cached = new CachedQuantile(stageId, stageAttemptId, quantileToString(q), count,
+          duration = computedQuantiles.duration(idx),
           executorDeserializeTime = computedQuantiles.executorDeserializeTime(idx),
           executorDeserializeCpuTime = computedQuantiles.executorDeserializeCpuTime(idx),
           executorRunTime = computedQuantiles.executorRunTime(idx),

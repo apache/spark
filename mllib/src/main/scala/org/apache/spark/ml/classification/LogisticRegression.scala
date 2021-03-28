@@ -608,7 +608,7 @@ class LogisticRegression @Since("1.2.0") (
       The coefficients are laid out in column major order during training. Here we initialize
       a column major matrix of initial coefficients.
      */
-    val initialCoefWithInterceptMatrix = createInitCoefWithInterceptMatrix(
+    val initialSolution = createInitialSolution(
       numClasses, numFeatures, histogram, featuresStd, lowerBounds, upperBounds, instr)
 
     /*
@@ -623,8 +623,8 @@ class LogisticRegression @Since("1.2.0") (
        as a result, no scaling is needed.
      */
     val (allCoefficients, objectiveHistory) =
-      trainImpl(instances, actualBlockSizeInMB, featuresStd, numClasses,
-        initialCoefWithInterceptMatrix, regularization, optimizer)
+      trainImpl(instances, actualBlockSizeInMB, featuresStd, featuresMean, numClasses,
+        initialSolution.toArray, regularization, optimizer)
 
     if (allCoefficients == null) {
       val msg = s"${optimizer.getClass.getName} failed."
@@ -817,7 +817,7 @@ class LogisticRegression @Since("1.2.0") (
    * The coefficients are laid out in column major order during training. Here we initialize
    * a column major matrix of initial coefficients.
    */
-  private def createInitCoefWithInterceptMatrix(
+  private def createInitialSolution(
       numClasses: Int,
       numFeatures: Int,
       histogram: Array[Double],
@@ -934,31 +934,61 @@ class LogisticRegression @Since("1.2.0") (
       instances: RDD[Instance],
       actualBlockSizeInMB: Double,
       featuresStd: Array[Double],
+      featuresMean: Array[Double],
       numClasses: Int,
-      initialCoefWithInterceptMatrix: Matrix,
+      initialSolution: Array[Double],
       regularization: Option[L2Regularization],
       optimizer: FirstOrderMinimizer[BDV[Double], DiffFunction[BDV[Double]]]) = {
-    val numFeatures = featuresStd.length
-    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+    val multinomial = checkMultinomial(numClasses)
 
-    val standardized = instances.mapPartitions { iter =>
-      val inverseStd = bcFeaturesStd.value.map { std => if (std != 0) 1.0 / std else 0.0 }
-      val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
+    // for binary LR, we can center the input vector, if and only if:
+    // 1, fitIntercept is true;
+    // 2, no penalty on the intercept, which is always true in existing impl;
+    // 3, no bounds on the intercept.
+    val fitWithMean = !multinomial && $(fitIntercept) &&
+      (!isSet(lowerBoundsOnIntercepts) || $(lowerBoundsOnIntercepts)(0).isNegInfinity) &&
+      (!isSet(upperBoundsOnIntercepts) || $(upperBoundsOnIntercepts)(0).isPosInfinity)
+
+    val numFeatures = featuresStd.length
+    val inverseStd = featuresStd.map(std => if (std != 0) 1.0 / std else 0.0)
+    val scaledMean = Array.tabulate(numFeatures)(i => inverseStd(i) * featuresMean(i))
+    val bcInverseStd = instances.context.broadcast(inverseStd)
+    var bcObjects = Seq(bcInverseStd)
+
+    val scaled = instances.mapPartitions { iter =>
+      val func = StandardScalerModel.getTransformFunc(Array.empty, bcInverseStd.value, false, true)
       iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
     }
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
-    val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
+    val blocks = InstanceBlock.blokifyWithMaxMemUsage(scaled, maxMemUsage)
       .persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
+      .setName(s"$uid: training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
-    val getAggregatorFunc = new BlockLogisticAggregator(numFeatures, numClasses, $(fitIntercept),
-      checkMultinomial(numClasses))(_)
+    val costFun = if (multinomial) {
+      // TODO: create a separate MultinomialLogisticBlockAggregator for clearness
+      val getAggregatorFunc = new BlockLogisticAggregator(numFeatures, numClasses,
+         $(fitIntercept), true)(_)
+      new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
+    } else {
+      val bcScaledMean = instances.context.broadcast(scaledMean)
+      bcObjects +:= bcScaledMean
+      val getAggregatorFunc = new BinaryLogisticBlockAggregator(bcInverseStd, bcScaledMean,
+         $(fitIntercept), fitWithMean)(_)
+      new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
+    }
 
-    val costFun = new RDDLossFunction(blocks, getAggregatorFunc,
-      regularization, $(aggregationDepth))
+    if (fitWithMean) {
+      // orginal `initialCoefWithInterceptArray` is for problem:
+      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+      // we should adjust it to the initial solution for problem:
+      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+      val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, initialSolution, 1, scaledMean, 1)
+      initialSolution(numFeatures) += adapt
+    }
+
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      new BDV[Double](initialCoefWithInterceptMatrix.toArray))
+      new BDV[Double](initialSolution))
 
     /*
        Note that in Logistic Regression, the objective history (loss + regularization)
@@ -972,9 +1002,18 @@ class LogisticRegression @Since("1.2.0") (
       arrayBuilder += state.adjustedValue
     }
     blocks.unpersist()
-    bcFeaturesStd.destroy()
+    bcObjects.foreach(_.destroy())
 
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
+    val solution = if (state == null) null else state.x.toArray
+    if (fitWithMean && solution != null) {
+      // the final solution is for problem:
+      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+      // we should adjust it back for original problem:
+      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+      val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, solution, 1, scaledMean, 1)
+      solution(numFeatures) -= adapt
+    }
+    (solution, arrayBuilder.result)
   }
 
   @Since("1.4.0")

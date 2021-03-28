@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
  * Trait used to help executor/worker allocate resources.
  * Please note that this is intended to be used in a single thread.
  */
-trait ResourceAllocator {
+private[spark] trait ResourceAllocator {
 
   protected def resourceName: String
   protected def resourceAddresses: Seq[String]
