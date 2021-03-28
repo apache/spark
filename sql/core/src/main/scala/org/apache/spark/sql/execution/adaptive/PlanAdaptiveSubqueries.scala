@@ -18,12 +18,13 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, ListQuery, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningExpression, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.{InSubqueryExec, SparkPlan, SubqueryExec}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, InSubqueryExec, SparkPlan}
 
-case class PlanAdaptiveSubqueries(subqueryMap: Map[Long, SubqueryExec]) extends Rule[SparkPlan] {
+case class PlanAdaptiveSubqueries(
+    subqueryMap: Map[Long, BaseSubqueryExec]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
@@ -40,6 +41,8 @@ case class PlanAdaptiveSubqueries(subqueryMap: Map[Long, SubqueryExec]) extends 
           )
         }
         InSubqueryExec(expr, subqueryMap(exprId.id), exprId)
+      case expressions.DynamicPruningSubquery(value, _, _, _, _, exprId) =>
+        DynamicPruningExpression(InSubqueryExec(value, subqueryMap(exprId.id), exprId))
     }
   }
 }

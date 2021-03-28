@@ -283,7 +283,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
         chiSqTestResult
           .filter { case (res, _) => res.pValue < fwe / chiSqTestResult.length }
       case errorType =>
-        throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
+        throw new IllegalArgumentException(s"Unknown ChiSqSelector Type: $errorType")
     }
     val indices = features.map { case (_, index) => index }
     new ChiSqSelectorModel(indices)

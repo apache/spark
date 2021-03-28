@@ -20,7 +20,6 @@
 import itertools
 from argparse import ArgumentParser
 import os
-import random
 import re
 import sys
 import subprocess
@@ -240,37 +239,28 @@ def run_sparkr_style_checks():
 
 def build_spark_documentation():
     set_title_and_block("Building Spark Documentation", "BLOCK_DOCUMENTATION")
-    os.environ["PRODUCTION"] = "1 jekyll build"
+    os.environ["PRODUCTION"] = "1"
 
     os.chdir(os.path.join(SPARK_HOME, "docs"))
 
-    jekyll_bin = which("jekyll")
+    bundle_bin = which("bundle")
 
-    if not jekyll_bin:
-        print("[error] Cannot find a version of `jekyll` on the system; please",
-              " install one and retry to build documentation.")
+    if not bundle_bin:
+        print("[error] Cannot find a version of `bundle` on the system; please",
+              " install one with `gem install bundler` and retry to build documentation.")
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
-        run_cmd([jekyll_bin, "build"])
+        run_cmd([bundle_bin, "install"])
+        run_cmd([bundle_bin, "exec", "jekyll", "build"])
 
     os.chdir(SPARK_HOME)
-
-
-def get_zinc_port():
-    """
-    Get a randomized port on which to start Zinc
-    """
-    return random.randrange(3030, 4030)
 
 
 def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    zinc_port = get_zinc_port()
-    os.environ["ZINC_PORT"] = "%s" % zinc_port
-    zinc_flag = "-DzincPort=%s" % zinc_port
-    flags = [os.path.join(SPARK_HOME, "build", "mvn"), zinc_flag]
+    flags = [os.path.join(SPARK_HOME, "build", "mvn")]
     run_cmd(flags + mvn_args)
 
 
@@ -754,7 +744,7 @@ def main():
             run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
-    # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
+    # note - the below commented out until *all* Jenkins workers can get the Bundler gem installed
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 

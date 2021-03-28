@@ -17,10 +17,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
 
-class SubexpressionEliminationSuite extends SparkFunSuite {
+class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Semantic equals and hash") {
     val a: AttributeReference = AttributeReference("name", IntegerType)()
     val id = {
@@ -252,6 +253,61 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence2.addExprTree(coalesceExpr2)
 
     assert(equivalence2.getAllEquivalentExprs.count(_.size == 2) == 0)
+  }
+
+  test("SPARK-34723: Correct parameter type for subexpression elimination under whole-stage") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val str = BoundReference(0, BinaryType, false)
+      val pos = BoundReference(1, IntegerType, false)
+
+      val substr = new Substring(str, pos)
+
+      val add = Add(Length(substr), Literal(1))
+      val add2 = Add(Length(substr), Literal(2))
+
+      val ctx = new CodegenContext()
+      val exprs = Seq(add, add2)
+
+      val oneVar = ctx.freshVariable("str", BinaryType)
+      val twoVar = ctx.freshVariable("pos", IntegerType)
+      ctx.addMutableState("byte[]", oneVar, forceInline = true, useFreshName = false)
+      ctx.addMutableState("int", twoVar, useFreshName = false)
+
+      ctx.INPUT_ROW = null
+      ctx.currentVars = Seq(
+        ExprCode(TrueLiteral, oneVar),
+        ExprCode(TrueLiteral, twoVar))
+
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
+      ctx.withSubExprEliminationExprs(subExprs.states) {
+        exprs.map(_.genCode(ctx))
+      }
+      val subExprsCode = subExprs.codes.mkString("\n")
+
+      val codeBody = s"""
+        public java.lang.Object generate(Object[] references) {
+          return new TestCode(references);
+        }
+
+        class TestCode {
+          ${ctx.declareMutableStates()}
+
+          public TestCode(Object[] references) {
+          }
+
+          public void initialize(int partitionIndex) {
+            ${subExprsCode}
+          }
+
+          ${ctx.declareAddedFunctions()}
+        }
+      """
+
+      val code = CodeFormatter.stripOverlappingComments(
+        new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+
+      CodeGenerator.compile(code)
+    }
   }
 }
 

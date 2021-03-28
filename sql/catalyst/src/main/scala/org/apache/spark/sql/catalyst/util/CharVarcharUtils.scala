@@ -22,10 +22,10 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 object CharVarcharUtils extends Logging {
 
@@ -41,7 +41,7 @@ object CharVarcharUtils extends Logging {
     StructType(st.map { field =>
       if (hasCharVarchar(field.dataType)) {
         val metadata = new MetadataBuilder().withMetadata(field.metadata)
-          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.sql).build()
+          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
         field.copy(dataType = replaceCharVarcharWithString(field.dataType), metadata = metadata)
       } else {
         field
@@ -114,17 +114,20 @@ object CharVarcharUtils extends Logging {
     attr.withMetadata(cleaned)
   }
 
+  def getRawTypeString(metadata: Metadata): Option[String] = {
+    if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
+      Some(metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))
+    } else {
+      None
+    }
+  }
+
   /**
    * Re-construct the original data type from the type string in the given metadata.
    * This is needed when dealing with char/varchar columns/fields.
    */
   def getRawType(metadata: Metadata): Option[DataType] = {
-    if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
-      Some(CatalystSqlParser.parseDataType(
-        metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
-    } else {
-      None
-    }
+    getRawTypeString(metadata).map(CatalystSqlParser.parseDataType)
   }
 
   /**
@@ -138,61 +141,6 @@ object CharVarcharUtils extends Logging {
   }
 
   /**
-   * Returns expressions to apply read-side char type padding for the given attributes.
-   *
-   * For a CHAR(N) column/field and the length of string value is M
-   * If M > N, raise runtime error
-   * If M <= N, the value should be right-padded to N characters.
-   *
-   * For a VARCHAR(N) column/field and the length of string value is M
-   * If M > N, raise runtime error
-   * If M <= N, the value should be remained.
-   */
-  def paddingWithLengthCheck(output: Seq[AttributeReference]): Seq[NamedExpression] = {
-    output.map { attr =>
-      getRawType(attr.metadata).filter { rawType =>
-        rawType.existsRecursively(dt => dt.isInstanceOf[CharType] || dt.isInstanceOf[VarcharType])
-      }.map { rawType =>
-        Alias(paddingWithLengthCheck(attr, rawType), attr.name)(
-          explicitMetadata = Some(attr.metadata))
-      }.getOrElse(attr)
-    }
-  }
-
-  private def paddingWithLengthCheck(expr: Expression, dt: DataType): Expression = dt match {
-    case CharType(length) => StringRPad(stringLengthCheck(expr, dt), Literal(length))
-
-    case VarcharType(_) => stringLengthCheck(expr, dt)
-
-    case StructType(fields) =>
-      val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
-        Seq(Literal(f.name),
-          paddingWithLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType))
-      })
-      if (expr.nullable) {
-        If(IsNull(expr), Literal(null, struct.dataType), struct)
-      } else {
-        struct
-      }
-
-    case ArrayType(et, containsNull) => charTypePaddingInArray(expr, et, containsNull)
-
-    case MapType(kt, vt, valueContainsNull) =>
-      val newKeys = charTypePaddingInArray(MapKeys(expr), kt, containsNull = false)
-      val newValues = charTypePaddingInArray(MapValues(expr), vt, valueContainsNull)
-      MapFromArrays(newKeys, newValues)
-
-    case _ => expr
-  }
-
-  private def charTypePaddingInArray(
-      arr: Expression, et: DataType, containsNull: Boolean): Expression = {
-    val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val func = LambdaFunction(paddingWithLengthCheck(param, et), Seq(param))
-    ArrayTransform(arr, func)
-  }
-
-  /**
    * Returns an expression to apply write-side string length check for the given expression. A
    * string value can not exceed N characters if it's written into a CHAR(N)/VARCHAR(N)
    * column/field.
@@ -203,52 +151,44 @@ object CharVarcharUtils extends Logging {
     }.getOrElse(expr)
   }
 
-  private def raiseError(typeName: String, length: Int): Expression = {
-    val errMsg = UTF8String.fromString(s"Exceeds $typeName type length limitation: $length")
-    RaiseError(Literal(errMsg, StringType), StringType)
-  }
+  private def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
+    dt match {
+      case CharType(length) =>
+        StaticInvoke(
+          classOf[CharVarcharCodegenUtils],
+          StringType,
+          "charTypeWriteSideCheck",
+          expr :: Literal(length) :: Nil,
+          returnNullable = false)
 
-  private def stringLengthCheck(expr: Expression, dt: DataType): Expression = dt match {
-    case CharType(length) =>
-      val trimmed = StringTrimRight(expr)
-      // Trailing spaces do not count in the length check. We don't need to retain the trailing
-      // spaces, as we will pad char type columns/fields at read time.
-      If(
-        GreaterThan(Length(trimmed), Literal(length)),
-        raiseError("char", length),
-        trimmed)
+      case VarcharType(length) =>
+        StaticInvoke(
+          classOf[CharVarcharCodegenUtils],
+          StringType,
+          "varcharTypeWriteSideCheck",
+          expr :: Literal(length) :: Nil,
+          returnNullable = false)
 
-    case VarcharType(length) =>
-      val trimmed = StringTrimRight(expr)
-      // Trailing spaces do not count in the length check. We need to retain the trailing spaces
-      // (truncate to length N), as there is no read-time padding for varchar type.
-      // TODO: create a special TrimRight function that can trim to a certain length.
-      If(
-        LessThanOrEqual(Length(expr), Literal(length)),
-        expr,
-        If(
-          GreaterThan(Length(trimmed), Literal(length)),
-          raiseError("varchar", length),
-          StringRPad(trimmed, Literal(length))))
+      case StructType(fields) =>
+        val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
+          Seq(Literal(f.name),
+            stringLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType))
+        })
+        if (expr.nullable) {
+          If(IsNull(expr), Literal(null, struct.dataType), struct)
+        } else {
+          struct
+        }
 
-    case StructType(fields) =>
-      val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
-        Seq(Literal(f.name), stringLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType))
-      })
-      if (expr.nullable) {
-        If(IsNull(expr), Literal(null, struct.dataType), struct)
-      } else {
-        struct
-      }
+      case ArrayType(et, containsNull) => stringLengthCheckInArray(expr, et, containsNull)
 
-    case ArrayType(et, containsNull) => stringLengthCheckInArray(expr, et, containsNull)
+      case MapType(kt, vt, valueContainsNull) =>
+        val newKeys = stringLengthCheckInArray(MapKeys(expr), kt, containsNull = false)
+        val newValues = stringLengthCheckInArray(MapValues(expr), vt, valueContainsNull)
+        MapFromArrays(newKeys, newValues)
 
-    case MapType(kt, vt, valueContainsNull) =>
-      val newKeys = stringLengthCheckInArray(MapKeys(expr), kt, containsNull = false)
-      val newValues = stringLengthCheckInArray(MapValues(expr), vt, valueContainsNull)
-      MapFromArrays(newKeys, newValues)
-
-    case _ => expr
+      case _ => expr
+    }
   }
 
   private def stringLengthCheckInArray(

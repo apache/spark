@@ -17,9 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.File
-import java.util.concurrent.TimeUnit
 
-import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
@@ -88,8 +86,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     if (sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
       KubernetesUtils.loadPodFromTemplate(
         kubernetesClient,
-        new File(sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get),
-        sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
+        sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get,
+        sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME),
+        sc.conf)
     }
 
     val schedulerExecutorService = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
@@ -105,14 +104,10 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         "kubernetes-executor-snapshots-subscribers", 2)
     val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor)
 
-    val removedExecutorsCache = CacheBuilder.newBuilder()
-      .expireAfterWrite(3, TimeUnit.MINUTES)
-      .build[java.lang.Long, java.lang.Long]()
     val executorPodsLifecycleEventHandler = new ExecutorPodsLifecycleManager(
       sc.conf,
       kubernetesClient,
-      snapshotsStore,
-      removedExecutorsCache)
+      snapshotsStore)
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
       sc.conf,

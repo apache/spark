@@ -16,7 +16,6 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{DoneablePod, Pod}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
@@ -53,8 +52,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
   private var eventHandlerUnderTest: ExecutorPodsLifecycleManager = _
 
   before {
-    MockitoAnnotations.initMocks(this)
-    val removedExecutorsCache = CacheBuilder.newBuilder().build[java.lang.Long, java.lang.Long]
+    MockitoAnnotations.openMocks(this).close()
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     namedExecutorPods = mutable.Map.empty[String, PodResource[Pod, DoneablePod]]
     when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map.empty[String, Long])
@@ -63,8 +61,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     eventHandlerUnderTest = new ExecutorPodsLifecycleManager(
       new SparkConf(),
       kubernetesClient,
-      snapshotsStore,
-      removedExecutorsCache)
+      snapshotsStore)
     eventHandlerUnderTest.start(schedulerBackend)
   }
 
