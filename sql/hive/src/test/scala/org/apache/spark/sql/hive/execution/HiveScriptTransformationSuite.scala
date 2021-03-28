@@ -20,13 +20,14 @@ package org.apache.spark.sql.hive.execution
 import java.sql.Timestamp
 import java.time.{Duration, Period}
 
+import org.apache.hadoop.hive.common.`type`.HiveIntervalDayTime
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, IntervalUtils}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -531,7 +532,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   }
 
-  test("SPARK-34879: Hive inspect supports DayTimeIntervalType and YearMonthIntervalType") {
+  test("SPARK-34879: HiveInspector supports DayTimeIntervalType and YearMonthIntervalType") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
@@ -547,7 +548,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         .select('a, 'b, 'c.cast(DayTimeIntervalType).as("c_1"), 'd)
       df.createTempView("v")
 
-      df.show()
       // Hive serde supports DayTimeIntervalType/YearMonthIntervalType as input and output data type
       checkAnswer(
         df,
@@ -567,5 +567,15 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema),
         df.select('a, 'b, 'c_1, 'd).collect())
     }
+  }
+
+  test("SPARK-34879: HiveInceptor throw overflow when" +
+    " HiveIntervalDayTime overflow then DayTimeIntervalType") {
+    val e = intercept[ArithmeticException] {
+      val dayTime = new HiveIntervalDayTime(Long.MaxValue - 1, 1000)
+      IntervalUtils.durationToMicros(
+        Duration.ofSeconds(dayTime.getTotalSeconds).plusNanos(dayTime.getNanos.toLong))
+    }.getMessage
+    assert(e.contains("long overflow"))
   }
 }
