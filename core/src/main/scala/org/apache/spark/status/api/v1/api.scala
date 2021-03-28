@@ -434,41 +434,6 @@ class ShuffleWriteMetricDistributions private[spark](
     val writeRecords: IndexedSeq[Double],
     val writeTime: IndexedSeq[Double])
 
-class ExecutorMetricsDistributions private[spark](
-  val quantiles: IndexedSeq[Double],
-
-  val taskTime: IndexedSeq[Double],
-  val failedTasks: IndexedSeq[Double],
-  val succeededTasks: IndexedSeq[Double],
-  val killedTasks: IndexedSeq[Double],
-  val inputBytes: IndexedSeq[Double],
-  val inputRecords: IndexedSeq[Double],
-  val outputBytes: IndexedSeq[Double],
-  val outputRecords: IndexedSeq[Double],
-  val shuffleRead: IndexedSeq[Double],
-  val shuffleReadRecords: IndexedSeq[Double],
-  val shuffleWrite: IndexedSeq[Double],
-  val shuffleWriteRecords: IndexedSeq[Double],
-  val memoryBytesSpilled: IndexedSeq[Double],
-  val diskBytesSpilled: IndexedSeq[Double],
-  @JsonSerialize(using = classOf[ExecutorPeakMetricsDistributionsJsonSerializer])
-  val peakMemoryMetrics: ExecutorPeakMetricsDistributions
-)
-
-@JsonSerialize(using = classOf[ExecutorPeakMetricsDistributionsJsonSerializer])
-class ExecutorPeakMetricsDistributions private[spark](
-  val quantiles: IndexedSeq[Double],
-  val executorMetrics: IndexedSeq[ExecutorMetrics]) {
-  private lazy val count = executorMetrics.length
-  private lazy val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
-
-  /** Returns the distributions for the specified metric. */
-  def getMetricDistribution(metricName: String): IndexedSeq[Double] = {
-    val sorted = executorMetrics.map(_.getMetricValue(metricName)).sorted
-    indices.map(i => sorted(i.toInt).toDouble).toIndexedSeq
-  }
-}
-
 class AccumulableInfo private[spark](
     val id: Long,
     val name: String,
