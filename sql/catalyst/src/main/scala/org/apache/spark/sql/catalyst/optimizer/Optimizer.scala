@@ -913,19 +913,6 @@ object OptimizeWindowFunctions extends Rule[LogicalPlan] {
  *   independent and are of the same window function type, collapse into the parent.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild))
-        if windowsCompatible(w1, w2) =>
-      w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
-
-    case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild)))
-      if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
-      Project(
-        pl ++ w1.windowOutputSet,
-        w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
-      )
-  }
-
   private def windowsCompatible(w1: Window, w2: Window): Boolean = {
     w1.partitionSpec == w2.partitionSpec &&
       w1.orderSpec == w2.orderSpec &&
@@ -935,6 +922,18 @@ object CollapseWindow extends Rule[LogicalPlan] {
       // by ExtractWindowFunctions.
       WindowFunctionType.functionType(w1.windowExpressions.head) ==
         WindowFunctionType.functionType(w2.windowExpressions.head)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild))
+      if windowsCompatible(w1, w2) =>
+      w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+
+    case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild)))
+      if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
+      Project(
+        pl ++ w1.windowOutputSet,
+        w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
   }
 }
 
