@@ -1000,11 +1000,11 @@ object TransposeWindow extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case w1 @ Window(_, _, _, w2 @ Window(_, _, _, grandChild))
-      if windowsCompatible(w1, w2) =>
+        if windowsCompatible(w1, w2) =>
       Project(w1.output, w2.copy(child = w1.copy(child = grandChild)))
 
     case w1 @ Window(_, _, _, Project(pl, w2 @ Window(_, _, _, grandChild)))
-      if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
+        if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
         w2.copy(child = w1.copy(child = grandChild)))
