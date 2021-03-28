@@ -179,3 +179,11 @@ SELECT count(*) FROM test_agg WHERE k = 1 or k = 2 or count(*) + 1L > 1L or max(
 
 -- Aggregate with multiple distinct decimal columns
 SELECT AVG(DISTINCT decimal_col), SUM(DISTINCT decimal_col) FROM VALUES (CAST(1 AS DECIMAL(9, 0))) t(decimal_col);
+
+-- SPARK-34882: Aggregate with multiple distinct null sensitive aggregators
+SELECT
+    first(DISTINCT a), last(DISTINCT a),
+    first(a), last(a),
+    first(DISTINCT b), last(DISTINCT b),
+    first(b), last(b)
+FROM testData WHERE a IS NOT NULL AND b IS NOT NULL;
