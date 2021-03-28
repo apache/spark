@@ -20,14 +20,13 @@ package org.apache.spark.sql.hive.execution
 import java.sql.Timestamp
 import java.time.{Duration, Period}
 
-import org.apache.hadoop.hive.common.`type`.HiveIntervalDayTime
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.util.{DateTimeConstants, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -571,11 +570,25 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   test("SPARK-34879: HiveInceptor throw overflow when" +
     " HiveIntervalDayTime overflow then DayTimeIntervalType") {
-    val e = intercept[ArithmeticException] {
-      val dayTime = new HiveIntervalDayTime(Long.MaxValue - 1, 1000)
-      IntervalUtils.durationToMicros(
-        Duration.ofSeconds(dayTime.getTotalSeconds).plusNanos(dayTime.getNanos.toLong))
-    }.getMessage
-    assert(e.contains("long overflow"))
+    withTempView("v") {
+      val df = Seq(
+        ("579025220 15:30:06.000001000")
+      ).toDF("a")
+      df.createTempView("v")
+
+      val e = intercept[Exception] {
+        checkAnswer(
+          df,
+          (child: SparkPlan) => createScriptTransformationExec(
+            input = Seq(
+              df.col("a").expr),
+            script = "cat",
+            output = Seq(AttributeReference("a", DayTimeIntervalType)()),
+            child = child,
+            ioschema = hiveIOSchema),
+          df.select('a).collect())
+      }.getMessage
+      assert(e.contains("java.lang.ArithmeticException: long overflow"))
+    }
   }
 }
