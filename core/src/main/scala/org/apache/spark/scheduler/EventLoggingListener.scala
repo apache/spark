@@ -26,6 +26,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogFileWriter
