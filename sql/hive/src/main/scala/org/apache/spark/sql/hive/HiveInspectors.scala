@@ -357,10 +357,7 @@ private[hive] trait HiveInspectors {
       case _: HiveIntervalYearMonthObjectInspector if x.preferWritable() =>
         withNullSafe(o => getYearMonthIntervalWritable(o))
       case _: HiveIntervalYearMonthObjectInspector =>
-        withNullSafe(o => {
-          val period = IntervalUtils.monthsToPeriod(o.asInstanceOf[Int])
-          new HiveIntervalYearMonth(period.getYears, period.getMonths)
-        })
+        withNullSafe(o => new HiveIntervalYearMonth(o.asInstanceOf[Int]))
       case _: VoidObjectInspector =>
         (_: Any) => null // always be null for void object inspector
     }
@@ -527,12 +524,12 @@ private[hive] trait HiveInspectors {
         _ => constant
       case poi: VoidObjectInspector =>
         _ => null // always be null for void object inspector
-      case ym: WritableConstantHiveIntervalDayTimeObjectInspector =>
-        val constant = ym.getWritableConstantValue.asInstanceOf[HiveIntervalDayTime]
+      case dt: WritableConstantHiveIntervalDayTimeObjectInspector =>
+        val constant = dt.getWritableConstantValue.asInstanceOf[HiveIntervalDayTime]
         _ => IntervalUtils.durationToMicros(
           Duration.ofSeconds(constant.getTotalSeconds).plusNanos(constant.getNanos.toLong))
-      case dt: WritableConstantHiveIntervalYearMonthObjectInspector =>
-        val constant = dt.getWritableConstantValue.asInstanceOf[HiveIntervalYearMonth]
+      case ym: WritableConstantHiveIntervalYearMonthObjectInspector =>
+        val constant = ym.getWritableConstantValue.asInstanceOf[HiveIntervalYearMonth]
         _ => constant.getTotalMonths
       case pi: PrimitiveObjectInspector => pi match {
         // We think HiveVarchar/HiveChar is also a String
@@ -1115,9 +1112,7 @@ private[hive] trait HiveInspectors {
     if (value == null) {
       null
     } else {
-      val period = IntervalUtils.monthsToPeriod(value.asInstanceOf[Int])
-      new hiveIo.HiveIntervalYearMonthWritable(
-        new HiveIntervalYearMonth(period.getYears, period.getMonths))
+      new hiveIo.HiveIntervalYearMonthWritable(new HiveIntervalYearMonth(value.asInstanceOf[Int]))
     }
 
   private def getDecimalWritable(value: Any): hiveIo.HiveDecimalWritable =
