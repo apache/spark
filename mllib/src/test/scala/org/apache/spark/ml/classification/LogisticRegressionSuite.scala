@@ -102,21 +102,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       df
     }
 
-    binaryDatasetWithSmallVar = {
-      val nPoints = 10000
-      val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
-      val xMean = Array(5.843, 3.057, 3.758, 10.199)
-      val xVariance = Array(0.6856, 0.1899, 3.116, 0.0001)
-
-      val testData =
-        generateMultinomialLogisticInput(coefficients, xMean, xVariance,
-          addIntercept = true, nPoints, seed)
-
-      val df = sc.parallelize(testData, 4).toDF().withColumn("weight", rand(seed))
-      df.cache()
-      df
-    }
-
     multinomialDataset = {
       val nPoints = 10000
       val coefficients = Array(
