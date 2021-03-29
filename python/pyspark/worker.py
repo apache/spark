@@ -141,7 +141,8 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec):
             raise RuntimeError(
                 "Number of columns of the returned pandas.DataFrame "
                 "doesn't match specified schema. "
-                "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
+                "Expected: {} Actual: {}"
+                "Columns: {}".format(len(return_type), len(result.columns), result.columns))
         return result
 
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
