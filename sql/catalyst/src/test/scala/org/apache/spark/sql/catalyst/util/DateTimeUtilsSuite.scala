@@ -711,4 +711,39 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("xx")))
     intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("\"quote")))
   }
+
+  test("SPARK-34761: timestamp add day-time interval") {
+    // transit from Pacific Standard Time to Pacific Daylight Time
+    assert(timestampAddDayTime(
+      // 2019-3-9 is the end of Pacific Standard Time
+      date(2019, 3, 9, 12, 0, 0, 123000, LA),
+      MICROS_PER_DAY, LA) ===
+      // 2019-3-10 is the start of Pacific Daylight Time
+      date(2019, 3, 10, 12, 0, 0, 123000, LA))
+    // just normal days
+    outstandingZoneIds.foreach { zid =>
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 100000, zid), 0, zid) ===
+        date(2021, 3, 18, 19, 44, 1, 100000, zid))
+      assert(timestampAddDayTime(
+        date(2021, 1, 19, 0, 0, 0, 0, zid), -18 * MICROS_PER_DAY, zid) ===
+        date(2021, 1, 1, 0, 0, 0, 0, zid))
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 999999, zid), 10 * MICROS_PER_MINUTE, zid) ===
+        date(2021, 3, 18, 19, 54, 1, 999999, zid))
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 1, zid), -MICROS_PER_DAY - 1, zid) ===
+        date(2021, 3, 17, 19, 44, 1, 0, zid))
+      assert(timestampAddDayTime(
+        date(2019, 5, 9, 12, 0, 0, 123456, zid), 2 * MICROS_PER_DAY + 1, zid) ===
+        date(2019, 5, 11, 12, 0, 0, 123457, zid))
+    }
+    // transit from Pacific Daylight Time to Pacific Standard Time
+    assert(timestampAddDayTime(
+      // 2019-11-2 is the end of Pacific Daylight Time
+      date(2019, 11, 2, 12, 0, 0, 123000, LA),
+      MICROS_PER_DAY, LA) ===
+      // 2019-11-3 is the start of Pacific Standard Time
+      date(2019, 11, 3, 12, 0, 0, 123000, LA))
+  }
 }

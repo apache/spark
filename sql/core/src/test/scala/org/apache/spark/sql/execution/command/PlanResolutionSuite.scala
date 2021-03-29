@@ -121,7 +121,7 @@ class PlanResolutionSuite extends AnalysisTest {
     new InMemoryCatalog,
     EmptyFunctionRegistry,
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
-  v1SessionCatalog.createTempView("v", LocalRelation(Nil), false)
+  createTempView(v1SessionCatalog, "v", LocalRelation(Nil), false)
 
   private val catalogManagerWithDefault = {
     val manager = mock(classOf[CatalogManager])

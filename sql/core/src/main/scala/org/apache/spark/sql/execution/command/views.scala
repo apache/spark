@@ -250,7 +250,7 @@ case class AlterViewAsCommand(
 
   private def alterTemporaryView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
     val catalog = session.sessionState.catalog
-    val getRawTempView: String => Option[LogicalPlan] = if (name.database.isEmpty) {
+    val getRawTempView: String => Option[TemporaryViewRelation] = if (name.database.isEmpty) {
       catalog.getRawTempView
     } else {
       catalog.getRawGlobalTempView
@@ -588,7 +588,7 @@ object ViewHelper extends SQLConfHelper with Logging {
       name: TableIdentifier,
       session: SparkSession,
       replace: Boolean,
-      getRawTempView: String => Option[LogicalPlan],
+      getRawTempView: String => Option[TemporaryViewRelation],
       originalText: Option[String],
       analyzedPlan: LogicalPlan,
       aliasedPlan: LogicalPlan): TemporaryViewRelation = {
@@ -619,14 +619,13 @@ object ViewHelper extends SQLConfHelper with Logging {
    * Checks if need to uncache the temp view being replaced.
    */
   private def needsToUncache(
-      rawTempView: LogicalPlan,
-      aliasedPlan: LogicalPlan): Boolean = rawTempView match {
-    // If TemporaryViewRelation doesn't store the analyzed view, always uncache.
-    case TemporaryViewRelation(_, None) => true
+      rawTempView: TemporaryViewRelation,
+      aliasedPlan: LogicalPlan): Boolean = rawTempView.plan match {
     // Do not need to uncache if the to-be-replaced temp view plan and the new plan are the
     // same-result plans.
-    case TemporaryViewRelation(_, Some(p)) => !p.sameResult(aliasedPlan)
-    case p => !p.sameResult(aliasedPlan)
+    case Some(p) => !p.sameResult(aliasedPlan)
+    // If TemporaryViewRelation doesn't store the analyzed view, always uncache.
+    case None => true
   }
 
   /**

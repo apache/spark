@@ -327,6 +327,54 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-34719: view query with duplicated output column names") {
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withView("v1", "v2") {
+          sql("CREATE VIEW v1 AS SELECT 1 a, 2 b")
+          sql("CREATE VIEW v2 AS SELECT 1 col")
+
+          val viewName = createView(
+            viewName = "testView",
+            sqlText = "SELECT *, 1 col, 2 col FROM v1",
+            columnNames = Seq("c1", "c2", "c3", "c4"))
+          withView(viewName) {
+            checkViewOutput(viewName, Seq(Row(1, 2, 1, 2)))
+
+            // One more duplicated column `COL` if caseSensitive=false.
+            sql("CREATE OR REPLACE VIEW v1 AS SELECT 1 a, 2 b, 3 COL")
+            if (caseSensitive) {
+              checkViewOutput(viewName, Seq(Row(1, 2, 1, 2)))
+            } else {
+              val e = intercept[AnalysisException](spark.table(viewName).collect())
+              assert(e.message.contains("incompatible schema change"))
+            }
+          }
+
+          // v1 has 3 columns [a, b, COL], v2 has one column [col], so `testView2` has duplicated
+          // output column names if caseSensitive=false.
+          val viewName2 = createView(
+            viewName = "testView2",
+            sqlText = "SELECT * FROM v1, v2",
+            columnNames = Seq("c1", "c2", "c3", "c4"))
+          withView(viewName2) {
+            checkViewOutput(viewName2, Seq(Row(1, 2, 3, 1)))
+
+            // One less duplicated column if caseSensitive=false.
+            sql("CREATE OR REPLACE VIEW v1 AS SELECT 1 a, 2 b")
+            if (caseSensitive) {
+              val e = intercept[AnalysisException](spark.table(viewName2).collect())
+              assert(e.message.contains("cannot resolve 'COL'"))
+            } else {
+              val e = intercept[AnalysisException](spark.table(viewName2).collect())
+              assert(e.message.contains("incompatible schema change"))
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {

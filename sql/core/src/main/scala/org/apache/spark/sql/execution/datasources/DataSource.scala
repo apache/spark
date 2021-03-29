@@ -32,7 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SparkPlan
@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, Tex
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
 
@@ -510,10 +510,7 @@ case class DataSource(
       physicalPlan: SparkPlan,
       metrics: Map[String, SQLMetric]): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
-    if (outputColumns.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
-      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
-    }
-
+    disallowWritingIntervals(outputColumns.map(_.dataType))
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(
@@ -547,10 +544,7 @@ case class DataSource(
    * Returns a logical plan to write the given [[LogicalPlan]] out to this [[DataSource]].
    */
   def planForWriting(mode: SaveMode, data: LogicalPlan): LogicalPlan = {
-    if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
-      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
-    }
-
+    disallowWritingIntervals(data.schema.map(_.dataType))
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
@@ -578,6 +572,12 @@ case class DataSource(
     val allPaths = caseInsensitiveOptions.get("path") ++ paths
     DataSource.checkAndGlobPathIfNecessary(allPaths.toSeq, newHadoopConfiguration(),
       checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths)
+  }
+
+  private def disallowWritingIntervals(dataTypes: Seq[DataType]): Unit = {
+    dataTypes.foreach(TypeUtils.invokeOnceForInterval(_) {
+      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
+    })
   }
 }
 

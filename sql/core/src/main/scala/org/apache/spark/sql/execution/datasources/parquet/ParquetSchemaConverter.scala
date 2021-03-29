@@ -98,9 +98,6 @@ class ParquetToSparkSchemaConverter(
     def typeString =
       if (typeAnnotation == null) s"$typeName" else s"$typeName ($typeAnnotation)"
 
-    def typeNotSupported() =
-      throw QueryCompilationErrors.parquetTypeUnsupportedError(typeString)
-
     def typeNotImplemented() =
       throw QueryCompilationErrors.parquetTypeUnsupportedYetError(typeString)
 
@@ -144,9 +141,9 @@ class ParquetToSparkSchemaConverter(
           case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_INT_DIGITS)
           case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
             intTypeAnnotation.getBitWidth match {
-              case 8 => typeNotSupported()
-              case 16 => typeNotSupported()
-              case 32 => typeNotSupported()
+              case 8 => ShortType
+              case 16 => IntegerType
+              case 32 => LongType
               case _ => illegalType()
             }
           case t: TimestampLogicalTypeAnnotation if t.getUnit == TimeUnit.MILLIS =>
@@ -165,7 +162,7 @@ class ParquetToSparkSchemaConverter(
           case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_LONG_DIGITS)
           case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
             intTypeAnnotation.getBitWidth match {
-              case 64 => typeNotSupported()
+              case 64 => DecimalType.LongDecimal
               case _ => illegalType()
             }
           case timestamp: TimestampLogicalTypeAnnotation if timestamp.getUnit == TimeUnit.MICROS =>
@@ -388,10 +385,12 @@ class SparkToParquetSchemaConverter(
         Types.primitive(DOUBLE, repetition).named(field.name)
 
       case StringType =>
-        Types.primitive(BINARY, repetition).as(LogicalTypeAnnotation.stringType()).named(field.name)
+        Types.primitive(BINARY, repetition)
+          .as(LogicalTypeAnnotation.stringType()).named(field.name)
 
       case DateType =>
-        Types.primitive(INT32, repetition).as(LogicalTypeAnnotation.dateType()).named(field.name)
+        Types.primitive(INT32, repetition)
+          .as(LogicalTypeAnnotation.dateType()).named(field.name)
 
       // NOTE: Spark SQL can write timestamp values to Parquet using INT96, TIMESTAMP_MICROS or
       // TIMESTAMP_MILLIS. TIMESTAMP_MICROS is recommended but INT96 is the default to keep the

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -32,6 +33,7 @@ import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.IntLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
@@ -286,18 +288,25 @@ public class VectorizedColumnReader {
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
           PrimitiveType primitiveType = descriptor.getPrimitiveType();
+
+          // We need to make sure that we initialize the right type for the dictionary otherwise
+          // WritableColumnVector will throw an exception when trying to decode to an Int when the
+          // dictionary is in fact initialized as Long
           LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
-          if (typeAnnotation instanceof DecimalLogicalTypeAnnotation &&
-              ((DecimalLogicalTypeAnnotation) typeAnnotation).getPrecision() <=
-                Decimal.MAX_INT_DIGITS() &&
-              primitiveType.getPrimitiveTypeName() == INT64) {
-            // We need to make sure that we initialize the right type for the dictionary otherwise
-            // WritableColumnVector will throw an exception when trying to decode to an Int when the
-            // dictionary is in fact initialized as Long
-            column.setDictionary(new ParquetDictionary(dictionary, true));
-          } else {
-            column.setDictionary(new ParquetDictionary(dictionary, false));
-          }
+          boolean castLongToInt = typeAnnotation instanceof DecimalLogicalTypeAnnotation &&
+            ((DecimalLogicalTypeAnnotation) typeAnnotation).getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+            primitiveType.getPrimitiveTypeName() == INT64;
+
+          // We require a long value, but we need to use dictionary to decode the original
+          // signed int first
+          boolean isUnsignedInt32 = isUnsignedIntTypeMatched(32);
+
+          // We require a decimal value, but we need to use dictionary to decode the original
+          // signed long first
+          boolean isUnsignedInt64 = isUnsignedIntTypeMatched(64);
+
+          boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
+          column.setDictionary(new ParquetDictionary(dictionary, needTransform));
         } else {
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
         }
@@ -379,6 +388,18 @@ public class VectorizedColumnReader {
               column.putInt(i, dictionary.decodeToInt(dictionaryIds.getDictId(i)));
             }
           }
+        } else if (column.dataType() == DataTypes.LongType) {
+          // In `ParquetToSparkSchemaConverter`, we map parquet UINT32 to our LongType.
+          // For unsigned int32, it stores as dictionary encoded signed int32 in Parquet
+          // whenever dictionary is available.
+          // Here we eagerly decode it to the original signed int value then convert to
+          // long(unit32).
+          for (int i = rowId; i < rowId + num; ++i) {
+            if (!column.isNullAt(i)) {
+              column.putLong(i,
+                Integer.toUnsignedLong(dictionary.decodeToInt(dictionaryIds.getDictId(i))));
+            }
+          }
         } else if (column.dataType() == DataTypes.ByteType) {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
@@ -412,6 +433,19 @@ public class VectorizedColumnReader {
           for (int i = rowId; i < rowId + num; ++i) {
             if (!column.isNullAt(i)) {
               column.putLong(i, dictionary.decodeToLong(dictionaryIds.getDictId(i)));
+            }
+          }
+        } else if (isUnsignedIntTypeMatched(64)) {
+          // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
+          // For unsigned int64, it stores as dictionary encoded signed int64 in Parquet
+          // whenever dictionary is available.
+          // Here we eagerly decode it to the original signed int64(long) value then convert to
+          // BigInteger.
+          for (int i = rowId; i < rowId + num; ++i) {
+            if (!column.isNullAt(i)) {
+              long signed = dictionary.decodeToLong(dictionaryIds.getDictId(i));
+              byte[] unsigned = new BigInteger(Long.toUnsignedString(signed)).toByteArray();
+              column.putByteArray(i, unsigned);
             }
           }
         } else if (isTimestampTypeMatched(TimeUnit.MILLIS)) {
@@ -574,6 +608,12 @@ public class VectorizedColumnReader {
         canReadAsIntDecimal(column.dataType())) {
       defColumn.readIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+    } else if (column.dataType() == DataTypes.LongType) {
+      // In `ParquetToSparkSchemaConverter`, we map parquet UINT32 to our LongType.
+      // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary fallbacks.
+      // We read them as long values.
+      defColumn.readUnsignedIntegers(
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.ByteType) {
       defColumn.readBytes(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
@@ -601,6 +641,12 @@ public class VectorizedColumnReader {
       defColumn.readLongs(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn,
         DecimalType.is32BitDecimalType(column.dataType()));
+    } else if (isTimestampTypeMatched(TimeUnit.MICROS)) {
+      // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
+      // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary fallbacks.
+      // We read them as decimal values.
+      defColumn.readUnsignedLongs(
+        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (isTimestampTypeMatched(TimeUnit.MICROS)) {
       if ("CORRECTED".equals(datetimeRebaseMode)) {
         defColumn.readLongs(
@@ -861,6 +907,12 @@ public class VectorizedColumnReader {
 
   private boolean isTimestampTypeMatched(TimeUnit unit) {
     return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation &&
-        ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == unit;
+      ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == unit;
+  }
+
+  private boolean isUnsignedIntTypeMatched(int bitWidth) {
+    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation &&
+      !((IntLogicalTypeAnnotation) logicalTypeAnnotation).isSigned() &&
+      ((IntLogicalTypeAnnotation) logicalTypeAnnotation).getBitWidth() == bitWidth;
   }
 }
