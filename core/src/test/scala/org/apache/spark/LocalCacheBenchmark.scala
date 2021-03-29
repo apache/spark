@@ -42,8 +42,8 @@ object LocalCacheBenchmark extends BenchmarkBase {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Loading Cache") {
       val size = 10000
-      val parallelism = 4
-      val guavaCacheConcurrencyLevel = 16
+      val parallelism = 8
+      val guavaCacheConcurrencyLevel = 8
       val dataset = (1 to parallelism)
         .map(_ => Random.shuffle(List.range(0, size)))
         .map(list => list.map(i => TestData(i)))
