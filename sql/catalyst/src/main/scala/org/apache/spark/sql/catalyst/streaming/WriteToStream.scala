@@ -15,16 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.tags;
+package org.apache.spark.sql.catalyst.streaming
 
-import org.scalatest.TagAnnotation;
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.streaming.OutputMode
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+/**
+ * Used to create a [[StreamExecution]].
+ */
+case class WriteToStream(
+    name: String,
+    resolvedCheckpointLocation: String,
+    sink: Table,
+    outputMode: OutputMode,
+    deleteCheckpointOnStop: Boolean,
+    inputQuery: LogicalPlan) extends LogicalPlan {
 
-@TagAnnotation
-@Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD, ElementType.TYPE})
-public @interface DedicatedJVMTest { }
+  override def isStreaming: Boolean = true
+
+  override def output: Seq[Attribute] = Nil
+
+  override def children: Seq[LogicalPlan] = inputQuery :: Nil
+}
+

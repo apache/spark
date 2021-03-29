@@ -526,6 +526,7 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   override val aggBufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
   override val initialValues: Seq[Expression] = zero :: Nil
   override val updateExpressions: Seq[Expression] = rowNumber + one :: Nil
+  override def nullable: Boolean = false
 }
 
 /**
@@ -834,6 +835,7 @@ abstract class RankLike extends AggregateWindowFunction {
   override val updateExpressions = increaseRank +: increaseRowNumber +: children
   override val evaluateExpression: Expression = rank
 
+  override def nullable: Boolean = false
   override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}()"
 
   def withOrder(order: Seq[Expression]): RankLike

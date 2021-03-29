@@ -65,19 +65,13 @@ jobs:
             java: 8
             hadoop: hadoop3.2
             hive: hive2.3
-            included-tags: org.apache.spark.tags.DedicatedJVMTest
-            comment: "- dedicated JVM tests"
-          - modules: sql
-            java: 8
-            hadoop: hadoop3.2
-            hive: hive2.3
             included-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- slow tests"
           - modules: sql
             java: 8
             hadoop: hadoop3.2
             hive: hive2.3
-            excluded-tags: org.apache.spark.tags.DedicatedJVMTest,org.apache.spark.tags.ExtendedSQLTest
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- other tests"
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
@@ -99,12 +93,11 @@ jobs:
       if: ${{ github.event.inputs.target != '' }}
       run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT, Maven and Zinc
+    - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
         path: |
           build/apache-maven-*
-          build/zinc-*
           build/scala-*
           build/*.jar
           ~/.sbt
@@ -186,12 +179,11 @@ jobs:
       if: ${{ github.event.inputs.target != '' }}
       run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT, Maven and Zinc
+    - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
         path: |
           build/apache-maven-*
-          build/zinc-*
           build/scala-*
           build/*.jar
           ~/.sbt
@@ -254,12 +246,11 @@ jobs:
       if: ${{ github.event.inputs.target != '' }}
       run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT, Maven and Zinc
+    - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
         path: |
           build/apache-maven-*
-          build/zinc-*
           build/scala-*
           build/*.jar
           ~/.sbt
@@ -297,12 +288,11 @@ jobs:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
-    - name: Cache Scala, SBT, Maven and Zinc
+    - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
         path: |
           build/apache-maven-*
-          build/zinc-*
           build/scala-*
           build/*.jar
           ~/.sbt

@@ -188,7 +188,7 @@ Input [4]: [sold_date_sk#12, customer_sk#13, item_sk#14, d_date_sk#21]
 Output [3]: [i_item_sk#25, i_class#26, i_category#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_category), IsNotNull(i_class), EqualTo(i_category,Women), EqualTo(i_class,maternity), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_category), IsNotNull(i_class), EqualTo(i_category,Women                                             ), EqualTo(i_class,maternity                                         ), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_class:string,i_category:string>
 
 (28) ColumnarToRow [codegen id : 6]
@@ -196,7 +196,7 @@ Input [3]: [i_item_sk#25, i_class#26, i_category#27]
 
 (29) Filter [codegen id : 6]
 Input [3]: [i_item_sk#25, i_class#26, i_category#27]
-Condition : ((((isnotnull(i_category#27) AND isnotnull(i_class#26)) AND (i_category#27 = Women)) AND (i_class#26 = maternity)) AND isnotnull(i_item_sk#25))
+Condition : ((((isnotnull(i_category#27) AND isnotnull(i_class#26)) AND (i_category#27 = Women                                             )) AND (i_class#26 = maternity                                         )) AND isnotnull(i_item_sk#25))
 
 (30) Project [codegen id : 6]
 Output [1]: [i_item_sk#25]

@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
+import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -56,8 +57,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 @Unstable
 abstract class BaseSessionStateBuilder(
     val session: SparkSession,
-    val parentState: Option[SessionState],
-    val options: Map[String, String]) {
+    val parentState: Option[SessionState]) {
   type NewBuilder = (SparkSession, Option[SessionState]) => BaseSessionStateBuilder
 
   /**
@@ -171,6 +171,7 @@ abstract class BaseSessionStateBuilder(
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(catalogManager) +:
+        ResolveWriteToStream +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =

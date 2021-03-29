@@ -91,27 +91,6 @@ install_mvn() {
   fi
 }
 
-# Install zinc under the build/ folder
-install_zinc() {
-  local ZINC_VERSION=0.3.15
-  ZINC_BIN="$(command -v zinc)"
-  if [ "$ZINC_BIN" ]; then
-    local ZINC_DETECTED_VERSION="$(zinc -version | head -n1 | awk '{print $5}')"
-  fi
-
-  if [ $(version $ZINC_DETECTED_VERSION) -lt $(version $ZINC_VERSION) ]; then
-    local zinc_path="zinc-${ZINC_VERSION}/bin/zinc"
-    [ ! -f "${_DIR}/${zinc_path}" ] && ZINC_INSTALL_FLAG=1
-    local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.lightbend.com}
-
-    install_app \
-      "${TYPESAFE_MIRROR}/zinc/${ZINC_VERSION}" \
-      "zinc-${ZINC_VERSION}.tgz" \
-      "${zinc_path}"
-    ZINC_BIN="${_DIR}/${zinc_path}"
-  fi
-}
-
 # Determine the Scala version from the root pom.xml file, set the Scala URL,
 # and, with that, download the specific version of Scala necessary under
 # the build/ folder
@@ -131,30 +110,11 @@ install_scala() {
   SCALA_LIBRARY="$(cd "$(dirname "${scala_bin}")/../lib" && pwd)/scala-library.jar"
 }
 
-# Setup healthy defaults for the Zinc port if none were provided from
-# the environment
-ZINC_PORT=${ZINC_PORT:-"3030"}
-
-# Install the proper version of Scala, Zinc and Maven for the build
-if [ "$(uname -m)" != 'aarch64' ]; then
-  install_zinc
-fi
 install_scala
 install_mvn
 
 # Reset the current working directory
 cd "${_CALLING_DIR}"
-
-# Now that zinc is ensured to be installed, check its status and, if its
-# not running or just installed, start it
-if [ "$(uname -m)" != 'aarch64' ] && [ -n "${ZINC_INSTALL_FLAG}" -o -z "`"${ZINC_BIN}" -status -port ${ZINC_PORT}`" ]; then
-  export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
-  "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
-  "${ZINC_BIN}" -start -port ${ZINC_PORT} \
-    -server 127.0.0.1 -idle-timeout 3h \
-    -scala-compiler "${SCALA_COMPILER}" \
-    -scala-library "${SCALA_LIBRARY}" &>/dev/null
-fi
 
 # Set any `mvn` options if not already present
 export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
@@ -163,12 +123,7 @@ echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
 # call the `mvn` command as usual
 # SPARK-25854
-"${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
+"${MVN_BIN}" "$@"
 MVN_RETCODE=$?
-
-# Try to shut down zinc explicitly if the server is still running.
-if [ "$(uname -m)" != 'aarch64' ]; then
-  "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
-fi
 
 exit $MVN_RETCODE

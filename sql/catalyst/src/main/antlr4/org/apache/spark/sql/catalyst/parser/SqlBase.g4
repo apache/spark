@@ -134,6 +134,8 @@ statement
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+    | ANALYZE TABLES ((FROM | IN) multipartIdentifier)? COMPUTE STATISTICS
+        (identifier)?                                                  #analyzeTables
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
@@ -693,7 +695,7 @@ inlineTable
     ;
 
 functionTable
-    : funcName=errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
+    : funcName=functionName '(' (expression (',' expression)*)? ')' tableAlias
     ;
 
 tableAlias

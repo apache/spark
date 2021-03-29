@@ -474,6 +474,7 @@ private[spark] class CachedQuantile(
     val taskCount: Long,
 
     // The following fields are an exploded view of a single entry for TaskMetricDistributions.
+    val duration: Double,
     val executorDeserializeTime: Double,
     val executorDeserializeCpuTime: Double,
     val executorRunTime: Double,
