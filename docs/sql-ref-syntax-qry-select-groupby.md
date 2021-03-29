@@ -58,12 +58,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
     equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
     and global aggregate.
-    
-    GROUPING SETS can be followed with normal expressions as well, such as
-    `GROUP BY GROUPING SETS (warehouse, product)`. It generates one grouping set
-    per non-empty subset of the given expressions, so `GROUP BY GROUPING SETS (warehouse, product)`
-    is equivalent to `GROUP BY GROUPING SETS ((warehouse), (product))`.
-    
+
     `GROUP BY warehouse, product GROUPING SETS((warehouse, producets), (warehouse))` is semantically equivalent to
     `GROUP BY GROUPING SETS((warehouse, produce), (warehouse))`. Under this grammar,
     the fields appearing in `GROUPING SETS`'s grouping_set must be a subset of the columns
@@ -92,7 +87,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 * **grouping_set**
 
-    A grouping set is specified by zero or more comma-separated expressions in parentheses.
+    A grouping set is specified by zero or more comma-separated expressions.
 
     **Syntax:** `{ ( [ expression [ , ... ] ] ) | expression }`
 
