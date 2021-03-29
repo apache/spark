@@ -252,6 +252,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRelations ::
       ResolveTables ::
       ResolvePartitionSpec ::
+      AddMetadataColumns ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -2043,7 +2044,6 @@ class Analyzer(override val catalogManager: CatalogManager)
    * columns are not accidentally selected by *.
    */
   object ResolveMissingReferences extends Rule[LogicalPlan] {
-    import org.apache.spark.sql.catalyst.util._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Special cases for adding real output
@@ -2051,7 +2051,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case sa @ Sort(_, _, child: Aggregate) => sa
 
       case s @ Sort(order, _, child)
-          if (!s.resolved || s.missingInput.nonEmpty) && child.resolved =>
+        if (!s.resolved || s.missingInput.nonEmpty) && child.resolved =>
         val (newOrder, newChild) = resolveExprsAndAddMissingAttrs(order, child)
         val ordering = newOrder.map(_.asInstanceOf[SortOrder])
         if (child.output == newChild.output) {
@@ -2071,50 +2071,6 @@ class Analyzer(override val catalogManager: CatalogManager)
           val newFilter = Filter(newCond.head, newChild)
           Project(child.output, newFilter)
         }
-
-      // Add metadata output to all node types
-      case node if node.children.nonEmpty && node.resolved && node.missingInput.nonEmpty &&
-          hasMetadataCol(node) =>
-        val inputAttrs = AttributeSet(node.children.flatMap(_.output))
-        val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
-        if (metaCols.isEmpty) {
-          node
-        } else {
-          val newNode = addMetadataCol(node)
-          // We should not change the output schema of the plan. We should project away the extra
-          // metadata columns if necessary.
-          if (newNode.sameOutput(node)) {
-            newNode
-          } else {
-            Project(node.output, newNode)
-          }
-        }
-    }
-
-    private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
-      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
-      plan.expressions.flatMap(_.collect {
-        case a: Attribute if a.isMetadataCol => a
-        case a: Attribute if childMetadataOutput.exists(_.exprId == a.exprId) =>
-          childMetadataOutput.find(_.exprId == a.exprId).get
-      })
-    }
-
-    private def hasMetadataCol(plan: LogicalPlan): Boolean = {
-      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
-      plan.expressions.exists(_.find {
-        case a: Attribute =>
-          a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
-        case _ => false
-      }.isDefined)
-    }
-
-    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
-      case r: DataSourceV2Relation => r.withMetadataColumns()
-      case p: Project => p.copy(
-        projectList = p.metadataOutput ++ p.projectList,
-        child = addMetadataCol(p.child))
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
     }
 
     /**
@@ -2170,6 +2126,68 @@ class Analyzer(override val catalogManager: CatalogManager)
             (exprs.map(resolveExpressionByPlanOutput(_, other)), other)
         }
       }
+    }
+  }
+
+  object AddMetadataColumns extends Rule[LogicalPlan] {
+
+    import org.apache.spark.sql.catalyst.util._
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDown {
+      // Add metadata output to all node types
+      case node if node.children.nonEmpty && node.resolved && node.missingInput.nonEmpty &&
+        hasMetadataCol(node) =>
+        println(s"Trying to restore missing input ${node.missingInput}")
+        val inputAttrs = AttributeSet(node.children.flatMap(_.output))
+        val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
+        println(s"Metadata attrs are ${getMetadataAttributes(node)}")
+        println(s"Input attrs are ${inputAttrs}")
+        if (metaCols.isEmpty) {
+          println(s"No meta cols")
+          node
+        } else {
+          val newNode = addMetadataCol(node)
+          println(s"Added metadata cols as ${newNode}")
+          // We should not change the output schema of the plan. We should project away the extra
+          // metadata columns if necessary.
+          if (newNode.sameOutput(node)) {
+            println(s"Same output ${newNode.output}")
+            newNode
+          } else {
+            println(s"From output ${node.output} to ${newNode.output}")
+            Project(node.output, newNode)
+          }
+        }
+    }
+
+  private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
+    lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
+      plan.expressions.flatMap(_.collect {
+        case a: Attribute if a.isMetadataCol => a
+        case a: Attribute if childMetadataOutput.exists(_.exprId == a.exprId) =>
+          childMetadataOutput.find(_.exprId == a.exprId).get
+      })
+    }
+
+    private def hasMetadataCol(plan: LogicalPlan): Boolean = {
+      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
+      val hasMetaCol = plan.expressions.exists(_.find {
+        case a: Attribute =>
+          a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
+        case _ => false
+      }.isDefined)
+      println(s"Plan $plan has metadata output: $hasMetaCol")
+      hasMetaCol
+    }
+
+    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
+      case r: DataSourceV2Relation => r.withMetadataColumns()
+      case p: Project =>
+        println(s"You find a project $p with metadata output ${p.metadataOutput}")
+        p.copy(
+          projectList = p.metadataOutput ++ p.projectList,
+          child = addMetadataCol(p.child))
+      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
     }
   }
 

@@ -19,7 +19,7 @@ create temporary view nt2 as select * from values
   ("one", 1),
   ("two", 22),
   ("one", 5)
-  as nt2(k, v2)
+as nt2(k, v2)
 -- !query schema
 struct<>
 -- !query output
@@ -240,10 +240,13 @@ two	2	two	22	two	5
 -- !query
 SELECT nt1.*, nt2.*, nt3.* FROM nt1 natural join nt2 join nt3 on nt2.k = nt3.k
 -- !query schema
-struct<>
+struct<k:string,v1:int,k:string,v2:int,k:string,v3:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Resolved attribute(s) k#x missing from k#x,v1#x,v2#x,k#x,v3#x in operator !Project [k#x, v1#x, k#x, v2#x, k#x, v3#x]. Attribute(s) with the same name appear in the operation: k. Please check if the right attribute(s) are used.
+one	1	one	1	one	4
+one	1	one	1	one	6
+one	1	one	5	one	4
+one	1	one	5	one	6
+two	2	two	22	two	5
 
 
 -- !query
