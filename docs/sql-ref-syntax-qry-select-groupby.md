@@ -50,7 +50,9 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 * **grouping_set**
 
-    A grouping set is specified by zero or more comma-separated expressions.
+    A grouping set is specified by zero or more comma-separated expressions in parentheses. When the
+    grouping set has only one element, parentheses can be omitted. For example, `GROUPING SETS ((a), (b))`
+    is the same as `GROUPING SETS (a, b)`.
 
     **Syntax:** `{ ( [ expression [ , ... ] ] ) | expression }`
 
@@ -64,11 +66,6 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
     equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
     and global aggregate.
-
-    `GROUP BY warehouse, product GROUPING SETS((warehouse, producets), (warehouse))` is semantically equivalent to
-    `GROUP BY GROUPING SETS((warehouse, produce), (warehouse))`. Under this grammar,
-    the fields appearing in `GROUPING SETS`'s grouping_set must be a subset of the columns
-    appearing in group by expression.
 
 * **ROLLUP**
 

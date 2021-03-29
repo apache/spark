@@ -917,6 +917,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val groupByExpressions = expressionList(ctx.groupingExpressions)
       if (ctx.GROUPING != null) {
         // GROUP BY .... GROUPING SETS (...)
+        // `GROUP BY warehouse, product GROUPING SETS((warehouse, producets), (warehouse))` is
+        // semantically equivalent to `GROUP BY GROUPING SETS((warehouse, produce), (warehouse))`.
+        // Under this grammar, the fields appearing in `GROUPING SETS`'s groupingSets must be a
+        // subset of the columns appearing in group by expression.
         val groupingSets =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
         Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
