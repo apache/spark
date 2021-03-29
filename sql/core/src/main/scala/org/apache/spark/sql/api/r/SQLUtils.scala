@@ -60,7 +60,7 @@ private[sql] object SQLUtils extends Logging {
           // So, we intentionally check if Hive classes are loadable or not only when
           // Hive support is explicitly enabled by short-circuiting. See also SPARK-26422.
           SparkSession.hiveClassesArePresent) {
-        SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
+        SparkSession.builder().enableHiveSupport().sparkContext(jsc.sc).getOrCreate()
       } else {
         if (enableHiveSupport) {
           logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +

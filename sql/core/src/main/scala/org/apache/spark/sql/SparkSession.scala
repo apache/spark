@@ -151,7 +151,7 @@ class SparkSession private(
       .map(_.clone(this))
       .getOrElse {
         val state = SparkSession.instantiateSessionState(
-          SparkSession.sessionStateClassName(sparkContext.conf),
+          SparkSession.sessionStateClassName(sharedState.conf),
           self,
           initialSessionOptions)
         state
@@ -945,11 +945,6 @@ object SparkSession extends Logging {
 
           SparkContext.getOrCreate(sparkConf)
           // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
-        }
-        // We should reset `spark.sql.catalogImplementation` according to current requirement.
-        if (sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory" &&
-          sparkConf.get(CATALOG_IMPLEMENTATION) == "hive") {
-          sparkContext.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
         }
         applyExtensions(
           sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
