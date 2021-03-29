@@ -33,21 +33,18 @@ import org.apache.spark.ml.linalg._
  * but NOT centered) before computation.
  *
  * @param bcCoefficients The coefficients corresponding to the features.
- * @param fitIntercept Whether to fit an intercept term.
- * @param fitWithMean Whether to center the data with mean before training, in a virtual way.
- *                    If true, we MUST adjust the intercept of both initial coefficients and
- *                    final solution in the caller.
+ * @param fitIntercept Whether to fit an intercept term. When true, will perform data centering
+ *                     in a virtual way. Then we MUST adjust the intercept of both initial
+ *                     coefficients and final solution in the caller.
  */
 class HingeBlockAggregator(
     bcInverseStd: Broadcast[Array[Double]],
     bcScaledMean: Broadcast[Array[Double]],
-    fitIntercept: Boolean,
-    fitWithMean: Boolean)(bcCoefficients: Broadcast[Vector])
+    fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[InstanceBlock, HingeBlockAggregator]
     with Logging {
 
-  if (fitWithMean) {
-    require(fitIntercept, s"for training without intercept, should not center the vectors")
+  if (fitIntercept) {
     require(bcScaledMean != null && bcScaledMean.value.length == bcInverseStd.value.length,
       "scaled means is required when center the vectors")
   }
@@ -70,7 +67,7 @@ class HingeBlockAggregator(
   // pre-computed margin of an empty vector.
   // with this variable as an offset, for a sparse vector, we only need to
   // deal with non-zero values in prediction.
-  private val marginOffset = if (fitWithMean) {
+  private val marginOffset = if (fitIntercept) {
     coefficientsArray.last -
       BLAS.getBLAS(numFeatures).ddot(numFeatures, coefficientsArray, 1, bcScaledMean.value, 1)
   } else {
@@ -97,10 +94,7 @@ class HingeBlockAggregator(
     // vec/arr here represents margins
     val vec = new DenseVector(Array.ofDim[Double](size))
     val arr = vec.values
-    if (fitIntercept) {
-      val offset = if (fitWithMean) marginOffset else coefficientsArray.last
-      java.util.Arrays.fill(arr, offset)
-    }
+    if (fitIntercept) java.util.Arrays.fill(arr, marginOffset)
     BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
 
     // in-place convert margins to multiplier
@@ -153,14 +147,12 @@ class HingeBlockAggregator(
         throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
     }
 
-    if (fitWithMean) {
+    if (fitIntercept) {
       // above update of the linear part of gradientSumArray does NOT take the centering
       // into account, here we need to adjust this part.
       BLAS.getBLAS(numFeatures).daxpy(numFeatures, -multiplierSum, bcScaledMean.value, 1,
         gradientSumArray, 1)
-    }
 
-    if (fitIntercept) {
       // update the intercept part of gradientSumArray
       gradientSumArray(numFeatures) += multiplierSum
     }
