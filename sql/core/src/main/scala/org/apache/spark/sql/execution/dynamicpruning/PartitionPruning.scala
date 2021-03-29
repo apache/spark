@@ -108,11 +108,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   /**
-   * Given an estimated filtering ratio we assume the partition pruning has benefit if
+   * Given an estimated filtering ratio(and extra filter ratio if filtering side can't
+   * build broadcast by join type) we assume the partition pruning has benefit if
    * the size in bytes of the partitioned plan after filtering is greater than the size
    * in bytes of the plan on the other side of the join. We estimate the filtering ratio
    * using column statistics if they are available, otherwise we use the config value of
-   * `spark.sql.optimizer.joinFilterRatio`.
+   * `spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio`.
    */
   private def pruningHasBenefit(
       partExpr: Expression,
