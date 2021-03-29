@@ -1456,12 +1456,9 @@ abstract class DynamicPartitionPruningSuiteBase
       }
 
       // DPP will apply even if autoBroadcastJoinThreshold is disabled
-      // and left side can broadcast by size
-      Seq(-1L, 100000L).foreach { threshold =>
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$threshold") {
-          val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, true, false)
-        }
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(sqlStr)
+        checkPartitionPruningPredicate(df, true, false)
       }
     }
   }
