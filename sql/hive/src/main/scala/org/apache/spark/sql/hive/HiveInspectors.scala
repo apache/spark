@@ -348,14 +348,14 @@ private[hive] trait HiveInspectors {
       case _: TimestampObjectInspector =>
         withNullSafe(o => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
       case _: HiveIntervalDayTimeObjectInspector  if x.preferWritable() =>
-        withNullSafe(o => getDayTimeIntervalWritable(o))
+        withNullSafe(o => getHiveIntervalDayTimeWritable(o))
       case _: HiveIntervalDayTimeObjectInspector =>
         withNullSafe(o => {
           val duration = IntervalUtils.microsToDuration(o.asInstanceOf[Long])
           new HiveIntervalDayTime(duration.getSeconds, duration.getNano)
         })
       case _: HiveIntervalYearMonthObjectInspector if x.preferWritable() =>
-        withNullSafe(o => getYearMonthIntervalWritable(o))
+        withNullSafe(o => getHiveIntervalYearMonthWritable(o))
       case _: HiveIntervalYearMonthObjectInspector =>
         withNullSafe(o => new HiveIntervalYearMonth(o.asInstanceOf[Int]))
       case _: VoidObjectInspector =>
@@ -890,9 +890,9 @@ private[hive] trait HiveInspectors {
     case Literal(_, NullType) =>
       getPrimitiveNullWritableConstantObjectInspector
     case Literal(_, DayTimeIntervalType) =>
-      getPrimitiveDayTimeIntervalWritableConstantObjectInspector
+      getHiveIntervalDayTimeWritableConstantObjectInspector
     case Literal(_, YearMonthIntervalType) =>
-      getPrimitiveYearMonthIntervalWritableConstantObjectInspector
+      getHiveIntervalYearMonthWritableConstantObjectInspector
     case Literal(value, ArrayType(dt, _)) =>
       val listObjectInspector = toInspector(dt)
       if (value == null) {
@@ -1034,11 +1034,11 @@ private[hive] trait HiveInspectors {
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.voidTypeInfo, null)
 
-  private def getPrimitiveDayTimeIntervalWritableConstantObjectInspector: ObjectInspector =
+  private def getHiveIntervalDayTimeWritableConstantObjectInspector: ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.intervalDayTimeTypeInfo, null)
 
-  private def getPrimitiveYearMonthIntervalWritableConstantObjectInspector: ObjectInspector =
+  private def getHiveIntervalYearMonthWritableConstantObjectInspector: ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.intervalYearMonthTypeInfo, null)
 
@@ -1099,7 +1099,7 @@ private[hive] trait HiveInspectors {
       new hiveIo.TimestampWritable(DateTimeUtils.toJavaTimestamp(value.asInstanceOf[Long]))
     }
 
-  private def getDayTimeIntervalWritable(value: Any): hiveIo.HiveIntervalDayTimeWritable =
+  private def getHiveIntervalDayTimeWritable(value: Any): hiveIo.HiveIntervalDayTimeWritable =
     if (value == null) {
       null
     } else {
@@ -1108,7 +1108,7 @@ private[hive] trait HiveInspectors {
         new HiveIntervalDayTime(duration.getSeconds, duration.getNano))
     }
 
-  private def getYearMonthIntervalWritable(value: Any): hiveIo.HiveIntervalYearMonthWritable =
+  private def getHiveIntervalYearMonthWritable(value: Any): hiveIo.HiveIntervalYearMonthWritable =
     if (value == null) {
       null
     } else {
