@@ -1017,6 +1017,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>2.3.0</td>
 </tr>
+<tr>
+  <td><code>spark.files.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections for fetching files in Spark RPC environments to be marked
+    as idled and closed if there are still outstanding files being downloaded but no traffic no the channel
+    for at least `connectionTimeout`.
+  </td>
+  <td>1.6.0</td>
+</tr>
 </table>
 
 ### Spark UI
