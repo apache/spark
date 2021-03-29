@@ -19,7 +19,7 @@ create temporary view nt2 as select * from values
   ("one", 1),
   ("two", 22),
   ("one", 5)
-as nt2(k, v2)
+  as nt2(k, v2)
 -- !query schema
 struct<>
 -- !query output
@@ -210,7 +210,7 @@ SELECT nt2.k FROM (SELECT * FROM nt1 natural join nt2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`nt2.k`' given input columns: [__auto_generated_subquery_name.k, __auto_generated_subquery_name.v1, __auto_generated_subquery_name.v2]; line 1 pos 7
+cannot resolve 'nt2.k' given input columns: [__auto_generated_subquery_name.k, __auto_generated_subquery_name.v1, __auto_generated_subquery_name.v2]; line 1 pos 7
 
 
 -- !query
