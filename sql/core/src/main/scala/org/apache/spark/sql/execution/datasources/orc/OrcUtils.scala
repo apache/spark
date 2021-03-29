@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
+import org.apache.spark.sql.internal.SQLConf.NESTED_SCHEMA_PRUNING_ENABLED
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -157,7 +158,8 @@ object OrcUtils extends Logging {
         // In these cases we map the physical schema to the data schema by index.
         assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
           s"${dataSchema.catalogString} has less fields than the actual ORC physical schema, " +
-          "no idea which columns were dropped, fail to read.")
+          "no idea which columns were dropped, fail to read. Try to disable " +
+          s"${NESTED_SCHEMA_PRUNING_ENABLED.key} to workaround this issue.")
         // for ORC file written by Hive, no field names
         // in the physical schema, there is a need to send the
         // entire dataSchema instead of required schema.
