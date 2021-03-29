@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecuti
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, REPARTITION, REPARTITION_WITH_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION, REPARTITION_WITH_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -1542,5 +1542,28 @@ class AdaptiveQueryExecSuite
       .toArray
     assert(materializeLogs(0).startsWith("Materialize query stage BroadcastQueryStageExec"))
     assert(materializeLogs(1).startsWith("Materialize query stage ShuffleQueryStageExec"))
+  }
+
+  test("SPARK-34899: Use origin plan if we can not coalesce shuffle partition") {
+    def check(ds: Dataset[Row], origin: ShuffleOrigin): Unit = {
+      ds.collect()
+      val plan = ds.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      assert(collect(plan) {
+        case c: CustomShuffleReaderExec => c
+      }.isEmpty)
+      assert(collect(plan) {
+        case s: ShuffleExchangeExec if s.shuffleOrigin == origin && s.numPartitions == 3 => s
+      }.size == 1)
+      checkAnswer(ds, testData)
+    }
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+      check(testData.repartition(), REPARTITION)
+      check(testData.sort($"key"), ENSURE_REQUIREMENTS)
+    }
   }
 }
