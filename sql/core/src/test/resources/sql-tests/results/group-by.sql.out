@@ -650,8 +650,8 @@ SELECT
     first(a), last(a),
     first(DISTINCT b), last(DISTINCT b),
     first(b), last(b)
-FROM testData WHERE a IS NOT NULL AND b IS NOT NULL
+FROM (SELECT a, b FROM testData WHERE a IS NOT NULL AND b IS NOT NULL ORDER BY a, b)
 -- !query schema
 struct<first(DISTINCT a):int,last(DISTINCT a):int,first(a):int,last(a):int,first(DISTINCT b):int,last(DISTINCT b):int,first(b):int,last(b):int>
 -- !query output
-1	3	1	3	2	1	1	2
+2	1	1	3	1	2	1	2

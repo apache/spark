@@ -186,4 +186,4 @@ SELECT
     first(a), last(a),
     first(DISTINCT b), last(DISTINCT b),
     first(b), last(b)
-FROM testData WHERE a IS NOT NULL AND b IS NOT NULL;
+FROM (SELECT a, b FROM testData WHERE a IS NOT NULL AND b IS NOT NULL ORDER BY a, b);
