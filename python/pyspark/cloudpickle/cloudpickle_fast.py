@@ -10,6 +10,7 @@ Note that the C Pickler sublassing API is CPython-specific. Therefore, some
 guards present in cloudpickle.py that were written to handle PyPy specificities
 are not present in cloudpickle_fast.py
 """
+import _collections_abc
 import abc
 import copyreg
 import io
@@ -33,8 +34,8 @@ from .cloudpickle import (
     _typevar_reduce, _get_bases, _make_cell, _make_empty_cell, CellType,
     _is_parametrized_type_hint, PYPY, cell_set,
     parametrized_type_hint_getinitargs, _create_parametrized_type_hint,
-    builtin_code_type
-
+    builtin_code_type,
+    _make_dict_keys, _make_dict_values, _make_dict_items,
 )
 
 
@@ -400,6 +401,24 @@ def _class_reduce(obj):
     return NotImplemented
 
 
+def _dict_keys_reduce(obj):
+    # Safer not to ship the full dict as sending the rest might
+    # be unintended and could potentially cause leaking of
+    # sensitive information
+    return _make_dict_keys, (list(obj), )
+
+
+def _dict_values_reduce(obj):
+    # Safer not to ship the full dict as sending the rest might
+    # be unintended and could potentially cause leaking of
+    # sensitive information
+    return _make_dict_values, (list(obj), )
+
+
+def _dict_items_reduce(obj):
+    return _make_dict_items, (dict(obj), )
+
+
 # COLLECTIONS OF OBJECTS STATE SETTERS
 # ------------------------------------
 # state setters are called at unpickling time, once the object is created and
@@ -473,6 +492,10 @@ class CloudPickler(Pickler):
     _dispatch_table[types.MappingProxyType] = _mappingproxy_reduce
     _dispatch_table[weakref.WeakSet] = _weakset_reduce
     _dispatch_table[typing.TypeVar] = _typevar_reduce
+    _dispatch_table[_collections_abc.dict_keys] = _dict_keys_reduce
+    _dispatch_table[_collections_abc.dict_values] = _dict_values_reduce
+    _dispatch_table[_collections_abc.dict_items] = _dict_items_reduce
+
 
     dispatch_table = ChainMap(_dispatch_table, copyreg.dispatch_table)
 

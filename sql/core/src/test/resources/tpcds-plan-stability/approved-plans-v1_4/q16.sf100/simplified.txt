@@ -1,5 +1,5 @@
-TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
-  WholeStageCodegen (12)
+WholeStageCodegen (12)
+  Sort [order count ]
     HashAggregate [sum,sum,count] [sum(UnscaledValue(cs_ext_ship_cost)),sum(UnscaledValue(cs_net_profit)),count(cs_order_number),order count ,total shipping cost ,total net profit ,sum,sum,count]
       InputAdapter
         Exchange #1
@@ -24,10 +24,11 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                               InputAdapter
                                                 Exchange [cs_order_number] #2
                                                   WholeStageCodegen (1)
-                                                    Filter [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.catalog_sales [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_warehouse_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
+                                                    Project [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_warehouse_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
+                                                      Filter [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.catalog_sales [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_warehouse_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit,cs_sold_date_sk]
                                           WholeStageCodegen (4)
                                             Sort [cs_order_number]
                                               InputAdapter
@@ -36,15 +37,16 @@ TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
                                                     Project [cs_warehouse_sk,cs_order_number]
                                                       ColumnarToRow
                                                         InputAdapter
-                                                          Scan parquet default.catalog_sales [cs_warehouse_sk,cs_order_number]
+                                                          Scan parquet default.catalog_sales [cs_warehouse_sk,cs_order_number,cs_sold_date_sk]
                                   WholeStageCodegen (7)
                                     Sort [cr_order_number]
                                       InputAdapter
                                         Exchange [cr_order_number] #4
                                           WholeStageCodegen (6)
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.catalog_returns [cr_order_number]
+                                            Project [cr_order_number]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.catalog_returns [cr_order_number,cr_returned_date_sk]
                               InputAdapter
                                 BroadcastExchange #5
                                   WholeStageCodegen (8)

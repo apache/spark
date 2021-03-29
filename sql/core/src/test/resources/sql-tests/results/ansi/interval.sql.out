@@ -5,7 +5,7 @@
 -- !query
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15')
 -- !query schema
-struct<multiply_interval(subtracttimestamps(TIMESTAMP '2019-10-15 10:11:12.001002', CAST(DATE '2019-10-15' AS TIMESTAMP)), CAST(3 AS DOUBLE)):interval>
+struct<multiply_interval(subtracttimestamps(TIMESTAMP '2019-10-15 10:11:12.001002', DATE '2019-10-15'), 3):interval>
 -- !query output
 30 hours 33 minutes 36.003006 seconds
 
@@ -13,7 +13,7 @@ struct<multiply_interval(subtracttimestamps(TIMESTAMP '2019-10-15 10:11:12.00100
 -- !query
 select interval 4 month 2 weeks 3 microseconds * 1.5
 -- !query schema
-struct<multiply_interval(INTERVAL '4 months 14 days 0.000003 seconds', CAST(1.5 AS DOUBLE)):interval>
+struct<multiply_interval(INTERVAL '4 months 14 days 0.000003 seconds', 1.5):interval>
 -- !query output
 6 months 21 days 0.000005 seconds
 
@@ -21,7 +21,7 @@ struct<multiply_interval(INTERVAL '4 months 14 days 0.000003 seconds', CAST(1.5 
 -- !query
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5
 -- !query schema
-struct<divide_interval(subtracttimestamps(TIMESTAMP '2019-10-15 00:00:00', TIMESTAMP '2019-10-14 00:00:00'), CAST(1.5 AS DOUBLE)):interval>
+struct<divide_interval(subtracttimestamps(TIMESTAMP '2019-10-15 00:00:00', TIMESTAMP '2019-10-14 00:00:00'), 1.5):interval>
 -- !query output
 16 hours
 
@@ -74,7 +74,7 @@ divide by zero
 -- !query
 select interval '2 seconds' / null
 -- !query schema
-struct<divide_interval(INTERVAL '2 seconds', CAST(NULL AS DOUBLE)):interval>
+struct<divide_interval(INTERVAL '2 seconds', NULL):interval>
 -- !query output
 NULL
 
@@ -82,7 +82,7 @@ NULL
 -- !query
 select interval '2 seconds' * null
 -- !query schema
-struct<multiply_interval(INTERVAL '2 seconds', CAST(NULL AS DOUBLE)):interval>
+struct<multiply_interval(INTERVAL '2 seconds', NULL):interval>
 -- !query output
 NULL
 
@@ -90,7 +90,7 @@ NULL
 -- !query
 select null * interval '2 seconds'
 -- !query schema
-struct<multiply_interval(INTERVAL '2 seconds', CAST(NULL AS DOUBLE)):interval>
+struct<multiply_interval(INTERVAL '2 seconds', NULL):interval>
 -- !query output
 NULL
 
@@ -178,7 +178,7 @@ struct<make_interval(1, 2, 3, 4, 5, 6, 0.000000):interval>
 -- !query
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009)
 -- !query schema
-struct<make_interval(1, 2, 3, 4, 5, 6, CAST(7.008009 AS DECIMAL(18,6))):interval>
+struct<make_interval(1, 2, 3, 4, 5, 6, 7.008009):interval>
 -- !query output
 1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds
 
@@ -196,8 +196,8 @@ select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Decimal(expanded,1234567890123456789,20,0}) cannot be represented as Decimal(18, 6).
+org.apache.spark.sql.AnalysisException
+cannot resolve 'make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789L)' due to data type mismatch: argument 7 requires decimal(18,6) type, however, '1234567890123456789L' is of bigint type.; line 1 pos 7
 
 
 -- !query
@@ -754,7 +754,7 @@ select
   interval '2-2' year to month + tsval
 from interval_arithmetic
 -- !query schema
-struct<tsval:timestamp,CAST(tsval - INTERVAL '2 years 2 months' AS TIMESTAMP):timestamp,CAST(tsval - INTERVAL '-2 years -2 months' AS TIMESTAMP):timestamp,CAST(tsval + INTERVAL '2 years 2 months' AS TIMESTAMP):timestamp,CAST(tsval + INTERVAL '-2 years -2 months' AS TIMESTAMP):timestamp,CAST(tsval + (- INTERVAL '2 years 2 months') AS TIMESTAMP):timestamp,CAST(tsval + INTERVAL '2 years 2 months' AS TIMESTAMP):timestamp>
+struct<tsval:timestamp,tsval - INTERVAL '2 years 2 months':timestamp,tsval - INTERVAL '-2 years -2 months':timestamp,tsval + INTERVAL '2 years 2 months':timestamp,tsval + INTERVAL '-2 years -2 months':timestamp,tsval + (- INTERVAL '2 years 2 months'):timestamp,tsval + INTERVAL '2 years 2 months':timestamp>
 -- !query output
 2012-01-01 00:00:00	2009-11-01 00:00:00	2014-03-01 00:00:00	2014-03-01 00:00:00	2009-11-01 00:00:00	2009-11-01 00:00:00	2014-03-01 00:00:00
 
@@ -798,7 +798,7 @@ select
   interval '99 11:22:33.123456789' day to second + tsval
 from interval_arithmetic
 -- !query schema
-struct<tsval:timestamp,CAST(tsval - INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds' AS TIMESTAMP):timestamp,CAST(tsval - INTERVAL '-99 days -11 hours -22 minutes -33.123456 seconds' AS TIMESTAMP):timestamp,CAST(tsval + INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds' AS TIMESTAMP):timestamp,CAST(tsval + INTERVAL '-99 days -11 hours -22 minutes -33.123456 seconds' AS TIMESTAMP):timestamp,CAST(tsval + (- INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds') AS TIMESTAMP):timestamp,CAST(tsval + INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds' AS TIMESTAMP):timestamp>
+struct<tsval:timestamp,tsval - INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds':timestamp,tsval - INTERVAL '-99 days -11 hours -22 minutes -33.123456 seconds':timestamp,tsval + INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds':timestamp,tsval + INTERVAL '-99 days -11 hours -22 minutes -33.123456 seconds':timestamp,tsval + (- INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds'):timestamp,tsval + INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds':timestamp>
 -- !query output
 2012-01-01 00:00:00	2011-09-23 12:37:26.876544	2012-04-09 11:22:33.123456	2012-04-09 11:22:33.123456	2011-09-23 12:37:26.876544	2011-09-23 12:37:26.876544	2012-04-09 11:22:33.123456
 
@@ -814,7 +814,7 @@ select
   interval '99 11:22:33.123456789' day to second + strval
 from interval_arithmetic
 -- !query schema
-struct<strval:string,CAST(strval - INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds' AS STRING):string,CAST(strval - INTERVAL '-99 days -11 hours -22 minutes -33.123456 seconds' AS STRING):string,CAST(CAST(strval AS TIMESTAMP) + INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds' AS STRING):string,CAST(CAST(strval AS TIMESTAMP) + INTERVAL '-99 days -11 hours -22 minutes -33.123456 seconds' AS STRING):string,CAST(CAST(strval AS TIMESTAMP) + (- INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds') AS STRING):string,CAST(CAST(strval AS TIMESTAMP) + INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds' AS STRING):string>
+struct<strval:string,strval - INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds':string,strval - INTERVAL '-99 days -11 hours -22 minutes -33.123456 seconds':string,strval + INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds':string,strval + INTERVAL '-99 days -11 hours -22 minutes -33.123456 seconds':string,strval + (- INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds'):string,strval + INTERVAL '99 days 11 hours 22 minutes 33.123456 seconds':string>
 -- !query output
 2012-01-01	2011-09-23 12:37:26.876544	2012-04-09 11:22:33.123456	2012-04-09 11:22:33.123456	2011-09-23 12:37:26.876544	2011-09-23 12:37:26.876544	2012-04-09 11:22:33.123456
 

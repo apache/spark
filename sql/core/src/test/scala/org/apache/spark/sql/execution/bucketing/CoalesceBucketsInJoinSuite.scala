@@ -99,7 +99,7 @@ class CoalesceBucketsInJoinSuite extends SQLTestUtils with SharedSparkSession {
           s.leftKeys, s.rightKeys, Inner, BuildLeft, None, lScan, rScan)
       }
 
-      val plan = CoalesceBucketsInJoin(spark.sessionState.conf)(join)
+      val plan = CoalesceBucketsInJoin(join)
 
       def verify(expected: Option[Int], subPlan: SparkPlan): Unit = {
         val coalesced = subPlan.collect {

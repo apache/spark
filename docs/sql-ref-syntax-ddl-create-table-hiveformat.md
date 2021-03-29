@@ -42,10 +42,10 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
 
 row_format:    
     : SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ]
-    | DELIMITED [ FIELDS TERMINATED BY fields_termiated_char [ ESCAPED BY escaped_char ] ] 
-        [ COLLECTION ITEMS TERMINATED BY collection_items_termiated_char ] 
-        [ MAP KEYS TERMINATED BY map_key_termiated_char ]
-        [ LINES TERMINATED BY row_termiated_char ]
+    | DELIMITED [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escaped_char ] ] 
+        [ COLLECTION ITEMS TERMINATED BY collection_items_terminated_char ] 
+        [ MAP KEYS TERMINATED BY map_key_terminated_char ]
+        [ LINES TERMINATED BY row_terminated_char ]
         [ NULL DEFINED AS null_char ]
 ```
 

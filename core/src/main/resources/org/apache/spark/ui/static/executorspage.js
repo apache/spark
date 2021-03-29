@@ -26,15 +26,15 @@ function getThreadDumpEnabled() {
 }
 
 function formatStatus(status, type, row) {
-    if (row.isBlacklisted) {
-        return "Blacklisted";
+    if (row.isExcluded) {
+        return "Excluded";
     }
 
     if (status) {
-        if (row.blacklistedInStages.length == 0) {
+        if (row.excludedInStages.length == 0) {
             return "Active"
         }
-        return "Active (Blacklisted in Stages: [" + row.blacklistedInStages.join(", ") + "])";
+        return "Active (Excluded in Stages: [" + row.excludedInStages.join(", ") + "])";
     }
     return "Dead"
 }
@@ -119,7 +119,7 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 var sumOptionalColumns = [3, 4];
-var execOptionalColumns = [5, 6, 9, 10];
+var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14];
 var execDataTable;
 var sumDataTable;
 
@@ -168,7 +168,7 @@ $(document).ready(function () {
             var allTotalInputBytes = 0;
             var allTotalShuffleRead = 0;
             var allTotalShuffleWrite = 0;
-            var allTotalBlacklisted = 0;
+            var allTotalExcluded = 0;
 
             var activeExecCnt = 0;
             var activeRDDBlocks = 0;
@@ -190,7 +190,7 @@ $(document).ready(function () {
             var activeTotalInputBytes = 0;
             var activeTotalShuffleRead = 0;
             var activeTotalShuffleWrite = 0;
-            var activeTotalBlacklisted = 0;
+            var activeTotalExcluded = 0;
 
             var deadExecCnt = 0;
             var deadRDDBlocks = 0;
@@ -212,7 +212,7 @@ $(document).ready(function () {
             var deadTotalInputBytes = 0;
             var deadTotalShuffleRead = 0;
             var deadTotalShuffleWrite = 0;
-            var deadTotalBlacklisted = 0;
+            var deadTotalExcluded = 0;
 
             response.forEach(function (exec) {
                 var memoryMetrics = {
@@ -246,7 +246,7 @@ $(document).ready(function () {
                 allTotalInputBytes += exec.totalInputBytes;
                 allTotalShuffleRead += exec.totalShuffleRead;
                 allTotalShuffleWrite += exec.totalShuffleWrite;
-                allTotalBlacklisted += exec.isBlacklisted ? 1 : 0;
+                allTotalExcluded += exec.isExcluded ? 1 : 0;
                 if (exec.isActive) {
                     activeExecCnt += 1;
                     activeRDDBlocks += exec.rddBlocks;
@@ -268,7 +268,7 @@ $(document).ready(function () {
                     activeTotalInputBytes += exec.totalInputBytes;
                     activeTotalShuffleRead += exec.totalShuffleRead;
                     activeTotalShuffleWrite += exec.totalShuffleWrite;
-                    activeTotalBlacklisted += exec.isBlacklisted ? 1 : 0;
+                    activeTotalExcluded += exec.isExcluded ? 1 : 0;
                 } else {
                     deadExecCnt += 1;
                     deadRDDBlocks += exec.rddBlocks;
@@ -290,7 +290,7 @@ $(document).ready(function () {
                     deadTotalInputBytes += exec.totalInputBytes;
                     deadTotalShuffleRead += exec.totalShuffleRead;
                     deadTotalShuffleWrite += exec.totalShuffleWrite;
-                    deadTotalBlacklisted += exec.isBlacklisted ? 1 : 0;
+                    deadTotalExcluded += exec.isExcluded ? 1 : 0; // todo - TEST BACKWARDS compatibility history?
                 }
             });
 
@@ -315,7 +315,7 @@ $(document).ready(function () {
                 "allTotalInputBytes": allTotalInputBytes,
                 "allTotalShuffleRead": allTotalShuffleRead,
                 "allTotalShuffleWrite": allTotalShuffleWrite,
-                "allTotalBlacklisted": allTotalBlacklisted
+                "allTotalExcluded": allTotalExcluded
             };
             var activeSummary = {
                 "execCnt": ( "Active(" + activeExecCnt + ")"),
@@ -338,7 +338,7 @@ $(document).ready(function () {
                 "allTotalInputBytes": activeTotalInputBytes,
                 "allTotalShuffleRead": activeTotalShuffleRead,
                 "allTotalShuffleWrite": activeTotalShuffleWrite,
-                "allTotalBlacklisted": activeTotalBlacklisted
+                "allTotalExcluded": activeTotalExcluded
             };
             var deadSummary = {
                 "execCnt": ( "Dead(" + deadExecCnt + ")" ),
@@ -361,7 +361,7 @@ $(document).ready(function () {
                 "allTotalInputBytes": deadTotalInputBytes,
                 "allTotalShuffleRead": deadTotalShuffleRead,
                 "allTotalShuffleWrite": deadTotalShuffleWrite,
-                "allTotalBlacklisted": deadTotalBlacklisted
+                "allTotalExcluded": deadTotalExcluded
             };
 
             var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
@@ -410,6 +410,78 @@ $(document).ready(function () {
                                 else
                                     return (formatBytes(row.memoryMetrics.usedOffHeapStorageMemory, type) + ' / ' +
                                         formatBytes(row.memoryMetrics.totalOffHeapStorageMemory, type));
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.JVMHeapMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.JVMHeapMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.JVMOffHeapMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.OnHeapExecutionMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.OnHeapExecutionMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.OffHeapExecutionMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.OnHeapStorageMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.OffHeapStorageMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.DirectPoolMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.DirectPoolMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.MappedPoolMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
                             }
                         },
                         {data: 'diskUsed', render: formatBytes},
@@ -462,8 +534,12 @@ $(document).ready(function () {
                     "columnDefs": [
                         {"visible": false, "targets": 5},
                         {"visible": false, "targets": 6},
+                        {"visible": false, "targets": 7},
+                        {"visible": false, "targets": 8},
                         {"visible": false, "targets": 9},
-                        {"visible": false, "targets": 10}
+                        {"visible": false, "targets": 10},
+                        {"visible": false, "targets": 13},
+                        {"visible": false, "targets": 14}
                     ],
                     "deferRender": true
                 };
@@ -547,7 +623,7 @@ $(document).ready(function () {
                         {data: 'allTotalInputBytes', render: formatBytes},
                         {data: 'allTotalShuffleRead', render: formatBytes},
                         {data: 'allTotalShuffleWrite', render: formatBytes},
-                        {data: 'allTotalBlacklisted'}
+                        {data: 'allTotalExcluded'}
                     ],
                     "paging": false,
                     "searching": false,
@@ -568,11 +644,15 @@ $(document).ready(function () {
                     "Show Additional Metrics" +
                     "</a></div>" +
                     "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
-                    "<div><input type='checkbox' class='toggle-vis' id='select-all-box'>Select All</div>" +
-                    "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'>On Heap Memory</div>" +
-                    "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'>Off Heap Memory</div>" +
-                    "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9'>Resources</div>" +
-                    "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'>Resource Profile Id</div>" +
+                    "<div><input type='checkbox' class='toggle-vis' id='select-all-box'> Select All</div>" +
+                    "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'> On Heap Memory</div>" +
+                    "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'> Off Heap Memory</div>" +
+                    "<div id='jvm_on_off_heap_memory' class='jvm_on_off_heap_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='7'> Peak JVM Memory OnHeap / OffHeap</div>" +
+                    "<div id='on_off_heap_execution_memory' class='on_off_heap_execution_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='8'> Peak Execution Memory OnHeap / OffHeap</div>" +
+                    "<div id='on_off_heap_storage_memory' class='on_off_heap_storage_memory'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9'> Peak Storage Memory OnHeap / OffHeap</div>" +
+                    "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'> Peak Pool Memory Direct / Mapped</div>" +
+                    "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13'> Resources</div>" +
+                    "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14'> Resource Profile Id</div>" +
                     "</div>");
 
                 reselectCheckboxesBasedOnTaskTableState();

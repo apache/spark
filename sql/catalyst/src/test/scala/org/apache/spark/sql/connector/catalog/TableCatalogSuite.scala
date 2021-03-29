@@ -23,9 +23,11 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.connector.InMemoryTableCatalog
+import org.apache.spark.sql.connector.{BufferedRows, InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -64,12 +66,12 @@ class TableCatalogSuite extends SparkFunSuite {
     val ident2 = Identifier.of(Array("ns"), "test_table_2")
     val ident3 = Identifier.of(Array("ns2"), "test_table_1")
 
-    assert(catalog.listTables(Array("ns")).isEmpty)
+    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns")))
 
     catalog.createTable(ident1, schema, Array.empty, emptyProps)
 
     assert(catalog.listTables(Array("ns")).toSet == Set(ident1))
-    assert(catalog.listTables(Array("ns2")).isEmpty)
+    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns2")))
 
     catalog.createTable(ident3, schema, Array.empty, emptyProps)
     catalog.createTable(ident2, schema, Array.empty, emptyProps)
@@ -643,6 +645,11 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(!catalog.tableExists(testIdent))
   }
 
+  test("purgeTable") {
+    val catalog = newCatalog()
+    intercept[UnsupportedOperationException](catalog.purgeTable(testIdent))
+  }
+
   test("renameTable") {
     val catalog = newCatalog()
 
@@ -841,7 +848,7 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(catalog.dropNamespace(testNs))
 
     assert(!catalog.namespaceExists(testNs))
-    assert(catalog.listTables(testNs).isEmpty)
+    intercept[NoSuchNamespaceException](catalog.listTables(testNs))
   }
 
   test("alterNamespace: basic behavior") {
@@ -881,5 +888,44 @@ class TableCatalogSuite extends SparkFunSuite {
     }
 
     assert(exc.getMessage.contains(testNs.quoted))
+  }
+
+  test("truncate non-partitioned table") {
+    val catalog = newCatalog()
+
+    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+      .asInstanceOf[InMemoryTable]
+    table.withData(Array(
+      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
+      new BufferedRows("4").withRow(InternalRow(1, "def", "4"))))
+    assert(table.truncateTable())
+    assert(table.rows.isEmpty)
+  }
+
+  test("truncate partitioned table") {
+    val partCatalog = new InMemoryPartitionTableCatalog
+    partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
+
+    val table = partCatalog.createTable(
+      testIdent,
+      new StructType()
+        .add("col0", IntegerType)
+        .add("part0", IntegerType),
+      Array(LogicalExpressions.identity(LogicalExpressions.parseReference("part0"))),
+      util.Collections.emptyMap[String, String])
+    val partTable = table.asInstanceOf[InMemoryPartitionTable]
+    val partIdent = InternalRow.apply(0)
+    val partIdent1 = InternalRow.apply(1)
+    partTable.createPartition(partIdent, new util.HashMap[String, String]())
+    partTable.createPartition(partIdent1, new util.HashMap[String, String]())
+    partTable.withData(Array(
+      new BufferedRows("0").withRow(InternalRow(0, 0)),
+      new BufferedRows("1").withRow(InternalRow(1, 1))
+    ))
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
+    assert(!partTable.rows.isEmpty)
+    assert(partTable.truncateTable())
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
+    assert(partTable.rows.isEmpty)
   }
 }

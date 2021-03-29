@@ -42,13 +42,6 @@ except ImportError:
     print("Install using 'sudo pip install PyGithub'")
     sys.exit(-1)
 
-try:
-    import unidecode
-except ImportError:
-    print("This tool requires the unidecode library to decode obscure github usernames")
-    print("Install using 'sudo pip install unidecode'")
-    sys.exit(-1)
-
 
 # Contributors list file name
 contributors_file_name = "contributors.txt"
@@ -64,11 +57,11 @@ def yesOrNoPrompt(msg):
 
 # Utility functions run git commands (written with Git 1.8.5)
 def run_cmd(cmd):
-    return Popen(cmd, stdout=PIPE).communicate()[0]
+    return Popen(cmd, stdout=PIPE).communicate()[0].decode("utf8")
 
 
 def run_cmd_error(cmd):
-    return Popen(cmd, stdout=PIPE, stderr=PIPE).communicate()[1]
+    return Popen(cmd, stdout=PIPE, stderr=PIPE).communicate()[1].decode("utf8")
 
 
 def get_date(commit_hash):
@@ -110,7 +103,7 @@ class Commit:
 # Under the hood, this runs a `git log` on that tag and parses the fields
 # from the command output to construct a list of Commit objects. Note that
 # because certain fields reside in the commit description and cannot be parsed
-# through the Github API itself, we need to do some intelligent regex parsing
+# through the GitHub API itself, we need to do some intelligent regex parsing
 # to extract those fields.
 #
 # This is written using Git 1.8.5.
@@ -140,7 +133,7 @@ def get_commits(tag):
             sys.exit("Unexpected format in commit: %s" % commit_digest)
         [_hash, author, title] = commit_digest.split(field_end_marker)
         # The PR number and github username is in the commit message
-        # itself and cannot be accessed through any Github API
+        # itself and cannot be accessed through any GitHub API
         pr_number = None
         match = re.search("Closes #([0-9]+) from ([^/\\s]+)/", commit_body)
         if match:
@@ -149,9 +142,7 @@ def get_commits(tag):
             # username so we can translate it properly later
             if not is_valid_author(author):
                 author = github_username
-        # Guard against special characters
-        author = str(author)
-        author = unidecode.unidecode(author).strip()
+        author = author.strip()
         commit = Commit(_hash, author, title, pr_number)
         commits.append(commit)
     return commits
@@ -252,7 +243,7 @@ def nice_join(str_list):
         return ", ".join(str_list[:-1]) + ", and " + str_list[-1]
 
 
-# Return the full name of the specified user on Github
+# Return the full name of the specified user on GitHub
 # If the user doesn't exist, return None
 def get_github_name(author, github_client):
     if github_client:

@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin`
@@ -38,7 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - The ratio of the number of buckets is less than the value set in
  *     COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
  */
-case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
+object CoalesceBucketsInJoin extends Rule[SparkPlan] {
   private def updateNumCoalescedBucketsInScan(
       plan: SparkPlan,
       numCoalescedBuckets: Int): SparkPlan = {
@@ -51,7 +50,6 @@ case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
   private def updateNumCoalescedBuckets(
       join: BaseJoinExec,
       numLeftBuckets: Int,
-      numRightBucket: Int,
       numCoalescedBuckets: Int): BaseJoinExec = {
     if (numCoalescedBuckets != numLeftBuckets) {
       val leftCoalescedChild =
@@ -73,7 +71,6 @@ case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
   private def isCoalesceSHJStreamSide(
       join: ShuffledHashJoinExec,
       numLeftBuckets: Int,
-      numRightBucket: Int,
       numCoalescedBuckets: Int): Boolean = {
     if (numCoalescedBuckets == numLeftBuckets) {
       join.buildSide != BuildRight
@@ -94,12 +91,12 @@ case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
         val numCoalescedBuckets = math.min(numLeftBuckets, numRightBuckets)
         join match {
           case j: SortMergeJoinExec =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
+            updateNumCoalescedBuckets(j, numLeftBuckets, numCoalescedBuckets)
           case j: ShuffledHashJoinExec
             // Only coalesce the buckets for shuffled hash join stream side,
             // to avoid OOM for build side.
-            if isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets) =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
+            if isCoalesceSHJStreamSide(j, numLeftBuckets, numCoalescedBuckets) =>
+            updateNumCoalescedBuckets(j, numLeftBuckets, numCoalescedBuckets)
           case other => other
         }
       case other => other

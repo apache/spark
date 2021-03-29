@@ -39,13 +39,15 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
   override def dataType: DataType = ArrayType(child.dataType, false)
 
   // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
   // actual order of input rows.
   override lazy val deterministic: Boolean = false
+
+  override def defaultResult: Option[Literal] = Option(Literal.create(Array(), dataType))
 
   protected def convertToBufferElement(value: Any): Any
 

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite

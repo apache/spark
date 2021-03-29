@@ -75,19 +75,25 @@ class JavaWrapper(object):
         enough for all elements. The empty slots in the inner Java arrays will
         be filled with null to make the non-jagged 2D array.
 
-        :param pylist:
-          Python list to convert to a Java Array.
-        :param java_class:
-          Java class to specify the type of Array. Should be in the
-          form of sc._gateway.jvm.* (sc is a valid Spark Context).
-        :return:
-          Java Array of converted pylist.
+        Parameters
+        ----------
+        pylist : list
+            Python list to convert to a Java Array.
+        java_class : :py:class:`py4j.java_gateway.JavaClass`
+            Java class to specify the type of Array. Should be in the
+            form of sc._gateway.jvm.* (sc is a valid Spark Context).
 
-        Example primitive Java classes:
-          - basestring -> sc._gateway.jvm.java.lang.String
-          - int -> sc._gateway.jvm.java.lang.Integer
-          - float -> sc._gateway.jvm.java.lang.Double
-          - bool -> sc._gateway.jvm.java.lang.Boolean
+            Example primitive Java classes:
+
+            - basestring -> sc._gateway.jvm.java.lang.String
+            - int -> sc._gateway.jvm.java.lang.Integer
+            - float -> sc._gateway.jvm.java.lang.Double
+            - bool -> sc._gateway.jvm.java.lang.Boolean
+
+        Returns
+        -------
+        :py:class:`py4j.java_collections.JavaArray`
+          Java Array of converted pylist.
         """
         sc = SparkContext._active_spark_context
         java_array = None
@@ -212,7 +218,10 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
 
         Meta-algorithms such as Pipeline should override this method.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
         self._transfer_params_to_java()
         return self._java_obj
@@ -264,8 +273,15 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         extra params. So both the Python wrapper and the Java pipeline
         component get copied.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`JavaParams`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -302,10 +318,15 @@ class JavaEstimator(JavaParams, Estimator, metaclass=ABCMeta):
         """
         Fits a Java model to the input dataset.
 
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :param params: additional params (overwriting embedded values)
-        :return: fitted Java model
+        Examples
+        --------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            input dataset
+
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            fitted Java model
         """
         self._transfer_params_to_java()
         return self._java_obj.fit(dataset._jdf)

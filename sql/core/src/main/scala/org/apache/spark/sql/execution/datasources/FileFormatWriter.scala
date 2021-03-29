@@ -38,7 +38,9 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -132,7 +134,7 @@ object FileFormatWriter extends Logging {
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
 
     val description = new WriteJobDescription(
-      uuid = UUID.randomUUID().toString,
+      uuid = UUID.randomUUID.toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
       allColumns = outputSpec.outputColumns,
@@ -162,6 +164,10 @@ object FileFormatWriter extends Logging {
     }
 
     SQLExecution.checkSQLExecutionId(sparkSession)
+
+    // propagate the description UUID into the jobs, so that committers
+    // get an ID guaranteed to be unique.
+    job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
 
     // This call shouldn't be put into the `try` block below because it only initializes and
     // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
@@ -212,8 +218,9 @@ object FileFormatWriter extends Logging {
 
       val commitMsgs = ret.map(_.commitMsg)
 
-      committer.commitJob(job, commitMsgs)
-      logInfo(s"Write Job ${description.uuid} committed.")
+      logInfo(s"Start to commit write Job ${description.uuid}.")
+      val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
+      logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
       processStats(description.statsTrackers, ret.map(_.summary.stats))
       logInfo(s"Finished processing stats for write job ${description.uuid}.")
@@ -223,7 +230,7 @@ object FileFormatWriter extends Logging {
     } catch { case cause: Throwable =>
       logError(s"Aborting job ${description.uuid}.", cause)
       committer.abortJob(job)
-      throw new SparkException("Job aborted.", cause)
+      throw QueryExecutionErrors.jobAbortedError(cause)
     }
   }
 
@@ -283,12 +290,12 @@ object FileFormatWriter extends Logging {
     } catch {
       case e: FetchFailedException =>
         throw e
-      case f: FileAlreadyExistsException =>
+      case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
         // If any output file to write already exists, it does not make sense to re-run this task.
         // We throw the exception and let Executor throw ExceptionFailure to abort the job.
         throw new TaskOutputFileAlreadyExistException(f)
       case t: Throwable =>
-        throw new SparkException("Task failed while writing rows.", t)
+        throw QueryExecutionErrors.taskFailedWhileWritingRowsError(t)
     }
   }
 

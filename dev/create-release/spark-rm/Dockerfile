@@ -15,16 +15,20 @@
 # limitations under the License.
 #
 
-# Image for building Spark releases. Based on Ubuntu 18.04.
+# Image for building Spark releases. Based on Ubuntu 20.04.
 #
 # Includes:
 # * Java 8
 # * Ivy
-# * Python (2.7.15/3.6.7)
-# * R-base/R-base-dev (4.0.2)
-# * Ruby 2.3 build utilities
+# * Python (3.8.5)
+# * R-base/R-base-dev (4.0.3)
+# * Ruby (2.7.0)
+#
+# You can test it as below:
+#   cd dev/create-release/spark-rm
+#   docker build -t spark-rm --build-arg UID=$UID .
 
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
 # For apt to be noninteractive
 ENV DEBIAN_FRONTEND noninteractive
@@ -36,8 +40,8 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
 #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
 #   We should use the latest Sphinx version once this is fixed.
-ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.0.4 numpy==1.18.1 pydata_sphinx_theme==0.3.1 ipython==7.16.1 nbsphinx==0.7.1"
-ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
+ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.1.2 numpy==1.19.4 pydata_sphinx_theme==0.4.1 ipython==7.19.0 nbsphinx==0.8.0 numpydoc==1.1.0"
+ARG GEM_PKGS="bundler:2.2.9"
 
 # Install extra needed repos and refresh.
 # - CRAN repo
@@ -46,7 +50,7 @@ ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 # This is all in a single "RUN" command so that if anything changes, "apt update" is run to fetch
 # the most current package versions (instead of potentially using old versions cached by docker).
 RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
-  echo 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran40/' >> /etc/apt/sources.list && \
+  echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list && \
   gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
   gpg -a --export E084DAB9 | apt-key add - && \
   apt-get clean && \
@@ -54,7 +58,6 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   apt-get clean && \
   apt-get update && \
   $APT_INSTALL software-properties-common && \
-  apt-add-repository -y ppa:brightbox/ruby-ng && \
   apt-get update && \
   # Install openjdk 8.
   $APT_INSTALL openjdk-8-jdk && \
@@ -62,26 +65,23 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   # Install build / source control tools
   $APT_INSTALL curl wget git maven ivy subversion make gcc lsof libffi-dev \
     pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev && \
-  curl -sL https://deb.nodesource.com/setup_11.x | bash && \
+  curl -sL https://deb.nodesource.com/setup_12.x | bash && \
   $APT_INSTALL nodejs && \
   # Install needed python packages. Use pip for installing packages (for consistency).
-  $APT_INSTALL libpython3-dev python3-pip python3-setuptools && \
+  $APT_INSTALL python3-pip python3-setuptools && \
   # qpdf is required for CRAN checks to pass.
   $APT_INSTALL qpdf jq && \
-  # Change default python version to python3.
-  update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 && \
-  update-alternatives --install /usr/bin/python python /usr/bin/python3.6 2 && \
-  update-alternatives --set python /usr/bin/python3.6 && \
   pip3 install $PIP_PKGS && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
   # Note that PySpark doc generation also needs pandoc due to nbsphinx
   $APT_INSTALL r-base r-base-dev && \
+  $APT_INSTALL libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev && \
   $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf && \
   Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \
   Rscript -e "devtools::install_github('jimhester/lintr')" && \
   # Install tools needed to build the documentation.
-  $APT_INSTALL ruby2.5 ruby2.5-dev && \
+  $APT_INSTALL ruby2.7 ruby2.7-dev && \
   gem install --no-document $GEM_PKGS
 
 WORKDIR /opt/spark-rm/output

@@ -24,10 +24,9 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -63,7 +62,8 @@ import org.apache.spark.sql.types._
  *                            functions.
  * - [[NamedExpression]]: An [[Expression]] that is named.
  * - [[TimeZoneAwareExpression]]: A common base trait for time zone aware expressions.
- * - [[SubqueryExpression]]: A base interface for expressions that contain a [[LogicalPlan]].
+ * - [[SubqueryExpression]]: A base interface for expressions that contain a
+ *                           [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  *
  * - [[LeafExpression]]: an expression that has no child.
  * - [[UnaryExpression]]: an expression that has one child.
@@ -286,7 +286,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def simpleStringWithNodeId(): String = {
-    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+    throw QueryExecutionErrors.simpleStringWithNodeIdUnsupportedError(nodeName)
   }
 }
 
@@ -302,10 +302,10 @@ trait Unevaluable extends Expression {
   final override def foldable: Boolean = false
 
   final override def eval(input: InternalRow = null): Any =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
 
@@ -352,19 +352,24 @@ trait UnevaluableAggregate extends DeclarativeAggregate {
   override def nullable: Boolean = true
 
   override lazy val aggBufferAttributes =
-    throw new UnsupportedOperationException(s"Cannot evaluate aggBufferAttributes: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "aggBufferAttributes", this)
 
   override lazy val initialValues: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate initialValues: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "initialValues", this)
 
   override lazy val updateExpressions: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate updateExpressions: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "updateExpressions", this)
 
   override lazy val mergeExpressions: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate mergeExpressions: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "mergeExpressions", this)
 
   override lazy val evaluateExpression: Expression =
-    throw new UnsupportedOperationException(s"Cannot evaluate evaluateExpression: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "evaluateExpression", this)
 }
 
 /**
@@ -537,6 +542,12 @@ abstract class UnaryExpression extends Expression {
   }
 }
 
+
+object UnaryExpression {
+  def unapply(e: UnaryExpression): Option[Expression] = Some(e.child)
+}
+
+
 /**
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
@@ -634,6 +645,11 @@ abstract class BinaryExpression extends Expression {
         $resultCode""", isNull = FalseLiteral)
     }
   }
+}
+
+
+object BinaryExpression {
+  def unapply(e: BinaryExpression): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
 
@@ -1072,4 +1088,6 @@ trait ComplexTypeMergingExpression extends Expression {
  * Common base trait for user-defined functions, including UDF/UDAF/UDTF of different languages
  * and Hive function wrappers.
  */
-trait UserDefinedExpression
+trait UserDefinedExpression {
+  def name: String
+}

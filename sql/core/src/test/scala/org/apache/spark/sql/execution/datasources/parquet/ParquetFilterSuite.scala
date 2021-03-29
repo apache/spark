@@ -25,9 +25,12 @@ import java.time.{LocalDate, LocalDateTime, ZoneId}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.fs.Path
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
+import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetOutputFormat}
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -45,7 +48,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
+import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -585,7 +589,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     Seq(true, false).foreach { java8Api =>
       withSQLConf(
         SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
-        SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+        SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED",
+        SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
         // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
         val millisData = Seq(
           "1000-06-14 08:28:53.123",
@@ -1569,8 +1574,69 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
   }
+
+  test("Support Parquet column index") {
+    // block 1:
+    //                      null count  min                                       max
+    // page-0                         0  0                                         99
+    // page-1                         0  100                                       199
+    // page-2                         0  200                                       299
+    // page-3                         0  300                                       399
+    // page-4                         0  400                                       449
+    //
+    // block 2:
+    //                      null count  min                                       max
+    // page-0                         0  450                                       549
+    // page-1                         0  550                                       649
+    // page-2                         0  650                                       749
+    // page-3                         0  750                                       849
+    // page-4                         0  850                                       899
+    withTempPath { path =>
+      spark.range(900)
+        .repartition(1)
+        .write
+        .option(ParquetOutputFormat.PAGE_SIZE, "500")
+        .option(ParquetOutputFormat.BLOCK_SIZE, "2000")
+        .parquet(path.getCanonicalPath)
+
+      val parquetFile = path.listFiles().filter(_.getName.startsWith("part")).last
+      val in = HadoopInputFile.fromPath(
+        new Path(parquetFile.getCanonicalPath),
+        spark.sessionState.newHadoopConf())
+
+      Utils.tryWithResource(ParquetFileReader.open(in)) { reader =>
+        val blocks = reader.getFooter.getBlocks
+        assert(blocks.size() > 1)
+        val columns = blocks.get(0).getColumns
+        assert(columns.size() === 1)
+        val columnIndex = reader.readColumnIndex(columns.get(0))
+        assert(columnIndex.getMinValues.size() > 1)
+
+        val rowGroupCnt = blocks.get(0).getRowCount
+        // Page count = Second page min value - first page min value
+        val pageCnt = columnIndex.getMinValues.get(1).asLongBuffer().get() -
+          columnIndex.getMinValues.get(0).asLongBuffer().get()
+        assert(pageCnt < rowGroupCnt)
+        Seq(true, false).foreach { columnIndex =>
+          withSQLConf(ParquetInputFormat.COLUMN_INDEX_FILTERING_ENABLED -> s"$columnIndex") {
+            val df = spark.read.parquet(parquetFile.getCanonicalPath).where("id = 1")
+            df.collect()
+            val plan = df.queryExecution.executedPlan
+            val metrics = plan.collectLeaves().head.metrics
+            val numOutputRows = metrics("numOutputRows").value
+            if (columnIndex) {
+              assert(numOutputRows === pageCnt)
+            } else {
+              assert(numOutputRows === rowGroupCnt)
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
+@ExtendedSQLTest
 class ParquetV1FilterSuite extends ParquetFilterSuite {
   override protected def sparkConf: SparkConf =
     super
@@ -1650,6 +1716,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
   }
 }
 
+@ExtendedSQLTest
 class ParquetV2FilterSuite extends ParquetFilterSuite {
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =

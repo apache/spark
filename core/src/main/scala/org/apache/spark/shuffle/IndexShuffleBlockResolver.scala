@@ -22,8 +22,8 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
 
-import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
@@ -56,6 +56,8 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
+  private val remoteShuffleMaxDisk: Option[Long] =
+    conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE)
 
   def getDataFile(shuffleId: Int, mapId: Long): File = getDataFile(shuffleId, mapId, None)
 
@@ -70,6 +72,13 @@ private[spark] class IndexShuffleBlockResolver(
       case _ =>
         None
     }
+  }
+
+  private def getShuffleBytesStored(): Long = {
+    val shuffleFiles: Seq[File] = getStoredShuffles().map {
+      si => getDataFile(si.shuffleId, si.mapId)
+    }
+    shuffleFiles.map(_.length()).sum
   }
 
   /**
@@ -91,7 +100,7 @@ private[spark] class IndexShuffleBlockResolver(
    * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
    * read from the specified directories.
    */
-  private def getIndexFile(
+  def getIndexFile(
       shuffleId: Int,
       mapId: Long,
       dirs: Option[Array[String]] = None): File = {
@@ -173,6 +182,13 @@ private[spark] class IndexShuffleBlockResolver(
    */
   override def putShuffleBlockAsStream(blockId: BlockId, serializerManager: SerializerManager):
       StreamCallbackWithID = {
+    // Throw an exception if we have exceeded maximum shuffle files stored
+    remoteShuffleMaxDisk.foreach { maxBytes =>
+      val bytesUsed = getShuffleBytesStored()
+      if (maxBytes < bytesUsed) {
+        throw new SparkException(s"Not storing remote shuffles $bytesUsed exceeds $maxBytes")
+      }
+    }
     val file = blockId match {
       case ShuffleIndexBlockId(shuffleId, mapId, _) =>
         getIndexFile(shuffleId, mapId)
@@ -225,19 +241,37 @@ private[spark] class IndexShuffleBlockResolver(
    * Get the index & data block for migration.
    */
   def getMigrationBlocks(shuffleBlockInfo: ShuffleBlockInfo): List[(BlockId, ManagedBuffer)] = {
-    val shuffleId = shuffleBlockInfo.shuffleId
-    val mapId = shuffleBlockInfo.mapId
-    // Load the index block
-    val indexFile = getIndexFile(shuffleId, mapId)
-    val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
-    val indexFileSize = indexFile.length()
-    val indexBlockData = new FileSegmentManagedBuffer(transportConf, indexFile, 0, indexFileSize)
+    try {
+      val shuffleId = shuffleBlockInfo.shuffleId
+      val mapId = shuffleBlockInfo.mapId
+      // Load the index block
+      val indexFile = getIndexFile(shuffleId, mapId)
+      val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+      val indexFileSize = indexFile.length()
+      val indexBlockData = new FileSegmentManagedBuffer(
+        transportConf, indexFile, 0, indexFileSize)
 
-    // Load the data block
-    val dataFile = getDataFile(shuffleId, mapId)
-    val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
-    val dataBlockData = new FileSegmentManagedBuffer(transportConf, dataFile, 0, dataFile.length())
-    List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
+      // Load the data block
+      val dataFile = getDataFile(shuffleId, mapId)
+      val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+      val dataBlockData = new FileSegmentManagedBuffer(
+        transportConf, dataFile, 0, dataFile.length())
+
+      // Make sure the index exist.
+      if (!indexFile.exists()) {
+        throw new FileNotFoundException("Index file is deleted already.")
+      }
+      if (dataFile.exists()) {
+        List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
+      } else {
+        List((indexBlockId, indexBlockData))
+      }
+    } catch {
+      case _: Exception => // If we can't load the blocks ignore them.
+        logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}. " +
+          "This is expected to occur if a block is removed after decommissioning has started.")
+        List.empty[(BlockId, ManagedBuffer)]
+    }
   }
 
 

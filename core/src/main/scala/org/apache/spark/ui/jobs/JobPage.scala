@@ -68,7 +68,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         .getOrElse(System.currentTimeMillis())
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
-      // extra layers of escaping in order to embed this in a Javascript string literal.
+      // extra layers of escaping in order to embed this in a JavaScript string literal.
       val escapedName = Utility.escape(name)
       val jsEscapedNameForTooltip = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedName))
       val jsEscapedNameForLabel = StringEscapeUtils.escapeEcmaScript(escapedName)
@@ -127,7 +127,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
                       e.removeReason.map { reason =>
-                        s"""<br>Reason: ${reason.replace("\n", " ")}"""
+                        s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
+                          reason.replace("\n", " "))}"""
                       }.getOrElse("")
                    }"' +
              |    'data-html="true">Executor ${e.id} removed</div>'
@@ -256,7 +257,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           executorSummary = None,
           killedTasksSummary = Map(),
           ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID,
-          peakExecutorMetrics = None)
+          peakExecutorMetrics = None,
+          taskMetricsDistributions = None,
+          executorMetricsDistributions = None)
       }
     }
 
@@ -283,9 +286,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     val pendingOrSkippedTableId =
       if (isComplete) {
-        "pending"
-      } else {
         "skipped"
+      } else {
+        "pending"
       }
 
     val activeStagesTable =

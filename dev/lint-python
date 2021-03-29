@@ -18,7 +18,7 @@
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.5.0"
-
+MYPY_BUILD="mypy"
 PYCODESTYLE_BUILD="pycodestyle"
 MINIMUM_PYCODESTYLE="2.6.0"
 
@@ -122,6 +122,31 @@ function pycodestyle_test {
     fi
 }
 
+function mypy_test {
+    local MYPY_REPORT=
+    local MYPY_STATUS=
+
+    # TODO(SPARK-32797): Install mypy on the Jenkins CI workers
+    if ! hash "$MYPY_BUILD" 2> /dev/null; then
+        echo "The $MYPY_BUILD command was not found. Skipping for now."
+        return
+    fi
+
+    echo "starting $MYPY_BUILD test..."
+    MYPY_REPORT=$( ($MYPY_BUILD --config-file python/mypy.ini python/pyspark) 2>&1)
+    MYPY_STATUS=$?
+
+    if [ "$MYPY_STATUS" -ne 0 ]; then
+        echo "mypy checks failed:"
+        echo "$MYPY_REPORT"
+        echo "$MYPY_STATUS"
+        exit "$MYPY_STATUS"
+    else
+        echo "mypy checks passed."
+        echo
+    fi
+}
+
 function flake8_test {
     local FLAKE8_VERSION=
     local EXPECTED_FLAKE8=
@@ -183,7 +208,7 @@ function sphinx_test {
     #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
     PYTHON_HAS_SPHINX_3_0=$("$PYTHON_EXECUTABLE" -c 'from distutils.version import LooseVersion; import sphinx; print(LooseVersion(sphinx.__version__) < LooseVersion("3.1.0"))')
     if [[ "$PYTHON_HAS_SPHINX_3_0" == "False" ]]; then
-        echo "$PYTHON_EXECUTABLE has Sphinx 3.1+ installed but it requires lower then 3.1. Skipping Sphinx build for now."
+        echo "$PYTHON_EXECUTABLE has Sphinx 3.1+ installed but it requires lower than 3.1. Skipping Sphinx build for now."
         echo
         return
     fi
@@ -208,6 +233,14 @@ function sphinx_test {
     PYTHON_HAS_IPYTHON=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("IPython") is not None)')
     if [[ "$PYTHON_HAS_IPYTHON" == "False" ]]; then
         echo "$PYTHON_EXECUTABLE does not have ipython installed. Skipping Sphinx build for now."
+        echo
+        return
+    fi
+
+    # TODO(SPARK-33242): Install numpydoc in Jenkins machines
+    PYTHON_HAS_NUMPYDOC=$("$PYTHON_EXECUTABLE" -c 'import importlib.util; print(importlib.util.find_spec("numpydoc") is not None)')
+    if [[ "$PYTHON_HAS_NUMPYDOC" == "False" ]]; then
+        echo "$PYTHON_EXECUTABLE does not have numpydoc installed. Skipping Sphinx build for now."
         echo
         return
     fi
@@ -241,11 +274,13 @@ SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 
 pushd "$SPARK_ROOT_DIR" &> /dev/null
 
-PYTHON_SOURCE="$(find . -name "*.py")"
+# skipping local ruby bundle directory from the search
+PYTHON_SOURCE="$(find . -path ./docs/.local_ruby_bundle -prune -false -o -name "*.py")"
 
 compile_python_test "$PYTHON_SOURCE"
 pycodestyle_test "$PYTHON_SOURCE"
 flake8_test
+mypy_test
 sphinx_test
 
 echo

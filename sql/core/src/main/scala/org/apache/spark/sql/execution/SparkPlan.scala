@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 object SparkPlan {
@@ -135,7 +134,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def longMetric(name: String): SQLMetric = metrics(name)
 
   // TODO: Move to `DistributedPlan`
-  /** Specifies how data is partitioned across different nodes in the cluster. */
+  /**
+   * Specifies how data is partitioned across different nodes in the cluster.
+   * Note this method may fail if it is invoked before `EnsureRequirements` is applied
+   * since `PartitioningCollection` requires all its partitionings to have
+   * the same number of partitions.
+   */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
 
   /**
@@ -513,7 +517,7 @@ trait LeafExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
   override def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
     val outputStr = s"${ExplainUtils.generateFieldString("Output", output)}"
 
     if (argumentString.nonEmpty) {
@@ -543,7 +547,7 @@ trait UnaryExecNode extends SparkPlan {
 
   override final def children: Seq[SparkPlan] = child :: Nil
   override def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
     val inputStr = s"${ExplainUtils.generateFieldString("Input", child.output)}"
 
     if (argumentString.nonEmpty) {
@@ -567,7 +571,7 @@ trait BinaryExecNode extends SparkPlan {
 
   override final def children: Seq[SparkPlan] = Seq(left, right)
   override def verboseStringWithOperatorId(): String = {
-    val argumentString = argString(SQLConf.get.maxToStringFields)
+    val argumentString = argString(conf.maxToStringFields)
     val leftOutputStr = s"${ExplainUtils.generateFieldString("Left output", left.output)}"
     val rightOutputStr = s"${ExplainUtils.generateFieldString("Right output", right.output)}"
 

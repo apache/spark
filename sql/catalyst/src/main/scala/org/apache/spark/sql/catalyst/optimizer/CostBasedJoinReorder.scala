@@ -34,8 +34,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
 
-  private def conf = SQLConf.get
-
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
@@ -351,14 +349,11 @@ object JoinReorderDP extends PredicateHelper with Logging {
     }
 
     def betterThan(other: JoinPlan, conf: SQLConf): Boolean = {
-      if (other.planCost.card == 0 || other.planCost.size == 0) {
-        false
-      } else {
-        val relativeRows = BigDecimal(this.planCost.card) / BigDecimal(other.planCost.card)
-        val relativeSize = BigDecimal(this.planCost.size) / BigDecimal(other.planCost.size)
-        relativeRows * conf.joinReorderCardWeight +
-          relativeSize * (1 - conf.joinReorderCardWeight) < 1
-      }
+      val thisCost = BigDecimal(this.planCost.card) * conf.joinReorderCardWeight +
+        BigDecimal(this.planCost.size) * (1 - conf.joinReorderCardWeight)
+      val otherCost = BigDecimal(other.planCost.card) * conf.joinReorderCardWeight +
+        BigDecimal(other.planCost.size) * (1 - conf.joinReorderCardWeight)
+      thisCost < otherCost
     }
   }
 }

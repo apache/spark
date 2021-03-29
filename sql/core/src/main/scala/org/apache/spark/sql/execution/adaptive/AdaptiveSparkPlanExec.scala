@@ -36,8 +36,7 @@ import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
-import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
+import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -82,49 +81,58 @@ case class AdaptiveSparkPlanExec(
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf)
 
-  @transient private val removeRedundantProjects = RemoveRedundantProjects(conf)
-  @transient private val ensureRequirements = EnsureRequirements(conf)
-
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    removeRedundantProjects,
-    ensureRequirements
+    RemoveRedundantProjects,
+    EnsureRequirements,
+    RemoveRedundantSorts,
+    DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    ReuseAdaptiveSubquery(conf, context.subqueryCache),
+    PlanAdaptiveDynamicPruningFilters(context.stageCache),
+    ReuseAdaptiveSubquery(context.subqueryCache),
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`. So they must be executed after it.
-    OptimizeSkewedJoin(conf),
-    OptimizeLocalShuffleReader(conf)
+    OptimizeSkewedJoin,
+    OptimizeLocalShuffleReader
   )
-
-  private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] =
-    context.qe.sparkPlan match {
-      case _: DataWritingCommandExec | _: V2TableWriteExec =>
-        // SPARK-32932: Local shuffle reader could break partitioning that works best
-        // for the following writing command
-        queryStageOptimizerRules.filterNot(_.isInstanceOf[OptimizeLocalShuffleReader])
-      case _ =>
-        queryStageOptimizerRules
-    }
 
   // A list of physical optimizer rules to be applied right after a new stage is created. The input
   // plan to these rules has exchange as its root node.
   @transient private val postStageCreationRules = Seq(
-    ApplyColumnarRulesAndInsertTransitions(conf, context.session.sessionState.columnarRules),
-    CollapseCodegenStages(conf)
+    ApplyColumnarRulesAndInsertTransitions(context.session.sessionState.columnarRules),
+    CollapseCodegenStages()
   )
+
+  // The partitioning of the query output depends on the shuffle(s) in the final stage. If the
+  // original plan contains a repartition operator, we need to preserve the specified partitioning,
+  // whether or not the repartition-introduced shuffle is optimized out because of an underlying
+  // shuffle of the same partitioning. Thus, we need to exclude some `CustomShuffleReaderRule`s
+  // from the final stage, depending on the presence and properties of repartition operators.
+  private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] = {
+    val origins = inputPlan.collect {
+      case s: ShuffleExchangeLike => s.shuffleOrigin
+    }
+    val allRules = queryStageOptimizerRules ++ postStageCreationRules
+    allRules.filter {
+      case c: CustomShuffleReaderRule =>
+        origins.forall(c.supportedShuffleOrigins.contains)
+      case _ => true
+    }
+  }
 
   @transient private val costEvaluator = SimpleCostEvaluator
 
-  @transient private val initialPlan = applyPhysicalRules(
-    inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  @transient private val initialPlan = context.session.withActive {
+    applyPhysicalRules(
+      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  }
 
   @volatile private var currentPhysicalPlan = initialPlan
 
@@ -182,8 +190,20 @@ case class AdaptiveSparkPlanExec(
           stagesToReplace = result.newStages ++ stagesToReplace
           executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
 
+          // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
+          // for tasks to be scheduled and leading to broadcast timeout.
+          // This partial fix only guarantees the start of materialization for BroadcastQueryStage
+          // is prior to others, but because the submission of collect job for broadcasting is
+          // running in another thread, the issue is not completely resolved.
+          val reorderedNewStages = result.newStages
+            .sortWith {
+              case (_: BroadcastQueryStageExec, _: BroadcastQueryStageExec) => false
+              case (_: BroadcastQueryStageExec, _) => true
+              case _ => false
+            }
+
           // Start materialization of all new stages and fail fast if any stages failed eagerly
-          result.newStages.foreach { stage =>
+          reorderedNewStages.foreach { stage =>
             try {
               stage.materialize().onComplete { res =>
                 if (res.isSuccess) {
@@ -247,7 +267,7 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
         result.newPlan,
-        finalStageOptimizerRules ++ postStageCreationRules,
+        finalStageOptimizerRules,
         Some((planChangeLogger, "AQE Final Query Stage Optimization")))
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
@@ -456,7 +476,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform shuffle node to something else.")
         }
-        ShuffleQueryStageExec(currentStageId, newShuffle)
+        ShuffleQueryStageExec(currentStageId, newShuffle, s.canonicalized)
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)),
@@ -466,7 +486,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform broadcast node to something else.")
         }
-        BroadcastQueryStageExec(currentStageId, newBroadcast)
+        BroadcastQueryStageExec(currentStageId, newBroadcast, b.canonicalized)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, e)

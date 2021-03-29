@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier}
-import java.net.{URI, URL}
+import java.net.{URI, URL, URLEncoder}
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
@@ -36,7 +36,6 @@ import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
-import org.apache.hadoop.yarn.server.webproxy.ProxyUriUtils
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark._
@@ -308,7 +307,8 @@ private[spark] class ApplicationMaster(
       // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
       registerAM(Utils.localHostName, -1, sparkConf,
         sparkConf.getOption("spark.driver.appUIAddress"), appAttemptId)
-      addAmIpFilter(Some(driverRef), ProxyUriUtils.getPath(appAttemptId.getApplicationId))
+      val encodedAppId = URLEncoder.encode(appAttemptId.getApplicationId.toString, "UTF-8")
+      addAmIpFilter(Some(driverRef), s"/proxy/$encodedAppId")
       createAllocator(driverRef, sparkConf, clientRpcEnv, appAttemptId, cachedResourcesConf)
       reporterThread.join()
     } catch {
@@ -481,8 +481,7 @@ private[spark] class ApplicationMaster(
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
 
     allocator.allocateResources()
-    val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATION_MASTER,
-      sparkConf, securityMgr)
+    val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATION_MASTER, sparkConf)
     val prefix = _sparkConf.get(YARN_METRICS_NAMESPACE).getOrElse(appId)
     ms.registerSource(new ApplicationMasterSource(prefix, allocator))
     // do not register static sources in this case as per SPARK-25277
@@ -567,10 +566,10 @@ private[spark] class ApplicationMaster(
           finish(FinalApplicationStatus.FAILED,
             ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
             s"Max number of executor failures ($maxNumExecutorFailures) reached")
-        } else if (allocator.isAllNodeBlacklisted) {
+        } else if (allocator.isAllNodeExcluded) {
           finish(FinalApplicationStatus.FAILED,
             ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
-            "Due to executor failures all available nodes are blacklisted")
+            "Due to executor failures all available nodes are excluded")
         } else {
           logDebug("Sending progress")
           allocator.allocateResources()
@@ -690,7 +689,7 @@ private[spark] class ApplicationMaster(
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
     driver match {
       case Some(d) =>
-        d.send(AddWebUIFilter(amFilter, params.toMap, proxyBase))
+        d.send(AddWebUIFilter(amFilter, params, proxyBase))
 
       case None =>
         System.setProperty(UI_FILTERS.key, amFilter)
@@ -792,7 +791,7 @@ private[spark] class ApplicationMaster(
               r.resourceProfileToTotalExecs,
               r.numLocalityAwareTasksPerResourceProfileId,
               r.hostToLocalTaskCount,
-              r.nodeBlacklist)) {
+              r.excludedNodes)) {
               resetAllocatorInterval()
             }
             context.reply(true)

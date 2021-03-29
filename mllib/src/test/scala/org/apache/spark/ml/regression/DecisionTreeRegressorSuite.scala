@@ -19,7 +19,7 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -235,6 +235,20 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     testEstimatorAndModelReadWrite(dt, continuousData,
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0),
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
+  }
+
+  test("SPARK-33398: Load DecisionTreeRegressionModel prior to Spark 3.0") {
+    val path = testFile("ml-models/dtr-2.4.7")
+    val model = DecisionTreeRegressionModel.load(path)
+    assert(model.numFeatures === 692)
+    assert(model.numNodes === 5)
+    assert(model.featureImportances ~==
+      Vectors.sparse(692, Array(100, 434),
+        Array(0.03987240829346093, 0.960127591706539)) absTol 1e-4)
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
   }
 }
 

@@ -31,7 +31,9 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *  4) Aggregate
  *  5) Other permissible unary operators. please see [[PushPredicateThroughNonJoin.canPushThrough]].
  */
-object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
+object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
+  with PredicateHelper
+  with JoinSelectionHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // LeftSemi/LeftAnti over Project
     case Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
@@ -42,7 +44,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         // No join condition, just push down the Join below Project
         p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
       } else {
-        val aliasMap = PushPredicateThroughNonJoin.getAliasMap(p)
+        val aliasMap = getAliasMap(p)
         val newJoinCond = if (aliasMap.nonEmpty) {
           Option(replaceAlias(joinCond.get, aliasMap))
         } else {
@@ -51,11 +53,12 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         p.copy(child = Join(gChild, rightOp, joinType, newJoinCond, hint))
       }
 
-    // LeftSemi/LeftAnti over Aggregate
+    // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), _, _)
         if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
-        !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
-      val aliasMap = PushPredicateThroughNonJoin.getAliasMap(agg)
+          !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
+          canPlanAsBroadcastHashJoin(join, conf) =>
+      val aliasMap = getAliasMap(agg)
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
         predicate.references.nonEmpty &&
@@ -172,7 +175,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
  * TODO:
  * Currently this rule can push down the left semi or left anti joins to either
  * left or right leg of the child join. This matches the behaviour of `PushPredicateThroughJoin`
- * when the lefi semi or left anti join is in expression form. We need to explore the possibility
+ * when the left semi or left anti join is in expression form. We need to explore the possibility
  * to push the left semi/anti joins to both legs of join if the join condition refers to
  * both left and right legs of the child join.
  */

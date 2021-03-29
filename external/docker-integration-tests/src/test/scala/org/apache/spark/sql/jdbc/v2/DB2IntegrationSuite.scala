@@ -19,6 +19,8 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -30,7 +32,7 @@ import org.apache.spark.tags.DockerTest
  * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
  * {{{
  *   DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
- *     ./build/sbt -Pdocker-integration-tests "test-only *DB2IntegrationSuite"
+ *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2IntegrationSuite"
  * }}}
  */
 @DockerTest
@@ -52,6 +54,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
   }
 
+  override val connectionTimeout = timeout(3.minutes)
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.db2.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -59,18 +63,26 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def dataPreparation(conn: Connection): Unit = {}
 
   override def testUpdateColumnType(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
+    sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE DOUBLE")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DoubleType)
+    expectedSchema = new StructType().add("ID", DoubleType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from DOUBLE to STRING
     val msg1 = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)")
     }.getMessage
     assert(msg1.contains("Cannot update alt_table field ID: double cannot be cast to varchar"))
+  }
+
+  override def testCreateTableWithProperty(tbl: String): Unit = {
+    sql(s"CREATE TABLE $tbl (ID INT)" +
+      s" TBLPROPERTIES('CCSID'='UNICODE')")
+    val t = spark.table(tbl)
+    val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
+    assert(t.schema === expectedSchema)
   }
 }

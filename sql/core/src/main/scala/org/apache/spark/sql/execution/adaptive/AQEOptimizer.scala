@@ -28,8 +28,8 @@ import org.apache.spark.util.Utils
 class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
   private val defaultBatches = Seq(
     Batch("Demote BroadcastHashJoin", Once,
-      DemoteBroadcastHashJoin(conf)),
-    Batch("Eliminate Join to Empty Relation", Once, EliminateJoinToEmptyRelation)
+      DemoteBroadcastHashJoin),
+    Batch("Eliminate Unnecessary Join", Once, EliminateUnnecessaryJoin)
   )
 
   final override protected def batches: Seq[Batch] = {

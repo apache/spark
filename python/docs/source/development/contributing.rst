@@ -21,14 +21,14 @@ Contributing to PySpark
 
 There are many types of contribution, for example, helping other users, testing releases, reviewing changes,
 documentation contribution, bug reporting, JIRA maintenance, code changes, etc.
-These are documented at `the general guidelines <http://spark.apache.org/contributing.html>`_.
+These are documented at `the general guidelines <https://spark.apache.org/contributing.html>`_.
 This page focuses on PySpark and includes additional details specifically for PySpark.
 
 
 Contributing by Testing Releases
 --------------------------------
 
-Before the official release, PySpark release candidates are shared in the `dev@spark.apache.org <http://apache-spark-developers-list.1001551.n3.nabble.com/>`_ mailing list to vote on.
+Before the official release, PySpark release candidates are shared in the `dev@spark.apache.org <https://mail-archives.apache.org/mod_mbox/spark-dev/>`_ mailing list to vote on.
 This release candidates can be easily installed via pip. For example, in case of Spark 3.0.0 RC1, you can install as below:
 
 .. code-block:: bash
@@ -53,7 +53,7 @@ under the `docs <https://github.com/apache/spark/tree/master/docs>`_ directory:
 
 .. code-block:: bash
 
-    SKIP_SCALADOC=1 SKIP_RDOC=1 SKIP_SQLDOC=1 jekyll serve --watch
+    SKIP_SCALADOC=1 SKIP_RDOC=1 SKIP_SQLDOC=1 bundle exec jekyll serve --watch
 
 PySpark uses Sphinx to generate its release PySpark documentation. Therefore, if you want to build only PySpark documentation alone,
 you can build under `python/docs <https://github.com/apache/spark/tree/master/python>`_ directory by:
@@ -71,23 +71,67 @@ under ``python/docs/source/reference``. Otherwise, they would not be documented 
 Preparing to Contribute Code Changes
 ------------------------------------
 
-Before starting to work on codes in PySpark, it is recommended to read `the general guidelines <http://spark.apache.org/contributing.html>`_.
+Before starting to work on codes in PySpark, it is recommended to read `the general guidelines <https://spark.apache.org/contributing.html>`_.
 There are a couple of additional notes to keep in mind when contributing to codes in PySpark:
 
 * Be Pythonic.
 * APIs are matched with Scala and Java sides in general.
 * PySpark specific APIs can still be considered as long as they are Pythonic and do not conflict with other existent APIs, for example, decorator usage of UDFs.
+* If you extend or modify public API, please adjust corresponding type hints. See `Contributing and Maintaining Type Hints`_ for details.
+
+Contributing and Maintaining Type Hints
+----------------------------------------
+
+PySpark type hints are provided using stub files, placed in the same directory as the annotated module, with exception to ``# type: ignore`` in modules which don't have their own stubs (tests, examples and non-public API).
+As a rule of thumb, only public API is annotated.
+
+Annotations should, when possible:
+
+* Reflect expectations of the underlying JVM API, to help avoid type related failures outside Python interpreter.
+* In case of conflict between too broad (``Any``) and too narrow argument annotations, prefer the latter as one, as long as it is covering most of the typical use cases.
+* Indicate nonsensical combinations of arguments using ``@overload``  annotations. For example, to indicate that ``*Col`` and ``*Cols`` arguments are mutually exclusive:
+
+  .. code-block:: python
+
+    @overload
+    def __init__(
+        self,
+        *,
+        threshold: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        *,
+        thresholds: Optional[List[float]] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...
+    ) -> None: ...
+
+* Be compatible with the current stable MyPy release.
 
 
-Code Style Guide
-----------------
+Complex supporting type definitions, should be placed in dedicated ``_typing.pyi`` stubs. See for example `pyspark.sql._typing.pyi <https://github.com/apache/spark/blob/master/python/pyspark/sql/_typing.pyi>`_.
+
+Annotations can be validated using ``dev/lint-python`` script or by invoking mypy directly:
+
+.. code-block:: bash
+
+    mypy --config python/mypy.ini python/pyspark
+
+
+
+Code and Docstring Guide
+----------------------------------
 
 Please follow the style of the existing codebase as is, which is virtually PEP 8 with one exception: lines can be up
 to 100 characters in length, not 79.
+For the docstring style, PySpark follows `NumPy documentation style <https://numpydoc.readthedocs.io/en/latest/format.html>`_.
 
 Note that the method and variable names in PySpark are the similar case is ``threading`` library in Python itself where
 the APIs were inspired by Java. PySpark also follows `camelCase` for exposed APIs that match with Scala and Java.
 There is an exception ``functions.py`` that uses `snake_case`. It was in order to make APIs SQL (and Python) friendly.
 
 PySpark leverages linters such as `pycodestyle <https://pycodestyle.pycqa.org/en/latest/>`_ and `flake8 <https://flake8.pycqa.org/en/latest/>`_, which ``dev/lint-python`` runs. Therefore, make sure to run that script to double check.
-

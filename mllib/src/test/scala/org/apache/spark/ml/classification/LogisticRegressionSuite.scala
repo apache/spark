@@ -28,7 +28,6 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix, Vector, Vectors}
-import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.stat.MultiClassSummarizer
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
@@ -45,6 +44,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   @transient var smallBinaryDataset: DataFrame = _
   @transient var smallMultinomialDataset: DataFrame = _
   @transient var binaryDataset: DataFrame = _
+  @transient var binaryDatasetWithSmallVar: DataFrame = _
   @transient var multinomialDataset: DataFrame = _
   @transient var multinomialDatasetWithZeroVar: DataFrame = _
   private val eps: Double = 1e-5
@@ -76,6 +76,21 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
       val xMean = Array(5.843, 3.057, 3.758, 1.199)
       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
+
+      val testData =
+        generateMultinomialLogisticInput(coefficients, xMean, xVariance,
+          addIntercept = true, nPoints, seed)
+
+      val df = sc.parallelize(testData, 4).toDF().withColumn("weight", rand(seed))
+      df.cache()
+      df
+    }
+
+    binaryDatasetWithSmallVar = {
+      val nPoints = 10000
+      val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
+      val xMean = Array(5.843, 3.057, 3.758, 10.199)
+      val xVariance = Array(0.6856, 0.1899, 3.116, 0.0001)
 
       val testData =
         generateMultinomialLogisticInput(coefficients, xMean, xVariance,
@@ -129,6 +144,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     binaryDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
       label + "," + weight + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
+    binaryDatasetWithSmallVar.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
+      label + "," + weight + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDatasetWithSmallVar")
     multinomialDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
       label + "," + weight + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
@@ -593,8 +611,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
         .setMaxIter(5)
         .setFamily("multinomial")
       val model = mlor.fit(dataset)
-      Seq(4, 16, 64).foreach { blockSize =>
-        val model2 = mlor.setBlockSize(blockSize).fit(dataset)
+      Seq(0, 0.01, 0.1, 1, 2, 4).foreach { s =>
+        val model2 = mlor.setMaxBlockSizeInMB(s).fit(dataset)
         assert(model.interceptVector ~== model2.interceptVector relTol 1e-6)
         assert(model.coefficientMatrix ~== model2.coefficientMatrix relTol 1e-6)
       }
@@ -606,8 +624,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
         .setMaxIter(5)
         .setFamily("binomial")
       val model = blor.fit(dataset)
-      Seq(4, 16, 64).foreach { blockSize =>
-        val model2 = blor.setBlockSize(blockSize).fit(dataset)
+      Seq(0, 0.01, 0.1, 1, 2, 4).foreach { s =>
+        val model2 = blor.setMaxBlockSizeInMB(s).fit(dataset)
         assert(model.intercept ~== model2.intercept relTol 1e-6)
         assert(model.coefficients ~== model2.coefficients relTol 1e-6)
       }
@@ -630,32 +648,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val blrModel = blr.fit(smallBinaryDataset)
     assert(blrModel.coefficients.size === 1)
     assert(blrModel.intercept !== 0.0)
-  }
-
-  test("sparse coefficients in LogisticAggregator") {
-    val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
-    val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val binaryAgg = new LogisticAggregator(bcFeaturesStd, 2,
-      fitIntercept = true, multinomial = false)(bcCoefficientsBinary)
-    val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
-      intercept[IllegalArgumentException] {
-        binaryAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
-      }
-    }
-    assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
-
-    val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
-    val multinomialAgg = new LogisticAggregator(bcFeaturesStd, 3,
-      fitIntercept = true, multinomial = true)(bcCoefficientsMulti)
-    val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
-      intercept[IllegalArgumentException] {
-        multinomialAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
-      }
-    }
-    assert(thrown.getMessage.contains("coefficients only supports dense"))
-    bcCoefficientsBinary.destroy()
-    bcFeaturesStd.destroy()
-    bcCoefficientsMulti.destroy()
   }
 
   test("overflow prediction for multiclass") {
@@ -822,6 +814,64 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     // Without regularization, with or without standardization will converge to the same solution.
     assert(model6.intercept ~== interceptExpected5 relTol 1E-3)
     assert(model6.coefficients ~= coefficientsExpected5 relTol 1E-3)
+  }
+
+  test("SPARK-34448: binary logistic regression with intercept, with features with small var") {
+    val trainer1 = new LogisticRegression().setFitIntercept(true).setStandardization(true)
+      .setWeightCol("weight")
+    val trainer2 = new LogisticRegression().setFitIntercept(true).setStandardization(false)
+      .setWeightCol("weight")
+    val trainer3 = new LogisticRegression().setFitIntercept(true).setStandardization(true)
+      .setElasticNetParam(0.0001).setRegParam(0.5).setWeightCol("weight")
+
+    val model1 = trainer1.fit(binaryDatasetWithSmallVar)
+    val model2 = trainer2.fit(binaryDatasetWithSmallVar)
+    val model3 = trainer3.fit(binaryDatasetWithSmallVar)
+
+    /*
+      Use the following R code to load the data and train the model using glmnet package.
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 0))
+      coefficients
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                          s0
+      (Intercept) -348.2955812
+      data.V3       -0.8145023
+      data.V4        0.8979252
+      data.V5       -0.6082397
+      data.V6       33.8070109
+
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0.0001,
+      lambda = 0.5, standardize=T))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                            s0
+      (Intercept) -7.403746510
+      data.V3     -0.001443382
+      data.V4      0.001454470
+      data.V5     -0.001097110
+      data.V6      0.048747722
+     */
+    val coefficientsR = Vectors.dense(-0.8145023, 0.8979252, -0.6082397, 33.8070109)
+    val interceptR = -348.2955812
+
+    assert(model1.intercept ~== interceptR relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsR relTol 1E-3)
+
+    // Without regularization, with or without standardization will converge to the same solution.
+    assert(model2.intercept ~== interceptR relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR relTol 1E-3)
+
+    val coefficientsR2 = Vectors.dense(-0.001443382, 0.001454470, -0.001097110, 0.048747722)
+    val interceptR2 = -7.403746510
+
+    assert(model3.intercept ~== interceptR2 relTol 1E-3)
+    assert(model3.coefficients ~= coefficientsR2 relTol 1E-3)
   }
 
   test("binary logistic regression without intercept without regularization") {
@@ -1548,9 +1598,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val interceptsExpected1 = Vectors.dense(
       1.0000152482448372, 3.591773288423673, 5.079685953744937)
 
-    checkCoefficientsEquivalent(model1.coefficientMatrix, coefficientsExpected1)
+    checkBoundedMLORCoefficientsEquivalent(model1.coefficientMatrix, coefficientsExpected1)
     assert(model1.interceptVector ~== interceptsExpected1 relTol 0.01)
-    checkCoefficientsEquivalent(model2.coefficientMatrix, coefficientsExpected1)
+    checkBoundedMLORCoefficientsEquivalent(model2.coefficientMatrix, coefficientsExpected1)
     assert(model2.interceptVector ~== interceptsExpected1 relTol 0.01)
 
     // Bound constrained optimization with bound on both side.
@@ -1585,9 +1635,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       isTransposed = true)
     val interceptsExpected3 = Vectors.dense(1.0, 2.0, 2.0)
 
-    checkCoefficientsEquivalent(model3.coefficientMatrix, coefficientsExpected3)
+    checkBoundedMLORCoefficientsEquivalent(model3.coefficientMatrix, coefficientsExpected3)
     assert(model3.interceptVector ~== interceptsExpected3 relTol 0.01)
-    checkCoefficientsEquivalent(model4.coefficientMatrix, coefficientsExpected3)
+    checkBoundedMLORCoefficientsEquivalent(model4.coefficientMatrix, coefficientsExpected3)
     assert(model4.interceptVector ~== interceptsExpected3 relTol 0.01)
 
     // Bound constrained optimization with infinite bound on both side.
@@ -1621,9 +1671,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val interceptsExpected5 = Vectors.dense(
       -2.2231282183460723, 0.3669496747012527, 1.856178543644802)
 
-    checkCoefficientsEquivalent(model5.coefficientMatrix, coefficientsExpected5)
+    checkBoundedMLORCoefficientsEquivalent(model5.coefficientMatrix, coefficientsExpected5)
     assert(model5.interceptVector ~== interceptsExpected5 relTol 0.01)
-    checkCoefficientsEquivalent(model6.coefficientMatrix, coefficientsExpected5)
+    checkBoundedMLORCoefficientsEquivalent(model6.coefficientMatrix, coefficientsExpected5)
     assert(model6.interceptVector ~== interceptsExpected5 relTol 0.01)
   }
 
@@ -1719,9 +1769,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       1.7524631428961193, 1.2292565990448736, 1.3433784431904323, 1.5846063017678864),
       isTransposed = true)
 
-    checkCoefficientsEquivalent(model1.coefficientMatrix, coefficientsExpected)
+    checkBoundedMLORCoefficientsEquivalent(model1.coefficientMatrix, coefficientsExpected)
     assert(model1.interceptVector.toArray === Array.fill(3)(0.0))
-    checkCoefficientsEquivalent(model2.coefficientMatrix, coefficientsExpected)
+    checkBoundedMLORCoefficientsEquivalent(model2.coefficientMatrix, coefficientsExpected)
     assert(model2.interceptVector.toArray === Array.fill(3)(0.0))
   }
 
@@ -2953,16 +3003,17 @@ object LogisticRegressionSuite {
   }
 
   /**
+   * Note: This method is only used in Bounded MLOR (without regularization) test
    * When no regularization is applied, the multinomial coefficients lack identifiability
    * because we do not use a pivot class. We can add any constant value to the coefficients
    * and get the same likelihood. If fitting under bound constrained optimization, we don't
    * choose the mean centered coefficients like what we do for unbound problems, since they
    * may out of the bounds. We use this function to check whether two coefficients are equivalent.
    */
-  def checkCoefficientsEquivalent(coefficients1: Matrix, coefficients2: Matrix): Unit = {
+  def checkBoundedMLORCoefficientsEquivalent(coefficients1: Matrix, coefficients2: Matrix): Unit = {
     coefficients1.colIter.zip(coefficients2.colIter).foreach { case (col1: Vector, col2: Vector) =>
       (col1.asBreeze - col2.asBreeze).toArray.toSeq.sliding(2).foreach {
-        case Seq(v1, v2) => assert(v1 ~= v2 absTol 1E-3)
+        case Seq(v1, v2) => assert(v1 ~= v2 absTol 1E-2)
       }
     }
   }

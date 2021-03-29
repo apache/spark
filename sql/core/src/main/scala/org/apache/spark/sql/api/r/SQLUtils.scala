@@ -33,7 +33,6 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
 
@@ -213,15 +212,6 @@ private[sql] object SQLUtils extends Logging {
         true
       case _ =>
         false
-    }
-  }
-
-  def getTables(sparkSession: SparkSession, databaseName: String): DataFrame = {
-    databaseName match {
-      case n: String if n != null && n.trim.nonEmpty =>
-        Dataset.ofRows(sparkSession, ShowTablesCommand(Some(n), None))
-      case _ =>
-        Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
     }
   }
 

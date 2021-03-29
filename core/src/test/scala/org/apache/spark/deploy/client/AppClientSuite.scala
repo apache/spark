@@ -27,7 +27,7 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 import org.apache.spark._
 import org.apache.spark.deploy.{ApplicationDescription, Command}
-import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
+import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState, WorkerDecommissioning}
 import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.{config, Logging}
@@ -122,7 +122,11 @@ class AppClientSuite
 
       // Send a decommission self to all the workers
       // Note: normally the worker would send this on their own.
-      workers.foreach(worker => worker.decommissionSelf())
+      workers.foreach { worker =>
+        worker.decommissionSelf()
+        // send the notice to Master to tell the decommission of Workers
+        master.self.send(WorkerDecommissioning(worker.workerId, worker.self))
+      }
 
       // Decommissioning is async.
       eventually(timeout(1.seconds), interval(10.millis)) {

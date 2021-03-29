@@ -33,6 +33,9 @@ abstract class LogicalPlan
   with QueryPlanConstraints
   with Logging {
 
+  /** Metadata fields that can be projected from this node */
+  def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
+
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming)
 
@@ -88,7 +91,11 @@ abstract class LogicalPlan
 
   private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
 
+  private[this] lazy val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
+
   private[this] lazy val outputAttributes = AttributeSeq(output)
+
+  private[this] lazy val outputMetadataAttributes = AttributeSeq(metadataOutput)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
@@ -99,6 +106,7 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
     childAttributes.resolve(nameParts, resolver)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -109,6 +117,7 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
     outputAttributes.resolve(nameParts, resolver)
+      .orElse(outputMetadataAttributes.resolve(nameParts, resolver))
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -118,7 +127,7 @@ abstract class LogicalPlan
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    outputAttributes.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
+    resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
   }
 
   /**
@@ -132,7 +141,7 @@ abstract class LogicalPlan
   def outputOrdering: Seq[SortOrder] = Nil
 
   /**
-   * Returns true iff `other`'s output is semantically the same, ie.:
+   * Returns true iff `other`'s output is semantically the same, i.e.:
    *  - it contains the same number of `Attribute`s;
    *  - references are the same;
    *  - the order is equal too.
@@ -226,7 +235,7 @@ object LogicalPlanIntegrity {
       // NOTE: we still need to filter resolved expressions here because the output of
       // some resolved logical plans can have unresolved references,
       // e.g., outer references in `ExistenceJoin`.
-      p.output.filter(_.resolved).map { a => (a.exprId, a.dataType) }
+      p.output.filter(_.resolved).map { a => (a.exprId, a.dataType.asNullable) }
     }.flatten
 
     val ignoredExprIds = plan.collect {

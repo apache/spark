@@ -18,8 +18,9 @@
 
 from typing import Any, Callable, Optional
 
-from pyspark.sql._typing import ColumnOrName, DataTypeOrString
+from pyspark.sql._typing import ColumnOrName, DataTypeOrString, UserDefinedFunctionLike
 from pyspark.sql.column import Column
+from pyspark.sql.types import DataType
 import pyspark.sql.session
 
 class UserDefinedFunction:
@@ -35,7 +36,7 @@ class UserDefinedFunction:
         deterministic: bool = ...,
     ) -> None: ...
     @property
-    def returnType(self): ...
+    def returnType(self) -> DataType: ...
     def __call__(self, *cols: ColumnOrName) -> Column: ...
     def asNondeterministic(self) -> UserDefinedFunction: ...
 
@@ -47,7 +48,7 @@ class UDFRegistration:
         name: str,
         f: Callable[..., Any],
         returnType: Optional[DataTypeOrString] = ...,
-    ): ...
+    ) -> UserDefinedFunctionLike: ...
     def registerJavaFunction(
         self,
         name: str,

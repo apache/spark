@@ -27,11 +27,10 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_PI,
       mainClass = "",
-      expectedLogOnCompletion = Seq("Pi is roughly 3"),
+      expectedDriverLogOnCompletion = Seq("Pi is roughly 3"),
       appArgs = Array("5"),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false)
   }
 
@@ -41,14 +40,13 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_FILES,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "Python runtime version check is: True",
         "Python environment version check is: True",
         "Python runtime version check for executor is: True"),
       appArgs = Array("python3"),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
@@ -61,12 +59,11 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_MEMORY_CHECK,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "PySpark Worker Memory Check is: True"),
       appArgs = Array(s"$additionalMemoryInBytes"),
       driverPodChecker = doDriverMemoryCheck,
       executorPodChecker = doExecutorMemoryCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }

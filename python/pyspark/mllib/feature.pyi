@@ -17,7 +17,7 @@
 # under the License.
 
 from typing import overload
-from typing import Iterable, Hashable, List, Tuple
+from typing import Iterable, Hashable, List, Tuple, Union
 
 from pyspark.mllib._typing import VectorLike
 from pyspark.context import SparkContext
@@ -135,7 +135,7 @@ class IDF:
 
 class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader[Word2VecModel]):
     def transform(self, word: str) -> Vector: ...  # type: ignore
-    def findSynonyms(self, word: str, num: int) -> Iterable[Tuple[str, float]]: ...
+    def findSynonyms(self, word: Union[str, VectorLike], num: int) -> Iterable[Tuple[str, float]]: ...
     def getVectors(self) -> JavaMap: ...
     @classmethod
     def load(cls, sc: SparkContext, path: str) -> Word2VecModel: ...

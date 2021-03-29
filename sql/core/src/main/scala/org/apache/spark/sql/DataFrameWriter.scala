@@ -314,22 +314,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, df.sparkSession.sessionState.conf)
 
-      val optionsWithPath = if (path.isEmpty) {
-        extraOptions
-      } else {
-        extraOptions + ("path" -> path.get)
-      }
+      val optionsWithPath = getOptionsWithPath(path)
 
       val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
         optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
 
       def getTable: Table = {
-        // For file source, it's expensive to infer schema/partition at each write. Here we pass
-        // the schema of input query and the user-specified partitioning to `getTable`. If the
-        // query schema is not compatible with the existing data, the write can still success but
-        // following reads would fail.
-        if (provider.isInstanceOf[FileDataSourceV2]) {
+        // If the source accepts external table metadata, here we pass the schema of input query
+        // and the user-specified partitioning to `getTable`. This is for avoiding
+        // schema/partitioning inference, which can be very expensive.
+        // If the query schema is not compatible with the existing data, the behavior is undefined.
+        // For example, writing file source will success but the following reads will fail.
+        if (provider.supportsExternalMetadata()) {
           provider.getTable(
             df.schema.asNullable,
             partitioningAsV2.toArray,
@@ -415,6 +412,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
+  private def getOptionsWithPath(path: Option[String]): CaseInsensitiveMap[String] = {
+    if (path.isEmpty) {
+      extraOptions
+    } else {
+      extraOptions + ("path" -> path.get)
+    }
+  }
+
   private def saveToV1Source(path: Option[String]): Unit = {
     partitioningColumns.foreach { columns =>
       extraOptions = extraOptions + (
@@ -422,11 +427,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         DataSourceUtils.encodePartitioningColumns(columns))
     }
 
-    val optionsWithPath = if (path.isEmpty) {
-      extraOptions
-    } else {
-      extraOptions + ("path" -> path.get)
-    }
+    val optionsWithPath = getOptionsWithPath(path)
 
     // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
@@ -469,7 +470,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     assertNotBucketed("insertInto")
 
@@ -536,6 +536,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       InsertIntoStatement(
         table = UnresolvedRelation(tableIdent),
         partitionSpec = Map.empty[String, Option[String]],
+        Nil,
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
         ifPartitionNotExists = false)
@@ -658,6 +659,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           extraOptions.get("path"),
           extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
+          None,
           orCreate = true)      // Create the table if it doesn't exist
 
       case (other, _) =>
@@ -675,7 +677,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           extraOptions.get("path"),
           extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
-          ifNotExists = other == SaveMode.Ignore)
+          None,
+          ifNotExists = other == SaveMode.Ignore,
+          external = false)
     }
 
     runCommand(df.sparkSession, "saveAsTable") {
@@ -881,7 +885,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `snappy`, `zlib`, and `lzo`). This will override
+   * shorten names(`none`, `snappy`, `zlib`, `lzo`, and `zstd`). This will override
    * `orc.compress` and `spark.sql.orc.compression.codec`. If `orc.compress` is given,
    * it overrides `spark.sql.orc.compression.codec`.</li>
    * </ul>

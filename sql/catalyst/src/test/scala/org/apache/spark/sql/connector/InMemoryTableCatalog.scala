@@ -24,7 +24,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -69,13 +70,24 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
+    createTable(ident, schema, partitions, properties, Distributions.unspecified(), Array.empty)
+  }
+
+  def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String],
+      distribution: Distribution,
+      ordering: Array[SortOrder]): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident)
     }
 
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
-    val table = new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties)
+    val tableName = s"$name.${ident.quoted}"
+    val table = new InMemoryTable(tableName, schema, partitions, properties, distribution, ordering)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
@@ -181,8 +193,20 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
 
   override def dropNamespace(namespace: Array[String]): Boolean = {
     listNamespaces(namespace).foreach(dropNamespace)
-    listTables(namespace).foreach(dropTable)
+    try {
+      listTables(namespace).foreach(dropTable)
+    } catch {
+      case _: NoSuchNamespaceException =>
+    }
     Option(namespaces.remove(namespace.toList)).isDefined
+  }
+
+  override def listTables(namespace: Array[String]): Array[Identifier] = {
+    if (namespace.isEmpty || namespaceExists(namespace)) {
+      super.listTables(namespace)
+    } else {
+      throw new NoSuchNamespaceException(namespace)
+    }
   }
 }
 

@@ -25,11 +25,10 @@ import com.codahale.metrics.ganglia.GangliaReporter
 import info.ganglia.gmetric4j.gmetric.GMetric
 import info.ganglia.gmetric4j.gmetric.GMetric.UDPAddressingMode
 
-import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
-class GangliaSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+class GangliaSink(
+    val property: Properties, val registry: MetricRegistry) extends Sink {
   val GANGLIA_KEY_PERIOD = "period"
   val GANGLIA_DEFAULT_PERIOD = 10
 
@@ -81,15 +80,15 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
       .withDMax(dmax)
       .build(ganglia)
 
-  override def start() {
+  override def start(): Unit = {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     reporter.stop()
   }
 
-  override def report() {
+  override def report(): Unit = {
     reporter.report()
   }
 }

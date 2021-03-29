@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.net.URI
-
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf

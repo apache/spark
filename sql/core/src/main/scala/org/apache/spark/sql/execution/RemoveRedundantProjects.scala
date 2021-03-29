@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExecBase
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
  * optimization to prune data. During physical planning, redundant project nodes can be removed
  * to simplify the query plan.
  */
-case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
+object RemoveRedundantProjects extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED)) {
       plan
@@ -62,13 +63,23 @@ case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
         val keepOrdering = a.aggregateExpressions
           .exists(ae => ae.mode.equals(Final) || ae.mode.equals(PartialMerge))
         a.mapChildren(removeProject(_, keepOrdering))
-      // GenerateExec requires column ordering since it binds input rows directly with its
-      // requiredChildOutput without using child's output schema.
-      case g: GenerateExec => g.mapChildren(removeProject(_, true))
-      // JoinExec ordering requirement will inherit from its parent. If there is no ProjectExec in
-      // its ancestors, JoinExec should require output columns to be ordered.
-      case o => o.mapChildren(removeProject(_, requireOrdering))
+      case o =>
+        val required = if (canPassThrough(o)) requireOrdering else true
+        o.mapChildren(removeProject(_, requireOrdering = required))
     }
+  }
+
+  /**
+   * Check if the given node can pass the ordering requirement from its parent.
+   */
+  private def canPassThrough(plan: SparkPlan): Boolean = plan match {
+    case _: FilterExec => true
+    // JoinExec ordering requirement should inherit from its parent. If there is no ProjectExec in
+    // its ancestors, JoinExec should require output columns to be ordered, and vice versa.
+    case _: BaseJoinExec => true
+    case _: WindowExec => true
+    case _: ExpandExec => true
+    case _ => false
   }
 
   /**

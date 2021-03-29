@@ -33,7 +33,7 @@ class HiveSessionImplSuite extends SparkFunSuite {
   private var session: HiveSessionImpl = _
   private var operationManager: OperationManagerMock = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
 
     val sessionManager = new SessionManager(null)

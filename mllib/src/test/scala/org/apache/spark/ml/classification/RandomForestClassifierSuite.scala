@@ -25,10 +25,10 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -428,6 +428,20 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
       allParamSettings, checkModelData)
+  }
+
+  test("SPARK-33398: Load RandomForestClassificationModel prior to Spark 3.0") {
+    val path = testFile("ml-models/rfc-2.4.7")
+    val model = RandomForestClassificationModel.load(path)
+    assert(model.numClasses === 2)
+    assert(model.numFeatures === 692)
+    assert(model.getNumTrees === 2)
+    assert(model.totalNumNodes === 10)
+    assert(model.trees.map(_.numNodes) === Array(3, 7))
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
   }
 }
 

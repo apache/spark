@@ -18,14 +18,19 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
 class DisableUnnecessaryBucketedScanWithoutHiveSupportSuite
   extends DisableUnnecessaryBucketedScanSuite
-  with SharedSparkSession {
+  with SharedSparkSession
+  with DisableAdaptiveExecutionSuite {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -33,7 +38,22 @@ class DisableUnnecessaryBucketedScanWithoutHiveSupportSuite
   }
 }
 
-abstract class DisableUnnecessaryBucketedScanSuite extends QueryTest with SQLTestUtils {
+class DisableUnnecessaryBucketedScanWithoutHiveSupportSuiteAE
+  extends DisableUnnecessaryBucketedScanSuite
+  with SharedSparkSession
+  with EnableAdaptiveExecutionSuite {
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+  }
+}
+
+abstract class DisableUnnecessaryBucketedScanSuite
+  extends QueryTest
+  with SQLTestUtils
+  with AdaptiveSparkPlanHelper {
+
   import testImplicits._
 
   private lazy val df1 =
@@ -48,7 +68,7 @@ abstract class DisableUnnecessaryBucketedScanSuite extends QueryTest with SQLTes
 
     def checkNumBucketedScan(query: String, expectedNumBucketedScan: Int): Unit = {
       val plan = sql(query).queryExecution.executedPlan
-      val bucketedScan = plan.collect { case s: FileSourceScanExec if s.bucketedScan => s }
+      val bucketedScan = collect(plan) { case s: FileSourceScanExec if s.bucketedScan => s }
       assert(bucketedScan.length == expectedNumBucketedScan)
     }
 
@@ -75,7 +95,7 @@ abstract class DisableUnnecessaryBucketedScanSuite extends QueryTest with SQLTes
         ("SELECT i FROM t1", 0, 1),
         ("SELECT j FROM t1", 0, 0),
         // Filter on bucketed column
-        ("SELECT * FROM t1 WHERE i = 1", 1, 1),
+        ("SELECT * FROM t1 WHERE i = 1", 0, 1),
         // Filter on non-bucketed column
         ("SELECT * FROM t1 WHERE j = 1", 0, 1),
         // Join with same buckets
@@ -215,6 +235,26 @@ abstract class DisableUnnecessaryBucketedScanSuite extends QueryTest with SQLTes
          """.stripMargin, 0, 0)
       ).foreach { case (query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled) =>
         checkDisableBucketedScan(query, numScanWithAutoScanEnabled, numScanWithAutoScanDisabled)
+      }
+    }
+  }
+
+  test("SPARK-33075: not disable bucketed table scan for cached query") {
+    withTable("t1") {
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
+        df1.write.format("parquet").bucketBy(8, "i").saveAsTable("t1")
+        spark.catalog.cacheTable("t1")
+        assertCached(spark.table("t1"))
+
+        // Verify cached bucketed table scan not disabled
+        val partitioning = stripAQEPlan(spark.table("t1").queryExecution.executedPlan)
+          .outputPartitioning
+        assert(partitioning match {
+          case HashPartitioning(Seq(column: AttributeReference), 8) if column.name == "i" => true
+          case _ => false
+        })
+        val aggregateQueryPlan = sql("SELECT SUM(i) FROM t1 GROUP BY i").queryExecution.executedPlan
+        assert(find(aggregateQueryPlan)(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
       }
     }
   }

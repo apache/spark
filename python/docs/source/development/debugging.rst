@@ -54,7 +54,7 @@ Enter the name of this new configuration, for example, ``MyRemoteDebugger`` and 
 .. image:: ../../../../docs/img/pyspark-remote-debug1.png
     :alt: PyCharm remote debugger setting
 
-| After that, you should install the corresponding version of the ``pydevd-pycahrm`` package in all the machines which will connect to your PyCharm debugger. In the previous dialog, it shows the command to install.
+| After that, you should install the corresponding version of the ``pydevd-pycharm`` package in all the machines which will connect to your PyCharm debugger. In the previous dialog, it shows the command to install.
 
 .. code-block:: text
 

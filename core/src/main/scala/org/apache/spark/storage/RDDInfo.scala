@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.config._
-import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDOperationScope}
 import org.apache.spark.util.Utils
 
 @DeveloperApi
@@ -32,13 +32,13 @@ class RDDInfo(
     val isBarrier: Boolean,
     val parentIds: Seq[Int],
     val callSite: String = "",
-    val scope: Option[RDDOperationScope] = None)
+    val scope: Option[RDDOperationScope] = None,
+    val outputDeterministicLevel: DeterministicLevel.Value = DeterministicLevel.DETERMINATE)
   extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0
   var memSize = 0L
   var diskSize = 0L
-  var externalBlockStoreSize = 0L
 
   def isCached: Boolean = (memSize + diskSize > 0) && numCachedPartitions > 0
 
@@ -69,6 +69,7 @@ private[spark] object RDDInfo {
       rdd.creationSite.shortForm
     }
     new RDDInfo(rdd.id, rddName, rdd.partitions.length,
-      rdd.getStorageLevel, rdd.isBarrier(), parentIds, callSite, rdd.scope)
+      rdd.getStorageLevel, rdd.isBarrier(), parentIds, callSite, rdd.scope,
+      rdd.outputDeterministicLevel)
   }
 }

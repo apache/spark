@@ -32,8 +32,8 @@ import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
-import org.apache.spark.sql.{FakeFileSystemRequiringDSOption, Row, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
+import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
@@ -41,8 +41,10 @@ import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
+abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDataSourceSuite {
   import testImplicits._
+
+  override protected def dataSourceFormat = "orc"
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -335,7 +337,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
 
     // Test all the valid options of spark.sql.orc.compression.codec
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO").foreach { c =>
+    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO", "ZSTD").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
@@ -537,21 +539,6 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       }
     }
   }
-
-  test("SPARK-33094: should propagate Hadoop config from DS options to underlying file system") {
-    withSQLConf(
-      "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
-      "fs.file.impl.disable.cache" -> "true") {
-      Seq(false, true).foreach { mergeSchema =>
-        withTempPath { dir =>
-          val path = dir.getAbsolutePath
-          val conf = Map("ds_option" -> "value", "mergeSchema" -> mergeSchema.toString)
-          spark.range(1).write.options(conf).orc(path)
-          checkAnswer(spark.read.options(conf).orc(path), Row(0))
-        }
-      }
-    }
-  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSparkSession {
@@ -606,5 +593,13 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     // Test ORC file came from ORC-621
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)
+  }
+
+  test("SPARK-33978: Write and read a file with ZSTD compression") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(3).write.option("compression", "zstd").orc(path)
+      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+    }
   }
 }

@@ -12,7 +12,7 @@ WholeStageCodegen (14)
                       WholeStageCodegen (5)
                         Project [w_warehouse_sk,i_item_sk,d_moy,mean,stdev]
                           Filter [mean,stdev]
-                            HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(cast(inv_quantity_on_hand as bigint)),stdev,mean,n,avg,m2,sum,count]
+                            HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(inv_quantity_on_hand),stdev,mean,n,avg,m2,sum,count]
                               InputAdapter
                                 Exchange [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy] #3
                                   WholeStageCodegen (4)
@@ -23,10 +23,12 @@ WholeStageCodegen (14)
                                             BroadcastHashJoin [inv_item_sk,i_item_sk]
                                               Project [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,d_moy]
                                                 BroadcastHashJoin [inv_date_sk,d_date_sk]
-                                                  Filter [inv_item_sk,inv_warehouse_sk,inv_date_sk]
+                                                  Filter [inv_item_sk,inv_warehouse_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand]
+                                                        Scan parquet default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                                          SubqueryBroadcast [d_date_sk] #1
+                                                            ReusedExchange [d_date_sk,d_moy] #4
                                                   InputAdapter
                                                     BroadcastExchange #4
                                                       WholeStageCodegen (1)
@@ -57,7 +59,7 @@ WholeStageCodegen (14)
                       WholeStageCodegen (11)
                         Project [w_warehouse_sk,i_item_sk,d_moy,mean,stdev]
                           Filter [mean,stdev]
-                            HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(cast(inv_quantity_on_hand as bigint)),stdev,mean,n,avg,m2,sum,count]
+                            HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(inv_quantity_on_hand),stdev,mean,n,avg,m2,sum,count]
                               InputAdapter
                                 Exchange [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy] #8
                                   WholeStageCodegen (10)
@@ -68,10 +70,12 @@ WholeStageCodegen (14)
                                             BroadcastHashJoin [inv_item_sk,i_item_sk]
                                               Project [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,d_moy]
                                                 BroadcastHashJoin [inv_date_sk,d_date_sk]
-                                                  Filter [inv_item_sk,inv_warehouse_sk,inv_date_sk]
+                                                  Filter [inv_item_sk,inv_warehouse_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand]
+                                                        Scan parquet default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                                          SubqueryBroadcast [d_date_sk] #2
+                                                            ReusedExchange [d_date_sk,d_moy] #9
                                                   InputAdapter
                                                     BroadcastExchange #9
                                                       WholeStageCodegen (7)

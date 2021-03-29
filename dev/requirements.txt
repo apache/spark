@@ -1,8 +1,8 @@
 flake8==3.5.0
 jira==1.0.3
 PyGithub==1.26.0
-Unidecode==0.04.19
 sphinx
 pydata_sphinx_theme
 ipython
 nbsphinx
+numpydoc

@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s._
 
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
@@ -42,7 +42,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
   }
 
-  test("Mounts pesistentVolumeClaims") {
+  test("Mounts persistentVolumeClaims") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
@@ -234,6 +234,31 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 2)
     assert(configuredPod.container.getVolumeMounts.size() === 2)
+  }
+
+  test("mountPath should be unique") {
+    val hpVolumeConf = KubernetesVolumeSpec(
+      "hpVolume",
+      "/data",
+      "",
+      false,
+      KubernetesHostPathVolumeConf("/hostPath/tmp")
+    )
+    val pvcVolumeConf = KubernetesVolumeSpec(
+      "checkpointVolume",
+      "/data",
+      "",
+      true,
+      KubernetesPVCVolumeConf("pvcClaim")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(
+      volumes = Seq(hpVolumeConf, pvcVolumeConf))
+
+    val step = new MountVolumesFeatureStep(kubernetesConf)
+    val m = intercept[IllegalArgumentException] {
+      step.configurePod(SparkPod.initialPod())
+    }.getMessage
+    assert(m.contains("Found duplicated mountPath: '/data'"))
   }
 
   test("Mounts subpath on emptyDir") {

@@ -22,6 +22,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.mllib.common import JavaModelWrapper
 from pyspark.mllib.linalg import Vector, Matrix, QRDecomposition
 from pyspark.mllib.stat import MultivariateStatisticalSummary
+import pyspark.sql.dataframe
 from numpy import ndarray  # noqa: F401
 
 VectorLike = Union[Vector, Sequence[Union[float, int]]]
@@ -35,7 +36,10 @@ class DistributedMatrix:
 
 class RowMatrix(DistributedMatrix):
     def __init__(
-        self, rows: RDD[Vector], numRows: int = ..., numCols: int = ...
+        self,
+        rows: Union[RDD[Vector], pyspark.sql.dataframe.DataFrame],
+        numRows: int = ...,
+        numCols: int = ...,
     ) -> None: ...
     @property
     def rows(self) -> RDD[Vector]: ...

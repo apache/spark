@@ -833,7 +833,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
 
     taskScheduler = mock[TaskSchedulerImpl]
-    when(taskScheduler.nodeBlacklist).thenReturn(Set[String]())
+    when(taskScheduler.excludedNodes).thenReturn(Set[String]())
     when(taskScheduler.sc).thenReturn(sc)
 
     externalShuffleClient = mock[MesosExternalBlockStoreClient]

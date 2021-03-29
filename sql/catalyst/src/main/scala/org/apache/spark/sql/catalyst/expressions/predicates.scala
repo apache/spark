@@ -18,14 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
-import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
@@ -49,11 +46,26 @@ abstract class BasePredicate {
 }
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
-  override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+  private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
+  private[this] lazy val runtime =
+    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
+  private[this] val expr = if (subExprEliminationEnabled) {
+    runtime.proxyExpressions(Seq(expression)).head
+  } else {
+    expression
+  }
+
+  override def eval(r: InternalRow): Boolean = {
+    if (subExprEliminationEnabled) {
+      runtime.setInput(r)
+    }
+
+    expr.eval(r).asInstanceOf[Boolean]
+  }
 
   override def initialize(partitionIndex: Int): Unit = {
     super.initialize(partitionIndex)
-    expression.foreach {
+    expr.foreach {
       case n: Nondeterministic => n.initialize(partitionIndex)
       case _ =>
     }
@@ -97,7 +109,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
-trait PredicateHelper extends Logging {
+trait PredicateHelper extends AliasHelper with Logging {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -117,18 +129,13 @@ trait PredicateHelper extends Logging {
       plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
 
     plan match {
-      case Project(projectList, child) =>
-        val aliases = AttributeMap(projectList.collect {
-          case a @ Alias(child, _) => (a.toAttribute, child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), child)
+      case p: Project =>
+        val aliases = getAliasMap(p)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
       // we can unwrap only if there are row projections, and no aggregation operation
-      case Aggregate(_, aggregateExpressions, child) =>
-        val aliasMap = AttributeMap(aggregateExpressions.collect {
-          case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
-            (a.toAttribute, a.child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), child)
+      case a: Aggregate =>
+        val aliasMap = getAliasMap(a)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
         Some((exp, l))
       case other =>
@@ -150,16 +157,30 @@ trait PredicateHelper extends Logging {
     }
   }
 
-  // Substitute any known alias from a map.
-  protected def replaceAlias(
-      condition: Expression,
-      aliases: AttributeMap[Expression]): Expression = {
-    // Use transformUp to prevent infinite recursion when the replacement expression
-    // redefines the same ExprId,
-    condition.transformUp {
-      case a: Attribute =>
-        aliases.getOrElse(a, a)
+  /**
+   * Builds a balanced output predicate in bottom up approach, by applying binary operator op
+   * pair by pair on input predicates exprs recursively.
+   * Example:  exprs = [a, b, c, d], op = And, returns (a And b) And (c And d)
+   * exprs = [a, b, c, d, e, f], op = And, returns ((a And b) And (c And d)) And (e And f)
+   */
+  protected def buildBalancedPredicate(
+      expressions: Seq[Expression], op: (Expression, Expression) => Expression): Expression = {
+    assert(expressions.nonEmpty)
+    var currentResult = expressions
+    while (currentResult.size != 1) {
+      var i = 0
+      val nextResult = new Array[Expression](currentResult.size / 2 + currentResult.size % 2)
+      while (i < currentResult.size) {
+        nextResult(i / 2) = if (i + 1 == currentResult.size) {
+          currentResult(i)
+        } else {
+          op(currentResult(i), currentResult(i + 1))
+        }
+        i += 2
+      }
+      currentResult = nextResult
     }
+    currentResult.head
   }
 
   /**
@@ -247,6 +268,24 @@ trait PredicateHelper extends Logging {
         None
       }
   }
+
+  // If one expression and its children are null intolerant, it is null intolerant.
+  protected def isNullIntolerant(expr: Expression): Boolean = expr match {
+    case e: NullIntolerant => e.children.forall(isNullIntolerant)
+    case _ => false
+  }
+
+  protected def outputWithNullability(
+      output: Seq[Attribute],
+      nonNullAttrExprIds: Seq[ExprId]): Seq[Attribute] = {
+    output.map { a =>
+      if (a.nullable && nonNullAttrExprIds.contains(a.exprId)) {
+        a.withNullability(false)
+      } else {
+        a
+      }
+    }
+  }
 }
 
 @ExpressionDescription(
@@ -260,7 +299,8 @@ trait PredicateHelper extends Logging {
       > SELECT _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
@@ -363,7 +403,8 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
       > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
        true
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 // scalastyle:on line.size.limit
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
@@ -599,7 +640,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       > SELECT false _FUNC_ NULL;
        false
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -681,7 +723,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
       > SELECT false _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -815,7 +858,8 @@ object Equality {
       > SELECT NULL _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -859,7 +903,8 @@ case class EqualTo(left: Expression, right: Expression)
       > SELECT NULL _FUNC_ NULL;
        true
   """,
-  since = "1.1.0")
+  since = "1.1.0",
+  group = "predicate_funcs")
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
   override def symbol: String = "<=>"
@@ -917,7 +962,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
       > SELECT 1 _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -948,7 +994,8 @@ case class LessThan(left: Expression, right: Expression)
       > SELECT 1 _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -979,7 +1026,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
       > SELECT 1 _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -1010,7 +1058,8 @@ case class GreaterThan(left: Expression, right: Expression)
       > SELECT 1 _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 

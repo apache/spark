@@ -27,7 +27,7 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -98,10 +98,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
           Seq(answer)
         } else {
           // spark-sql echoes the submitted queries
-          val queryEcho = query.split("\n").toList match {
-            case firstLine :: tail =>
-              s"spark-sql> $firstLine" :: tail.map(l => s"         > $l")
-          }
+          val xs = query.split("\n").toList
+          val queryEcho = s"spark-sql> ${xs.head}" :: xs.tail.map(l => s"         > $l")
           // longer lines sometimes get split in the output,
           // match the first 60 characters of each query line
           queryEcho.map(_.take(60)) :+ answer
@@ -572,5 +570,28 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     // If Java 8 time API is enabled via the SQL config `spark.sql.datetime.java8API.enabled`,
     // the date formatter for `java.sql.LocalDate` must output negative years with sign.
     runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
+  }
+
+  test("SPARK-33100: Ignore a semicolon inside a bracketed comment in spark-sql") {
+    runCliWithin(4.minute)(
+      "/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      ";;/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      "/* SELECT 'test';*/;; SELECT 'test';" -> "test",
+      "SELECT 'test'; -- SELECT 'test';" -> "test",
+      "SELECT 'test'; /* SELECT 'test';*/;" -> "test",
+      "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
+      "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
+      "/*/* multi-level bracketed*/ SELECT 'test';" -> "test"
+    )
+  }
+
+  test("SPARK-33100: test sql statements with hint in bracketed comment") {
+    runCliWithin(2.minute)(
+      "CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES(1, 2) AS t1(k, v);" -> "",
+      "CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES(2, 1) AS t2(k, v);" -> "",
+      "EXPLAIN SELECT /*+ MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;" -> "SortMergeJoin",
+      "EXPLAIN SELECT /* + MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
+        -> "BroadcastHashJoin"
+    )
   }
 }

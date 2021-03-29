@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.AvroTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
@@ -39,7 +40,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -68,7 +69,7 @@ class HadoopTableReader(
     @transient private val tableDesc: TableDesc,
     @transient private val sparkSession: SparkSession,
     hadoopConf: Configuration)
-  extends TableReader with CastSupport with Logging {
+  extends TableReader with CastSupport with SQLConfHelper with Logging {
 
   // Hadoop honors "mapreduce.job.maps" as hint,
   // but will ignore when mapreduce.jobtracker.address is "local".
@@ -239,6 +240,8 @@ class HadoopTableReader(
       fillPartitionKeys(partValues, mutableRow)
 
       val tableProperties = tableDesc.getProperties
+      val avroSchemaProperties = Seq(AvroTableProperties.SCHEMA_LITERAL,
+        AvroTableProperties.SCHEMA_URL).map(_.getPropName())
 
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
@@ -248,10 +251,15 @@ class HadoopTableReader(
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
         // information) may be defined in table properties. Here we should merge table properties
         // and partition properties before initializing the deserializer. Note that partition
-        // properties take a higher priority here. For example, a partition may have a different
-        // SerDe as the one defined in table properties.
+        // properties take a higher priority here except for the Avro table properties
+        // to support schema evolution: in that case the properties given at table level will
+        // be used (for details please check SPARK-26836).
+        // For example, a partition may have a different SerDe as the one defined in table
+        // properties.
         val props = new Properties(tableProperties)
-        partProps.asScala.foreach {
+        partProps.asScala.filterNot { case (k, _) =>
+          avroSchemaProperties.contains(k) && tableProperties.containsKey(k)
+        }.foreach {
           case (key, value) => props.setProperty(key, value)
         }
         DeserializerLock.synchronized {

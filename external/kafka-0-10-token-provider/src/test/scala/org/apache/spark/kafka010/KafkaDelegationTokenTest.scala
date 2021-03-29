@@ -51,8 +51,10 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
   protected val bootStrapServers = "127.0.0.1:0"
   protected val matchingTargetServersRegex = "127.0.0.*:0"
   protected val nonMatchingTargetServersRegex = "127.0.intentionally_non_matching.*:0"
+  protected val trustStoreType = "customTrustStoreType"
   protected val trustStoreLocation = "/path/to/trustStore"
   protected val trustStorePassword = "trustStoreSecret"
+  protected val keyStoreType = "customKeyStoreType"
   protected val keyStoreLocation = "/path/to/keyStore"
   protected val keyStorePassword = "keyStoreSecret"
   protected val keyPassword = "keySecret"
@@ -124,8 +126,10 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
       KafkaTokenSparkConf.DEFAULT_TARGET_SERVERS_REGEX,
       securityProtocol,
       KafkaTokenSparkConf.DEFAULT_SASL_KERBEROS_SERVICE_NAME,
+      Some(trustStoreType),
       Some(trustStoreLocation),
       Some(trustStorePassword),
+      Some(keyStoreType),
       Some(keyStoreLocation),
       Some(keyStorePassword),
       Some(keyPassword),

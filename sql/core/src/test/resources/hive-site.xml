@@ -23,4 +23,9 @@
       <value>true</value>
       <description>Internal marker for test.</description>
   </property>
+  <property>
+    <name>hadoop.tmp.dir</name>
+    <value>/tmp/hive_one</value>
+    <description>default is /tmp/hadoop-${user.name} and will be overridden </description>
+  </property>
 </configuration>

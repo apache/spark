@@ -53,9 +53,10 @@ true
 -- !query
 SELECT boolean('test') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: test
 
 
 -- !query
@@ -69,9 +70,10 @@ false
 -- !query
 SELECT boolean('foo') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: foo
 
 
 -- !query
@@ -93,9 +95,10 @@ true
 -- !query
 SELECT boolean('yeah') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: yeah
 
 
 -- !query
@@ -117,57 +120,64 @@ false
 -- !query
 SELECT boolean('nay') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: nay
 
 
 -- !query
 SELECT boolean('on') AS true
 -- !query schema
-struct<true:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: on
 
 
 -- !query
 SELECT boolean('off') AS `false`
 -- !query schema
-struct<false:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: off
 
 
 -- !query
 SELECT boolean('of') AS `false`
 -- !query schema
-struct<false:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: of
 
 
 -- !query
 SELECT boolean('o') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: o
 
 
 -- !query
 SELECT boolean('on_') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: on_
 
 
 -- !query
 SELECT boolean('off_') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: off_
 
 
 -- !query
@@ -181,9 +191,10 @@ true
 -- !query
 SELECT boolean('11') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: 11
 
 
 -- !query
@@ -197,17 +208,19 @@ false
 -- !query
 SELECT boolean('000') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean: 000
 
 
 -- !query
 SELECT boolean('') AS error
 -- !query schema
-struct<error:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean:
 
 
 -- !query
@@ -310,17 +323,19 @@ true	false
 -- !query
 SELECT boolean(string('  tru e ')) AS invalid
 -- !query schema
-struct<invalid:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean:   tru e
 
 
 -- !query
 SELECT boolean(string('')) AS invalid
 -- !query schema
-struct<invalid:boolean>
+struct<>
 -- !query output
-NULL
+java.lang.UnsupportedOperationException
+invalid input syntax for type boolean:
 
 
 -- !query
@@ -463,7 +478,8 @@ INSERT INTO BOOLTBL2
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+failed to evaluate expression CAST('XXX' AS BOOLEAN): invalid input syntax for type boolean: XXX; line 2 pos 3
 
 
 -- !query
@@ -471,7 +487,6 @@ SELECT '' AS f_4, BOOLTBL2.* FROM BOOLTBL2
 -- !query schema
 struct<f_4:string,f1:boolean>
 -- !query output
-	NULL
 	false
 	false
 	false
@@ -545,9 +560,6 @@ struct<tf_12_ff_4:string,f1:boolean,f1:boolean>
 	false	false
 	false	false
 	false	false
-	true	NULL
-	true	NULL
-	true	NULL
 	true	false
 	true	false
 	true	false
@@ -623,7 +635,7 @@ SELECT '' AS `Not False`, f1
 -- !query schema
 struct<Not False:string,f1:boolean>
 -- !query output
-	NULL
+
 
 
 -- !query
@@ -646,7 +658,6 @@ SELECT '' AS `Not True`, f1
 -- !query schema
 struct<Not True:string,f1:boolean>
 -- !query output
-	NULL
 	false
 	false
 	false

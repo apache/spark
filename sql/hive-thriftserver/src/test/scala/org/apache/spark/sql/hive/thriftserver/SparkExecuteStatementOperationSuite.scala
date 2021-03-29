@@ -61,6 +61,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
 
   Seq(
     (OperationState.CANCELED, (_: SparkExecuteStatementOperation).cancel()),
+    (OperationState.TIMEDOUT, (_: SparkExecuteStatementOperation).timeoutCancel()),
     (OperationState.CLOSED, (_: SparkExecuteStatementOperation).close())
   ).foreach { case (finalState, transition) =>
     test("SPARK-32057 SparkExecuteStatementOperation should not transiently become ERROR " +
@@ -109,7 +110,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
       signal: Semaphore,
       finalState: OperationState)
     extends SparkExecuteStatementOperation(sqlContext, hiveSession, statement,
-      new util.HashMap, false) {
+      new util.HashMap, false, 0) {
 
     override def cleanup(): Unit = {
       super.cleanup()

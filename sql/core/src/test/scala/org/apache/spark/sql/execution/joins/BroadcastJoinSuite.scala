@@ -91,7 +91,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     } else {
       df1.join(df2, joinExpression, joinType)
     }
-    val plan = EnsureRequirements(spark.sessionState.conf).apply(df3.queryExecution.sparkPlan)
+    val plan = EnsureRequirements.apply(df3.queryExecution.sparkPlan)
     assert(plan.collect { case p: T => p }.size === 1)
     plan
   }
@@ -171,7 +171,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       val df4 = Seq((1, "5"), (2, "5")).toDF("key", "value")
       val df5 = df4.join(df3, Seq("key"), "inner")
 
-      val plan = EnsureRequirements(spark.sessionState.conf).apply(df5.queryExecution.sparkPlan)
+      val plan = EnsureRequirements.apply(df5.queryExecution.sparkPlan)
 
       assert(plan.collect { case p: BroadcastHashJoinExec => p }.size === 1)
       assert(plan.collect { case p: SortMergeJoinExec => p }.size === 1)
@@ -182,7 +182,7 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
     val joined = df1.join(df, Seq("key"), "inner")
 
-    val plan = EnsureRequirements(spark.sessionState.conf).apply(joined.queryExecution.sparkPlan)
+    val plan = EnsureRequirements.apply(joined.queryExecution.sparkPlan)
 
     assert(plan.collect { case p: BroadcastHashJoinExec => p }.size === 1)
   }
@@ -242,33 +242,40 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     assert(HashJoin.rewriteKeyExpr(l :: l :: Nil) === l :: l :: Nil)
     assert(HashJoin.rewriteKeyExpr(l :: i :: Nil) === l :: i :: Nil)
 
-    assert(HashJoin.rewriteKeyExpr(i :: Nil) === Cast(i, LongType) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: Nil) ===
+      Cast(i, LongType, Some(conf.sessionLocalTimeZone)) :: Nil)
     assert(HashJoin.rewriteKeyExpr(i :: l :: Nil) === i :: l :: Nil)
     assert(HashJoin.rewriteKeyExpr(i :: i :: Nil) ===
-      BitwiseOr(ShiftLeft(Cast(i, LongType), Literal(32)),
-        BitwiseAnd(Cast(i, LongType), Literal((1L << 32) - 1))) :: Nil)
+      BitwiseOr(ShiftLeft(Cast(i, LongType, Some(conf.sessionLocalTimeZone)), Literal(32)),
+        BitwiseAnd(Cast(i, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 32) - 1))) ::
+        Nil)
     assert(HashJoin.rewriteKeyExpr(i :: i :: i :: Nil) === i :: i :: i :: Nil)
 
-    assert(HashJoin.rewriteKeyExpr(s :: Nil) === Cast(s, LongType) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: Nil) ===
+      Cast(s, LongType, Some(conf.sessionLocalTimeZone)) :: Nil)
     assert(HashJoin.rewriteKeyExpr(s :: l :: Nil) === s :: l :: Nil)
     assert(HashJoin.rewriteKeyExpr(s :: s :: Nil) ===
-      BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
-        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+      BitwiseOr(ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
+        BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
+        Nil)
     assert(HashJoin.rewriteKeyExpr(s :: s :: s :: Nil) ===
       BitwiseOr(ShiftLeft(
-        BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
-          BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+        BitwiseOr(ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
+          BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))),
         Literal(16)),
-        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+        BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
+        Nil)
     assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: Nil) ===
       BitwiseOr(ShiftLeft(
         BitwiseOr(ShiftLeft(
-          BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
-            BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+          BitwiseOr(ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
+            BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)),
+              Literal((1L << 16) - 1))),
           Literal(16)),
-          BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+          BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))),
         Literal(16)),
-        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+        BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
+        Nil)
     assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: s :: Nil) ===
       s :: s :: s :: s :: s :: Nil)
 
@@ -432,22 +439,24 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         // join1 is a broadcast join where df2 is broadcasted. Note that output partitioning on the
         // streamed side (t1) is HashPartitioning (bucketed files).
         val join1 = t1.join(df2, t1("i1") === df2("i2") && t1("j1") === df2("j2"))
-        val plan1 = join1.queryExecution.executedPlan
-        assert(collect(plan1) { case e: ShuffleExchangeExec => e }.isEmpty)
-        val broadcastJoins = collect(plan1) { case b: BroadcastHashJoinExec => b }
-        assert(broadcastJoins.size == 1)
-        assert(broadcastJoins(0).outputPartitioning.isInstanceOf[PartitioningCollection])
-        val p = broadcastJoins(0).outputPartitioning.asInstanceOf[PartitioningCollection]
-        assert(p.partitionings.size == 4)
-        // Verify all the combinations of output partitioning.
-        Seq(Seq(t1("i1"), t1("j1")),
-          Seq(t1("i1"), df2("j2")),
-          Seq(df2("i2"), t1("j1")),
-          Seq(df2("i2"), df2("j2"))).foreach { expected =>
-          val expectedExpressions = expected.map(_.expr)
-          assert(p.partitionings.exists {
-            case h: HashPartitioning => expressionsEqual(h.expressions, expectedExpressions)
-          })
+        withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
+          val plan1 = join1.queryExecution.executedPlan
+          assert(collect(plan1) { case e: ShuffleExchangeExec => e }.isEmpty)
+          val broadcastJoins = collect(plan1) { case b: BroadcastHashJoinExec => b }
+          assert(broadcastJoins.size == 1)
+          assert(broadcastJoins(0).outputPartitioning.isInstanceOf[PartitioningCollection])
+          val p = broadcastJoins(0).outputPartitioning.asInstanceOf[PartitioningCollection]
+          assert(p.partitionings.size == 4)
+          // Verify all the combinations of output partitioning.
+          Seq(Seq(t1("i1"), t1("j1")),
+            Seq(t1("i1"), df2("j2")),
+            Seq(df2("i2"), t1("j1")),
+            Seq(df2("i2"), df2("j2"))).foreach { expected =>
+            val expectedExpressions = expected.map(_.expr)
+            assert(p.partitionings.exists {
+              case h: HashPartitioning => expressionsEqual(h.expressions, expectedExpressions)
+            })
+          }
         }
 
         // Join on the column from the broadcasted side (i2, j2) and make sure output partitioning

@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.CleanupAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -64,7 +63,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // the produced join then becomes unresolved and break structural integrity. We should
     // de-duplicate conflicting attributes.
     // SPARK-26078: it may also happen that the subquery has conflicting attributes with the outer
-    // values. In this case, the resulting join would contain trivially true conditions (eg.
+    // values. In this case, the resulting join would contain trivially true conditions (e.g.
     // id#3 = id#3) which cannot be de-duplicated after. In this method, if there are conflicting
     // attributes in the join condition, the subquery's conflicting attributes are changed using
     // a projection which aliases them and resolves the problem.
@@ -94,7 +93,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Filter(condition, child) =>
+    case Filter(condition, child)
+      if SubqueryExpression.hasInOrCorrelatedExistsSubquery(condition) =>
       val (withSubquery, withoutSubquery) =
         splitConjunctivePredicates(condition)
           .partition(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
@@ -175,7 +175,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val inConditions = values.zip(sub.output).map(EqualTo.tupled)
           // To handle a null-aware predicate not-in-subquery in nested conditions
           // (e.g., `v > 0 OR t1.id NOT IN (SELECT id FROM t2)`), we transform
-          // `inConditon` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
+          // `inCondition` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
           //
           // For example, `SELECT * FROM t1 WHERE v > 0 OR t1.id NOT IN (SELECT id FROM t2)`
           // is transformed into a plan below;
@@ -329,13 +329,15 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
     case q: UnaryNode =>
       rewriteSubQueries(q, q.children)
+    case s: SupportsSubquery =>
+      rewriteSubQueries(s, s.children)
   }
 }
 
 /**
  * This rule rewrites correlated [[ScalarSubquery]] expressions into LEFT OUTER joins.
  */
-object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
+object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelper {
   /**
    * Extract all correlated scalar subqueries from an expression. The subqueries are collected using
    * the given collector. The expression is rewritten and returned.
@@ -357,7 +359,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    */
   private def tryEvalExpr(expr: Expression): Expression = {
     // Removes Alias over given expression, because Alias is not foldable.
-    if (!CleanupAliases.trimAliases(expr).foldable) {
+    if (!trimAliases(expr).foldable) {
       // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
       // Needs to evaluate them on query runtime.
       expr
@@ -566,7 +568,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
               case s @ SubqueryAlias(alias, _) =>
                 subqueryRoot = SubqueryAlias(alias, subqueryRoot)
-              case op => sys.error(s"Unexpected operator $op in corelated subquery")
+              case op => sys.error(s"Unexpected operator $op in correlated subquery")
             }
 
             // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups

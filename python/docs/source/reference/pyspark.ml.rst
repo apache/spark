@@ -16,16 +16,16 @@
     under the License.
 
 
-ML
-==
+MLlib (DataFrame-based)
+=======================
 
-ML Pipeline APIs
-----------------
+Pipeline APIs
+-------------
 
 .. currentmodule:: pyspark.ml
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Transformer
@@ -44,7 +44,7 @@ Parameters
 .. currentmodule:: pyspark.ml.param
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Param
@@ -58,11 +58,9 @@ Feature
 .. currentmodule:: pyspark.ml.feature
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
-    ANOVASelector
-    ANOVASelectorModel
     Binarizer
     BucketedRandomProjectionLSH
     BucketedRandomProjectionLSHModel
@@ -74,8 +72,6 @@ Feature
     DCT
     ElementwiseProduct
     FeatureHasher
-    FValueSelector
-    FValueSelectorModel
     HashingTF
     IDF
     IDFModel
@@ -109,6 +105,8 @@ Feature
     StringIndexer
     StringIndexerModel
     Tokenizer
+    UnivariateFeatureSelector
+    UnivariateFeatureSelectorModel
     VarianceThresholdSelector
     VarianceThresholdSelectorModel
     VectorAssembler
@@ -126,7 +124,7 @@ Classification
 .. currentmodule:: pyspark.ml.classification
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     LinearSVC
@@ -169,7 +167,7 @@ Clustering
 .. currentmodule:: pyspark.ml.clustering
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     BisectingKMeans
@@ -188,14 +186,15 @@ Clustering
     PowerIterationClustering
 
 
-ML Functions
-----------------------------
+Functions
+---------
 
 .. currentmodule:: pyspark.ml.functions
 
 .. autosummary::
     :toctree: api/
 
+    array_to_vector
     vector_to_array
 
 
@@ -205,7 +204,7 @@ Vector and Matrix
 .. currentmodule:: pyspark.ml.linalg
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Vector
@@ -224,7 +223,7 @@ Recommendation
 .. currentmodule:: pyspark.ml.recommendation
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ALS
@@ -237,7 +236,7 @@ Regression
 .. currentmodule:: pyspark.ml.regression
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     AFTSurvivalRegression
@@ -268,13 +267,11 @@ Statistics
 .. currentmodule:: pyspark.ml.stat
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
-    ANOVATest
     ChiSquareTest
     Correlation
-    FValueTest
     KolmogorovSmirnovTest
     MultivariateGaussian
     Summarizer
@@ -287,10 +284,11 @@ Tuning
 .. currentmodule:: pyspark.ml.tuning
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ParamGridBuilder
+    ParamRandomBuilder
     CrossValidator
     CrossValidatorModel
     TrainValidationSplit
@@ -303,7 +301,7 @@ Evaluation
 .. currentmodule:: pyspark.ml.evaluation
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Evaluator
@@ -321,7 +319,7 @@ Frequency Pattern Mining
 .. currentmodule:: pyspark.ml.fpm
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     FPGrowth
@@ -335,7 +333,7 @@ Image
 .. currentmodule:: pyspark.ml.image
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ImageSchema
@@ -348,7 +346,7 @@ Utilities
 .. currentmodule:: pyspark.ml.util
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     BaseReadWrite

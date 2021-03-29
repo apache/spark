@@ -35,6 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.DependencyUtils.downloadFile
 import org.apache.spark.util.Utils.getHadoopFileSystem
 
 private[spark] object KubernetesUtils extends Logging {
@@ -81,9 +82,13 @@ private[spark] object KubernetesUtils extends Logging {
 
   def loadPodFromTemplate(
       kubernetesClient: KubernetesClient,
-      templateFile: File,
-      containerName: Option[String]): SparkPod = {
+      templateFileName: String,
+      containerName: Option[String],
+      conf: SparkConf): SparkPod = {
     try {
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+      val localFile = downloadFile(templateFileName, Utils.createTempDir(), conf, hadoopConf)
+      val templateFile = new File(new java.net.URI(localFile).getPath)
       val pod = kubernetesClient.pods().load(templateFile).get()
       selectSparkContainer(pod, containerName)
     } catch {
@@ -261,12 +266,19 @@ private[spark] object KubernetesUtils extends Logging {
       isLocalDependency(Utils.resolveURI(resource))
   }
 
-  def renameMainAppResource(resource: String, conf: SparkConf): String = {
+  def renameMainAppResource(
+      resource: String,
+      conf: Option[SparkConf] = None,
+      shouldUploadLocal: Boolean): String = {
     if (isLocalAndResolvable(resource)) {
-      SparkLauncher.NO_RESOURCE
+      if (shouldUploadLocal) {
+        uploadFileUri(resource, conf)
+      } else {
+        SparkLauncher.NO_RESOURCE
+      }
     } else {
       resource
-   }
+    }
   }
 
   def uploadFileUri(uri: String, conf: Option[SparkConf] = None): String = {
