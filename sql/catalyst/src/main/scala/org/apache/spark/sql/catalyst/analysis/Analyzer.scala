@@ -2137,24 +2137,17 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Add metadata output to all node types
       case node if node.children.nonEmpty && node.resolved && node.missingInput.nonEmpty &&
         hasMetadataCol(node) =>
-        println(s"Trying to restore missing input ${node.missingInput}")
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
         val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
-        println(s"Metadata attrs are ${getMetadataAttributes(node)}")
-        println(s"Input attrs are ${inputAttrs}")
         if (metaCols.isEmpty) {
-          println(s"No meta cols")
           node
         } else {
           val newNode = addMetadataCol(node)
-          println(s"Added metadata cols as ${newNode}")
           // We should not change the output schema of the plan. We should project away the extra
           // metadata columns if necessary.
           if (newNode.sameOutput(node)) {
-            println(s"Same output ${newNode.output}")
             newNode
           } else {
-            println(s"From output ${node.output} to ${newNode.output}")
             Project(node.output, newNode)
           }
         }
@@ -2176,14 +2169,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
         case _ => false
       }.isDefined)
-      println(s"Plan $plan has metadata output: $hasMetaCol")
       hasMetaCol
     }
 
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
       case r: DataSourceV2Relation => r.withMetadataColumns()
       case p: Project =>
-        println(s"You find a project $p with metadata output ${p.metadataOutput}")
         p.copy(
           projectList = p.metadataOutput ++ p.projectList,
           child = addMetadataCol(p.child))
