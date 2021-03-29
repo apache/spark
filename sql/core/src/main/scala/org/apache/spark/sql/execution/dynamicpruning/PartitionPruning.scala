@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.internal.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
@@ -47,6 +48,10 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
  *    (3) otherwise, we drop the subquery.
  */
 object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+
+  private val buildBroadcastThreshold = math.max(
+    AUTO_BROADCASTJOIN_THRESHOLD.defaultValue.getOrElse(conf.autoBroadcastJoinThreshold),
+    conf.autoBroadcastJoinThreshold)
 
   /**
    * Search the partitioned table scan for a given partition column in a logical plan
@@ -160,8 +165,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       // We can't reuse the broadcast because the join type doesn't support broadcast,
       // and doing DPP means running an extra query that may have significant overhead.
       // We need to make sure the pruning side is very big so that DPP is still worthy.
-      canBroadcastBySize(otherPlan, conf) &&
-        estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
+      estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
     }
   }
 
@@ -210,6 +214,10 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     case _ => false
   }
 
+  private def canBroadcastBySize(plan: LogicalPlan): Boolean = {
+    plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= buildBroadcastThreshold
+  }
+
   private def prune(plan: LogicalPlan): LogicalPlan = {
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
@@ -247,13 +255,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var partScan = getPartitionTableScan(l, left)
             if (partScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right)) {
+                hasPartitionPruningFilter(right) && canBroadcastBySize(right)) {
               newLeft = insertPredicate(l, newLeft, r, right, rightKeys, partScan.get,
                 canBuildBroadcastRight(joinType))
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) ) {
+                  hasPartitionPruningFilter(left) && canBroadcastBySize(left)) {
                 newRight = insertPredicate(r, newRight, l, left, leftKeys, partScan.get,
                   canBuildBroadcastLeft(joinType))
               }

@@ -1453,14 +1453,6 @@ abstract class DynamicPartitionPruningSuiteBase
           checkPartitionPruningPredicate(df, !reuseBroadcastOnly, false)
         }
       }
-
-      // DPP will only apply if left side can broadcast by size
-      Seq(1L, 100000L).foreach { threshold =>
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$threshold") {
-          val df = sql(sqlStr)
-          checkPartitionPruningPredicate(df, threshold > 10L, false)
-        }
-      }
     }
   }
 }
