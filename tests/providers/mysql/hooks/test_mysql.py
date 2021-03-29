@@ -217,6 +217,21 @@ class TestMySqlHookConnMySqlConnectorPython(unittest.TestCase):
         assert kwargs['allow_local_infile'] == 1
 
 
+class MockMySQLConnectorConnection:
+    DEFAULT_AUTOCOMMIT = 'default'
+
+    def __init__(self):
+        self._autocommit = self.DEFAULT_AUTOCOMMIT
+
+    @property
+    def autocommit(self):
+        return self._autocommit
+
+    @autocommit.setter
+    def autocommit(self, autocommit):
+        self._autocommit = autocommit
+
+
 class TestMySqlHook(unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -234,11 +249,24 @@ class TestMySqlHook(unittest.TestCase):
 
         self.db_hook = SubMySqlHook()
 
-    def test_set_autocommit(self):
-        autocommit = True
-        self.db_hook.set_autocommit(self.conn, autocommit)
+    @parameterized.expand([(True,), (False,)])
+    def test_set_autocommit_mysql_connector(self, autocommit):
+        conn = MockMySQLConnectorConnection()
+        self.db_hook.set_autocommit(conn, autocommit)
+        assert conn.autocommit is autocommit
 
+    def test_get_autocommit_mysql_connector(self):
+        conn = MockMySQLConnectorConnection()
+        assert self.db_hook.get_autocommit(conn) == MockMySQLConnectorConnection.DEFAULT_AUTOCOMMIT
+
+    def test_set_autocommit_mysqldb(self):
+        autocommit = False
+        self.db_hook.set_autocommit(self.conn, autocommit)
         self.conn.autocommit.assert_called_once_with(autocommit)
+
+    def test_get_autocommit_mysqldb(self):
+        self.db_hook.get_autocommit(self.conn)
+        self.conn.get_autocommit.assert_called_once()
 
     def test_run_without_autocommit(self):
         sql = 'SQL'
