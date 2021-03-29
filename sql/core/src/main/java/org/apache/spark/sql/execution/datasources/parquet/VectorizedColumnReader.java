@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.Arrays;
+import java.util.*;
 
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesInput;
@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
@@ -111,6 +112,12 @@ public class VectorizedColumnReader {
   private final String datetimeRebaseMode;
   private final String int96RebaseMode;
 
+  // TODO handle and init these filed properly
+  private Optional<PrimitiveIterator.OfLong> rowIndexesIterator;
+  private long[] rowIndexes;
+  private WritableColumnVector tempVector;
+  private Long currentRow;
+
   private boolean isDecimalTypeMatched(DataType dt) {
     DecimalType d = (DecimalType) dt;
     DecimalMetadata dm = descriptor.getPrimitiveType().getDecimalMetadata();
@@ -140,7 +147,10 @@ public class VectorizedColumnReader {
       PageReader pageReader,
       ZoneId convertTz,
       String datetimeRebaseMode,
-      String int96RebaseMode) throws IOException {
+      String int96RebaseMode,
+      Optional<PrimitiveIterator.OfLong> rowIndexesIterator
+      ) throws IOException {
+    this.rowIndexesIterator = rowIndexesIterator;
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
@@ -248,7 +258,31 @@ public class VectorizedColumnReader {
   /**
    * Reads `total` values from this columnReader into column.
    */
-  void readBatch(int total, WritableColumnVector column) throws IOException {
+  void readBatch(int total, WritableColumnVector _column) throws IOException {
+    WritableColumnVector column;
+    if (rowIndexesIterator.isPresent()) {
+      if (tempVector == null) {
+        switch (descriptor.getPrimitiveType().getPrimitiveTypeName()) {
+          case INT64:
+            tempVector = new OnHeapColumnVector(4096, DataTypes.LongType);
+            break;
+          case BINARY:
+            tempVector = new OnHeapColumnVector(4096, DataTypes.BinaryType);
+            break;
+        }
+      }
+      column = tempVector;
+      column.reset();
+
+      rowIndexes = new long[total];
+      for (int i = 0; i < total; i++) {
+        rowIndexes[i] = rowIndexesIterator.get().next();
+      }
+    } else {
+      column = _column;
+    }
+
+
     int rowId = 0;
     WritableColumnVector dictionaryIds = null;
     if (dictionary != null) {
@@ -257,6 +291,7 @@ public class VectorizedColumnReader {
       // page.
       dictionaryIds = column.reserveDictionaryIds(total);
     }
+
     while (total > 0) {
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
@@ -338,9 +373,52 @@ public class VectorizedColumnReader {
         }
       }
 
+      if (rowIndexesIterator.isPresent()) {
+        boolean continuousRange = (rowIndexes[total - 1] - rowIndexes[0] + 1) == total;
+        if (continuousRange) {
+          // skip to offset pos and dump all remaining values
+          int offset = (int) (rowIndexes[rowId] - currentRow);
+          if (offset < num) {
+            switch (typeName) {
+              case INT64:
+                _column.putLongs(rowId, num, column.getLongs(offset, num - offset), 0);
+                break;
+              case BINARY:
+                for (int i = 0; i < num - offset; i++) {
+                  _column.putByteArray(rowId + i, column.getBinary(i + offset));
+                }
+                break;
+            }
+            currentRow += num;
+            rowId += (num - offset);
+            total -= (num - offset);
+          } else {
+            currentRow += num;
+          }
+        } else {
+          // need to check every row
+          for (int i = 0; i < num; ) {
+            while (currentRow < rowIndexes[rowId]) {
+              i++;
+              currentRow++;
+            }
+            switch (typeName) {
+              case INT64:
+                _column.putLong(rowId, column.getLong(i));
+                break;
+              case BINARY:
+                _column.putByteArray(rowId, column.getBinary(i));
+            }
+            rowId++;
+            total--;
+          }
+        }
+      } else {
+        rowId += num;
+        total -= num;
+      }
+
       valuesRead += num;
-      rowId += num;
-      total -= num;
     }
   }
 
@@ -853,6 +931,7 @@ public class VectorizedColumnReader {
   }
 
   private void readPageV1(DataPageV1 page) throws IOException {
+    this.currentRow = page.getFirstRowIndex().orElse(0L);
     this.pageValueCount = page.getValueCount();
     ValuesReader rlReader = page.getRlEncoding().getValuesReader(descriptor, REPETITION_LEVEL);
     ValuesReader dlReader;
@@ -878,6 +957,7 @@ public class VectorizedColumnReader {
   }
 
   private void readPageV2(DataPageV2 page) throws IOException {
+    this.currentRow = page.getFirstRowIndex().orElse(0L);
     this.pageValueCount = page.getValueCount();
     this.repetitionLevelColumn = createRLEIterator(descriptor.getMaxRepetitionLevel(),
         page.getRepetitionLevels(), descriptor);
@@ -894,4 +974,5 @@ public class VectorizedColumnReader {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
     }
   }
+
 }
