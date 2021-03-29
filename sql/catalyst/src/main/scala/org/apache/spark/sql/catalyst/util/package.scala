@@ -148,10 +148,10 @@ package object util extends Logging {
   }
 
   def quoteIfNeeded(part: String): String = {
-    if (part.contains(".") || part.contains("`")) {
-      s"`${part.replace("`", "``")}`"
-    } else {
+    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
       part
+    } else {
+      s"`${part.replace("`", "``")}`"
     }
   }
 

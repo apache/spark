@@ -287,16 +287,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO = buildConf(
-    "spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio")
-    .internal()
-    .doc("When statistics are not available or configured not to be used, this config will be " +
-      "used as the fallback filter ratio for computing the data size of the partitioned table " +
-      "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
-      "subquery as the pruning filter if broadcast reuse is not applicable.")
-    .version("3.0.0")
-    .doubleConf
-    .createWithDefault(0.5)
+  val DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio")
+      .internal()
+      .doc("When statistics are not available or configured not to be used, this config will be " +
+        "used as the fallback filter ratio for computing the data size of the partitioned table " +
+        "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
+        "subquery as the pruning filter if broadcast reuse is not applicable.")
+      .version("3.0.0")
+      .doubleConf
+      .createWithDefault(0.5)
 
   val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly")
@@ -306,6 +306,18 @@ object SQLConf {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.pruningSideExtraFilterRatio")
+      .internal()
+      .doc("When filtering side doesn't support broadcast by join type, and doing DPP means " +
+        "running an extra query that may have significant overhead. This config will be used " +
+        "as the extra filter ratio for computing the data size of the pruning side after DPP, " +
+        "in order to evaluate if it is worth adding an extra subquery as the pruning filter.")
+      .version("3.2.0")
+      .doubleConf
+      .checkValue(ratio => ratio > 0.0 && ratio <= 1.0, "The ratio value must be in (0.0, 1.0].")
+      .createWithDefault(0.04)
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
@@ -500,8 +512,8 @@ object SQLConf {
         "reduce IO and improve performance. Note, multiple contiguous blocks exist in single " +
         s"fetch request only happen when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true. This feature also depends " +
-        "on a relocatable serializer, the concatenation support codec in use and the new version " +
-        "shuffle fetch protocol.")
+        "on a relocatable serializer, the concatenation support codec in use, the new version " +
+        "shuffle fetch protocol and io encryption is disabled.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -3248,6 +3260,9 @@ class SQLConf extends Serializable with Logging {
 
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
+
+  def dynamicPartitionPruningPruningSideExtraFilterRatio: Double =
+    getConf(DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 

@@ -279,7 +279,8 @@ case class ArrayTransform(
       if (indexVar.isDefined) {
         indexVar.get.value.set(i)
       }
-      result.update(i, f.eval(inputRow))
+      val v = InternalRow.copyValue(f.eval(inputRow))
+      result.update(i, v)
       i += 1
     }
     result
@@ -805,7 +806,7 @@ case class TransformKeys(
     while (i < map.numElements) {
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
-      val result = functionForEval.eval(inputRow)
+      val result = InternalRow.copyValue(functionForEval.eval(inputRow))
       resultKeys.update(i, result)
       i += 1
     }
@@ -853,7 +854,8 @@ case class TransformValues(
     while (i < map.numElements) {
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
-      resultValues.update(i, functionForEval.eval(inputRow))
+      val v = InternalRow.copyValue(functionForEval.eval(inputRow))
+      resultValues.update(i, v)
       i += 1
     }
     new ArrayBasedMapData(map.keyArray(), resultValues)
@@ -1035,7 +1037,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
       value1Var.value.set(v1)
       value2Var.value.set(v2)
       keys.update(i, key)
-      values.update(i, functionForEval.eval(inputRow))
+      val v = InternalRow.copyValue(functionForEval.eval(inputRow))
+      values.update(i, v)
       i += 1
     }
     new ArrayBasedMapData(keys, values)
@@ -1108,7 +1111,8 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
           } else {
             rightElemVar.value.set(null)
           }
-          result.update(i, f.eval(input))
+          val v = InternalRow.copyValue(f.eval(input))
+          result.update(i, v)
           i += 1
         }
         result
