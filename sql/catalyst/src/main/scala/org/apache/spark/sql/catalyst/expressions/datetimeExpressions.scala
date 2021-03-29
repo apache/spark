@@ -2372,21 +2372,48 @@ case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expressi
 
 /**
  * Returns the interval from the `left` date (inclusive) to the `right` date (exclusive).
+ *   - When the SQL config `spark.sql.ansi.intervals.enabled` is false,
+ *     it returns `CalendarIntervalType` in which the `microseconds` field is set to 0 and
+ *     the `months` and `days` fields are initialized to the difference between the given dates.
+ *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in days
+ *     between the given dates.
  */
-case class SubtractDates(left: Expression, right: Expression)
+case class SubtractDates(
+    left: Expression,
+    right: Expression,
+    ansiIntervals: Boolean)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.ansiIntervalsEnabled)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
-  override def dataType: DataType = CalendarIntervalType
+  override def dataType: DataType = if (ansiIntervals) DayTimeIntervalType else CalendarIntervalType
+
+  @transient
+  private lazy val evalFunc: (Int, Int) => Any = ansiIntervals match {
+    case true => (leftDays: Int, rightDays: Int) =>
+      Math.multiplyExact(Math.subtractExact(leftDays, rightDays), MICROS_PER_DAY)
+    case false => (leftDays: Int, rightDays: Int) => subtractDates(leftDays, rightDays)
+  }
 
   override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
-    DateTimeUtils.subtractDates(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
+    evalFunc(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (leftDays, rightDays) => {
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      s"$dtu.subtractDates($leftDays, $rightDays)"
-    })
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ansiIntervals match {
+    case true =>
+      val m = classOf[Math].getName
+      defineCodeGen(ctx, ev, (leftDays, rightDays) =>
+        s"$m.multiplyExact($m.subtractExact($leftDays, $rightDays), ${MICROS_PER_DAY}L)")
+    case false =>
+      defineCodeGen(ctx, ev, (leftDays, rightDays) => {
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        s"$dtu.subtractDates($leftDays, $rightDays)"
+      })
   }
+}
+
+object SubtractDates {
+  def apply(left: Expression, right: Expression): SubtractDates = new SubtractDates(left, right)
 }
