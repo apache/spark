@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.TaskContext
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
 
 private[spark]
 trait BlockDataManager {
@@ -71,4 +71,9 @@ trait BlockDataManager {
    * Release locks acquired by [[putBlockData()]] and [[getLocalBlockData()]].
    */
   def releaseLock(blockId: BlockId, taskContext: Option[TaskContext]): Unit
+
+  /**
+   * Get the local merged shuffle block data
+   */
+  def getMergedBlockData(blockId: ShuffleBlockId): Seq[ManagedBuffer]
 }

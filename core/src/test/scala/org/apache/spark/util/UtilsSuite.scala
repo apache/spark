@@ -17,8 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, PrintStream, SequenceInputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File, FileOutputStream, PrintStream, SequenceInputStream}
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -30,14 +29,12 @@ import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
-
 import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
+import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -1448,6 +1445,17 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     conf.set(SHUFFLE_SERVICE_ENABLED, true)
     assert(Utils.isPushBasedShuffleEnabled(conf) === true)
   }
+
+  test("Test create dir with 770") {
+    val testDir = new File("target/testDir");
+    FileUtils.deleteQuietly(testDir)
+    Utils.createDirWith770(testDir)
+    val foo = new File(testDir, "foo.txt")
+    Files.touch(foo)
+    assert(testDir.exists && testDir.isDirectory)
+    FileUtils.deleteQuietly(testDir)
+  }
+
 }
 
 private class SimpleExtension

@@ -316,6 +316,38 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Create a directory that is writable by the group.
+   * Grant 770 permission so the shuffle server can create subdirs/files within the merge folder.
+   */
+  def createDirWith770(dirToCreate: File): Unit = {
+    var attempts = 0
+    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
+    var created: File = null
+    while (created == null) {
+      attempts += 1
+      if (attempts > maxAttempts) {
+        throw new IOException(
+          s"Failed to create directory ${dirToCreate.getAbsolutePath} after " +
+            s"${maxAttempts} attempts!")
+      }
+      try {
+        val builder = new ProcessBuilder().command(
+          "mkdir", "-m770", dirToCreate.getAbsolutePath)
+        val proc = builder.start()
+        val exitCode = proc.waitFor()
+        if (dirToCreate.exists()) {
+          created = dirToCreate
+        }
+        logDebug(
+          s"Created directory at ${dirToCreate.getAbsolutePath} and exitCode $exitCode")
+      } catch {
+        case e: SecurityException => created = null;
+      }
+    }
+  }
+
+
+  /**
    * Create a temporary directory inside the given parent directory. The directory will be
    * automatically deleted when the VM shuts down.
    */
