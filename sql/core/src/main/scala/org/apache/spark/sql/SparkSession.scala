@@ -154,7 +154,7 @@ class SparkSession private(
       .map(_.clone(this))
       .getOrElse {
         val state = SparkSession.instantiateSessionState(
-          SparkSession.sessionStateClassName(sparkContext.conf),
+          SparkSession.sessionStateClassName(sharedState.conf),
           self)
         state
       }
@@ -948,6 +948,7 @@ object SparkSession extends Logging {
           SparkContext.getOrCreate(sparkConf)
           // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
         }
+
         applyExtensions(
           sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
           extensions)
