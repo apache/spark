@@ -532,7 +532,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   }
 
-  test("SPARK-34879: HiveInspector supports DayTimeIntervalType and YearMonthIntervalType") {
+  test("SPARK-34879: HiveInspectors supports DayTimeIntervalType and YearMonthIntervalType") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
@@ -545,7 +545,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           Duration.ofSeconds(Long.MaxValue / DateTimeConstants.MICROS_PER_SECOND),
           Period.ofMonths(10))
       ).toDF("a", "b", "c", "d")
-        .select($"a", $"b", $"c".cast(DayTimeIntervalType).as("c_1"), $"d")
       df.createTempView("v")
 
       // Hive serde supports DayTimeIntervalType/YearMonthIntervalType as input and output data type
@@ -555,21 +554,21 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           input = Seq(
             df.col("a").expr,
             df.col("b").expr,
-            df.col("c_1").expr,
+            df.col("c").expr,
             df.col("d").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", DayTimeIntervalType)(),
             AttributeReference("b", DayTimeIntervalType)(),
-            AttributeReference("c_1", DayTimeIntervalType)(),
+            AttributeReference("c", DayTimeIntervalType)(),
             AttributeReference("d", YearMonthIntervalType)()),
           child = child,
           ioschema = hiveIOSchema),
-        df.select($"a", $"b", $"c_1", $"d").collect())
+        df.select($"a", $"b", $"c", $"d").collect())
     }
   }
 
-  test("SPARK-34879: HiveInceptor throw overflow when" +
+  test("SPARK-34879: HiveInspectors throw overflow when" +
     " HiveIntervalDayTime overflow then DayTimeIntervalType") {
     withTempView("v") {
       val df = Seq(("579025220 15:30:06.000001000")).toDF("a")
