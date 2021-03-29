@@ -115,9 +115,15 @@ abstract class LogicalPlan
    */
   def resolve(
       nameParts: Seq[String],
-      resolver: Resolver): Option[NamedExpression] =
-    outputAttributes.resolve(nameParts, resolver)
-      .orElse(outputMetadataAttributes.resolve(nameParts, resolver))
+      resolver: Resolver,
+      withMetadata: Boolean = true): Option[NamedExpression] = {
+    val maybeResolvedExpression = outputAttributes.resolve(nameParts, resolver)
+    if (withMetadata) {
+      maybeResolvedExpression.orElse(outputMetadataAttributes.resolve(nameParts, resolver))
+    } else {
+      maybeResolvedExpression
+    }
+  }
 
   /**
    * Given an attribute name, split it to name parts by dot, but

@@ -1790,19 +1790,19 @@ SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query schema
 struct<xxx:string,udf(i):int,udf(j):int,udf(t):string,udf(k):int>
 -- !query output
-	8	8	eight	NULL
-	4	1	four	NULL
 	NULL	NULL	null	NULL
-	7	7	seven	NULL
-	6	6	six	NULL
 	NULL	0	zero	NULL
 	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
 	3	2	three	-3
+	4	1	four	NULL
 	5	0	five	-5
 	5	0	five	-5
+	6	6	six	NULL
+	7	7	seven	NULL
+	8	8	eight	NULL
 
 
 -- !query
@@ -1812,19 +1812,19 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query schema
 struct<xxx:string,udf(i):int,udf(j):int,udf(t):string,udf(k):int>
 -- !query output
-	8	8	eight	NULL
-	4	1	four	NULL
 	NULL	NULL	null	NULL
-	7	7	seven	NULL
-	6	6	six	NULL
 	NULL	0	zero	NULL
 	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
 	3	2	three	-3
+	4	1	four	NULL
 	5	0	five	-5
 	5	0	five	-5
+	6	6	six	NULL
+	7	7	seven	NULL
+	8	8	eight	NULL
 
 
 -- !query

@@ -252,7 +252,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRelations ::
       ResolveTables ::
       ResolvePartitionSpec ::
-      AddMetadataColumns ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -971,67 +970,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       nameParts
     } else {
       AnalysisContext.get.catalogAndNamespace.head +: nameParts
-    }
-  }
-
-  /**
-   * Adds metadata columns to output for child relations when nodes are missing resolved attributes.
-   *
-   * References to metadata columns are resolved using columns from [[LogicalPlan.metadataOutput]],
-   * but the relation's output does not include the metadata columns until the relation is replaced
-   * with a copy adding them to the output. Unless this rule adds metadata to the relation's output,
-   * the analyzer will detect that nothing produces the columns.
-   *
-   * This rule only adds metadata columns when a node is resolved but is missing input from its
-   * children. This ensures that metadata columns are not added to the plan unless they are used. By
-   * checking only resolved nodes, this ensures that * expansion is already done so that metadata
-   * columns are not accidentally selected by *.
-   */
-  object AddMetadataColumns extends Rule[LogicalPlan] {
-    import org.apache.spark.sql.catalyst.util._
-
-    private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
-      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
-      plan.expressions.flatMap(_.collect {
-        case a: Attribute if a.isMetadataCol => a
-        case a: Attribute if childMetadataOutput.exists(_.exprId == a.exprId) =>
-          childMetadataOutput.find(_.exprId == a.exprId).get
-      })
-    }
-
-    private def hasMetadataCol(plan: LogicalPlan): Boolean = {
-      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
-      plan.expressions.exists(_.find {
-        case a: Attribute =>
-          a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
-        case _ => false
-      }.isDefined)
-    }
-
-    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
-      case r: DataSourceV2Relation => r.withMetadataColumns()
-      case p: Project => p.copy(
-        projectList = p.metadataOutput ++ p.projectList,
-        child = addMetadataCol(p.child))
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
-        val inputAttrs = AttributeSet(node.children.flatMap(_.output))
-        val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
-        if (metaCols.isEmpty) {
-          node
-        } else {
-          val newNode = addMetadataCol(node)
-          // We should not change the output schema of the plan. We should project away the extra
-          // metadata columns if necessary.
-          if (newNode.sameOutput(node)) {
-            newNode
-          } else {
-            Project(node.output, newNode)
-          }
-        }
     }
   }
 
@@ -1964,7 +1902,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       expr,
       plan,
       resolveColumnByName = nameParts => {
-        plan.resolve(nameParts, resolver)
+        plan.resolve(nameParts, resolver, withMetadata = false)
       },
       resolveColumnByOrdinal = ordinal => {
         assert(ordinal >= 0 && ordinal < plan.output.length)
@@ -2087,15 +2025,28 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * In many dialects of SQL it is valid to sort by attributes that are not present in the SELECT
-   * clause.  This rule detects such queries and adds the required attributes to the original
-   * projection, so that they will be available during sorting. Another projection is added to
-   * remove these attributes after sorting.
+   * Adds missing references, including both real output and metadata output.
    *
-   * The HAVING clause could also used a grouping columns that is not presented in the SELECT.
+   * In many dialects of SQL it is valid to use attributes during sorting and grouping are not
+   * present in the SELECT clause. This rule detects such queries and adds the required attributes
+   * to the original projection, so that they will be available during the operation.
+   * Another projection is added to remove these attributes after the operation.
+   *
+   * This rule also adds metadata columns to output for child relations when nodes are missing
+   * resolved attributes. References to metadata columns are resolved using columns from
+   * [[LogicalPlan.metadataOutput]], but the relation's output does not include the metadata columns
+   * until the relation is replaced with a copy adding them to the output. Unless this rule adds
+   * metadata to the relation's output, the analyzer will detect that nothing produces the columns.
+   * This rule only adds metadata columns when a node is resolved but is missing input from its
+   * children. This ensures that metadata columns are not added to the plan unless they are used. By
+   * checking only resolved nodes, this ensures that * expansion is already done so that metadata
+   * columns are not accidentally selected by *.
    */
   object ResolveMissingReferences extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.catalyst.util._
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      // Special cases for adding real output
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
@@ -2120,13 +2071,57 @@ class Analyzer(override val catalogManager: CatalogManager)
           val newFilter = Filter(newCond.head, newChild)
           Project(child.output, newFilter)
         }
+
+      // Add metadata output to all node types
+      case node if node.children.nonEmpty && node.resolved && node.missingInput.nonEmpty &&
+          hasMetadataCol(node) =>
+        val inputAttrs = AttributeSet(node.children.flatMap(_.output))
+        val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
+        if (metaCols.isEmpty) {
+          node
+        } else {
+          val newNode = addMetadataCol(node)
+          // We should not change the output schema of the plan. We should project away the extra
+          // metadata columns if necessary.
+          if (newNode.sameOutput(node)) {
+            newNode
+          } else {
+            Project(node.output, newNode)
+          }
+        }
+    }
+
+    private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
+      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
+      plan.expressions.flatMap(_.collect {
+        case a: Attribute if a.isMetadataCol => a
+        case a: Attribute if childMetadataOutput.exists(_.exprId == a.exprId) =>
+          childMetadataOutput.find(_.exprId == a.exprId).get
+      })
+    }
+
+    private def hasMetadataCol(plan: LogicalPlan): Boolean = {
+      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
+      plan.expressions.exists(_.find {
+        case a: Attribute =>
+          a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
+        case _ => false
+      }.isDefined)
+    }
+
+    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
+      case r: DataSourceV2Relation => r.withMetadataColumns()
+      case p: Project => p.copy(
+        projectList = p.metadataOutput ++ p.projectList,
+        child = addMetadataCol(p.child))
+      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
     }
 
     /**
-     * This method tries to resolve expressions and find missing attributes recursively. Specially,
-     * when the expressions used in `Sort` or `Filter` contain unresolved attributes or resolved
-     * attributes which are missed from child output. This method tries to find the missing
-     * attributes out and add into the projection.
+     * This method tries to resolve expressions and find missing attributes recursively.
+     * Specifically, when the expressions used in `Sort` or `Filter` contain unresolved attributes
+     * or resolved attributes which are missing from child output. This method tries to find the
+     * missing attributes and add them into the projection.
      */
     private def resolveExprsAndAddMissingAttrs(
         exprs: Seq[Expression], plan: LogicalPlan): (Seq[Expression], LogicalPlan) = {
