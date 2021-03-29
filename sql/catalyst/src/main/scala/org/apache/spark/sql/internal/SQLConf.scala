@@ -843,7 +843,7 @@ object SQLConf {
       .doc("Enables vectorized orc decoding for nested column.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
