@@ -33,7 +33,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
     val batches = Batch("Aggregate", FixedPoint(100),
       FoldablePropagation,
       RemoveLiteralFromGroupExpressions,
-      RemoveUnnecessaryOuterJoin,
+      EliminateOuterJoin,
       RemoveRepetitionFromGroupExpressions,
       ReplaceDistinctWithAggregate) :: Nil
   }
@@ -104,7 +104,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
     comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
-  test("SPARK-34808: RemoveUnnecessaryOuterJoin must before RemoveRepetitionFromGroupExpressions") {
+  test("SPARK-34808: EliminateOuterJoin must before RemoveRepetitionFromGroupExpressions") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val query = Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
