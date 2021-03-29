@@ -48,6 +48,12 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     result values of the grouping expressions. A grouping expression may be a column name like `GROUP BY a`, a column position like
     `GROUP BY 0`, or an expression like `GROUP BY a + b`.
 
+* **grouping_set**
+
+    A grouping set is specified by zero or more comma-separated expressions.
+
+    **Syntax:** `{ ( [ expression [ , ... ] ] ) | expression }`
+
 * **GROUPING SETS**
 
     Groups the rows for each grouping set specified after GROUPING SETS. For example,
@@ -84,12 +90,6 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse, location),
      (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
-
-* **grouping_set**
-
-    A grouping set is specified by zero or more comma-separated expressions.
-
-    **Syntax:** `{ ( [ expression [ , ... ] ] ) | expression }`
 
 * **aggregate_name**
 
