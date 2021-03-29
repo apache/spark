@@ -222,7 +222,7 @@ case class BroadcastQueryStageExec(
 
   @transient private lazy val materializeWithTimeout = {
     val broadcastFuture = broadcast.completionFuture
-    val timeout = SQLConf.get.broadcastTimeout
+    val timeout = conf.broadcastTimeout
     val promise = Promise[Any]()
     val fail = BroadcastQueryStageExec.scheduledExecutor.schedule(new Runnable() {
       override def run(): Unit = {

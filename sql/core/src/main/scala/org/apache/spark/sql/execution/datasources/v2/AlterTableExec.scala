@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableChange}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Physical plan node for altering a table.
@@ -37,7 +37,7 @@ case class AlterTableExec(
       catalog.alterTable(ident, changes: _*)
     } catch {
       case e: IllegalArgumentException =>
-        throw new SparkException(s"Unsupported table change: ${e.getMessage}", e)
+        throw QueryExecutionErrors.unsupportedTableChangeError(e)
     }
 
     Seq.empty

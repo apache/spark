@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, UserDefinedType}
 
 /*
@@ -147,7 +146,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
    */
   private def pruneNamedStruct(struct: CreateNamedStruct, prunedType: StructType) = {
     // Filters out the pruned fields.
-    val resolver = SQLConf.get.resolver
+    val resolver = conf.resolver
     val prunedFields = struct.nameExprs.zip(struct.valExprs).filter { case (nameExpr, _) =>
       val name = nameExpr.eval(EmptyRow).toString
       prunedType.fieldNames.exists(resolver(_, name))
@@ -216,7 +215,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
 
       val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
 
-      if (SQLConf.get.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
+      if (conf.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
         // Prunes nested fields in serializers.
         val prunedSchema = SchemaPruning.pruneDataSchema(
           StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)

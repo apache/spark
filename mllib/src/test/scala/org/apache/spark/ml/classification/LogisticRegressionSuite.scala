@@ -28,7 +28,6 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix, Vector, Vectors}
-import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.stat.MultiClassSummarizer
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
@@ -45,6 +44,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   @transient var smallBinaryDataset: DataFrame = _
   @transient var smallMultinomialDataset: DataFrame = _
   @transient var binaryDataset: DataFrame = _
+  @transient var binaryDatasetWithSmallVar: DataFrame = _
   @transient var multinomialDataset: DataFrame = _
   @transient var multinomialDatasetWithZeroVar: DataFrame = _
   private val eps: Double = 1e-5
@@ -76,6 +76,21 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
       val xMean = Array(5.843, 3.057, 3.758, 1.199)
       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
+
+      val testData =
+        generateMultinomialLogisticInput(coefficients, xMean, xVariance,
+          addIntercept = true, nPoints, seed)
+
+      val df = sc.parallelize(testData, 4).toDF().withColumn("weight", rand(seed))
+      df.cache()
+      df
+    }
+
+    binaryDatasetWithSmallVar = {
+      val nPoints = 10000
+      val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
+      val xMean = Array(5.843, 3.057, 3.758, 10.199)
+      val xVariance = Array(0.6856, 0.1899, 3.116, 0.0001)
 
       val testData =
         generateMultinomialLogisticInput(coefficients, xMean, xVariance,
@@ -129,6 +144,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     binaryDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
       label + "," + weight + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
+    binaryDatasetWithSmallVar.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
+      label + "," + weight + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDatasetWithSmallVar")
     multinomialDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
       label + "," + weight + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
@@ -632,32 +650,6 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(blrModel.intercept !== 0.0)
   }
 
-  test("sparse coefficients in LogisticAggregator") {
-    val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
-    val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val binaryAgg = new LogisticAggregator(bcFeaturesStd, 2,
-      fitIntercept = true, multinomial = false)(bcCoefficientsBinary)
-    val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
-      intercept[IllegalArgumentException] {
-        binaryAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
-      }
-    }
-    assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
-
-    val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
-    val multinomialAgg = new LogisticAggregator(bcFeaturesStd, 3,
-      fitIntercept = true, multinomial = true)(bcCoefficientsMulti)
-    val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
-      intercept[IllegalArgumentException] {
-        multinomialAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
-      }
-    }
-    assert(thrown.getMessage.contains("coefficients only supports dense"))
-    bcCoefficientsBinary.destroy()
-    bcFeaturesStd.destroy()
-    bcCoefficientsMulti.destroy()
-  }
-
   test("overflow prediction for multiclass") {
     val model = new LogisticRegressionModel("mLogReg",
       Matrices.dense(3, 2, Array(0.0, 0.0, 0.0, 1.0, 2.0, 3.0)),
@@ -822,6 +814,64 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     // Without regularization, with or without standardization will converge to the same solution.
     assert(model6.intercept ~== interceptExpected5 relTol 1E-3)
     assert(model6.coefficients ~= coefficientsExpected5 relTol 1E-3)
+  }
+
+  test("SPARK-34448: binary logistic regression with intercept, with features with small var") {
+    val trainer1 = new LogisticRegression().setFitIntercept(true).setStandardization(true)
+      .setWeightCol("weight")
+    val trainer2 = new LogisticRegression().setFitIntercept(true).setStandardization(false)
+      .setWeightCol("weight")
+    val trainer3 = new LogisticRegression().setFitIntercept(true).setStandardization(true)
+      .setElasticNetParam(0.0001).setRegParam(0.5).setWeightCol("weight")
+
+    val model1 = trainer1.fit(binaryDatasetWithSmallVar)
+    val model2 = trainer2.fit(binaryDatasetWithSmallVar)
+    val model3 = trainer3.fit(binaryDatasetWithSmallVar)
+
+    /*
+      Use the following R code to load the data and train the model using glmnet package.
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 0))
+      coefficients
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                          s0
+      (Intercept) -348.2955812
+      data.V3       -0.8145023
+      data.V4        0.8979252
+      data.V5       -0.6082397
+      data.V6       33.8070109
+
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0.0001,
+      lambda = 0.5, standardize=T))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                            s0
+      (Intercept) -7.403746510
+      data.V3     -0.001443382
+      data.V4      0.001454470
+      data.V5     -0.001097110
+      data.V6      0.048747722
+     */
+    val coefficientsR = Vectors.dense(-0.8145023, 0.8979252, -0.6082397, 33.8070109)
+    val interceptR = -348.2955812
+
+    assert(model1.intercept ~== interceptR relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsR relTol 1E-3)
+
+    // Without regularization, with or without standardization will converge to the same solution.
+    assert(model2.intercept ~== interceptR relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR relTol 1E-3)
+
+    val coefficientsR2 = Vectors.dense(-0.001443382, 0.001454470, -0.001097110, 0.048747722)
+    val interceptR2 = -7.403746510
+
+    assert(model3.intercept ~== interceptR2 relTol 1E-3)
+    assert(model3.coefficients ~= coefficientsR2 relTol 1E-3)
   }
 
   test("binary logistic regression without intercept without regularization") {

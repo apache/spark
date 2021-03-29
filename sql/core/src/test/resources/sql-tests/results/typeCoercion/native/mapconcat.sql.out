@@ -94,7 +94,7 @@ FROM various_maps
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_concat(various_maps.`tinyint_map1`, various_maps.`array_map1`)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<tinyint,tinyint>, map<array<string>,array<string>>]; line 2 pos 4
+cannot resolve 'map_concat(various_maps.tinyint_map1, various_maps.array_map1)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<tinyint,tinyint>, map<array<string>,array<string>>]; line 2 pos 4
 
 
 -- !query
@@ -105,7 +105,7 @@ FROM various_maps
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_concat(various_maps.`boolean_map1`, various_maps.`int_map2`)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<boolean,boolean>, map<int,int>]; line 2 pos 4
+cannot resolve 'map_concat(various_maps.boolean_map1, various_maps.int_map2)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<boolean,boolean>, map<int,int>]; line 2 pos 4
 
 
 -- !query
@@ -116,7 +116,7 @@ FROM various_maps
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_concat(various_maps.`int_map1`, various_maps.`struct_map2`)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<int,int>, map<struct<col1:string,col2:int>,struct<col1:string,col2:int>>]; line 2 pos 4
+cannot resolve 'map_concat(various_maps.int_map1, various_maps.struct_map2)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<int,int>, map<struct<col1:string,col2:int>,struct<col1:string,col2:int>>]; line 2 pos 4
 
 
 -- !query
@@ -127,7 +127,7 @@ FROM various_maps
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_concat(various_maps.`struct_map1`, various_maps.`array_map2`)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<struct<col1:string,col2:int>,struct<col1:string,col2:int>>, map<array<string>,array<string>>]; line 2 pos 4
+cannot resolve 'map_concat(various_maps.struct_map1, various_maps.array_map2)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<struct<col1:string,col2:int>,struct<col1:string,col2:int>>, map<array<string>,array<string>>]; line 2 pos 4
 
 
 -- !query
@@ -138,4 +138,4 @@ FROM various_maps
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'map_concat(various_maps.`int_map1`, various_maps.`array_map2`)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<int,int>, map<array<string>,array<string>>]; line 2 pos 4
+cannot resolve 'map_concat(various_maps.int_map1, various_maps.array_map2)' due to data type mismatch: input to function map_concat should all be the same type, but it's [map<int,int>, map<array<string>,array<string>>]; line 2 pos 4

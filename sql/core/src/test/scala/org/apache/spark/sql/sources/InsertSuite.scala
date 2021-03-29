@@ -731,13 +731,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue1 to long causes overflow"))
+        assert(msg.contains(s"Casting $outOfRangeValue1 to bigint causes overflow"))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue2 to long causes overflow"))
+        assert(msg.contains(s"Casting $outOfRangeValue2 to bigint causes overflow"))
       }
     }
   }
@@ -930,7 +930,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |)
           """.stripMargin)
       }.getMessage
-      assert(msg.contains("cannot resolve '`c3`' given input columns"))
+      assert(msg.contains("cannot resolve 'c3' given input columns"))
     }
   }
 }

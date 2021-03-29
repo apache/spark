@@ -870,7 +870,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v1")
             }.getMessage
-            assert(e.contains("cannot resolve '`C1`' given input columns: " +
+            assert(e.contains("cannot resolve 'C1' given input columns: " +
               "[spark_catalog.default.t.c1]"))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
@@ -880,7 +880,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v3")
             }.getMessage
-            assert(e.contains("expression 'spark_catalog.default.t.`c1`' is neither present " +
+            assert(e.contains(
+              "expression 'spark_catalog.default.t.c1' is neither present " +
               "in the group by, nor is it an aggregate function. Add to group by or wrap in " +
               "first() (or first_value) if you don't care which value you get."))
           }
@@ -888,7 +889,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v4")
             }.getMessage
-            assert(e.contains("cannot resolve '`a`' given input columns: " +
+            assert(e.contains("cannot resolve 'a' given input columns: " +
               "[spark_catalog.default.t.c1]"))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {

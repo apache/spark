@@ -591,6 +591,9 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "select * from range(2)",
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
+    // SPARK-34627
+    intercept("select * from default.range(2)",
+      "table valued function cannot specify database name: default.range")
   }
 
   test("SPARK-20311 range(N) as alias") {

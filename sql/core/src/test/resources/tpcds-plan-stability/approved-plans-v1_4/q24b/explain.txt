@@ -144,7 +144,7 @@ Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_net_paid#5, s_stor
 Output [6]: [i_item_sk#18, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_color), EqualTo(i_color,chiffon), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_color), EqualTo(i_color,chiffon             ), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
 (23) ColumnarToRow [codegen id : 6]
@@ -152,7 +152,7 @@ Input [6]: [i_item_sk#18, i_current_price#19, i_size#20, i_color#21, i_units#22,
 
 (24) Filter [codegen id : 6]
 Input [6]: [i_item_sk#18, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23]
-Condition : ((isnotnull(i_color#21) AND (i_color#21 = chiffon)) AND isnotnull(i_item_sk#18))
+Condition : ((isnotnull(i_color#21) AND (i_color#21 = chiffon             )) AND isnotnull(i_item_sk#18))
 
 (25) BroadcastExchange
 Input [6]: [i_item_sk#18, i_current_price#19, i_size#20, i_color#21, i_units#22, i_manager_id#23]
