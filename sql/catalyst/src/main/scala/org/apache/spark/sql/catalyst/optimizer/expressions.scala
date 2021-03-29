@@ -576,7 +576,9 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private def simplifyMultiLike(
       child: Expression, patterns: Seq[UTF8String], multi: MultiLikeBase): Expression = {
     val (remainPatternMap, replacementMap) =
-      patterns.map { p => p -> simplifyLike(child, p.toString)}.partition(_._2.isEmpty)
+      patterns.map { p =>
+        p -> Option(p).flatMap(p => simplifyLike(child, p.toString))
+      }.partition(_._2.isEmpty)
     val remainPatterns = remainPatternMap.map(_._1)
     val replacements = replacementMap.map(_._2.get)
     if (replacements.isEmpty) {
