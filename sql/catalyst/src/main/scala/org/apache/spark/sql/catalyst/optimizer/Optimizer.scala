@@ -670,7 +670,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // introduce limits on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
-    case LocalLimit(exp, join @ Join(left, right, joinType, conditionOpt, _)) =>
+    case LocalLimit(exp, join: Join) =>
       LocalLimit(exp, pushLocalLimitThroughJoin(exp, join))
     // There is a Project between LocalLimit and Join if they do not have the same output.
     case LocalLimit(exp, project @ Project(_, join: Join)) =>
