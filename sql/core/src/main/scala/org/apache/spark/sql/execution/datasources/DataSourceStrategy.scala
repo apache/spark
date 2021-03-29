@@ -696,7 +696,6 @@ object DataSourceStrategy
   }
 
   protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
-
     aggregates.aggregateFunction match {
       case min: aggregate.Min =>
         val colName = columnAsString(min.child)
@@ -712,8 +711,7 @@ object DataSourceStrategy
         if (colName.nonEmpty) Some(Sum(colName, sum.dataType, aggregates.isDistinct)) else None
       case count: aggregate.Count =>
         val columnName = count.children.head match {
-          case Literal(_, _) =>
-            "1"
+          case Literal(_, _) => "1"
           case _ => columnAsString(count.children.head)
         }
         if (columnName.nonEmpty) {
