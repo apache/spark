@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, Unr
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
@@ -429,10 +430,12 @@ case class InsertAction(
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 }
 
-case class Assignment(key: Expression, value: Expression) extends Expression with Unevaluable {
+case class Assignment(key: Expression, value: Expression) extends Expression
+    with Unevaluable with BinaryLike[Expression] {
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException("nullable")
-  override def children: Seq[Expression] = key ::  value :: Nil
+  override def left: Expression = key
+  override def right: Expression = value
 }
 
 /**

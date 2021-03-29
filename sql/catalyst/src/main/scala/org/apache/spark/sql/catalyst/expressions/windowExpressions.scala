@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExcept
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
@@ -142,8 +142,7 @@ case object RangeFrame extends FrameType {
 /**
  * The trait used to represent special boundaries used in a window frame.
  */
-sealed trait SpecialFrameBoundary extends Expression with Unevaluable {
-  override def children: Seq[Expression] = Nil
+sealed trait SpecialFrameBoundary extends LeafExpression with Unevaluable {
   override def dataType: DataType = NullType
   override def nullable: Boolean = false
 }
@@ -166,13 +165,12 @@ case object CurrentRow extends SpecialFrameBoundary {
  * Represents a window frame.
  */
 sealed trait WindowFrame extends Expression with Unevaluable {
-  override def children: Seq[Expression] = Nil
   override def dataType: DataType = throw QueryExecutionErrors.dataTypeOperationUnsupportedError
   override def nullable: Boolean = false
 }
 
 /** Used as a placeholder when a frame specification is not defined. */
-case object UnspecifiedFrame extends WindowFrame
+case object UnspecifiedFrame extends WindowFrame with LeafLike[Expression]
 
 /**
  * A specified Window Frame. The val lower/upper can be either a foldable [[Expression]] or a
@@ -527,7 +525,6 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
 }
 
 abstract class RowNumberLike extends AggregateWindowFunction {
-  override def children: Seq[Expression] = Nil
   protected val zero = Literal(0)
   protected val one = Literal(1)
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
@@ -575,7 +572,7 @@ object SizeBasedWindowFunction {
   since = "2.0.0",
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
-case class RowNumber() extends RowNumberLike {
+case class RowNumber() extends RowNumberLike with LeafLike[Expression] {
   override val evaluateExpression = rowNumber
   override def prettyName: String = "row_number"
 }
@@ -604,7 +601,7 @@ case class RowNumber() extends RowNumberLike {
   since = "2.0.0",
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
-case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
+case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction with LeafLike[Expression] {
   override def dataType: DataType = DoubleType
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
   // return the same value for equal values in the partition.

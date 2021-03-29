@@ -62,10 +62,9 @@ case object Complete extends AggregateMode
  * A place holder expressions used in code-gen, it does not change the corresponding value
  * in the row.
  */
-case object NoOp extends Expression with Unevaluable {
+case object NoOp extends LeafExpression with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
-  override def children: Seq[Expression] = Nil
 }
 
 object AggregateExpression {
