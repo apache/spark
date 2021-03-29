@@ -91,11 +91,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
       partScan: LogicalRelation,
-      canBuildBroadcast: Boolean): LogicalPlan = {
+      canBuildBroadcastByType: Boolean): LogicalPlan = {
     val reuseEnabled = conf.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
     lazy val hasBenefit =
-      pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan, canBuildBroadcast)
+      pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan, canBuildBroadcastByType)
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
@@ -125,7 +125,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       partPlan: LogicalPlan,
       otherExpr: Expression,
       otherPlan: LogicalPlan,
-      canBuildBroadcast: Boolean): Boolean = {
+      canBuildBroadcastByType: Boolean): Boolean = {
 
     // get the distinct counts of an attribute for a given table
     def distinctCounts(attr: Attribute, plan: LogicalPlan): Option[BigInt] = {
@@ -159,10 +159,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     val estimatePruningSideSize = filterRatio * partPlan.stats.sizeInBytes.toFloat
     // the pruning overhead is the total size in bytes of all scan relations
     val overhead = otherPlan.collectLeaves().map(_.stats.sizeInBytes).sum.toFloat
-    if (canBuildBroadcast) {
+    if (canBuildBroadcastByType && canBroadcastBySize(otherPlan, conf)) {
       estimatePruningSideSize > overhead
     } else {
-      // We can't reuse the broadcast because the join type doesn't support broadcast,
+      // We can't reuse the broadcast because the join type doesn't support broadcast
+      // or the filtering size is too large to build broadcast,
       // and doing DPP means running an extra query that may have significant overhead.
       // We need to make sure the pruning side is very big so that DPP is still worthy.
       estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead

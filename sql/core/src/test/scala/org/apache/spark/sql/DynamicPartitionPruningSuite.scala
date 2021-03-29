@@ -860,7 +860,8 @@ abstract class DynamicPartitionPruningSuiteBase
     Given("disable broadcast hash join and enable query duplication")
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_PRUNING_SIDE_EXTRA_FILTER_RATIO.key -> "1") {
       val df = sql(
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -1451,6 +1452,15 @@ abstract class DynamicPartitionPruningSuiteBase
           SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$reuseBroadcastOnly") {
           val df = sql(sqlStr)
           checkPartitionPruningPredicate(df, !reuseBroadcastOnly, false)
+        }
+      }
+
+      // DPP will apply even if autoBroadcastJoinThreshold is disabled
+      // and left side can broadcast by size
+      Seq(-1L, 100000L).foreach { threshold =>
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> s"$threshold") {
+          val df = sql(sqlStr)
+          checkPartitionPruningPredicate(df, true, false)
         }
       }
     }
