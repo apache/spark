@@ -94,7 +94,7 @@ class ContinuousDataSourceRDD(
     new NextIterator[InternalRow] {
       override def getNext(): InternalRow = {
         partitionReader.currentMetricsValues.foreach { metric =>
-          customMetrics(metric.name()) += metric.value()
+          customMetrics(metric.name()).set(metric.value())
         }
         readerForPartition.next() match {
           case null =>

@@ -198,7 +198,7 @@ class SQLAppStatusListener(
   }
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
-    val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
+    val accumIds = exec.metrics.map(_.accumulatorId).toSet
     val metricAggregationMethods = exec.metrics.map { m =>
       (m.accumulatorId, m.aggregateMethod)
     }.toMap
@@ -214,7 +214,7 @@ class SQLAppStatusListener(
 
     val maxMetricsFromAllStages = new mutable.HashMap[Long, Array[Long]]()
 
-    taskMetrics.filter(m => metricTypes.contains(m._1)).foreach { case (id, values) =>
+    taskMetrics.filter(m => accumIds.contains(m._1)).foreach { case (id, values) =>
       val prev = allMetrics.getOrElse(id, null)
       val updated = if (prev != null) {
         prev ++ values
@@ -225,7 +225,7 @@ class SQLAppStatusListener(
     }
 
     // Find the max for each metric id between all stages.
-    val validMaxMetrics = maxMetrics.filter(m => metricTypes.contains(m._1))
+    val validMaxMetrics = maxMetrics.filter(m => accumIds.contains(m._1))
     validMaxMetrics.foreach { case (id, value, taskId, stageId, attemptId) =>
       val updated = maxMetricsFromAllStages.getOrElse(id, Array(value, stageId, attemptId, taskId))
       if (value > updated(0)) {
@@ -238,7 +238,7 @@ class SQLAppStatusListener(
     }
 
     exec.driverAccumUpdates.foreach { case (id, value) =>
-      if (metricTypes.contains(id)) {
+      if (accumIds.contains(id)) {
         val prev = allMetrics.getOrElse(id, null)
         val updated = if (prev != null) {
           // If the driver updates same metrics as tasks and has higher value then remove

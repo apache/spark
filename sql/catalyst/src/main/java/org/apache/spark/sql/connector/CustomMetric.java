@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.Evolving;
 
 /**
@@ -28,7 +30,7 @@ import org.apache.spark.annotation.Evolving;
  * @since 3.2.0
  */
 @Evolving
-public interface CustomMetric {
+public interface CustomMetric extends Serializable {
     /**
      * Returns the name of custom metric.
      */

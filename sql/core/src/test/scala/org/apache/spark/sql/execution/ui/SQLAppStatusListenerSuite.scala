@@ -37,13 +37,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.connector.CustomMetricScanBuilder
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
 import org.apache.spark.util.kvstore.InMemoryStore
@@ -810,6 +813,42 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(
       executionId, System.currentTimeMillis()))
+  }
+
+
+  test("SPARK-34338: Report metrics from Datasource v2 scan") {
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
+    val schema = new StructType().add("i", "int").add("j", "int")
+    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomMetricScanBuilder())
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+      override lazy val sparkPlan = physicalPlan
+      override lazy val executedPlan = physicalPlan
+    }
+
+    SQLExecution.withNewExecutionId(dummyQueryExecution) {
+      physicalPlan.execute().collect()
+    }
+
+    // Wait until the new execution is started and being tracked.
+    while (statusStore.executionsCount() < oldCount) {
+      Thread.sleep(100)
+    }
+
+    // Wait for listener to finish computing the metrics for the execution.
+    while (statusStore.executionsList().isEmpty ||
+      statusStore.executionsList().last.metricValues == null) {
+      Thread.sleep(100)
+    }
+
+    val execId = statusStore.executionsList().last.executionId
+    val metrics = statusStore.executionMetrics(execId)
+    val expectedMetric = physicalPlan.metrics("custom_metric")
+    val expectedValue = "custom_metric: 12345, 12345"
+
+    assert(metrics.contains(expectedMetric.id))
+    assert(metrics(expectedMetric.id) === expectedValue)
   }
 }
 

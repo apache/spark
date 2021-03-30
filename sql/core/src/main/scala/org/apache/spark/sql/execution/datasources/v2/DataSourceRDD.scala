@@ -93,7 +93,7 @@ private class PartitionIterator[T](
       throw QueryExecutionErrors.endOfStreamError()
     }
     reader.currentMetricsValues.foreach { metric =>
-      customMetrics(metric.name()) += metric.value()
+      customMetrics(metric.name()).set(metric.value())
     }
     valuePrepared = false
     reader.get()
