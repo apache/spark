@@ -3117,7 +3117,7 @@ object SQLConf {
     .doc("When set to true, Spark SQL uses the mixed legacy interval type `CalendarIntervalType` " +
       "instead of the ANSI compliant interval types `YearMonthIntervalType` and " +
       "`DayTimeIntervalType`. For instance, the date subtraction expression returns " +
-      "`CalendarIntervalType` when the SQL config is set to `false` otherwise an ANSI interval.")
+      "`CalendarIntervalType` when the SQL config is set to `true` otherwise an ANSI interval.")
     .version("3.2.0")
     .booleanConf
     .createWithDefault(false)
