@@ -1200,7 +1200,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     checkEvaluation(
       cast(cast(null, IntegerType), DayTimeIntervalType), null)
     checkEvaluation(
-      cast(cast(Int.MinValue, IntegerType), DayTimeIntervalType), -2147483648L)
+      cast(cast(Int.MinValue, IntegerType), DayTimeIntervalType), Int.MinValue.toLong)
     checkEvaluation(
       cast(cast(Byte.MaxValue, ByteType), DayTimeIntervalType), Byte.MaxValue.toLong)
     checkEvaluation(
@@ -1810,7 +1810,7 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(
       cast(cast(null, IntegerType), DayTimeIntervalType), null)
     checkEvaluation(
-      cast(cast(Int.MinValue, IntegerType), DayTimeIntervalType), -2147483648L)
+      cast(cast(Int.MinValue, IntegerType), DayTimeIntervalType), Int.MinValue.toLong)
     checkEvaluation(
       cast(cast(Byte.MaxValue, ByteType), DayTimeIntervalType), Byte.MaxValue.toLong)
     checkEvaluation(
