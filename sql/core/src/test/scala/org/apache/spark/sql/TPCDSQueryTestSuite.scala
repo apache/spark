@@ -53,8 +53,8 @@ import org.apache.spark.sql.test.TestSparkSession
  */
 class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelper {
 
-  private val tpcdsDataPath = System.getenv("SPARK_TPCDS_DATA")
-  private val regenerateGoldenFiles = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+  private val tpcdsDataPath = sys.env.get("SPARK_TPCDS_DATA")
+  private val regenerateGoldenFiles = sys.env.get("SPARK_GENERATE_GOLDEN_FILES").exists(_ == "1")
 
   // To make output results deterministic
   protected override def sparkConf: SparkConf = super.sparkConf
@@ -67,12 +67,12 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
   // We use SF=1 table data here, so we cannot use SF=100 stats
   protected override val injectStats: Boolean = false
 
-  if (tpcdsDataPath != null) {
+  if (tpcdsDataPath.nonEmpty) {
     val nonExistentTables = tableNames.filterNot { tableName =>
-      Files.exists(Paths.get(s"$tpcdsDataPath/$tableName"))
+      Files.exists(Paths.get(s"${tpcdsDataPath.get}/$tableName"))
     }
     if (nonExistentTables.nonEmpty) {
-      fail(s"Non-existent TPCDS table paths found in $tpcdsDataPath: " +
+      fail(s"Non-existent TPCDS table paths found in ${tpcdsDataPath.get}: " +
         nonExistentTables.mkString(", "))
     }
   }
@@ -92,7 +92,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
       s"""
          |CREATE TABLE `$tableName` (${tableColumns(tableName)})
          |USING $format
-         |LOCATION '$tpcdsDataPath/$tableName'
+         |LOCATION '${tpcdsDataPath.get}/$tableName'
          |${options.mkString("\n")}
        """.stripMargin)
   }
@@ -134,7 +134,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
     assertResult(expectedOutput, s"Result did not match\n$queryString") { outputString }
   }
 
-  if (tpcdsDataPath != null) {
+  if (tpcdsDataPath.nonEmpty) {
     tpcdsQueries.foreach { name =>
       val queryString = resourceToString(s"tpcds/$name.sql",
         classLoader = Thread.currentThread().getContextClassLoader)
@@ -153,6 +153,6 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
       }
     }
   } else {
-    ignore("skipped because env `SPARK_TPCDS_DATA` is not given") {}
+    ignore("skipped because env `SPARK_TPCDS_DATA` is not set") {}
   }
 }
