@@ -31,25 +31,22 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class UpdatingSessionsIteratorSuite extends SharedSparkSession {
 
-  val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
+  private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
     .add("aggVal1", LongType).add("aggVal2", DoubleType)
-  val rowAttributes = rowSchema.toAttributes
+  private val rowAttributes = rowSchema.toAttributes
 
-  val keysWithSessionSchema = rowSchema.filter { attr =>
+  private val noKeyRowAttributes = rowAttributes.filterNot { attr =>
+    Seq("key1", "key2").contains(attr.name)
+  }
+
+  private val keysWithSessionAttributes = rowAttributes.filter { attr =>
     List("key1", "key2", "session").contains(attr.name)
   }
-  val keysWithSessionAttributes = rowAttributes.filter { attr =>
-    List("key1", "key2", "session").contains(attr.name)
-  }
 
-  val sessionSchema = rowSchema.filter(st => st.name == "session").head
-  val sessionAttribute = rowAttributes.filter(attr => attr.name == "session").head
+  private val sessionAttribute = rowAttributes.filter(attr => attr.name == "session").head
 
-  val valuesSchema = rowSchema.filter(st => List("aggVal1", "aggVal2").contains(st.name))
-  val valuesAttributes = rowAttributes.filter {
-    attr => List("aggVal1", "aggVal2").contains(attr.name)
-  }
+  private val noKeySessionAttribute = noKeyRowAttributes.filter(attr => attr.name == "session").head
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -316,44 +313,6 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
   }
 
   test("no key") {
-    val noKeyRowSchema = new StructType()
-      .add("session", new StructType().add("start", LongType).add("end", LongType))
-      .add("aggVal1", LongType).add("aggVal2", DoubleType)
-    val noKeyRowAttributes = noKeyRowSchema.toAttributes
-
-    val noKeySessionAttribute = noKeyRowAttributes.filter(attr => attr.name == "session").head
-
-    def createNoKeyRow(
-        sessionStart: Long,
-        sessionEnd: Long,
-        aggVal1: Long,
-        aggVal2: Double): UnsafeRow = {
-      val genericRow = new GenericInternalRow(4)
-      val session: Array[Any] = new Array[Any](2)
-      session(0) = sessionStart
-      session(1) = sessionEnd
-
-      val sessionRow = new GenericInternalRow(session)
-      genericRow.update(0, sessionRow)
-
-      genericRow.setLong(1, aggVal1)
-      genericRow.setDouble(2, aggVal2)
-
-      val rowProjection = GenerateUnsafeProjection.generate(noKeyRowAttributes, noKeyRowAttributes)
-      rowProjection(genericRow)
-    }
-
-    def assertNoKeyRowsEqualsWithNewSession(
-        expectedRow: InternalRow,
-        retRow: InternalRow,
-        newSessionStart: Long,
-        newSessionEnd: Long): Unit = {
-      assert(retRow.getStruct(0, 2).getLong(0) == newSessionStart)
-      assert(retRow.getStruct(0, 2).getLong(1) == newSessionEnd)
-      assert(retRow.getLong(1) === expectedRow.getLong(1))
-      assert(doubleEquals(retRow.getDouble(2), expectedRow.getDouble(2)))
-    }
-
     val row1 = createNoKeyRow(100, 110, 10, 1.1)
     val row2 = createNoKeyRow(100, 110, 20, 1.2)
     val row3 = createNoKeyRow(105, 115, 30, 1.3)
@@ -429,5 +388,36 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     assert(retRow.getStruct(2, 2).getLong(1) == newSessionEnd)
     assert(retRow.getLong(3) === expectedRow.getLong(3))
     assert(doubleEquals(retRow.getDouble(3), expectedRow.getDouble(3)))
+  }
+
+  private def createNoKeyRow(
+      sessionStart: Long,
+      sessionEnd: Long,
+      aggVal1: Long,
+      aggVal2: Double): UnsafeRow = {
+    val genericRow = new GenericInternalRow(4)
+    val session: Array[Any] = new Array[Any](2)
+    session(0) = sessionStart
+    session(1) = sessionEnd
+
+    val sessionRow = new GenericInternalRow(session)
+    genericRow.update(0, sessionRow)
+
+    genericRow.setLong(1, aggVal1)
+    genericRow.setDouble(2, aggVal2)
+
+    val rowProjection = GenerateUnsafeProjection.generate(noKeyRowAttributes, noKeyRowAttributes)
+    rowProjection(genericRow)
+  }
+
+  private def assertNoKeyRowsEqualsWithNewSession(
+      expectedRow: InternalRow,
+      retRow: InternalRow,
+      newSessionStart: Long,
+      newSessionEnd: Long): Unit = {
+    assert(retRow.getStruct(0, 2).getLong(0) == newSessionStart)
+    assert(retRow.getStruct(0, 2).getLong(1) == newSessionEnd)
+    assert(retRow.getLong(1) === expectedRow.getLong(1))
+    assert(doubleEquals(retRow.getDouble(2), expectedRow.getDouble(2)))
   }
 }
