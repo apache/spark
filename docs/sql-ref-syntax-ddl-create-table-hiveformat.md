@@ -41,7 +41,7 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ AS select_statement ]
 
 row_format:    
-    : SERDE serde_class [ WITH SERDEPROPERTIES (key1 [=] val1, key2 [=] val2, ...)  ]
+    : SERDE serde_class [ WITH SERDEPROPERTIES (key1 [=] val1, key2 [=] val2, ...) ]
     | DELIMITED [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escaped_char ] ] 
         [ COLLECTION ITEMS TERMINATED BY collection_items_terminated_char ] 
         [ MAP KEYS TERMINATED BY map_key_terminated_char ]
