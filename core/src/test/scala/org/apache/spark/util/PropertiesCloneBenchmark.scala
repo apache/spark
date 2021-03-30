@@ -26,11 +26,11 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 
 
 /**
- * Benchmark for Kryo Unsafe vs safe Serialization.
+ * Benchmark for SerializationUtils.clone vs Utils.cloneProperties.
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar>
+ *      bin/spark-submit --class <this class> <spark core test jar>
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
