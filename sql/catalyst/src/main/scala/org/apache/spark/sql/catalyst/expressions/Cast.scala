@@ -563,7 +563,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DayTimeIntervalType =>
       b => b
     case YearMonthIntervalType =>
-      b => b.asInstanceOf[Int].toLong
+      b => IntegerExactNumeric.toLong(b.asInstanceOf[Int])
   }
 
   // IntConverter
@@ -593,7 +593,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
     case DayTimeIntervalType =>
-      b => LongExactNumeric.toInt(b.asInstanceOf[Long])
+      b =>
+        val intValue = try {
+          LongExactNumeric.toInt(b.asInstanceOf[Long])
+        } catch {
+          case _: ArithmeticException =>
+            throw QueryExecutionErrors.castingCauseOverflowError(b, IntegerType.catalogString)
+        }
+        intValue
     case YearMonthIntervalType =>
       b => b
   }
@@ -1421,7 +1428,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToDayTimeIntervalCode(from: DataType): CastFunction = from match {
     case x: IntegralType =>
-      (c, evPrim, evNull) => code"$evPrim = (long) $c;"
+      castIntegralTypeToIntegralTypeExactCode("long", LongType.catalogString, true)
   }
 
   private[this] def castToYearMonthIntervalCode(from: DataType): CastFunction = from match {
