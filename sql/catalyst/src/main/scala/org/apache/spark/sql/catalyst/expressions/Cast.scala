@@ -534,17 +534,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def castToDayTimeInterval(from: DataType): Any => Any = from match {
-    case x: IntegralType if ansiEnabled =>
-      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
     case x: IntegralType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
+      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
   }
 
   private[this] def castToYearMonthInterval(from: DataType): Any => Any = from match {
-    case x: IntegralType if ansiEnabled =>
-      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: IntegralType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
+      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
   }
 
   // LongConverter
@@ -646,12 +642,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
     case DayTimeIntervalType if ansiEnabled =>
-      b => val intValue = try {
-        LongExactNumeric.toInt(b.asInstanceOf[Long])
-      } catch {
-        case _: ArithmeticException =>
-          throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
-      }
+      b =>
+        val intValue = try {
+          LongExactNumeric.toInt(b.asInstanceOf[Long])
+        } catch {
+          case _: ArithmeticException =>
+            throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
+        }
         if (intValue == intValue.toShort) {
           intValue.toShort
         } else {

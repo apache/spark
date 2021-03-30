@@ -1838,8 +1838,9 @@ class CastSuite extends CastSuiteBase {
       Short.MaxValue.toInt)
     checkEvaluation(cast(cast(Int.MaxValue, IntegerType), YearMonthIntervalType),
       Int.MaxValue.toInt)
-    checkEvaluation(cast(cast(Long.MaxValue, LongType), YearMonthIntervalType),
-      -1)
+    castExceptionInExtractNumeric(
+      checkEvaluation(cast(cast(Long.MaxValue, LongType), YearMonthIntervalType),
+        -1), IntegerType)
 
     checkEvaluation(cast(
       Literal.create(Period.ofMonths(Byte.MaxValue), YearMonthIntervalType),
