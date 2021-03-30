@@ -1795,7 +1795,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   override def typeCheckFailureMessage: String = if (ansiEnabled) {
-    AnsiCast.typeCheckFailureMessage(child.dataType, dataType, SQLConf.ANSI_ENABLED.key, "false")
+    AnsiCast.typeCheckFailureMessage(child.dataType, dataType,
+      Some(SQLConf.ANSI_ENABLED.key), Some("false"))
   } else {
     s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
   }
@@ -1823,8 +1824,10 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
   // If there are more scenarios for this expression, we should update the error message on type
   // check failure.
   override def typeCheckFailureMessage: String =
-    AnsiCast.typeCheckFailureMessage(child.dataType, dataType,
-      SQLConf.STORE_ASSIGNMENT_POLICY.key, SQLConf.StoreAssignmentPolicy.LEGACY.toString)
+    AnsiCast.typeCheckFailureMessage(child.dataType,
+      dataType,
+      Some(SQLConf.STORE_ASSIGNMENT_POLICY.key),
+      Some(SQLConf.StoreAssignmentPolicy.LEGACY.toString))
 
 }
 
@@ -1940,8 +1943,8 @@ object AnsiCast {
   def typeCheckFailureMessage(
       from: DataType,
       to: DataType,
-      fallbackConfKey: String,
-      fallbackConfValue: String): String =
+      fallbackConfKey: Option[String],
+      fallbackConfValue: Option[String]): String =
     (from, to) match {
       case (_: NumericType, TimestampType) =>
         suggestionOnConversionFunctions(from, to,
@@ -1963,10 +1966,10 @@ object AnsiCast {
            | If you have to cast ${from.catalogString} to ${to.catalogString}, you can use the function ARRAY_JOIN or set $fallbackConfKey as $fallbackConfValue.
            |""".stripMargin
 
-      case _ if Cast.canCast(from, to) =>
+      case _ if fallbackConfKey.isDefined && fallbackConfValue.isDefined && Cast.canCast(from, to) =>
         s"""
            | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
-           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set $fallbackConfKey as $fallbackConfValue.
+           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set ${fallbackConfKey.get} as ${fallbackConfValue.get}.
            |""".stripMargin
 
       case _ => s"cannot cast ${from.catalogString} to ${to.catalogString}"

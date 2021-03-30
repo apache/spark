@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 class TryCastSuite extends AnsiCastSuiteBase {
@@ -33,7 +32,7 @@ class TryCastSuite extends AnsiCastSuiteBase {
 
   override def isAlwaysNullable: Boolean = true
 
-  override protected def setConfigurationHint: String = s"set ${SQLConf.ANSI_ENABLED.key} as false"
+  override protected def setConfigurationHint: String = ""
 
   override def checkExceptionInExpression[T <: Throwable : ClassTag](
       expression: => Expression,

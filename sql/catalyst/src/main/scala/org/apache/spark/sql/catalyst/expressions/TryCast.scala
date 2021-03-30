@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -82,5 +81,5 @@ case class TryCast(child: Expression, dataType: DataType, timeZoneId: Option[Str
   }
 
   override def typeCheckFailureMessage: String =
-    AnsiCast.typeCheckFailureMessage(child.dataType, dataType, SQLConf.ANSI_ENABLED.key, "false")
+    AnsiCast.typeCheckFailureMessage(child.dataType, dataType, None, None)
 }

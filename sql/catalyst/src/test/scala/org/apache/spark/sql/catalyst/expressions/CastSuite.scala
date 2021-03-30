@@ -912,9 +912,11 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     if (optionalExpectedMsg.isDefined) {
       assert(message.contains(optionalExpectedMsg.get))
-    } else {
+    } else if (setConfigurationHint.nonEmpty) {
       assert(message.contains("with ANSI mode on"))
       assert(message.contains(setConfigurationHint))
+    } else {
+      assert("cannot cast [a-zA-Z]+ to [a-zA-Z]+".r.findFirstIn(message).isDefined)
     }
   }
 
