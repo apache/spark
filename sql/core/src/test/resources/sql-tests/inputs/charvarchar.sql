@@ -61,7 +61,60 @@ desc formatted char_part;
 MSCK REPAIR TABLE char_part;
 desc formatted char_part;
 
+create table char_tbl4(c char(5), v varchar(6)) using parquet;
+insert into char_tbl4 values
+    (null, null),
+    (null, 'E'),
+    ('N', null),
+    ('Ne', 'Ea'),
+    ('Ne ', 'Ea '),
+    ('Ne ', 'Ea '),
+    ('Ne  ', 'Ea  '),
+    ('Net', 'Ease'),
+    ('Net ', 'Ease '),
+    ('Net  ', 'Ease  ');
+
+insert into char_tbl4 values ('Net   ', 'Ease  ');
+
+select c, v from char_tbl4;
+select c from char_tbl4 order by c;
+select v from char_tbl4 order by v;
+select ascii(c), ascii(v) from char_tbl4;
+select base64(c), base64(v) from char_tbl4;
+select bit_length(c), bit_length(v) from char_tbl4;
+select char_length(c), char_length(v) from char_tbl4;
+select octet_length(c), octet_length(v) from char_tbl4;
+select concat_ws('|', c, c), concat_ws('|', c, v) from char_tbl4;
+select concat(c, c), concat_ws(v, c) from char_tbl4;
+select like(c, 'Ne  _')from char_tbl4;
+select like(v, 'Ea_')from char_tbl4;
+select lower(c), lower(v) from char_tbl4;
+select upper(c), upper(v) from char_tbl4;
+select printf('Hey, %s%s', c, v) from char_tbl4;
+select repect(c, 2), repect(v, 2) from char_tbl4;
+select replace(c, 'Ne', 'Ca'), replace(v, 'Ea', 'Ri') from char_tbl4;
+select rpad(c, 4), rpad(v, 5) from char_tbl4;
+select rpad(c, 5), rpad(v, 6) from char_tbl4;
+select rpad(c, 6), rpad(v, 7) from char_tbl4;
+select rtrim(c), rtrim(v) from char_tbl4;
+select split(c, 'e'), split(v, 'a') from char_tbl4;
+select substring(c, 2), substring(v, 3) from char_tbl4;
+select left(c, 2), left(v, 3) from char_tbl4;
+select right(c, 2), right(v, 3) from char_tbl4;
+select typeof(c), typeof(v) from char_tbl4 limit 1;
+
+select cast(NULL as char(1));
+select cast('a ' as char(1));
+select cast('abcde' as char(1));
+select cast('abcde' as char(5));
+select cast('abcde' as char(10));
+
+select cast(NULL as varchar(1));
+select cast('abcde' as varchar(1));
+select cast('abcde' as varchar(5));
+select cast('abcde' as varchar(10));
 -- char_tbl has renamed to char_tbl1
 drop table char_tbl1;
 drop table char_tbl2;
 drop table char_tbl3;
+drop table char_tbl4;
