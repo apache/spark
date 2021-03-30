@@ -1196,7 +1196,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val end = LocalDate.of(2019, 10, 5)
     val epochDate = Literal(LocalDate.ofEpochDay(0))
 
-    withSQLConf(SQLConf.ANSI_INTERVALS_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       checkEvaluation(SubtractDates(Literal(end), Literal(end)),
         new CalendarInterval(0, 0, 0))
       checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
@@ -1215,7 +1215,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
     }
 
-    withSQLConf(SQLConf.ANSI_INTERVALS_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
       checkEvaluation(SubtractDates(Literal(end), Literal(end)), Duration.ZERO)
       checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)), Duration.ofDays(1))
       checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)), Duration.ofDays(-1))

@@ -2720,7 +2720,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("SPARK-34896: return day-time interval from dates subtraction") {
     withSQLConf(
       SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
-      SQLConf.ANSI_INTERVALS_ENABLED.key -> "true") {
+      SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
       outstandingTimezonesIds.foreach { zid =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid) {
           Seq(

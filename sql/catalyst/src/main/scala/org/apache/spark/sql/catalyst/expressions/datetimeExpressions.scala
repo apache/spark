@@ -2372,7 +2372,7 @@ case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expressi
 
 /**
  * Returns the interval from the `left` date (inclusive) to the `right` date (exclusive).
- *   - When the SQL config `spark.sql.ansi.intervals.enabled` is false,
+ *   - When the SQL config `spark.sql.legacy.interval.enabled` is `true`,
  *     it returns `CalendarIntervalType` in which the `microseconds` field is set to 0 and
  *     the `months` and `days` fields are initialized to the difference between the given dates.
  *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in days
@@ -2381,32 +2381,33 @@ case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expressi
 case class SubtractDates(
     left: Expression,
     right: Expression,
-    ansiIntervals: Boolean)
+    legacyInterval: Boolean)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(left: Expression, right: Expression) =
-    this(left, right, SQLConf.get.ansiIntervalsEnabled)
+    this(left, right, SQLConf.get.legacyIntervalEnabled)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
-  override def dataType: DataType = if (ansiIntervals) DayTimeIntervalType else CalendarIntervalType
+  override def dataType: DataType =
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
 
   @transient
-  private lazy val evalFunc: (Int, Int) => Any = ansiIntervals match {
-    case true => (leftDays: Int, rightDays: Int) =>
+  private lazy val evalFunc: (Int, Int) => Any = legacyInterval match {
+    case false => (leftDays: Int, rightDays: Int) =>
       Math.multiplyExact(Math.subtractExact(leftDays, rightDays), MICROS_PER_DAY)
-    case false => (leftDays: Int, rightDays: Int) => subtractDates(leftDays, rightDays)
+    case true => (leftDays: Int, rightDays: Int) => subtractDates(leftDays, rightDays)
   }
 
   override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
     evalFunc(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ansiIntervals match {
-    case true =>
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = legacyInterval match {
+    case false =>
       val m = classOf[Math].getName
       defineCodeGen(ctx, ev, (leftDays, rightDays) =>
         s"$m.multiplyExact($m.subtractExact($leftDays, $rightDays), ${MICROS_PER_DAY}L)")
-    case false =>
+    case true =>
       defineCodeGen(ctx, ev, (leftDays, rightDays) => {
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         s"$dtu.subtractDates($leftDays, $rightDays)"
