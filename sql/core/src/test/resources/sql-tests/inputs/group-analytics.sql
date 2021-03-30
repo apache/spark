@@ -33,6 +33,7 @@ SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPI
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(year);
 
 -- Partial ROLLUP/CUBE/GROUPING SETS
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, CUBE(course, year) ORDER BY course, year;
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year), ROLLUP(course, year) ORDER BY course, year;
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year), ROLLUP(course, year), GROUPING SETS(course, year) ORDER BY course, year;
 
