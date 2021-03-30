@@ -32,9 +32,9 @@ import org.apache.spark.sql.types.DataType
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`. " +
-    s"_FUNC_ is identical to CAST with configuration `${SQLConf.ANSI_ENABLED.key}` as true, " +
-    "except it returns NULL instead of raising an error. Note that the behavior of _FUNC_ " +
-    s"doesn't depend on configuration `${SQLConf.ANSI_ENABLED.key}`.",
+    "This expression is identical to CAST with configuration `spark.sql.ansi.enabled` as " +
+    "true, except it returns NULL instead of raising an error. Note that the behavior of this " +
+    "expression doesn't depend on configuration `spark.sql.ansi.enabled`.",
   examples = """
     Examples:
       > SELECT _FUNC_('10' as int);

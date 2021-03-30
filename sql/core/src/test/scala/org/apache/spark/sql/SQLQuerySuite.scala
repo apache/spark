@@ -4118,26 +4118,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("try_cast") {
-    Seq("true", "false").foreach { ansiEnabled =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
-        checkAnswer(spark.sql("SELECT try_cast(2147483647L AS int)"), Row(2147483647))
-        checkAnswer(spark.sql("SELECT try_cast(2147483648L AS int)"), Row(null))
-
-        checkAnswer(spark.sql("SELECT try_cast(\"2021-01-01\" AS date)"),
-          Row(Date.valueOf("2021-01-01")))
-        checkAnswer(spark.sql("SELECT try_cast(\"2021-101-01\" AS date)"), Row(null))
-
-        checkAnswer(spark.sql("SELECT try_cast(\"2021-01-01 00:00:00\" AS timestamp)"),
-          Row(Timestamp.valueOf("2021-01-01 00:00:00")))
-        checkAnswer(spark.sql("SELECT try_cast(\"2021-01-01 27:00:00\" AS timestamp)"), Row(null))
-
-        checkAnswer(spark.sql("SELECT try_cast(\"true\" AS boolean)"), Row(true))
-        checkAnswer(spark.sql("SELECT try_cast(\"hello\" AS boolean)"), Row(null))
-      }
-    }
-  }
-
   test("SPARK-33482: Fix FileScan canonicalization") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
