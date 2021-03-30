@@ -51,7 +51,8 @@ public interface PartitionReader<T> extends Closeable {
   T get();
 
   /**
-   * Returns an array of custom task metrics. By default it returns empty array.
+   * Returns an array of custom task metrics. By default it returns empty array. Note that it is
+   * not recommended to put heavy logic in this method as it may affect reading performance.
    */
   default CustomTaskMetric[] currentMetricsValues() {
     CustomTaskMetric[] NO_METRICS = {};
