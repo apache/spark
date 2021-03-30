@@ -18,9 +18,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.IdentityHashMap
 
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
+import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.guava.CaffeinatedGuava
-import com.google.common.cache.LoadingCache
+import com.google.common.cache.{CacheLoader, LoadingCache}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 
 import org.apache.spark.sql.catalyst.InternalRow
