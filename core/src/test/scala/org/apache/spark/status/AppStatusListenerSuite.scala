@@ -1799,17 +1799,17 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   test("SPARK-34877 - check YarnAmInfoEvent is populated correctly") {
     def checkInfoPopulated(listener: AppStatusListener,
       logUrlMap: Map[String, String]): Unit = {
-      val yarnAmInfo = listener.liveWorker.get(listener.yarnAMID)
+      val yarnAmInfo = listener.liveMiscellaneousProcess.get(listener.yarnAMID)
       assert(yarnAmInfo.isDefined)
       yarnAmInfo.foreach { info =>
-        assert(info.workerId == listener.yarnAMID)
+        assert(info.processId == listener.yarnAMID)
         assert(info.isActive)
-        assert(info.workerLogs == logUrlMap)
+        assert(info.processLogs == logUrlMap)
       }
-      check[WorkerSummaryWrapper](listener.yarnAMID) { worker =>
-        assert(worker.info.id === listener.yarnAMID)
-        assert(worker.info.isActive)
-        assert(worker.info.workerLogs == logUrlMap)
+      check[ProcessSummaryWrapper](listener.yarnAMID) { process =>
+        assert(process.info.id === listener.yarnAMID)
+        assert(process.info.isActive)
+        assert(process.info.processLogs == logUrlMap)
       }
     }
     val listener = new AppStatusListener(store, conf, true)
@@ -1818,7 +1818,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     var logUrlMap: Map[String, String] = Map("stdout" -> stdout,
       "stderr" -> stderr)
     var yarnHostName = "yarnAmHost:2453"
-    listener.onOtherEvent(MiscellaneousWorkerInfoEvent(123678L, 1, 512, yarnHostName, logUrlMap))
+    listener.onOtherEvent(MiscellaneousProcessInfoEvent(123678L, 1, 512, yarnHostName, logUrlMap))
     checkInfoPopulated(listener, logUrlMap)
 
     // Launch new AM in case of failure
@@ -1828,7 +1828,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     logUrlMap = Map("stdout" -> stdout,
       "stderr" -> stderr)
     yarnHostName = "yarnAmHost:2451"
-    listener.onOtherEvent(MiscellaneousWorkerInfoEvent(123678L, 1, 512, yarnHostName, logUrlMap))
+    listener.onOtherEvent(MiscellaneousProcessInfoEvent(123678L, 1, 512, yarnHostName, logUrlMap))
     checkInfoPopulated(listener, logUrlMap)
   }
 

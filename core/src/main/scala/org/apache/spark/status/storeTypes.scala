@@ -515,7 +515,7 @@ private[spark] class CachedQuantile(
 
 }
 
-private[spark] class WorkerSummaryWrapper(val info: WorkerSummary) {
+private[spark] class ProcessSummaryWrapper(val info: ProcessSummary) {
 
   @JsonIgnore @KVIndex
   private def id: String = info.id

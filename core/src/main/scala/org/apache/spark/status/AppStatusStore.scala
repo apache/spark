@@ -92,8 +92,8 @@ private[spark] class AppStatusStore(
     filtered.asScala.map(_.info).filter(_.id != FALLBACK_BLOCK_MANAGER_ID.executorId).toSeq
   }
 
-  def workerList(activeOnly: Boolean): Seq[v1.WorkerSummary] = {
-    val base = store.view(classOf[WorkerSummaryWrapper])
+  def miscellaneousProcessList(activeOnly: Boolean): Seq[v1.ProcessSummary] = {
+    val base = store.view(classOf[ProcessSummaryWrapper])
     val filtered = if (activeOnly) {
       base.index("active").reverse().first(true).last(true)
     } else {

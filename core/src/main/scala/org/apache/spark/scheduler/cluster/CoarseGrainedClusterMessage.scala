@@ -124,8 +124,8 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
-  // Send Miscellaneous Worker information to the driver
-  case class MiscellaneousWorkerInfo(time: Long, cores: Int, memory: Long,
+  // Send Miscellaneous Process information to the driver
+  case class MiscellaneousProcessInfo(time: Long, cores: Int, memory: Long,
       hostName: String, logUrlInfo: Map[String, String])
     extends CoarseGrainedClusterMessage
 

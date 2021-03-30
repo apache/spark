@@ -80,8 +80,8 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   def allExecutorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(false))
 
   @GET
-  @Path("allworkers")
-  def allWorkerList(): Seq[WorkerSummary] = withUI(_.store.workerList(false))
+  @Path("allmiscellaneousprocess")
+  def allProcessList(): Seq[ProcessSummary] = withUI(_.store.miscellaneousProcessList(false))
 
   @Path("stages")
   def stages(): Class[StagesResource] = classOf[StagesResource]

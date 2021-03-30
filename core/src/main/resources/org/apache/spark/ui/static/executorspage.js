@@ -39,7 +39,7 @@ function formatStatus(status, type, row) {
     return "Dead"
 }
 
-function formatWorkerStatus(activeStatus) {
+function formatProcessStatus(activeStatus) {
     if (activeStatus) {
         return "Active"
     }
@@ -557,13 +557,13 @@ $(document).ready(function () {
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
 
                  // This section should be visible once API gives the response.
-                 $('.active-worker-container').hide()
-                 var endPoint = createRESTEndPointForMiscellaneousWorkers(appId);
+                 $('.active-process-container').hide()
+                 var endPoint = createRESTEndPointForMiscellaneousProcess(appId);
                  $.getJSON(endPoint, function( response, status, jqXHR ) {
                     if (response.length) {
-                        var workerSummaryResponse = response;
-                        var workerSummaryConf = {
-                            "data": workerSummaryResponse,
+                        var processSummaryResponse = response;
+                        var processSummaryConf = {
+                            "data": processSummaryResponse,
                             "columns": [{
                                     data: "id"
                                 },
@@ -572,7 +572,7 @@ $(document).ready(function () {
                                 },
                                 {
                                     data: function(row) {
-                                        return formatWorkerStatus(row.isActive);
+                                        return formatProcessStatus(row.isActive);
                                     }
                                 },
                                 {
@@ -585,7 +585,7 @@ $(document).ready(function () {
                                     data: "totalCores"
                                 },
                                 {
-                                    data: "workerLogs",
+                                    data: "processLogs",
                                     render: formatLogsCells
                                 },
                             ],
@@ -598,9 +598,8 @@ $(document).ready(function () {
                                 "sEmptyTable": "No data to show yet"
                             }
                         };
-                        var workerSummaryTableSelector =
-                            $("#active-worker-table").DataTable(workerSummaryConf);
-                        $('.active-worker-container').show()
+                        $("#active-process-table").DataTable(processSummaryConf);
+                        $('.active-process-container').show()
                     }
                  });
 

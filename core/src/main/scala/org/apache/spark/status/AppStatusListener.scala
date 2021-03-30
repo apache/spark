@@ -78,13 +78,13 @@ private[spark] class AppStatusListener(
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
   private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
-  private[spark] val liveWorker = new HashMap[String, LiveWorkers]()
+  private[spark] val liveMiscellaneousProcess = new HashMap[String, LiveMiscellaneousProcess]()
 
   private val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   // Keep the active executor count as a separate variable to avoid having to do synchronization
   // around liveExecutors.
   @volatile private var activeExecutorCount = 0
-  @volatile private var activeWorkerCount = 0
+  @volatile private var activeProcessCount = 0
 
   /** The last time when flushing `LiveEntity`s. This is to avoid flushing too frequently. */
   private var lastFlushTimeNs = System.nanoTime()
@@ -111,8 +111,8 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
-    case MiscellaneousWorkerInfoEvent(time, cores, memory, hostName, urlInfo) =>
-      updateAMInfoInLiveWorker(time, cores, memory, hostName, urlInfo.toMap)
+    case MiscellaneousProcessInfoEvent(time, cores, memory, hostName, urlInfo) =>
+      updateAMInfoInLiveProcess(time, cores, memory, hostName, urlInfo.toMap)
     case _ =>
   }
 
@@ -1130,10 +1130,11 @@ private[spark] class AppStatusListener(
     })
   }
 
-  private def getOrCreateWorker(workerId: String, addTime: Long): LiveWorkers = {
-    liveWorker.getOrElseUpdate(workerId, {
-      activeWorkerCount += 1
-      new LiveWorkers(workerId, addTime)
+  private def getOrCreateOtherProcess(processId: String,
+      addTime: Long): LiveMiscellaneousProcess = {
+    liveMiscellaneousProcess.getOrElseUpdate(processId, {
+      activeProcessCount += 1
+      new LiveMiscellaneousProcess(processId, addTime)
     })
   }
 
@@ -1372,18 +1373,18 @@ private[spark] class AppStatusListener(
    * @param hostName Spark AM Host Name
    * @param urlInfo Url for Spark AM host(stderr, stdout)
    */
-  private def updateAMInfoInLiveWorker(time: Long,
+  private def updateAMInfoInLiveProcess(time: Long,
     cores: Int,
     memory: Long,
     hostName: String,
     urlInfo: Map[String, String]): Unit = {
-    val worker = getOrCreateWorker(yarnAMID, time)
-    worker.workerLogs = urlInfo
-    worker.hostPort = hostName
-    worker.isActive = true
-    worker.totalCores = cores
-    worker.maxMemory = memory
-    update(worker, System.nanoTime())
+    val process = getOrCreateOtherProcess(yarnAMID, time)
+    process.processLogs = urlInfo
+    process.hostPort = hostName
+    process.isActive = true
+    process.totalCores = cores
+    process.maxMemory = memory
+    update(process, System.nanoTime())
   }
 
 }
