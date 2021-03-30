@@ -22,6 +22,7 @@ import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.config.UI
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -92,14 +93,15 @@ class HiveSharedStateSuite extends SparkFunSuite {
 
   test("SPARK-34568: We should respect enableHiveSupport when initialize SparkSession") {
     val conf = new SparkConf().setMaster("local").setAppName("SPARK-34568")
+      .set(UI.UI_ENABLED, false)
     val sc = SparkContext.getOrCreate(conf)
     val catalog = sc.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION)
     try {
       sc.conf.set(StaticSQLConf.CATALOG_IMPLEMENTATION, "in-memory")
       val sparkSession = SparkSession.builder().enableHiveSupport().sparkContext(sc).getOrCreate()
       assert(
-        sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "in-memory")
-      assert(sparkSession.sharedState.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive")
+        sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) === "in-memory")
+      assert(sparkSession.sharedState.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) === "hive")
       assert(sparkSession.sessionState.catalog.getClass
         .getCanonicalName.contains("HiveSessionCatalog"))
     } finally {
