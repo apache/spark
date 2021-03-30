@@ -74,7 +74,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
           minNumPartitions = minPartitionNum)
         // We can never extend the shuffle partition number, so if we get the same number here,
         // that means we can not coalesce shuffle partition. Just return the origin plan.
-        if (partitionSpecs.length == validMetrics.head.bytesByPartitionId.length) {
+        if (partitionSpecs.length == distinctNumPreShufflePartitions.head) {
           plan
         } else {
           // This transformation adds new nodes, so we must use `transformUp` here.
