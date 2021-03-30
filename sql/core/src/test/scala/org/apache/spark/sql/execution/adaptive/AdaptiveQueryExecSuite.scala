@@ -1563,13 +1563,15 @@ class AdaptiveQueryExecSuite
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2258",
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
       val df = spark.sparkContext.parallelize(
         (1 to 100).map(i => TestData(i, i.toString)), 10).toDF()
 
+      // partition size [1420, 1420]
       checkNoCoalescePartitions(df.repartition(), REPARTITION)
+      // partition size [1140, 1119]
       checkNoCoalescePartitions(df.sort($"key"), ENSURE_REQUIREMENTS)
     }
   }
