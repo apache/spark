@@ -17,15 +17,19 @@
 
 package org.apache.spark
 
+import java.util.concurrent.Callable
+
+import scala.concurrent.duration.Duration
 import scala.util.Random
-import com.github.benmanes.caffeine.cache.{Caffeine, CacheLoader => CaffeineCacheLoader}
+
+import com.github.benmanes.caffeine.cache.{CacheLoader => CaffeineCacheLoader, Caffeine}
 import com.github.benmanes.caffeine.guava.CaffeinatedGuava
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.util.ThreadUtils
 
-import java.util.concurrent.Callable
-import scala.concurrent.duration.Duration
+
 
 /**
  * Benchmark for Guava Cache vs Caffeine.
@@ -111,3 +115,4 @@ object LocalCacheBenchmark extends BenchmarkBase {
 
   case class TestData(content: Int)
 }
+

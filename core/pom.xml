@@ -56,6 +56,11 @@
       <artifactId>guava</artifactId>
     </dependency>
     <dependency>
+      <groupId>site.ycsb</groupId>
+      <artifactId>core</artifactId>
+      <version>0.17.0</version>
+    </dependency>
+    <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill_${scala.binary.version}</artifactId>
     </dependency>
