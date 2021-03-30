@@ -647,7 +647,7 @@ private[hive] object TestHiveContext {
     scratchDir
   }
 
-  def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
+  private def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
     sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
     sc
   }
