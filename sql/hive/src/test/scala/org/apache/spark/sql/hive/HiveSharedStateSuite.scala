@@ -91,7 +91,8 @@ class HiveSharedStateSuite extends SparkFunSuite {
       "session level conf should be passed to catalog")
   }
 
-  test("SPARK-34568: We should respect enableHiveSupport when initialize SparkSession") {
+  test("SPARK-34568: When SparkContext's conf not enable hive, " +
+    "we should respect `enableHiveSupport()` when build SparkSession too") {
     val conf = new SparkConf().setMaster("local").setAppName("SPARK-34568")
       .set(UI.UI_ENABLED, false)
     val sc = SparkContext.getOrCreate(conf)
