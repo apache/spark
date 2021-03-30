@@ -108,6 +108,9 @@ class MergingSessionsIterator(
   private[this] val sessionProjection: UnsafeProjection =
     UnsafeProjection.create(Seq(sessionExpression), valueAttributes)
 
+  // The flag indicating there's error on iterator, sort precondition is not fulfilled.
+  private var errorOnIterator: Boolean = false
+
   protected def initialize(): Unit = {
     if (inputIterator.hasNext) {
       initializeBuffer(sortBasedAggregationBuffer)
@@ -151,7 +154,8 @@ class MergingSessionsIterator(
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
         if (sessionStart < getSessionStart(currentSession)) {
-          throw new IllegalArgumentException("Input iterator is not sorted based on session!")
+          errorOnIterator = true
+          throw new IllegalStateException("Input iterator is not sorted based on session!")
         } else if (sessionStart <= getSessionEnd(currentSession)) {
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
@@ -204,7 +208,12 @@ class MergingSessionsIterator(
   // Iterator's public methods
   ///////////////////////////////////////////////////////////////////////////
 
-  override final def hasNext: Boolean = sortedInputHasNewGroup
+  override final def hasNext: Boolean = {
+    if (errorOnIterator) {
+      throw new IllegalStateException("The iterator is already corrupted.")
+    }
+    sortedInputHasNewGroup
+  }
 
   override final def next(): UnsafeRow = {
     if (hasNext) {

@@ -17,408 +17,177 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal, MutableProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.aggregate.MergingSessionsIterator
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class MergingSessionsIteratorSuite extends SharedSparkSession {
 
-  val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
+  private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
-    .add("aggVal1", LongType).add("aggVal2", DoubleType)
-  val rowAttributes = rowSchema.toAttributes
+    .add("count", LongType)
+  private val rowAttributes = rowSchema.toAttributes
 
-  val keysWithSessionSchema = rowSchema.filter { attr =>
-    List("key1", "key2", "session").contains(attr.name)
-  }
-  val keysWithSessionAttributes = rowAttributes.filter { attr =>
+  private val keysWithSessionAttributes = rowAttributes.filter { attr =>
     List("key1", "key2", "session").contains(attr.name)
   }
 
-  val sessionSchema = rowSchema.filter(st => st.name == "session").head
-  val sessionAttribute = rowAttributes.filter(attr => attr.name == "session").head
-
-  val valuesSchema = rowSchema.filter(st => List("aggVal1", "aggVal2").contains(st.name))
-  val valuesAttributes = rowAttributes.filter {
-    attr => List("aggVal1", "aggVal2").contains(attr.name)
+  private val noKeyRowAttributes = rowAttributes.filterNot { attr =>
+    Seq("key1", "key2").contains(attr.name)
   }
 
-/*
-
-<< MergingSessionsExec >>
-
-requiredChildDistributionExpressions = {Some@9252} "Some(ArrayBuffer(id#12))"
- value = {ArrayBuffer@9263} "ArrayBuffer" size = 1
-requiredChildDistributionOption = {None$@9253} "None"
-groupingExpressions = {ArrayBuffer@9254} "ArrayBuffer" size = 2
- 0 = {AttributeReference@9255} "session_window#25"
- 1 = {AttributeReference@9267} "id#12"
-sessionExpression = {AttributeReference@9255} "session_window#25"
- name = "session_window"
- dataType = {StructType@9271} "StructType" size = 2
- nullable = false
- metadata = {Metadata@9272} "{"spark.sessionWindow":true}"
- exprId = {ExprId@9273} "ExprId(25,dd71ade5-9781-46bb-bc2d-5f45fe1a1e2d)"
- qualifier = {Nil$@9274} "Nil$" size = 0
- references = {AttributeSet@9275} "AttributeSet" size = 1
- bitmap$trans$0 = true
- deterministic = true
- _references = null
- resolved = true
- canonicalized = {AttributeReference@9276} "none#25"
- Expression.bitmap$trans$0 = false
- bitmap$0 = 7
- containsChild = {Set$EmptySet$@9277} "Set$EmptySet$" size = 0
- _hashCode = 0
- allChildren = null
- origin = {Origin@9278} "Origin(None,None)"
- tags = {HashMap@9279} "HashMap" size = 0
- TreeNode.bitmap$0 = 1
-aggregateExpressions = {ArrayBuffer@9256} "ArrayBuffer" size = 2
- 0 = {AggregateExpression@9355} "merge_count(1)"
-  resultAttribute = null
-  canonicalized = null
-  references = null
-  aggregateFunction = {Count@9364} "count(1)"
-  mode = {PartialMerge$@9365} "PartialMerge"
-  isDistinct = false
-  filter = {None$@9253} "None"
-  resultId = {ExprId@9366} "ExprId(20,dd71ade5-9781-46bb-bc2d-5f45fe1a1e2d)"
-  bitmap$trans$0 = 0
-  bitmap$0 = false
-  deterministic = false
-  _references = null
-  resolved = false
-  Expression.canonicalized = null
-  Expression.bitmap$trans$0 = false
-  Expression.bitmap$0 = 0
-  containsChild = null
-  _hashCode = 0
-  allChildren = null
-  origin = {Origin@9367} "Origin(None,None)"
-  tags = {HashMap@9368} "HashMap" size = 0
-  TreeNode.bitmap$0 = 0
- 1 = {AggregateExpression@9356} "merge_sum(value#11)"
-  resultAttribute = null
-  canonicalized = null
-  references = null
-  aggregateFunction = {Sum@9371} "sum(value#11)"
-  mode = {PartialMerge$@9365} "PartialMerge"
-  isDistinct = false
-  filter = {None$@9253} "None"
-  resultId = {ExprId@9372} "ExprId(23,dd71ade5-9781-46bb-bc2d-5f45fe1a1e2d)"
-  bitmap$trans$0 = 0
-  bitmap$0 = false
-  deterministic = false
-  _references = null
-  resolved = false
-  Expression.canonicalized = null
-  Expression.bitmap$trans$0 = false
-  Expression.bitmap$0 = 0
-  containsChild = null
-  _hashCode = 0
-  allChildren = null
-  origin = {Origin@9367} "Origin(None,None)"
-  tags = {HashMap@9373} "HashMap" size = 0
-  TreeNode.bitmap$0 = 0
-aggregateAttributes = {ArrayBuffer@9257} "ArrayBuffer" size = 2
- 0 = {AttributeReference@9360} "count(1)#20L"
-  name = "count(1)"
-  dataType = {LongType$@9377} "LongType"
-  nullable = false
-  metadata = {Metadata@9437} "{}"
-  exprId = {ExprId@9366} "ExprId(20,dd71ade5-9781-46bb-bc2d-5f45fe1a1e2d)"
-  qualifier = {Nil$@9274} "Nil$" size = 0
-  references = null
-  bitmap$trans$0 = false
-  deterministic = false
-  _references = null
-  resolved = true
-  canonicalized = null
-  Expression.bitmap$trans$0 = false
-  bitmap$0 = 2
-  containsChild = {Set$EmptySet$@9277} "Set$EmptySet$" size = 0
-  _hashCode = 0
-  allChildren = null
-  origin = {Origin@9385} "Origin(None,None)"
-  tags = {HashMap@9442} "HashMap" size = 0
-  TreeNode.bitmap$0 = 1
- 1 = {AttributeReference@9361} "sum(value#11)#23L"
-  name = "sum(value#11)"
-  dataType = {LongType$@9377} "LongType"
-  nullable = true
-  metadata = {Metadata@9437} "{}"
-  exprId = {ExprId@9372} "ExprId(23,dd71ade5-9781-46bb-bc2d-5f45fe1a1e2d)"
-  qualifier = {Nil$@9274} "Nil$" size = 0
-  references = null
-  bitmap$trans$0 = false
-  deterministic = false
-  _references = null
-  resolved = true
-  canonicalized = null
-  Expression.bitmap$trans$0 = false
-  bitmap$0 = 2
-  containsChild = {Set$EmptySet$@9277} "Set$EmptySet$" size = 0
-  _hashCode = 0
-  allChildren = null
-  origin = {Origin@9385} "Origin(None,None)"
-  tags = {HashMap@9438} "HashMap" size = 0
-  TreeNode.bitmap$0 = 1
-initialInputBufferOffset = 2
-resultExpressions = {ArrayBuffer@9258} "ArrayBuffer" size = 4
- 0 = {AttributeReference@9255} "session_window#25"
- 1 = {AttributeReference@9267} "id#12"
- 2 = {AttributeReference@9446} "count#54L"
- 3 = {AttributeReference@9447} "sum#55L"
-child = {HashAggregateExec@9259} "HashAggregate(keys=[session_window#25, id#12], functions=[partial_count(1), partial_sum(value#11)], output=[session_window#25, id#12, count#54L, sum#55L])\n+- PlanLater Project [named_struct(start, precisetimestampconversion(precisetimestampconversion(cast(_1#3 as timestamp), TimestampType, LongType), LongType, TimestampType), end, precisetimestampconversion((precisetimestampconversion(cast(_1#3 as timestamp), TimestampType, LongType) + 10000000), LongType, TimestampType)) AS session_window#25, _2#4 AS value#11, _3#5 AS id#12]\n"
-
-<< MergingSessionsIterator >>
-
-partIndex = 1
-groupingExpressions = {ArrayBuffer@13034} "ArrayBuffer" size = 2
- 0 = {AttributeReference@13035} "session_window#25"
- 1 = {AttributeReference@13060} "id#12"
-sessionExpression = {AttributeReference@13035} "session_window#25"
- name = "session_window"
- dataType = {StructType@13064} "StructType" size = 2
- nullable = false
- metadata = {Metadata@13065} "{"spark.sessionWindow":true}"
- exprId = {ExprId@13066} "ExprId(25,a01591e6-1d42-469b-89fe-93886ef20ed2)"
- qualifier = {Nil$@13067} "Nil$" size = 0
- references = null
- bitmap$trans$0 = false
- deterministic = false
- _references = null
- resolved = true
- canonicalized = null
- Expression.bitmap$trans$0 = false
- bitmap$0 = 2
- containsChild = null
- _hashCode = 0
- allChildren = null
- origin = {Origin@13068} "Origin(None,None)"
- tags = {HashMap@13069} "HashMap" size = 0
- TreeNode.bitmap$0 = 0
-valueAttributes = {ArrayBuffer@13036} "ArrayBuffer" size = 4
- 0 = {AttributeReference@13035} "session_window#25"
- 1 = {AttributeReference@13060} "id#12"
- 2 = {AttributeReference@13120} "count#54L"
- 3 = {AttributeReference@13121} "sum#55L"
-inputIterator = {WholeStageCodegenExec$$anon$1@13037} "<iterator>"
- buffer = {GeneratedClass$GeneratedIteratorForCodegenStage2@13126}
- durationMs = {SQLMetric@13127} "SQLMetric(id: 220, name: Some(duration), value: -1)"
-aggregateExpressions = {ArrayBuffer@13038} "ArrayBuffer" size = 2
- 0 = {AggregateExpression@13130} "merge_count(1)"
- 1 = {AggregateExpression@13131} "merge_sum(value#11)"
-aggregateAttributes = {ArrayBuffer@13039} "ArrayBuffer" size = 2
- 0 = {AttributeReference@13135} "count(1)#20L"
- 1 = {AttributeReference@13136} "sum(value#11)#23L"
-initialInputBufferOffset = 2
-resultExpressions = {ArrayBuffer@13040} "ArrayBuffer" size = 4
- 0 = {AttributeReference@13035} "session_window#25"
- 1 = {AttributeReference@13060} "id#12"
- 2 = {AttributeReference@13120} "count#54L"
- 3 = {AttributeReference@13121} "sum#55L"
-newMutableProjection = {MergingSessionsExec$lambda@13041} "org.apache.spark.sql.execution.aggregate.MergingSessionsExec$$Lambda$2770/254372732@3d4735c5"
-numOutputRows = {SQLMetric@13042} "SQLMetric(id: 216, name: Some(number of output rows), value: 0)"
-*/
+  private val sessionAttribute = rowAttributes.filter(attr => attr.name == "session").head
 
   test("no row") {
-    val iterator = new UpdatingSessionIterator(None.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
-
+    val iterator = createTestIterator(None.iterator)
     assert(!iterator.hasNext)
   }
 
   test("only one row") {
-    val rows = List(createRow("a", 1, 100, 110, 10, 1.1))
+    val rows = List(createRow("a", 1, 100, 110))
 
-    val iterator = new UpdatingSessionIterator(rows.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
-
+    val iterator = createTestIterator(rows.iterator)
     assert(iterator.hasNext)
 
+    val expectedRow = createRow("a", 1, 100, 110, 1)
+
     val retRow = iterator.next()
-    assertRowsEquals(retRow, rows.head)
+    assertRowsEquals(retRow, expectedRow)
 
     assert(!iterator.hasNext)
   }
 
   test("one session per key, one key") {
-    val row1 = createRow("a", 1, 100, 110, 10, 1.1)
-    val row2 = createRow("a", 1, 100, 110, 20, 1.2)
-    val row3 = createRow("a", 1, 105, 115, 30, 1.3)
-    val row4 = createRow("a", 1, 113, 123, 40, 1.4)
+    val row1 = createRow("a", 1, 100, 110)
+    val row2 = createRow("a", 1, 100, 110)
+    val row3 = createRow("a", 1, 105, 115)
+    val row4 = createRow("a", 1, 113, 123)
     val rows = List(row1, row2, row3, row4)
 
-    val iterator = new UpdatingSessionIterator(rows.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
+    val iterator = createTestIterator(rows.iterator)
+    assert(iterator.hasNext)
 
-    val retRows = rows.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
+    val retRow = iterator.next()
+    val expectedRow = createRow("a", 1, 100, 123, 4)
+    assertRowsEquals(expectedRow, retRow)
 
-    retRows.zip(rows).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (100 ~ 123)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 100, 123)
-    }
-
-    assert(iterator.hasNext === false)
+    assert(!iterator.hasNext)
   }
 
   test("one session per key, multi keys") {
-    val row1 = createRow("a", 1, 100, 110, 10, 1.1)
-    val row2 = createRow("a", 1, 100, 110, 20, 1.2)
-    val row3 = createRow("a", 1, 105, 115, 30, 1.3)
-    val row4 = createRow("a", 1, 113, 123, 40, 1.4)
-    val rows1 = List(row1, row2, row3, row4)
+    val rows = Seq(
+      // session 1
+      createRow("a", 1, 100, 110),
+      createRow("a", 1, 100, 110),
+      createRow("a", 1, 105, 115),
+      createRow("a", 1, 113, 123),
 
-    val row5 = createRow("a", 2, 110, 120, 10, 1.1)
-    val row6 = createRow("a", 2, 115, 125, 20, 1.2)
-    val row7 = createRow("a", 2, 117, 127, 30, 1.3)
-    val row8 = createRow("a", 2, 125, 135, 40, 1.4)
-    val rows2 = List(row5, row6, row7, row8)
+      // session 2
+      createRow("a", 2, 110, 120),
+      createRow("a", 2, 115, 125),
+      createRow("a", 2, 117, 127),
+      createRow("a", 2, 125, 135)
+    )
 
-    val rowsAll = rows1 ++ rows2
+    val iterator = createTestIterator(rows.iterator)
+    assert(iterator.hasNext)
 
-    val iterator = new UpdatingSessionIterator(rowsAll.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
+    val expectedRow1 = createRow("a", 1, 100, 123, 4)
+    assertRowsEquals(expectedRow1, iterator.next())
 
-    val retRows1 = rows1.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
-    val retRows2 = rows2.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
+    assert(iterator.hasNext)
 
-    retRows1.zip(rows1).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (100 ~ 123)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 100, 123)
-    }
+    val expectedRow2 = createRow("a", 2, 110, 135, 4)
+    assertRowsEquals(expectedRow2, iterator.next())
 
-    retRows2.zip(rows2).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (110 ~ 135)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 110, 135)
-    }
-
-    assert(iterator.hasNext === false)
+    assert(!iterator.hasNext)
   }
 
   test("multiple sessions per key, single key") {
-    val row1 = createRow("a", 1, 100, 110, 10, 1.1)
-    val row2 = createRow("a", 1, 105, 115, 20, 1.2)
-    val rows1 = List(row1, row2)
+    val rows = Seq(
+      // session 1
+      createRow("a", 1, 100, 110),
+      createRow("a", 1, 105, 115),
 
-    val row3 = createRow("a", 1, 125, 135, 30, 1.3)
-    val row4 = createRow("a", 1, 127, 137, 40, 1.4)
-    val rows2 = List(row3, row4)
+      // session 2
+      createRow("a", 1, 125, 135),
+      createRow("a", 1, 127, 137)
+    )
 
-    val rowsAll = rows1 ++ rows2
+    val iterator = createTestIterator(rows.iterator)
+    assert(iterator.hasNext)
 
-    val iterator = new UpdatingSessionIterator(rowsAll.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
+    val expectedRow1 = createRow("a", 1, 100, 115, 2)
+    assertRowsEquals(expectedRow1, iterator.next())
 
-    val retRows1 = rows1.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
+    assert(iterator.hasNext)
 
-    val retRows2 = rows2.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
+    val expectedRow2 = createRow("a", 1, 125, 137, 2)
+    assertRowsEquals(expectedRow2, iterator.next())
 
-    retRows1.zip(rows1).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (100 ~ 115)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 100, 115)
-    }
-
-    retRows2.zip(rows2).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (125 ~ 137)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 125, 137)
-    }
-
-    assert(iterator.hasNext === false)
+    assert(!iterator.hasNext)
   }
 
   test("multiple sessions per key, multi keys") {
-    val row1 = createRow("a", 1, 100, 110, 10, 1.1)
-    val row2 = createRow("a", 1, 100, 110, 20, 1.2)
-    val rows1 = List(row1, row2)
+    val rows = Seq(
+      // session 1
+      createRow("a", 1, 100, 110),
+      createRow("a", 1, 100, 110),
 
-    val row3 = createRow("a", 1, 115, 125, 30, 1.3)
-    val row4 = createRow("a", 1, 119, 129, 40, 1.4)
-    val rows2 = List(row3, row4)
+      // session 2
+      createRow("a", 1, 115, 125),
+      createRow("a", 1, 119, 129),
 
-    val row5 = createRow("a", 2, 110, 120, 10, 1.1)
-    val row6 = createRow("a", 2, 115, 125, 20, 1.2)
-    val rows3 = List(row5, row6)
+      // session 3
+      createRow("a", 2, 110, 120),
+      createRow("a", 2, 115, 125),
 
-    val row7 = createRow("a", 2, 127, 137, 30, 1.3)
-    val row8 = createRow("a", 2, 135, 145, 40, 1.4)
-    val rows4 = List(row7, row8)
+      // session 4
+      createRow("a", 2, 127, 137),
+      createRow("a", 2, 135, 145)
+    )
 
-    val rowsAll = rows1 ++ rows2 ++ rows3 ++ rows4
+    val iterator = createTestIterator(rows.iterator)
+    assert(iterator.hasNext)
 
-    val iterator = new UpdatingSessionIterator(rowsAll.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
+    val expectedRow1 = createRow("a", 1, 100, 110, 2)
+    assertRowsEquals(expectedRow1, iterator.next())
 
-    val retRows1 = rows1.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
+    assert(iterator.hasNext)
 
-    val retRows2 = rows2.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
+    val expectedRow2 = createRow("a", 1, 115, 129, 2)
+    assertRowsEquals(expectedRow2, iterator.next())
 
-    val retRows3 = rows3.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
+    assert(iterator.hasNext)
 
-    val retRows4 = rows4.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
+    val expectedRow3 = createRow("a", 2, 110, 125, 2)
+    assertRowsEquals(expectedRow3, iterator.next())
 
-    retRows1.zip(rows1).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (100 ~ 110)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 100, 110)
-    }
+    assert(iterator.hasNext)
 
-    retRows2.zip(rows2).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (115 ~ 129)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 115, 129)
-    }
+    val expectedRow4 = createRow("a", 2, 127, 145, 2)
+    assertRowsEquals(expectedRow4, iterator.next())
 
-    retRows3.zip(rows3).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (110 ~ 125)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 110, 125)
-    }
-
-    retRows4.zip(rows4).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (127 ~ 145)
-      assertRowsEqualsWithNewSession(expectedRow, retRow, 127, 145)
-    }
-
-    assert(iterator.hasNext === false)
+    assert(!iterator.hasNext)
   }
 
   test("throws exception if data is not sorted by session start") {
-    val row1 = createRow("a", 1, 100, 110, 10, 1.1)
-    val row2 = createRow("a", 1, 100, 110, 20, 1.2)
-    val row3 = createRow("a", 1, 95, 105, 30, 1.3)
-    val row4 = createRow("a", 1, 113, 123, 40, 1.4)
-    val rows = List(row1, row2, row3, row4)
+    val rows = Seq(
+      createRow("a", 1, 100, 110),
+      createRow("a", 1, 100, 110),
+      createRow("a", 1, 95, 105),
+      createRow("a", 1, 113, 123)
+    )
 
-    val iterator = new UpdatingSessionIterator(rows.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
+    val iterator = createTestIterator(rows.iterator)
 
-    // UpdatingSessionIterator can't detect error on hasNext
+    // MergingSessionsIterator can't detect error on hasNext
     assert(iterator.hasNext)
 
     // when calling next() it can detect error and throws IllegalStateException
@@ -436,98 +205,64 @@ numOutputRows = {SQLMetric@13042} "SQLMetric(id: 216, name: Some(number of outpu
     }
   }
 
-  test("throws exception if data is not sorted by key") {
-    val row1 = createRow("a", 1, 100, 110, 10, 1.1)
-    val row2 = createRow("a", 2, 100, 110, 20, 1.2)
-    val row3 = createRow("a", 1, 113, 123, 40, 1.4)
-    val rows = List(row1, row2, row3)
+  test("no key") {
+    val rows = Seq(
+      createNoKeyRow(100, 110),
+      createNoKeyRow(100, 110),
+      createNoKeyRow(105, 115),
+      createNoKeyRow(113, 123)
+    )
 
-    val iterator = new UpdatingSessionIterator(rows.iterator, keysWithSessionAttributes,
-      sessionAttribute, rowAttributes, inMemoryThreshold, spillThreshold)
-
-    // UpdatingSessionIterator can't detect error on hasNext
+    val iterator = createNoKeyTestIterator(rows.iterator)
     assert(iterator.hasNext)
 
-    assertRowsEquals(row1, iterator.next())
+    val expectedRow = createNoKeyRow(100, 123, 4)
+    assertNoKeyRowsEquals(expectedRow, iterator.next())
 
-    assert(iterator.hasNext)
-
-    // second row itself is OK but while finding end of session it reads third row, and finds
-    // its key is already finished processing, hence precondition for sorting is broken, and
-    // it throws IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
-
-    // afterwards, calling either hasNext() or next() will throw IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.hasNext
-    }
-
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
+    assert(!iterator.hasNext)
   }
 
-  test("no key") {
-    val noKeyRowSchema = new StructType()
-      .add("session", new StructType().add("start", LongType).add("end", LongType))
-      .add("aggVal1", LongType).add("aggVal2", DoubleType)
-    val noKeyRowAttributes = noKeyRowSchema.toAttributes
+  private def createTestIterator(iterator: Iterator[InternalRow]): MergingSessionsIterator = {
+    createTestIterator(iterator, isNoKey = false)
+  }
 
-    val noKeySessionAttribute = noKeyRowAttributes.filter(attr => attr.name == "session").head
+  private def createNoKeyTestIterator(iterator: Iterator[InternalRow]): MergingSessionsIterator = {
+    createTestIterator(iterator, isNoKey = true)
+  }
 
-    def createNoKeyRow(
-        sessionStart: Long,
-        sessionEnd: Long,
-        aggVal1: Long,
-        aggVal2: Double): UnsafeRow = {
-      val genericRow = new GenericInternalRow(4)
-      val session: Array[Any] = new Array[Any](2)
-      session(0) = sessionStart
-      session(1) = sessionEnd
+  private def createTestIterator(
+      iterator: Iterator[InternalRow],
+      isNoKey: Boolean): MergingSessionsIterator = {
+    val countFunc = Count(Literal.create(1L, LongType))
+    val countAggExpr = countFunc.toAggregateExpression()
+    val countRetAttr = countAggExpr.resultAttribute
 
-      val sessionRow = new GenericInternalRow(session)
-      genericRow.update(0, sessionRow)
+    val aggregateExpressions = Seq(countAggExpr)
+    val aggregateAttributes = Seq(countRetAttr)
 
-      genericRow.setLong(1, aggVal1)
-      genericRow.setDouble(2, aggVal2)
+    val initialInputBufferOffset = 1
 
-      val rowProjection = GenerateUnsafeProjection.generate(noKeyRowAttributes, noKeyRowAttributes)
-      rowProjection(genericRow)
+    val groupingExpressions = if (isNoKey) {
+      Seq(sessionAttribute)
+    } else {
+      keysWithSessionAttributes
     }
+    val resultExpressions = groupingExpressions ++ aggregateAttributes
 
-    def assertNoKeyRowsEqualsWithNewSession(
-        expectedRow: InternalRow,
-        retRow: InternalRow,
-        newSessionStart: Long,
-        newSessionEnd: Long): Unit = {
-      assert(retRow.getStruct(0, 2).getLong(0) == newSessionStart)
-      assert(retRow.getStruct(0, 2).getLong(1) == newSessionEnd)
-      assert(retRow.getLong(1) === expectedRow.getLong(1))
-      assert(doubleEquals(retRow.getDouble(2), expectedRow.getDouble(2)))
-    }
-
-    val row1 = createNoKeyRow(100, 110, 10, 1.1)
-    val row2 = createNoKeyRow(100, 110, 20, 1.2)
-    val row3 = createNoKeyRow(105, 115, 30, 1.3)
-    val row4 = createNoKeyRow(113, 123, 40, 1.4)
-    val rows = List(row1, row2, row3, row4)
-
-    val iterator = new UpdatingSessionIterator(rows.iterator, Seq(noKeySessionAttribute),
-      noKeySessionAttribute, noKeyRowAttributes, inMemoryThreshold, spillThreshold)
-
-    val retRows = rows.indices.map { _ =>
-      assert(iterator.hasNext)
-      iterator.next()
-    }
-
-    retRows.zip(rows).foreach { case (retRow, expectedRow) =>
-      // session being expanded to (100 ~ 123)
-      assertNoKeyRowsEqualsWithNewSession(expectedRow, retRow, 100, 123)
-    }
-
-    assert(iterator.hasNext === false)
+    new MergingSessionsIterator(
+      partIndex = 0,
+      groupingExpressions = groupingExpressions,
+      sessionExpression = sessionAttribute,
+      valueAttributes = resultExpressions,
+      inputIterator = iterator,
+      aggregateExpressions = aggregateExpressions,
+      aggregateAttributes = aggregateAttributes,
+      initialInputBufferOffset = initialInputBufferOffset,
+      resultExpressions = resultExpressions,
+      newMutableProjection = (expressions, inputSchema) =>
+        MutableProjection.create(expressions, inputSchema),
+      numOutputRows = SQLMetrics.createMetric(sparkContext, "output rows")
+    )
   }
 
   private def createRow(
@@ -535,9 +270,8 @@ numOutputRows = {SQLMetric@13042} "SQLMetric(id: 216, name: Some(number of outpu
       key2: Int,
       sessionStart: Long,
       sessionEnd: Long,
-      aggVal1: Long,
-      aggVal2: Double): UnsafeRow = {
-    val genericRow = new GenericInternalRow(6)
+      countValue: Long = 0): UnsafeRow = {
+    val genericRow = new GenericInternalRow(4)
     if (key1 != null) {
       genericRow.update(0, UTF8String.fromString(key1))
     } else {
@@ -552,15 +286,10 @@ numOutputRows = {SQLMetric@13042} "SQLMetric(id: 216, name: Some(number of outpu
     val sessionRow = new GenericInternalRow(session)
     genericRow.update(2, sessionRow)
 
-    genericRow.setLong(3, aggVal1)
-    genericRow.setDouble(4, aggVal2)
+    genericRow.setLong(3, countValue)
 
     val rowProjection = GenerateUnsafeProjection.generate(rowAttributes, rowAttributes)
     rowProjection(genericRow)
-  }
-
-  private def doubleEquals(value1: Double, value2: Double): Boolean = {
-    value1 > value2 - 0.000001 && value1 < value2 + 0.000001
   }
 
   private def assertRowsEquals(expectedRow: InternalRow, retRow: InternalRow): Unit = {
@@ -569,19 +298,29 @@ numOutputRows = {SQLMetric@13042} "SQLMetric(id: 216, name: Some(number of outpu
     assert(retRow.getStruct(2, 2).getLong(0) == expectedRow.getStruct(2, 2).getLong(0))
     assert(retRow.getStruct(2, 2).getLong(1) == expectedRow.getStruct(2, 2).getLong(1))
     assert(retRow.getLong(3) === expectedRow.getLong(3))
-    assert(doubleEquals(retRow.getDouble(3), expectedRow.getDouble(3)))
   }
 
-  private def assertRowsEqualsWithNewSession(
-      expectedRow: InternalRow,
-      retRow: InternalRow,
-      newSessionStart: Long,
-      newSessionEnd: Long): Unit = {
-    assert(retRow.getString(0) === expectedRow.getString(0))
-    assert(retRow.getInt(1) === expectedRow.getInt(1))
-    assert(retRow.getStruct(2, 2).getLong(0) == newSessionStart)
-    assert(retRow.getStruct(2, 2).getLong(1) == newSessionEnd)
-    assert(retRow.getLong(3) === expectedRow.getLong(3))
-    assert(doubleEquals(retRow.getDouble(3), expectedRow.getDouble(3)))
+  private def createNoKeyRow(
+      sessionStart: Long,
+      sessionEnd: Long,
+      countValue: Long = 0): UnsafeRow = {
+    val genericRow = new GenericInternalRow(2)
+    val session: Array[Any] = new Array[Any](2)
+    session(0) = sessionStart
+    session(1) = sessionEnd
+
+    val sessionRow = new GenericInternalRow(session)
+    genericRow.update(0, sessionRow)
+
+    genericRow.setLong(1, countValue)
+
+    val rowProjection = GenerateUnsafeProjection.generate(noKeyRowAttributes, noKeyRowAttributes)
+    rowProjection(genericRow)
+  }
+
+  private def assertNoKeyRowsEquals(expectedRow: InternalRow, retRow: InternalRow): Unit = {
+    assert(retRow.getStruct(0, 2).getLong(0) == expectedRow.getStruct(0, 2).getLong(0))
+    assert(retRow.getStruct(0, 2).getLong(1) == expectedRow.getStruct(0, 2).getLong(1))
+    assert(retRow.getLong(1) === expectedRow.getLong(1))
   }
 }
