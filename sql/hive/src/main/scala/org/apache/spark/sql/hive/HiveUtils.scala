@@ -50,11 +50,6 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, Utils}
 
 private[spark] object HiveUtils extends Logging {
 
-  def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
-    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-    sc
-  }
-
   /** The version of hive used internally by Spark SQL. */
   val builtinHiveVersion: String = HiveVersionInfo.getVersion
 

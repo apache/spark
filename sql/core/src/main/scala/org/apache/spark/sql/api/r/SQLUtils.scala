@@ -39,11 +39,6 @@ import org.apache.spark.sql.types._
 private[sql] object SQLUtils extends Logging {
   SerDe.setSQLReadObject(readSqlObject).setSQLWriteObject(writeSqlObject)
 
-  private[this] def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
-    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-    sc
-  }
-
   def getOrCreateSparkSession(
       jsc: JavaSparkContext,
       sparkConfigMap: JMap[Object, Object],
