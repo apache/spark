@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.HyperLogLogPlusPlusHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -60,7 +61,7 @@ case class HyperLogLogPlusPlus(
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate {
+  extends ImperativeAggregate with UnaryLike[Expression] {
 
   def this(child: Expression) = {
     this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
@@ -81,8 +82,6 @@ case class HyperLogLogPlusPlus(
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def children: Seq[Expression] = Seq(child)
 
   override def nullable: Boolean = false
 

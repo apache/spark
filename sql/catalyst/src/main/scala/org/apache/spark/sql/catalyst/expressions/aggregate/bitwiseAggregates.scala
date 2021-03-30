@@ -18,15 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryArithmetic, BitwiseAnd, BitwiseOr, BitwiseXor, ExpectsInputTypes, Expression, ExpressionDescription, If, IsNull, Literal}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegralType}
 
-abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes {
+abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes
+    with UnaryLike[Expression] {
 
   val child: Expression
 
   def bitOperator(left: Expression, right: Expression): BinaryArithmetic
-
-  override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = true
 
