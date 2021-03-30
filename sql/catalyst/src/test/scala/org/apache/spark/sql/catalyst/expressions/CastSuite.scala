@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.DateTimeException
+import java.time.{DateTimeException, Duration, Period}
 import java.util.{Calendar, TimeZone}
 
 import scala.collection.parallel.immutable.ParVector
@@ -1711,6 +1711,20 @@ class CastSuite extends CastSuiteBase {
       }.getMessage
       assert(e3.contains("Casting 2147483648 to int causes overflow"))
     }
+  }
+
+  test("SPARK-34902: Cast support DayTimeIntervalType and YearMonthIntervalType") {
+    // DayTimeIntervalType
+    checkEvaluation(cast(12345723121L, DayTimeIntervalType),
+      12345723121L)
+    checkEvaluation(cast(Literal.create(Duration.ofMinutes(10), DayTimeIntervalType), LongType),
+      600000000L)
+
+    // YearMonthIntervaltype
+    checkEvaluation(cast(12345, YearMonthIntervalType),
+      12345)
+    checkEvaluation(cast(Literal.create(Period.ofMonths(10), YearMonthIntervalType), IntegerType),
+      10)
   }
 }
 

@@ -72,6 +72,11 @@ object Cast {
 
     case (StringType, CalendarIntervalType) => true
 
+    case (LongType, DayTimeIntervalType) => true
+    case (DayTimeIntervalType, LongType) => true
+    case (IntegerType, YearMonthIntervalType) => true
+    case (YearMonthIntervalType, IntegerType) => true
+
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
     case (DateType, _: NumericType) => true
@@ -526,6 +531,16 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[UTF8String](_, s => IntervalUtils.safeStringToInterval(s))
   }
 
+  private[this] def castToDayTimeInterval(from: DataType): Any => Any = from match {
+    case LongType =>
+      buildCast[Long](_, l => l)
+  }
+
+  private[this] def castToYearMonthInterval(from: DataType): Any => Any = from match {
+    case IntegerType =>
+      buildCast[Int](_, i => i)
+  }
+
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
@@ -543,6 +558,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
+    case dt: DayTimeIntervalType =>
+      b => b
   }
 
   // IntConverter
@@ -571,6 +588,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
+    case ym: YearMonthIntervalType =>
+      b => b
   }
 
   // ShortConverter
@@ -830,6 +849,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         case decimal: DecimalType => castToDecimal(from, decimal)
         case TimestampType => castToTimestamp(from)
         case CalendarIntervalType => castToInterval(from)
+        case DayTimeIntervalType => castToDayTimeInterval(from)
+        case YearMonthIntervalType => castToYearMonthInterval(from)
         case BooleanType => castToBoolean(from)
         case ByteType => castToByte(from)
         case ShortType => castToShort(from)
@@ -888,6 +909,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
+    case DayTimeIntervalType => castToDayTimeIntervalCode(from)
+    case YearMonthIntervalType => castToYearMonthIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
@@ -1339,6 +1362,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   }
 
+  private[this] def castToDayTimeIntervalCode(from: DataType): CastFunction = from match {
+    case LongType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = $c;"
+  }
+
+  private[this] def castToYearMonthIntervalCode(from: DataType): CastFunction = from match {
+    case IntegerType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = $c;"
+
+  }
+
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
     val block = inline"new java.math.BigDecimal($MICROS_PER_SECOND)"
     code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
@@ -1542,6 +1578,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       castFractionToIntegralTypeCode("int", IntegerType.catalogString)
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
+    case ym: YearMonthIntervalType =>
+      (c, evPrim, evNull) => code"$evPrim = $c;"
   }
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
@@ -1570,6 +1608,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       castFractionToIntegralTypeCode("long", LongType.catalogString)
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
+    case dt: DayTimeIntervalType =>
+      (c, evPrim, evNull) => code"$evPrim = $c;"
   }
 
   private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
@@ -1891,6 +1931,11 @@ object AnsiCast {
     case (DateType, TimestampType) => true
 
     case (StringType, _: CalendarIntervalType) => true
+
+    case (LongType, DayTimeIntervalType) => true
+    case (DayTimeIntervalType, LongType) => true
+    case (IntegerType, YearMonthIntervalType) => true
+    case (YearMonthIntervalType, IntegerType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
