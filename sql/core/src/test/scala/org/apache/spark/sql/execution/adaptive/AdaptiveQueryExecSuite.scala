@@ -39,6 +39,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
@@ -1545,14 +1546,17 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-34899: Use origin plan if we can not coalesce shuffle partition") {
-    def check(ds: Dataset[Row], origin: ShuffleOrigin): Unit = {
+    def checkNoCoalescePartitions(ds: Dataset[Row], origin: ShuffleOrigin): Unit = {
+      assert(collect(ds.queryExecution.executedPlan) {
+        case s: ShuffleExchangeExec if s.shuffleOrigin == origin && s.numPartitions == 2 => s
+      }.size == 1)
       ds.collect()
-      val plan = ds.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      val plan = ds.queryExecution.executedPlan
       assert(collect(plan) {
         case c: CustomShuffleReaderExec => c
       }.isEmpty)
       assert(collect(plan) {
-        case s: ShuffleExchangeExec if s.shuffleOrigin == origin && s.numPartitions == 3 => s
+        case s: ShuffleExchangeExec if s.shuffleOrigin == origin && s.numPartitions == 2 => s
       }.size == 1)
       checkAnswer(ds, testData)
     }
@@ -1561,9 +1565,12 @@ class AdaptiveQueryExecSuite
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10",
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
-      check(testData.repartition(), REPARTITION)
-      check(testData.sort($"key"), ENSURE_REQUIREMENTS)
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val df = spark.sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString)), 10).toDF()
+
+      checkNoCoalescePartitions(df.repartition(), REPARTITION)
+      checkNoCoalescePartitions(df.sort($"key"), ENSURE_REQUIREMENTS)
     }
   }
 }
