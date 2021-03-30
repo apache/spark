@@ -812,6 +812,81 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-34902: Cast support DayTimeIntervalType and YearMonthIntervalType") {
+    // DayTimeIntervalType
+    checkEvaluation(
+      cast(cast(0, IntegerType), DayTimeIntervalType), 0L)
+    checkEvaluation(
+      cast(cast(null, IntegerType), DayTimeIntervalType), null)
+    checkEvaluation(
+      cast(cast(Int.MinValue, IntegerType), DayTimeIntervalType), Int.MinValue.toLong)
+    checkEvaluation(
+      cast(cast(Byte.MaxValue, ByteType), DayTimeIntervalType), Byte.MaxValue.toLong)
+    checkEvaluation(
+      cast(cast(Short.MaxValue, ShortType), DayTimeIntervalType), Short.MaxValue.toLong)
+    checkEvaluation(
+      cast(cast(Int.MaxValue, IntegerType), DayTimeIntervalType), Int.MaxValue.toLong)
+    checkEvaluation(
+      cast(cast(Long.MaxValue, LongType), DayTimeIntervalType), Long.MaxValue)
+
+    checkEvaluation(cast(
+      Literal.create(Duration.of(Byte.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
+      ByteType), Byte.MaxValue)
+    checkEvaluation(cast(
+      Literal.create(Duration.of(Short.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
+      ShortType), Short.MaxValue)
+    checkEvaluation(cast(
+      Literal.create(Duration.of(Int.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
+      IntegerType), Int.MaxValue)
+    checkEvaluation(cast(
+      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
+      LongType), Long.MaxValue)
+
+    castExceptionInExtractNumeric(checkEvaluation(cast(
+      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
+      ByteType), -1), ByteType)
+    castExceptionInExtractNumeric(checkEvaluation(cast(
+      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
+      ShortType), -1), ShortType)
+    castExceptionInExtractNumeric(checkEvaluation(cast(
+      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
+      IntegerType), -1), IntegerType)
+
+    // YearMonthIntervalType
+    checkEvaluation(cast(cast(Byte.MaxValue, ByteType), YearMonthIntervalType),
+      Byte.MaxValue.toInt)
+    checkEvaluation(cast(cast(Short.MaxValue, ShortType), YearMonthIntervalType),
+      Short.MaxValue.toInt)
+    checkEvaluation(cast(cast(Int.MaxValue, IntegerType), YearMonthIntervalType),
+      Int.MaxValue.toInt)
+    castExceptionInExtractNumeric(
+      checkEvaluation(cast(cast(Long.MaxValue, LongType), YearMonthIntervalType),
+        -1), IntegerType)
+
+    checkEvaluation(cast(
+      Literal.create(Period.ofMonths(Byte.MaxValue), YearMonthIntervalType),
+      ByteType), Byte.MaxValue)
+    checkEvaluation(cast(
+      Literal.create(Period.ofMonths(Short.MaxValue), YearMonthIntervalType),
+      ShortType), Short.MaxValue)
+    checkEvaluation(cast(
+      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
+      IntegerType), Int.MaxValue)
+    castExceptionWhenCodegen(checkEvaluation(cast(
+      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
+      LongType), Int.MaxValue))
+
+    castExceptionInExtractNumeric(checkEvaluation(cast(
+      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
+      ByteType), -1), ByteType)
+    castExceptionInExtractNumeric(checkEvaluation(cast(
+      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
+      ShortType), -1), ShortType)
+    castExceptionWhenCodegen(checkEvaluation(cast(
+      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
+      LongType), Int.MaxValue))
+  }
 }
 
 abstract class AnsiCastSuiteBase extends CastSuiteBase {
@@ -1191,81 +1266,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("SPARK-26218: Fix the corner case of codegen when casting float to Integer") {
     checkExceptionInExpression[ArithmeticException](
       cast(cast(Literal("2147483648"), FloatType), IntegerType), "overflow")
-  }
-
-  test("SPARK-34902: Cast support DayTimeIntervalType and YearMonthIntervalType") {
-    // DayTimeIntervalType
-    checkEvaluation(
-      cast(cast(0, IntegerType), DayTimeIntervalType), 0L)
-    checkEvaluation(
-      cast(cast(null, IntegerType), DayTimeIntervalType), null)
-    checkEvaluation(
-      cast(cast(Int.MinValue, IntegerType), DayTimeIntervalType), Int.MinValue.toLong)
-    checkEvaluation(
-      cast(cast(Byte.MaxValue, ByteType), DayTimeIntervalType), Byte.MaxValue.toLong)
-    checkEvaluation(
-      cast(cast(Short.MaxValue, ShortType), DayTimeIntervalType), Short.MaxValue.toLong)
-    checkEvaluation(
-      cast(cast(Int.MaxValue, IntegerType), DayTimeIntervalType), Int.MaxValue.toLong)
-    checkEvaluation(
-      cast(cast(Long.MaxValue, LongType), DayTimeIntervalType), Long.MaxValue)
-
-    checkEvaluation(cast(
-      Literal.create(Duration.of(Byte.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ByteType), Byte.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Duration.of(Short.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ShortType), Short.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Duration.of(Int.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      IntegerType), Int.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      LongType), Long.MaxValue)
-
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ByteType), -1), ByteType)
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ShortType), -1), ShortType)
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      IntegerType), -1), IntegerType)
-
-    // YearMonthIntervalType
-    checkEvaluation(cast(cast(Byte.MaxValue, ByteType), YearMonthIntervalType),
-      Byte.MaxValue.toInt)
-    checkEvaluation(cast(cast(Short.MaxValue, ShortType), YearMonthIntervalType),
-      Short.MaxValue.toInt)
-    checkEvaluation(cast(cast(Int.MaxValue, IntegerType), YearMonthIntervalType),
-      Int.MaxValue.toInt)
-    castExceptionInExtractNumeric(
-      checkEvaluation(cast(cast(Long.MaxValue, LongType), YearMonthIntervalType),
-        -1), IntegerType)
-
-    checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Byte.MaxValue), YearMonthIntervalType),
-      ByteType), Byte.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Short.MaxValue), YearMonthIntervalType),
-      ShortType), Short.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      IntegerType), Int.MaxValue)
-    castExceptionWhenCodegen(checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      LongType), Int.MaxValue))
-
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      ByteType), -1), ByteType)
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      ShortType), -1), ShortType)
-    castExceptionWhenCodegen(checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      LongType), Int.MaxValue))
   }
 }
 
@@ -1801,81 +1801,6 @@ class CastSuite extends CastSuiteBase {
       }.getMessage
       assert(e3.contains("Casting 2147483648 to int causes overflow"))
     }
-  }
-
-  test("SPARK-34902: Cast support DayTimeIntervalType and YearMonthIntervalType") {
-    // DayTimeIntervalType
-    checkEvaluation(
-      cast(cast(0, IntegerType), DayTimeIntervalType), 0L)
-    checkEvaluation(
-      cast(cast(null, IntegerType), DayTimeIntervalType), null)
-    checkEvaluation(
-      cast(cast(Int.MinValue, IntegerType), DayTimeIntervalType), Int.MinValue.toLong)
-    checkEvaluation(
-      cast(cast(Byte.MaxValue, ByteType), DayTimeIntervalType), Byte.MaxValue.toLong)
-    checkEvaluation(
-      cast(cast(Short.MaxValue, ShortType), DayTimeIntervalType), Short.MaxValue.toLong)
-    checkEvaluation(
-      cast(cast(Int.MaxValue, IntegerType), DayTimeIntervalType), Int.MaxValue.toLong)
-    checkEvaluation(
-      cast(cast(Long.MaxValue, LongType), DayTimeIntervalType), Long.MaxValue)
-
-    checkEvaluation(cast(
-      Literal.create(Duration.of(Byte.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ByteType), Byte.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Duration.of(Short.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ShortType), Short.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Duration.of(Int.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      IntegerType), Int.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      LongType), Long.MaxValue)
-
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ByteType), -1), ByteType)
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ShortType), -1), ShortType)
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      IntegerType), -1), IntegerType)
-
-    // YearMonthIntervalType
-    checkEvaluation(cast(cast(Byte.MaxValue, ByteType), YearMonthIntervalType),
-      Byte.MaxValue.toInt)
-    checkEvaluation(cast(cast(Short.MaxValue, ShortType), YearMonthIntervalType),
-      Short.MaxValue.toInt)
-    checkEvaluation(cast(cast(Int.MaxValue, IntegerType), YearMonthIntervalType),
-      Int.MaxValue.toInt)
-    castExceptionInExtractNumeric(
-      checkEvaluation(cast(cast(Long.MaxValue, LongType), YearMonthIntervalType),
-        -1), IntegerType)
-
-    checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Byte.MaxValue), YearMonthIntervalType),
-      ByteType), Byte.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Short.MaxValue), YearMonthIntervalType),
-      ShortType), Short.MaxValue)
-    checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      IntegerType), Int.MaxValue)
-    castExceptionWhenCodegen(checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      LongType), Int.MaxValue))
-
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      ByteType), -1), ByteType)
-    castExceptionInExtractNumeric(checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      ShortType), -1), ShortType)
-    castExceptionWhenCodegen(checkEvaluation(cast(
-      Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      LongType), Int.MaxValue))
   }
 }
 
