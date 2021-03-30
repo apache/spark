@@ -592,10 +592,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
-    case DayTimeIntervalType if ansiEnabled =>
-      b => LongExactNumeric.toInt(b.asInstanceOf[Long])
     case DayTimeIntervalType =>
-      b => implicitly[Numeric[Long]].toInt(b.asInstanceOf[Long])
+      b => LongExactNumeric.toInt(b.asInstanceOf[Long])
     case YearMonthIntervalType =>
       b => b
   }
@@ -641,7 +639,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
-    case DayTimeIntervalType if ansiEnabled =>
+    case DayTimeIntervalType =>
       b =>
         val intValue = try {
           LongExactNumeric.toInt(b.asInstanceOf[Long])
@@ -654,9 +652,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         } else {
           throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
         }
-    case DayTimeIntervalType =>
-      b => implicitly[Numeric[Long]].toInt(b.asInstanceOf[Long]).toShort
-    case YearMonthIntervalType if ansiEnabled =>
+    case YearMonthIntervalType =>
       b =>
         val intValue = try {
           IntegerExactNumeric.toInt(b.asInstanceOf[Int])
@@ -669,8 +665,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         } else {
           throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
         }
-    case YearMonthIntervalType =>
-      b => implicitly[Numeric[Int]].toInt(b.asInstanceOf[Int]).toShort
   }
 
   // ByteConverter
@@ -714,7 +708,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
-    case DayTimeIntervalType if ansiEnabled =>
+    case DayTimeIntervalType =>
       b =>
         val intValue = try {
           LongExactNumeric.toInt(b.asInstanceOf[Long])
@@ -727,9 +721,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         } else {
           throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType.catalogString)
         }
-    case DayTimeIntervalType =>
-      b => implicitly[Numeric[Long]].toInt(b.asInstanceOf[Long]).toByte
-    case YearMonthIntervalType if ansiEnabled =>
+    case YearMonthIntervalType =>
       b =>
         val intValue = try {
           IntegerExactNumeric.toInt(b.asInstanceOf[Int])
@@ -742,8 +734,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         } else {
           throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType.catalogString)
         }
-    case YearMonthIntervalType =>
-      b => implicitly[Numeric[Int]].toInt(b.asInstanceOf[Int]).toByte
   }
 
   /**
@@ -1435,10 +1425,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def castToYearMonthIntervalCode(from: DataType): CastFunction = from match {
-    case LongType if ansiEnabled =>
-      castIntegralTypeToIntegralTypeExactCode("int", IntegerType.catalogString)
-    case x: IntegralType =>
-      (c, evPrim, evNull) => code"$evPrim = (int) $c;"
+    case _: IntegralType =>
+      castIntegralTypeToIntegralTypeExactCode("int", IntegerType.catalogString, true)
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
@@ -1514,8 +1502,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castIntegralTypeToIntegralTypeExactCode(
       integralType: String,
-      catalogType: String): CastFunction = {
-    assert(ansiEnabled)
+      catalogType: String,
+      strictMode: Boolean = false): CastFunction = {
+    assert(ansiEnabled || strictMode)
     (c, evPrim, evNull) =>
       code"""
         if ($c == ($integralType) $c) {
@@ -1584,10 +1573,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       castFractionToIntegralTypeCode("byte", ByteType.catalogString)
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
-    case DayTimeIntervalType | YearMonthIntervalType if ansiEnabled =>
-      castIntegralTypeToIntegralTypeExactCode("byte", ByteType.catalogString)
     case DayTimeIntervalType | YearMonthIntervalType =>
-      (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
+      castIntegralTypeToIntegralTypeExactCode("byte", ByteType.catalogString, true)
   }
 
   private[this] def castToShortCode(
@@ -1619,10 +1606,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       castFractionToIntegralTypeCode("short", ShortType.catalogString)
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
-    case DayTimeIntervalType | YearMonthIntervalType if ansiEnabled =>
-      castIntegralTypeToIntegralTypeExactCode("short", ShortType.catalogString)
     case DayTimeIntervalType | YearMonthIntervalType =>
-      (c, evPrim, evNull) => code"$evPrim = (short) $c;"
+      castIntegralTypeToIntegralTypeExactCode("short", ShortType.catalogString, true)
   }
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
@@ -1652,10 +1637,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       castFractionToIntegralTypeCode("int", IntegerType.catalogString)
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
-    case DayTimeIntervalType if ansiEnabled =>
-      castIntegralTypeToIntegralTypeExactCode("int", IntegerType.catalogString)
     case DayTimeIntervalType =>
-      (c, evPrim, evNull) => code"$evPrim = (int) $c;"
+      castIntegralTypeToIntegralTypeExactCode("int", IntegerType.catalogString, true)
     case YearMonthIntervalType =>
       (c, evPrim, evNull) => code"$evPrim = $c;"
   }

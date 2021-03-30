@@ -1833,15 +1833,15 @@ class CastSuite extends CastSuiteBase {
       Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
       LongType), Long.MaxValue)
 
-    castExceptionWhenCodegen(checkEvaluation(cast(
+    castExceptionInExtractNumeric(checkEvaluation(cast(
       Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ByteType), -1))
-    castExceptionWhenCodegen(checkEvaluation(cast(
+      ByteType), -1), ByteType)
+    castExceptionInExtractNumeric(checkEvaluation(cast(
       Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      ShortType), -1))
-    checkEvaluation(cast(
+      ShortType), -1), ShortType)
+    castExceptionInExtractNumeric(checkEvaluation(cast(
       Literal.create(Duration.of(Long.MaxValue, ChronoUnit.MICROS), DayTimeIntervalType),
-      IntegerType), -1)
+      IntegerType), -1), IntegerType)
 
     // YearMonthIntervalType
     checkEvaluation(cast(cast(Byte.MaxValue, ByteType), YearMonthIntervalType),
@@ -1867,12 +1867,12 @@ class CastSuite extends CastSuiteBase {
       Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
       LongType), Int.MaxValue))
 
-    castExceptionWhenCodegen(checkEvaluation(cast(
+    castExceptionInExtractNumeric(checkEvaluation(cast(
       Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      ByteType), -1))
-    castExceptionWhenCodegen(checkEvaluation(cast(
+      ByteType), -1), ByteType)
+    castExceptionInExtractNumeric(checkEvaluation(cast(
       Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
-      ShortType), -1))
+      ShortType), -1), ShortType)
     castExceptionWhenCodegen(checkEvaluation(cast(
       Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
       LongType), Int.MaxValue))
