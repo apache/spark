@@ -93,10 +93,13 @@ class HiveSharedStateSuite extends SparkFunSuite {
   test("SPARK-34568: We should respect enableHiveSupport when initialize SparkSession") {
     val conf = new SparkConf().setMaster("local").setAppName("SPARK-34568")
     val sc = SparkContext.getOrCreate(conf)
+    val catalog = sc.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION)
+    sc.conf.set(StaticSQLConf.CATALOG_IMPLEMENTATION, "in-memory")
     val sparkSession = SparkSession.builder().enableHiveSupport().sparkContext(sc).getOrCreate()
     assert(sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "in-memory")
     assert(sparkSession.sharedState.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive")
     assert(sparkSession.sharedState.externalCatalog.unwrapped.getClass
       .getCanonicalName.contains("HiveExternalCatalog"))
+    sc.conf.set(StaticSQLConf.CATALOG_IMPLEMENTATION, catalog)
   }
 }
