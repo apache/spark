@@ -98,8 +98,8 @@ class HiveSharedStateSuite extends SparkFunSuite {
     val sparkSession = SparkSession.builder().enableHiveSupport().sparkContext(sc).getOrCreate()
     assert(sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "in-memory")
     assert(sparkSession.sharedState.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive")
-    assert(sparkSession.sharedState.externalCatalog.unwrapped.getClass
-      .getCanonicalName.contains("HiveExternalCatalog"))
+    assert(sparkSession.sessionState.catalog.getClass
+      .getCanonicalName.contains("HiveSessionCatalog"))
     sc.conf.set(StaticSQLConf.CATALOG_IMPLEMENTATION, catalog)
   }
 }
