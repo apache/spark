@@ -251,8 +251,15 @@ private[parquet] class ParquetRowConverter(
       catalystType: DataType,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
+    def isUnsignedIntTypeMatched(bitWidth: Int): Boolean = {
+      parquetType.getLogicalTypeAnnotation match {
+        case i: IntLogicalTypeAnnotation if !i.isSigned => i.getBitWidth == bitWidth
+        case _ => false
+      }
+    }
+
     catalystType match {
-      case LongType if parquetType.getOriginalType == OriginalType.UINT_32 =>
+      case LongType if isUnsignedIntTypeMatched(32) =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
             updater.setLong(Integer.toUnsignedLong(value))
@@ -286,7 +293,7 @@ private[parquet] class ParquetRowConverter(
         }
 
       // For unsigned int64
-      case _: DecimalType if parquetType.getOriginalType == OriginalType.UINT_64 =>
+      case _: DecimalType if isUnsignedIntTypeMatched(64) =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
