@@ -294,8 +294,8 @@ public class VectorizedColumnReader {
           // dictionary is in fact initialized as Long
           LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
           boolean castLongToInt = typeAnnotation instanceof DecimalLogicalTypeAnnotation &&
-            ((DecimalLogicalTypeAnnotation) typeAnnotation).getPrecision() <= Decimal.MAX_INT_DIGITS() &&
-            primitiveType.getPrimitiveTypeName() == INT64;
+            ((DecimalLogicalTypeAnnotation) typeAnnotation).getPrecision() <=
+            Decimal.MAX_INT_DIGITS() && primitiveType.getPrimitiveTypeName() == INT64;
 
           // We require a long value, but we need to use dictionary to decode the original
           // signed int first
@@ -641,7 +641,7 @@ public class VectorizedColumnReader {
       defColumn.readLongs(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn,
         DecimalType.is32BitDecimalType(column.dataType()));
-    } else if (isTimestampTypeMatched(TimeUnit.MICROS)) {
+    } else if (isUnsignedIntTypeMatched(64)) {
       // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
       // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary fallbacks.
       // We read them as decimal values.
