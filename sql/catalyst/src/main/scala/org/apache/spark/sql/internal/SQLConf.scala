@@ -2049,8 +2049,8 @@ object SQLConf {
 
   val ARROW_PYSPARK_SELF_DESTRUCT_ENABLED =
     buildConf("spark.sql.execution.arrow.pyspark.selfDestruct.enabled")
-      .doc("When true, make use of Apache Arrow's self-destruct and split-blocks options " +
-        "for columnar data transfers in PySpark, when converting from Arrow to Pandas. " +
+      .doc("(Experimental) When true, make use of Apache Arrow's self-destruct and split-blocks " +
+        "options for columnar data transfers in PySpark, when converting from Arrow to Pandas. " +
         "This reduces memory usage at the cost of some CPU time. " +
         "This optimization applies to: pyspark.sql.DataFrame.toPandas " +
         "when 'spark.sql.execution.arrow.pyspark.enabled' is set.")
