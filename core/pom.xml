@@ -56,7 +56,7 @@
       <artifactId>guava</artifactId>
     </dependency>
     <dependency>
-      <groupId>site.ycsb</groupId>
+      <groupId> site.ycsb</groupId>
       <artifactId>core</artifactId>
       <version>0.17.0</version>
     </dependency>
