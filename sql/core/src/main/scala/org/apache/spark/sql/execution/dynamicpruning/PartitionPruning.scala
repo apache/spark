@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.internal.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
@@ -48,10 +47,6 @@ import org.apache.spark.sql.internal.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD
  *    (3) otherwise, we drop the subquery.
  */
 object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
-
-  private val buildBroadcastThreshold = math.max(
-    AUTO_BROADCASTJOIN_THRESHOLD.defaultValue.getOrElse(conf.autoBroadcastJoinThreshold),
-    conf.autoBroadcastJoinThreshold)
 
   /**
    * Search the partitioned table scan for a given partition column in a logical plan
@@ -91,11 +86,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
       partScan: LogicalRelation,
-      canBuildBroadcastByType: Boolean): LogicalPlan = {
+      canBuildBroadcast: Boolean): LogicalPlan = {
     val reuseEnabled = conf.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
     lazy val hasBenefit =
-      pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan, canBuildBroadcastByType)
+      pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan, canBuildBroadcast)
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
@@ -125,7 +120,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       partPlan: LogicalPlan,
       otherExpr: Expression,
       otherPlan: LogicalPlan,
-      canBuildBroadcastByType: Boolean): Boolean = {
+      canBuildBroadcast: Boolean): Boolean = {
 
     // get the distinct counts of an attribute for a given table
     def distinctCounts(attr: Attribute, plan: LogicalPlan): Option[BigInt] = {
@@ -159,11 +154,10 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     val estimatePruningSideSize = filterRatio * partPlan.stats.sizeInBytes.toFloat
     // the pruning overhead is the total size in bytes of all scan relations
     val overhead = otherPlan.collectLeaves().map(_.stats.sizeInBytes).sum.toFloat
-    if (canBuildBroadcastByType && canBroadcastBySize(otherPlan, conf)) {
+    if (canBuildBroadcast) {
       estimatePruningSideSize > overhead
     } else {
-      // We can't reuse the broadcast because the join type doesn't support broadcast
-      // or the filtering size is too large to build broadcast,
+      // We can't reuse the broadcast because the join type doesn't support broadcast,
       // and doing DPP means running an extra query that may have significant overhead.
       // We need to make sure the pruning side is very big so that DPP is still worthy.
       estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
@@ -215,10 +209,6 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     case _ => false
   }
 
-  private def canBroadcastBySize(plan: LogicalPlan): Boolean = {
-    plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= buildBroadcastThreshold
-  }
-
   private def prune(plan: LogicalPlan): LogicalPlan = {
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
@@ -256,13 +246,15 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var partScan = getPartitionTableScan(l, left)
             if (partScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right) && canBroadcastBySize(right)) {
+                hasPartitionPruningFilter(right) &&
+                (canBroadcastBySize(right, conf) || hintToBroadcastRight(hint))) {
               newLeft = insertPredicate(l, newLeft, r, right, rightKeys, partScan.get,
                 canBuildBroadcastRight(joinType))
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) && canBroadcastBySize(left)) {
+                  hasPartitionPruningFilter(left) &&
+                  (canBroadcastBySize(left, conf) || hintToBroadcastLeft(hint))) {
                 newRight = insertPredicate(r, newRight, l, left, leftKeys, partScan.get,
                   canBuildBroadcastLeft(joinType))
               }
