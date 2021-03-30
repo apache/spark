@@ -448,6 +448,7 @@ jobs:
       uses: actions/checkout@v2
       with:
         repository: maropu/spark-tpcds-sf-1
+        ref: 6b660a53091bd6d23cbe58b0f09aae08e71cc667
         path: ./tpcds-sf-1
     - name: Cache Coursier local repository
       uses: actions/cache@v2
