@@ -252,7 +252,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Partial CUBE/ROLLUP/GROUPING SETS like `GROUP BY a, b, CUBE(a, b)` and mixed CUBE/ROLLUP/GROUPING SETS like `GROUP BY CUBE(a, b), ROLLUP(a, c)` is not supported.(line 1, pos 52)
+Partial CUBE/ROLLUP/GROUPING SETS like `GROUP BY a, b, CUBE(a, b)` is not supported.(line 1, pos 52)
 
 == SQL ==
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, CUBE(course, year) ORDER BY course, year
@@ -266,7 +266,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Partial CUBE/ROLLUP/GROUPING SETS like `GROUP BY a, b, CUBE(a, b)` and mixed CUBE/ROLLUP/GROUPING SETS like `GROUP BY CUBE(a, b), ROLLUP(a, c)` is not supported.(line 1, pos 52)
+Mixed CUBE/ROLLUP/GROUPING SETS like `GROUP BY CUBE(a, b), ROLLUP(a, c)` is not supported.(line 1, pos 52)
 
 == SQL ==
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year), ROLLUP(course, year) ORDER BY course, year
@@ -280,7 +280,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Partial CUBE/ROLLUP/GROUPING SETS like `GROUP BY a, b, CUBE(a, b)` and mixed CUBE/ROLLUP/GROUPING SETS like `GROUP BY CUBE(a, b), ROLLUP(a, c)` is not supported.(line 1, pos 52)
+Mixed CUBE/ROLLUP/GROUPING SETS like `GROUP BY CUBE(a, b), ROLLUP(a, c)` is not supported.(line 1, pos 52)
 
 == SQL ==
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year), ROLLUP(course, year), GROUPING SETS(course, year) ORDER BY course, year
