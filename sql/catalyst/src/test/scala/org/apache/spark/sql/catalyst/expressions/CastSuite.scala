@@ -1196,6 +1196,12 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("SPARK-34902: Cast support DayTimeIntervalType and YearMonthIntervalType") {
     // DayTimeIntervalType
     checkEvaluation(
+      cast(cast(0, IntegerType), DayTimeIntervalType), 0L)
+    checkEvaluation(
+      cast(cast(null, IntegerType), DayTimeIntervalType), null)
+    checkEvaluation(
+      cast(cast(Int.MinValue, IntegerType), DayTimeIntervalType), -2147483648L)
+    checkEvaluation(
       cast(cast(Byte.MaxValue, ByteType), DayTimeIntervalType), Byte.MaxValue.toLong)
     checkEvaluation(
       cast(cast(Short.MaxValue, ShortType), DayTimeIntervalType), Short.MaxValue.toLong)
@@ -1799,6 +1805,12 @@ class CastSuite extends CastSuiteBase {
 
   test("SPARK-34902: Cast support DayTimeIntervalType and YearMonthIntervalType") {
     // DayTimeIntervalType
+    checkEvaluation(
+      cast(cast(0, IntegerType), DayTimeIntervalType), 0L)
+    checkEvaluation(
+      cast(cast(null, IntegerType), DayTimeIntervalType), null)
+    checkEvaluation(
+      cast(cast(Int.MinValue, IntegerType), DayTimeIntervalType), -2147483648L)
     checkEvaluation(
       cast(cast(Byte.MaxValue, ByteType), DayTimeIntervalType), Byte.MaxValue.toLong)
     checkEvaluation(
