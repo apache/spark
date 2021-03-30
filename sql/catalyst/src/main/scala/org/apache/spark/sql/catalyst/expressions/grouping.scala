@@ -27,8 +27,9 @@ import org.apache.spark.sql.types._
  */
 trait GroupingSet extends Expression with CodegenFallback {
 
+  def groupingSets: Seq[Seq[Expression]]
+  def selectedGroupByExprs: Seq[Seq[Expression]]
   def groupByExprs: Seq[Expression]
-  override def children: Seq[Expression] = groupByExprs
 
   // this should be replaced first
   override lazy val resolved: Boolean = false
@@ -39,47 +40,102 @@ trait GroupingSet extends Expression with CodegenFallback {
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 }
 
-// scalastyle:off line.size.limit line.contains.tab
-@ExpressionDescription(
-  usage = """
-    _FUNC_([col1[, col2 ..]]) - create a multi-dimensional cube using the specified columns
-      so that we can run aggregation on them.
-  """,
-  examples = """
-    Examples:
-      > SELECT name, age, count(*) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY _FUNC_(name, age);
-        Bob	5	1
-        Alice	2	1
-        Alice	NULL	1
-        NULL	2	1
-        NULL	NULL	2
-        Bob	NULL	1
-        NULL	5	1
-  """,
-  since = "2.0.0",
-  group = "agg_funcs")
-// scalastyle:on line.size.limit line.contains.tab
-case class Cube(groupByExprs: Seq[Expression]) extends GroupingSet {}
+object GroupingSet {
+  /**
+   * GROUP BY a, b, c WITH ROLLUP
+   * is equivalent to
+   * GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
+   * or
+   * GROUP BY GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
+   * Group Count: N + 1 (N is the number of group expressions)
+   *
+   * We need to get all of its subsets for the rule described above, the subset is
+   * represented as sequence of expressions.
+   */
+  def rollupExprs(exprs: Seq[Seq[Expression]]): Seq[Seq[Expression]] =
+    exprs.inits.map(_.flatten).toIndexedSeq
 
-// scalastyle:off line.size.limit line.contains.tab
-@ExpressionDescription(
-  usage = """
-    _FUNC_([col1[, col2 ..]]) - create a multi-dimensional rollup using the specified columns
-      so that we can run aggregation on them.
-  """,
-  examples = """
-    Examples:
-      > SELECT name, age, count(*) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY _FUNC_(name, age);
-        Bob	5	1
-        Alice	2	1
-        Alice	NULL	1
-        NULL	NULL	2
-        Bob	NULL	1
-  """,
-  since = "2.0.0",
-  group = "agg_funcs")
-// scalastyle:on line.size.limit line.contains.tab
-case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}
+  /**
+   * GROUP BY a, b, c WITH CUBE
+   * is equivalent to
+   * GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
+   * or
+   * GROUP BY GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
+   * Group Count: 2 ^ N (N is the number of group expressions)
+   *
+   * We need to get all of its subsets for a given GROUPBY expression, the subsets are
+   * represented as sequence of expressions.
+   */
+  def cubeExprs(exprs: Seq[Seq[Expression]]): Seq[Seq[Expression]] = {
+    // `cubeExprs0` is recursive and returns a lazy Stream. Here we call `toIndexedSeq` to
+    // materialize it and avoid serialization problems later on.
+    cubeExprs0(exprs).toIndexedSeq
+  }
+
+  def cubeExprs0(exprs: Seq[Seq[Expression]]): Seq[Seq[Expression]] = exprs.toList match {
+    case x :: xs =>
+      val initial = cubeExprs0(xs)
+      initial.map(x ++ _) ++ initial
+    case Nil =>
+      Seq(Seq.empty)
+  }
+
+  /**
+   * This methods converts given grouping sets into the indexes of the flatten grouping sets.
+   * Let's say we have a query below:
+   *   SELECT k1, k2, avg(v) FROM t GROUP BY GROUPING SETS ((k1), (k1, k2), (k2, k1));
+   * In this case, flatten grouping sets are "[k1, k1, k2, k2, k1]" and the method
+   * will return indexes "[[1], [2, 3], [4, 5]]".
+   */
+  def computeGroupingSetIndexes(groupingSets: Seq[Seq[Expression]]): Seq[Seq[Int]] = {
+    val startOffsets = groupingSets.map(_.length).scanLeft(0)(_ + _).init
+    groupingSets.zip(startOffsets).map {
+      case (gs, startOffset) => gs.indices.map(_ + startOffset)
+    }
+  }
+}
+
+case class Cube(groupingSetIndexes: Seq[Seq[Int]], children: Seq[Expression]) extends GroupingSet {
+  override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
+  override def groupByExprs: Seq[Expression] = children.distinct
+  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.cubeExprs(groupingSets)
+}
+
+object Cube {
+  def apply(groupingSets: Seq[Seq[Expression]]): Cube = {
+    Cube(GroupingSet.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
+  }
+}
+
+case class Rollup(
+    groupingSetIndexes: Seq[Seq[Int]],
+    children: Seq[Expression]) extends GroupingSet {
+  override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
+  override def groupByExprs: Seq[Expression] = children.distinct
+  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.rollupExprs(groupingSets)
+}
+
+object Rollup {
+  def apply(groupingSets: Seq[Seq[Expression]]): Rollup = {
+    Rollup(GroupingSet.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
+  }
+}
+
+case class GroupingSets(
+    groupingSetIndexes: Seq[Seq[Int]],
+    flatGroupingSets: Seq[Expression],
+    groupByExprs: Seq[Expression]) extends GroupingSet {
+  override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(flatGroupingSets))
+  override def selectedGroupByExprs: Seq[Seq[Expression]] = groupingSets
+  override def children: Seq[Expression] = groupingSets.flatten ++ groupByExprs
+}
+
+object GroupingSets {
+  def apply(groupingSets: Seq[Seq[Expression]], groupByExprs: Seq[Expression]): GroupingSets = {
+    val groupingSetIndexes = GroupingSet.computeGroupingSetIndexes(groupingSets)
+    GroupingSets(groupingSetIndexes, groupingSets.flatten, groupByExprs)
+  }
+}
 
 /**
  * Indicates whether a specified column expression in a GROUP BY list is aggregated or not.

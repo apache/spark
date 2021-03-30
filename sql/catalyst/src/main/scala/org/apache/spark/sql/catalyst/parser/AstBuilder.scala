@@ -907,29 +907,78 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Add an [[Aggregate]] or [[GroupingSets]] to a logical plan.
+   * Add an [[Aggregate]] to a logical plan.
    */
   private def withAggregationClause(
       ctx: AggregationClauseContext,
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val groupByExpressions = expressionList(ctx.groupingExpressions)
-
-    if (ctx.GROUPING != null) {
-      // GROUP BY .... GROUPING SETS (...)
-      val selectedGroupByExprs =
-        ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-      GroupingSets(selectedGroupByExprs.toSeq, groupByExpressions, query, selectExpressions)
-    } else {
-      // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
-      val mappedGroupByExpressions = if (ctx.CUBE != null) {
-        Seq(Cube(groupByExpressions))
-      } else if (ctx.ROLLUP != null) {
-        Seq(Rollup(groupByExpressions))
+    if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
+      val groupByExpressions = expressionList(ctx.groupingExpressions)
+      if (ctx.GROUPING != null) {
+        // GROUP BY .... GROUPING SETS (...)
+        // `GROUP BY warehouse, product GROUPING SETS((warehouse, producets), (warehouse))` is
+        // semantically equivalent to `GROUP BY GROUPING SETS((warehouse, produce), (warehouse))`.
+        // Under this grammar, the fields appearing in `GROUPING SETS`'s groupingSets must be a
+        // subset of the columns appearing in group by expression.
+        val groupingSets =
+          ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
+        Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
+          selectExpressions, query)
       } else {
-        groupByExpressions
+        // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
+        val mappedGroupByExpressions = if (ctx.CUBE != null) {
+          Seq(Cube(groupByExpressions.map(Seq(_))))
+        } else if (ctx.ROLLUP != null) {
+          Seq(Rollup(groupByExpressions.map(Seq(_))))
+        } else {
+          groupByExpressions
+        }
+        Aggregate(mappedGroupByExpressions, selectExpressions, query)
       }
-      Aggregate(mappedGroupByExpressions, selectExpressions, query)
+    } else {
+      val groupByExpressions =
+        ctx.groupingExpressionsWithGroupingAnalytics.asScala
+          .map(groupByExpr => {
+            val groupingAnalytics = groupByExpr.groupingAnalytics
+            if (groupingAnalytics != null) {
+              val groupingSets = groupingAnalytics.groupingSet.asScala
+                .map(_.expression.asScala.map(e => expression(e)).toSeq)
+              if (groupingAnalytics.CUBE != null) {
+                // CUBE(A, B, (A, B), ()) is not supported.
+                if (groupingSets.exists(_.isEmpty)) {
+                  throw new ParseException("Empty set in CUBE grouping sets is not supported.",
+                    groupingAnalytics)
+                }
+                Cube(groupingSets.toSeq)
+              } else if (groupingAnalytics.ROLLUP != null) {
+                // ROLLUP(A, B, (A, B), ()) is not supported.
+                if (groupingSets.exists(_.isEmpty)) {
+                  throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
+                    groupingAnalytics)
+                }
+                Rollup(groupingSets.toSeq)
+              } else {
+                assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
+                GroupingSets(groupingSets.toSeq,
+                  groupingSets.flatten.distinct.toSeq)
+              }
+            } else {
+              expression(groupByExpr.expression)
+            }
+          })
+      val (groupingSet, expressions) = groupByExpressions.partition(_.isInstanceOf[GroupingSet])
+      if (expressions.nonEmpty && groupingSet.nonEmpty) {
+        throw new ParseException("Partial CUBE/ROLLUP/GROUPING SETS like " +
+          "`GROUP BY a, b, CUBE(a, b)` is not supported.",
+          ctx)
+      }
+      if (groupingSet.size > 1) {
+        throw new ParseException("Mixed CUBE/ROLLUP/GROUPING SETS like " +
+          "`GROUP BY CUBE(a, b), ROLLUP(a, c)` is not supported.",
+          ctx)
+      }
+      Aggregate(groupByExpressions.toSeq, selectExpressions, query)
     }
   }
 
