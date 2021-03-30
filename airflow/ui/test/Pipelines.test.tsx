@@ -19,13 +19,16 @@
 
 import React from 'react';
 import '@testing-library/jest-dom';
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, fireEvent } from '@testing-library/react';
 import nock from 'nock';
+import axios from 'axios';
 
 import Pipelines from 'views/Pipelines';
 import {
   defaultHeaders, QueryWrapper, RouterWrapper, url,
 } from './utils';
+
+axios.defaults.adapter = require('axios/lib/adapters/http');
 
 const sampleDag = {
   dagId: 'dagId1',
@@ -86,12 +89,50 @@ describe('Test Pipelines Table', () => {
         totalEntries: 0,
       });
 
+    nock(url)
+      .defaultReplyHeaders(defaultHeaders)
+      .persist()
+      .intercept(`/dags/${sampleDag.dagId}`, 'PATCH')
+      .reply(200, { ...sampleDag, ...{ isPaused: !sampleDag.isPaused } });
+
     const { getByText } = render(
       <QueryWrapper><Pipelines /></QueryWrapper>,
       {
         wrapper: RouterWrapper,
       },
     );
+
     await waitFor(() => expect(getByText('No Pipelines found.')).toBeInTheDocument());
+  });
+
+  test('Toggle a pipeline on/off', async () => {
+    nock(url)
+      .defaultReplyHeaders(defaultHeaders)
+      .get('/dags')
+      .reply(200, {
+        dags: [sampleDag],
+        totalEntries: 1,
+      });
+
+    nock(url)
+      .defaultReplyHeaders(defaultHeaders)
+      .persist()
+      .intercept(`/dags/${sampleDag.dagId}`, 'PATCH')
+      .reply(200, { ...sampleDag, ...{ isPaused: !sampleDag.isPaused } });
+
+    const { getByText, getByRole } = render(
+      <QueryWrapper><Pipelines /></QueryWrapper>,
+      {
+        wrapper: RouterWrapper,
+      },
+    );
+
+    await waitFor(() => expect(getByText(sampleDag.dagId)).toBeInTheDocument());
+    const toggle = getByRole('switch');
+    expect(toggle.firstChild?.checked).toBeTruthy();
+    fireEvent.click(toggle);
+    // 'Dag Updated' is the toast confirming the change happened
+    await waitFor(() => expect(getByText('Pipeline Updated')).toBeInTheDocument());
+    await waitFor(() => expect(toggle.firstChild?.checked).toBeFalsy());
   });
 });
