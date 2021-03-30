@@ -1015,8 +1015,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDown {
       // Add metadata output to all node types
-      case node if node.children.nonEmpty && node.resolved && node.missingInput.nonEmpty &&
-        hasMetadataCol(node) =>
+      case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
         val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
         if (metaCols.isEmpty) {
@@ -1745,7 +1744,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
-        q.mapExpressions(resolveExpressionByPlanChildren(_, q))
+        q.mapExpressions(resolveExpressionByPlanChildren(_, q, withMetadata = true))
     }
 
     def resolveAssignments(
@@ -1982,11 +1981,12 @@ class Analyzer(override val catalogManager: CatalogManager)
   def resolveExpressionByPlanOutput(
       expr: Expression,
       plan: LogicalPlan,
-      throws: Boolean = false): Expression = {
+      throws: Boolean = false,
+      withMetadata: Boolean = false): Expression = {
     resolveExpression(
       expr,
       resolveColumnByName = nameParts => {
-        plan.resolve(nameParts, resolver, withMetadata = false)
+        plan.resolve(nameParts, resolver, withMetadata = withMetadata)
       },
       getAttrCandidates = () => plan.output,
       throws = throws)
@@ -2002,11 +2002,12 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   def resolveExpressionByPlanChildren(
       e: Expression,
-      q: LogicalPlan): Expression = {
+      q: LogicalPlan,
+      withMetadata: Boolean = false): Expression = {
     resolveExpression(
       e,
       resolveColumnByName = nameParts => {
-        q.resolveChildren(nameParts, resolver)
+        q.resolveChildren(nameParts, resolver, withMetadata = withMetadata)
       },
       getAttrCandidates = () => {
         assert(q.children.length == 1)

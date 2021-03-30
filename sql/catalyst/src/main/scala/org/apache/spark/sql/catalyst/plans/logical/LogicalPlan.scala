@@ -104,9 +104,15 @@ abstract class LogicalPlan
    */
   def resolveChildren(
       nameParts: Seq[String],
-      resolver: Resolver): Option[NamedExpression] =
-    childAttributes.resolve(nameParts, resolver)
-      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
+      resolver: Resolver,
+      withMetadata: Boolean = true): Option[NamedExpression] = {
+    val maybeResolvedExpression = childAttributes.resolve(nameParts, resolver)
+    if (withMetadata) {
+      maybeResolvedExpression.orElse(childMetadataAttributes.resolve(nameParts, resolver))
+    } else {
+      maybeResolvedExpression
+    }
+  }
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
