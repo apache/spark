@@ -15,14 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.catalog
+package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.spark.sql.AnalysisException
+import java.sql.SQLException
 
-/**
- * Thrown when a query failed for invalid function class, usually because a SQL
- * function's class does not follow the rules of the UDF/UDAF/UDTF class definition.
- */
-class InvalidUDFClassException private[sql](message: String)
-  extends AnalysisException(message, None, None, None, "U0000", 1000, None) {
+import org.apache.hive.service.cli.HiveSQLException
+
+import org.apache.spark.{SparkException, SparkUpgradeException}
+
+private[hive] object SQLExceptionUtils {
+
+  def toHiveSQLException(reason: String, cause: Throwable): HiveSQLException = {
+    cause match {
+      case e: HiveSQLException =>
+        e
+      case e: SparkException =>
+        new HiveSQLException(reason, "undefined", 0, e)
+      case e: SparkUpgradeException =>
+        new HiveSQLException(reason, "undefined", 1, e)
+      case e: SQLException =>
+        new HiveSQLException(reason, e.getSQLState, e.getErrorCode, e)
+      case e =>
+        new HiveSQLException(reason, e)
+    }
+  }
 }

@@ -782,7 +782,8 @@ abstract class TypeCoercionBase {
           AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
         } catch {
           case e: NumberFormatException => throw new AnalysisException(
-            "The second argument of 'date_sub' function needs to be an integer.", cause = Some(e))
+            "The second argument of 'date_sub' function needs to be an integer.",
+            sqlState = "22023", errorCode = 1001, cause = Some(e))
         }
         DateSub(l, Literal(days))
     }

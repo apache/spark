@@ -319,10 +319,7 @@ private[hive] class SparkExecuteStatementOperation(
           setState(OperationState.ERROR)
           HiveThriftServer2.eventManager.onStatementError(
             statementId, e.getMessage, SparkUtils.exceptionString(e))
-          e match {
-            case _: HiveSQLException => throw e
-            case _ => throw new HiveSQLException("Error running query: " + e.toString, e)
-          }
+          throw SQLExceptionUtils.toHiveSQLException(s"Error running query: ${e.toString}", e)
         }
     } finally {
       synchronized {

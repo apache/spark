@@ -82,6 +82,8 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
         .contains("The second argument of 'date_sub' function needs to be an integer."))
       assert(e.getMessage.contains("" +
         "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e.getSQLState.equals("22023"))
+      assert(e.getErrorCode === 1001)
     }
   }
 

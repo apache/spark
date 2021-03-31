@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.sql.SQLException
+
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -32,8 +34,10 @@ class AnalysisException protected[sql] (
     val startPosition: Option[Int] = None,
     // Some plans fail to serialize due to bugs in scala collections.
     @transient val plan: Option[LogicalPlan] = None,
+    val sqlState: String = "",
+    val errorCode: Int = 0,
     val cause: Option[Throwable] = None)
-  extends Exception(message, cause.orNull) with Serializable {
+  extends SQLException(message, sqlState, errorCode, cause.orNull) with Serializable {
 
   def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {
     val newException = new AnalysisException(message, line, startPosition)
