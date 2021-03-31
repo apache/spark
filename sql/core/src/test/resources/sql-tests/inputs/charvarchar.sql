@@ -72,8 +72,6 @@ insert into char_tbl4 values
     ('Net ', 'Ease '),
     ('NetEa ', 'Ease  ');
 insert into char_tbl4 values ('NetE  ', 'NetEas');
-insert into char_tbl4 values ('NetE  ', 'NetEase');
-insert into char_tbl4 values ('NetEase', '');
 create table char_tbl5(c char(6)) using parquet;
 insert into char_tbl5 select c from char_tbl4;
 
