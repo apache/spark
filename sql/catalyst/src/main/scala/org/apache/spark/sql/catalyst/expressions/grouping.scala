@@ -215,18 +215,26 @@ object GroupingID {
 
 
 object GroupByOperator {
-  type GroupByOperatorType = Option[(Seq[Cube], Seq[Rollup], Seq[Expression], Seq[Expression])]
+  def unapply(exprs: Seq[Expression]):
+  Option[(Seq[Seq[Expression]], Seq[Seq[Expression]], Seq[Expression])] = {
 
-  def unapply(exprs: Seq[Expression]): GroupByOperatorType = {
     val (groupingSets, others) = exprs.partition(_.isInstanceOf[GroupingSet])
     if (groupingSets.isEmpty) {
       None
     } else {
-      val cubes = groupingSets.filter(_.isInstanceOf[Cube]).map(_.asInstanceOf[Cube])
-      val rollups = groupingSets.filter(_.isInstanceOf[Rollup]).map(_.asInstanceOf[Rollup])
       val groups =
-        cubes.flatMap(_.groupByExprs) ++ rollups.flatMap(_.groupByExprs) ++ others
-      Some((cubes, rollups, others, groups.distinct))
+        groupingSets.flatMap(_.asInstanceOf[GroupingSet].groupByExprs) ++ others
+      val selectedGroupByExprs =
+        groupingSets.map(_.asInstanceOf[GroupingSet].selectedGroupByExprs)
+          .foldRight(Seq.empty[Seq[Expression]]) { (x, y) =>
+            if (y.isEmpty) {
+              x
+            } else {
+              for (a <- x; b <- y) yield b ++ a
+            }
+          }.map(others ++ _).map(_.distinct)
+      Some(selectedGroupByExprs,
+        groupingSets.flatMap(_.asInstanceOf[GroupingSet].groupingSets), groups.distinct)
     }
   }
 }
