@@ -215,26 +215,24 @@ object GroupingID {
 
 
 object GroupingAnalytics {
-  def unapply(exprs: Seq[Expression]):
-  Option[(Seq[Seq[Expression]], Seq[Seq[Expression]], Seq[Expression])] = {
-
-    val (groupingSets, others) = exprs.partition(_.isInstanceOf[GroupingSet])
-    if (groupingSets.isEmpty) {
+  def unapply(exprs: Seq[Expression])
+  : Option[(Seq[Seq[Expression]], Seq[Seq[Expression]], Seq[Expression])] = {
+    val (groupingSetExprs, others) = exprs.partition(_.isInstanceOf[GroupingSet])
+    if (groupingSetExprs.isEmpty) {
       None
     } else {
-      val groups =
-        groupingSets.flatMap(_.asInstanceOf[GroupingSet].groupByExprs) ++ others
-      val selectedGroupByExprs =
-        groupingSets.map(_.asInstanceOf[GroupingSet].selectedGroupByExprs)
-          .foldRight(Seq.empty[Seq[Expression]]) { (x, y) =>
-            if (y.isEmpty) {
-              x
-            } else {
-              for (a <- x; b <- y) yield b ++ a
-            }
-          }.map(others ++ _).map(_.distinct)
+      val groupingSets = groupingSetExprs.map(_.asInstanceOf[GroupingSet])
+      val groups = groupingSets.flatMap(_.groupByExprs) ++ others
+      val selectedGroupByExprs = groupingSets.map(_.selectedGroupByExprs)
+        .foldRight(Seq.empty[Seq[Expression]]) { (x, y) =>
+          if (y.isEmpty) {
+            x
+          } else {
+            for (a <- x; b <- y) yield b ++ a
+          }
+        }.map(others ++ _).map(_.distinct)
       Some(selectedGroupByExprs,
-        groupingSets.flatMap(_.asInstanceOf[GroupingSet].groupingSets), groups.distinct)
+        groupingSetExprs.flatMap(_.asInstanceOf[GroupingSet].groupingSets), groups.distinct)
     }
   }
 }
