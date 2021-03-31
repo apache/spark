@@ -24,18 +24,12 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.StringType
 
 /**
  * Adds a jar to the current session so it can be used (for UDFs or serdes).
  */
 case class AddJarCommand(path: String) extends RunnableCommand {
-  override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("result", IntegerType, nullable = false) :: Nil)
-    schema.toAttributes
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sessionState.resourceLoader.addJar(path)
     Seq.empty[Row]
@@ -49,6 +43,16 @@ case class AddFileCommand(path: String) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val recursive = !sparkSession.sessionState.conf.addSingleFileInAddFile
     sparkSession.sparkContext.addFile(path, recursive)
+    Seq.empty[Row]
+  }
+}
+
+/**
+ * Adds an archive to the current session so it can be used.
+ */
+case class AddArchiveCommand(path: String) extends RunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sparkContext.addArchive(path)
     Seq.empty[Row]
   }
 }
@@ -97,6 +101,27 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends Runnab
       } yield Row(jarPath)
     } else {
       jarList.map(Row(_))
+    }
+  }
+}
+
+/**
+ * Returns a list of archive paths that are added to resources.
+ * If archive paths are provided, return the ones that are added to resources.
+ */
+case class ListArchivesCommand(archives: Seq[String] = Seq.empty[String]) extends RunnableCommand {
+  override val output: Seq[Attribute] = {
+    AttributeReference("Results", StringType, nullable = false)() :: Nil
+  }
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val archiveList = sparkSession.sparkContext.listArchives()
+    if (archives.nonEmpty) {
+      for {
+        archiveName <- archives.map(f => new Path(f).getName)
+        archivePath <- archiveList if archivePath.contains(archiveName)
+      } yield Row(archivePath)
+    } else {
+      archiveList.map(Row(_))
     }
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io._
+import java.io.{BufferedReader, File, InputStream, InputStreamReader, OutputStream}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 

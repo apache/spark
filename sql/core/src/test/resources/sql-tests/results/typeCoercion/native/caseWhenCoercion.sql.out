@@ -21,7 +21,7 @@ struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS TINYINT) END:tinyin
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as smallint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS SMALLINT) ELSE CAST(2 AS SMALLINT) END:smallint>
+struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS SMALLINT) END:smallint>
 -- !query output
 1
 
@@ -29,7 +29,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS SMALLINT) ELSE CAST(2 AS S
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as int) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS INT) ELSE CAST(2 AS INT) END:int>
+struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS INT) END:int>
 -- !query output
 1
 
@@ -37,7 +37,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS INT) ELSE CAST(2 AS INT) E
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as bigint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS BIGINT) ELSE CAST(2 AS BIGINT) END:bigint>
+struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS BIGINT) END:bigint>
 -- !query output
 1
 
@@ -45,7 +45,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS BIGINT) ELSE CAST(2 AS BIG
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS FLOAT) ELSE CAST(2 AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS FLOAT) END:float>
 -- !query output
 1.0
 
@@ -53,7 +53,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS FLOAT) ELSE CAST(2 AS FLOA
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as double) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS DOUBLE) ELSE CAST(2 AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS DOUBLE) END:double>
 -- !query output
 1.0
 
@@ -61,7 +61,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS DOUBLE) ELSE CAST(2 AS DOU
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as decimal(10, 0)) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS DECIMAL(10,0)) ELSE CAST(2 AS DECIMAL(10,0)) END:decimal(10,0)>
+struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS DECIMAL(10,0)) END:decimal(10,0)>
 -- !query output
 1
 
@@ -69,7 +69,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS DECIMAL(10,0)) ELSE CAST(2
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS TINYINT) AS STRING) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS STRING) END:string>
 -- !query output
 1
 
@@ -113,7 +113,7 @@ cannot resolve 'CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST('2017-12-11 09:
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as tinyint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(CAST(2 AS TINYINT) AS SMALLINT) END:smallint>
+struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS TINYINT) END:smallint>
 -- !query output
 1
 
@@ -129,7 +129,7 @@ struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS SMALLINT) END:smal
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as int) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS INT) ELSE CAST(2 AS INT) END:int>
+struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS INT) END:int>
 -- !query output
 1
 
@@ -137,7 +137,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS INT) ELSE CAST(2 AS INT) 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as bigint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS BIGINT) ELSE CAST(2 AS BIGINT) END:bigint>
+struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS BIGINT) END:bigint>
 -- !query output
 1
 
@@ -145,7 +145,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS BIGINT) ELSE CAST(2 AS BI
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS FLOAT) ELSE CAST(2 AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS FLOAT) END:float>
 -- !query output
 1.0
 
@@ -153,7 +153,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS FLOAT) ELSE CAST(2 AS FLO
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as double) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS DOUBLE) ELSE CAST(2 AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS DOUBLE) END:double>
 -- !query output
 1.0
 
@@ -161,7 +161,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS DOUBLE) ELSE CAST(2 AS DO
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as decimal(10, 0)) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS DECIMAL(10,0)) ELSE CAST(2 AS DECIMAL(10,0)) END:decimal(10,0)>
+struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS DECIMAL(10,0)) END:decimal(10,0)>
 -- !query output
 1
 
@@ -169,7 +169,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS DECIMAL(10,0)) ELSE CAST(
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS SMALLINT) AS STRING) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS STRING) END:string>
 -- !query output
 1
 
@@ -213,7 +213,7 @@ cannot resolve 'CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST('2017-12-11 09
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as tinyint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(CAST(2 AS TINYINT) AS INT) END:int>
+struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS TINYINT) END:int>
 -- !query output
 1
 
@@ -221,7 +221,7 @@ struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(CAST(2 AS TINYINT) AS INT) E
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as smallint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(CAST(2 AS SMALLINT) AS INT) END:int>
+struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS SMALLINT) END:int>
 -- !query output
 1
 
@@ -237,7 +237,7 @@ struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS INT) END:int>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as bigint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS INT) AS BIGINT) ELSE CAST(2 AS BIGINT) END:bigint>
+struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS BIGINT) END:bigint>
 -- !query output
 1
 
@@ -245,7 +245,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS INT) AS BIGINT) ELSE CAST(2 AS BIGINT)
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS INT) AS FLOAT) ELSE CAST(2 AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS FLOAT) END:float>
 -- !query output
 1.0
 
@@ -253,7 +253,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS INT) AS FLOAT) ELSE CAST(2 AS FLOAT) E
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as double) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS INT) AS DOUBLE) ELSE CAST(2 AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS DOUBLE) END:double>
 -- !query output
 1.0
 
@@ -261,7 +261,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS INT) AS DOUBLE) ELSE CAST(2 AS DOUBLE)
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as decimal(10, 0)) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS INT) AS DECIMAL(10,0)) ELSE CAST(2 AS DECIMAL(10,0)) END:decimal(10,0)>
+struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS DECIMAL(10,0)) END:decimal(10,0)>
 -- !query output
 1
 
@@ -269,7 +269,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS INT) AS DECIMAL(10,0)) ELSE CAST(2 AS 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS INT) AS STRING) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS STRING) END:string>
 -- !query output
 1
 
@@ -313,7 +313,7 @@ cannot resolve 'CASE WHEN true THEN CAST(1 AS INT) ELSE CAST('2017-12-11 09:30:0
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as tinyint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(CAST(2 AS TINYINT) AS BIGINT) END:bigint>
+struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS TINYINT) END:bigint>
 -- !query output
 1
 
@@ -321,7 +321,7 @@ struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(CAST(2 AS TINYINT) AS BIG
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as smallint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(CAST(2 AS SMALLINT) AS BIGINT) END:bigint>
+struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS SMALLINT) END:bigint>
 -- !query output
 1
 
@@ -329,7 +329,7 @@ struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(CAST(2 AS SMALLINT) AS BI
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as int) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(CAST(2 AS INT) AS BIGINT) END:bigint>
+struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS INT) END:bigint>
 -- !query output
 1
 
@@ -345,7 +345,7 @@ struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS BIGINT) END:bigint>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS BIGINT) AS FLOAT) ELSE CAST(2 AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS FLOAT) END:float>
 -- !query output
 1.0
 
@@ -353,7 +353,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS BIGINT) AS FLOAT) ELSE CAST(2 AS FLOAT
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as double) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS BIGINT) AS DOUBLE) ELSE CAST(2 AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS DOUBLE) END:double>
 -- !query output
 1.0
 
@@ -361,7 +361,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS BIGINT) AS DOUBLE) ELSE CAST(2 AS DOUB
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as decimal(10, 0)) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) ELSE CAST(CAST(2 AS DECIMAL(10,0)) AS DECIMAL(20,0)) END:decimal(20,0)>
+struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS DECIMAL(10,0)) END:decimal(20,0)>
 -- !query output
 1
 
@@ -369,7 +369,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) ELSE CAST(CA
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS BIGINT) AS STRING) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS STRING) END:string>
 -- !query output
 1
 
@@ -413,7 +413,7 @@ cannot resolve 'CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST('2017-12-11 09:3
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as tinyint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(CAST(2 AS TINYINT) AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS TINYINT) END:float>
 -- !query output
 1.0
 
@@ -421,7 +421,7 @@ struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(CAST(2 AS TINYINT) AS FLOA
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as smallint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(CAST(2 AS SMALLINT) AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS SMALLINT) END:float>
 -- !query output
 1.0
 
@@ -429,7 +429,7 @@ struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(CAST(2 AS SMALLINT) AS FLO
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as int) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(CAST(2 AS INT) AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS INT) END:float>
 -- !query output
 1.0
 
@@ -437,7 +437,7 @@ struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(CAST(2 AS INT) AS FLOAT) E
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as bigint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(CAST(2 AS BIGINT) AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS BIGINT) END:float>
 -- !query output
 1.0
 
@@ -453,7 +453,7 @@ struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS FLOAT) END:float>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as double) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS FLOAT) AS DOUBLE) ELSE CAST(2 AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS DOUBLE) END:double>
 -- !query output
 1.0
 
@@ -461,7 +461,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS FLOAT) AS DOUBLE) ELSE CAST(2 AS DOUBL
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as decimal(10, 0)) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS FLOAT) AS DOUBLE) ELSE CAST(CAST(2 AS DECIMAL(10,0)) AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS DECIMAL(10,0)) END:double>
 -- !query output
 1.0
 
@@ -469,7 +469,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS FLOAT) AS DOUBLE) ELSE CAST(CAST(2 AS 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS FLOAT) AS STRING) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS STRING) END:string>
 -- !query output
 1.0
 
@@ -513,7 +513,7 @@ cannot resolve 'CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST('2017-12-11 09:30
 -- !query
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as tinyint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS TINYINT) AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS TINYINT) END:double>
 -- !query output
 1.0
 
@@ -521,7 +521,7 @@ struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS TINYINT) AS DOU
 -- !query
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as smallint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS SMALLINT) AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS SMALLINT) END:double>
 -- !query output
 1.0
 
@@ -529,7 +529,7 @@ struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS SMALLINT) AS DO
 -- !query
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as int) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS INT) AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS INT) END:double>
 -- !query output
 1.0
 
@@ -537,7 +537,7 @@ struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS INT) AS DOUBLE)
 -- !query
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as bigint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS BIGINT) AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS BIGINT) END:double>
 -- !query output
 1.0
 
@@ -545,7 +545,7 @@ struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS BIGINT) AS DOUB
 -- !query
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS FLOAT) AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS FLOAT) END:double>
 -- !query output
 1.0
 
@@ -561,7 +561,7 @@ struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS DOUBLE) END:double>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as decimal(10, 0)) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS DECIMAL(10,0)) AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS DECIMAL(10,0)) END:double>
 -- !query output
 1.0
 
@@ -569,7 +569,7 @@ struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(CAST(2 AS DECIMAL(10,0)) 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS DOUBLE) AS STRING) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS STRING) END:string>
 -- !query output
 1.0
 
@@ -613,7 +613,7 @@ cannot resolve 'CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST('2017-12-11 09:3
 -- !query
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as tinyint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(CAST(2 AS TINYINT) AS DECIMAL(10,0)) END:decimal(10,0)>
+struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS TINYINT) END:decimal(10,0)>
 -- !query output
 1
 
@@ -621,7 +621,7 @@ struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(CAST(2 AS TINYINT)
 -- !query
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as smallint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(CAST(2 AS SMALLINT) AS DECIMAL(10,0)) END:decimal(10,0)>
+struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS SMALLINT) END:decimal(10,0)>
 -- !query output
 1
 
@@ -629,7 +629,7 @@ struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(CAST(2 AS SMALLINT
 -- !query
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as int) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(CAST(2 AS INT) AS DECIMAL(10,0)) END:decimal(10,0)>
+struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS INT) END:decimal(10,0)>
 -- !query output
 1
 
@@ -637,7 +637,7 @@ struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(CAST(2 AS INT) AS 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as bigint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0)) ELSE CAST(CAST(2 AS BIGINT) AS DECIMAL(20,0)) END:decimal(20,0)>
+struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS BIGINT) END:decimal(20,0)>
 -- !query output
 1
 
@@ -645,7 +645,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0)) ELSE 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) ELSE CAST(CAST(2 AS FLOAT) AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS FLOAT) END:double>
 -- !query output
 1.0
 
@@ -653,7 +653,7 @@ struct<CASE WHEN true THEN CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) ELSE CAST(CA
 -- !query
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as double) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) ELSE CAST(2 AS DOUBLE) END:double>
+struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS DOUBLE) END:double>
 -- !query output
 1.0
 
@@ -669,7 +669,7 @@ struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS DECIMAL(10,0)
 -- !query
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(1 AS DECIMAL(10,0)) AS STRING) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS STRING) END:string>
 -- !query output
 1
 
@@ -713,7 +713,7 @@ cannot resolve 'CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST('2017-12-
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as tinyint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS TINYINT) AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS TINYINT) END:string>
 -- !query output
 1
 
@@ -721,7 +721,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS TINYINT) AS STR
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as smallint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS SMALLINT) AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS SMALLINT) END:string>
 -- !query output
 1
 
@@ -729,7 +729,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS SMALLINT) AS ST
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as int) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS INT) AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS INT) END:string>
 -- !query output
 1
 
@@ -737,7 +737,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS INT) AS STRING)
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as bigint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS BIGINT) AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BIGINT) END:string>
 -- !query output
 1
 
@@ -745,7 +745,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS BIGINT) AS STRI
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS FLOAT) AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS FLOAT) END:string>
 -- !query output
 1
 
@@ -753,7 +753,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS FLOAT) AS STRIN
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as double) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS DOUBLE) AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DOUBLE) END:string>
 -- !query output
 1
 
@@ -761,7 +761,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS DOUBLE) AS STRI
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as decimal(10, 0)) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2 AS DECIMAL(10,0)) AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DECIMAL(10,0)) END:string>
 -- !query output
 1
 
@@ -795,7 +795,7 @@ cannot resolve 'CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BOOLEAN) EN
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast('2017-12-11 09:30:00.0' as timestamp) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END:string>
 -- !query output
 1
 
@@ -803,7 +803,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2017-12-11 09:30:00.
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast('2017-12-11 09:30:00' as date) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(CAST(2017-12-11 09:30:00 AS DATE) AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2017-12-11 09:30:00 AS DATE) END:string>
 -- !query output
 1
 
@@ -1088,7 +1088,7 @@ cannot resolve 'CASE WHEN true THEN CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) E
 -- !query
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) AS STRING) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS STRING) END:string>
 -- !query output
 2017-12-12 09:30:00
 
@@ -1122,7 +1122,7 @@ struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(20
 -- !query
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast('2017-12-11 09:30:00' as date) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) END:timestamp>
+struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2017-12-11 09:30:00 AS DATE) END:timestamp>
 -- !query output
 2017-12-12 09:30:00
 
@@ -1193,7 +1193,7 @@ cannot resolve 'CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAS
 -- !query
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(2017-12-12 09:30:00 AS DATE) AS STRING) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS STRING) END:string>
 -- !query output
 2017-12-12
 
@@ -1219,7 +1219,7 @@ cannot resolve 'CASE WHEN true THEN CAST('2017-12-12 09:30:00' AS DATE) ELSE CAS
 -- !query
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast('2017-12-11 09:30:00.0' as timestamp) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(CAST(2017-12-12 09:30:00 AS DATE) AS TIMESTAMP) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END:timestamp>
+struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END:timestamp>
 -- !query output
 2017-12-12 00:00:00
 

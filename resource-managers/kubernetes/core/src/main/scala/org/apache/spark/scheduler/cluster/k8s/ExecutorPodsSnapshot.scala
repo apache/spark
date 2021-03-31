@@ -29,25 +29,27 @@ import org.apache.spark.internal.Logging
 /**
  * An immutable view of the current executor pods that are running in the cluster.
  */
-private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, ExecutorPodState]) {
+private[spark] case class ExecutorPodsSnapshot(
+    executorPods: Map[Long, ExecutorPodState],
+    fullSnapshotTs: Long) {
 
   import ExecutorPodsSnapshot._
 
   def withUpdate(updatedPod: Pod): ExecutorPodsSnapshot = {
     val newExecutorPods = executorPods ++ toStatesByExecutorId(Seq(updatedPod))
-    new ExecutorPodsSnapshot(newExecutorPods)
+    new ExecutorPodsSnapshot(newExecutorPods, fullSnapshotTs)
   }
 }
 
 object ExecutorPodsSnapshot extends Logging {
   private var shouldCheckAllContainers: Boolean = _
-  private var sparkContainerName: String = _
+  private var sparkContainerName: String = DEFAULT_EXECUTOR_CONTAINER_NAME
 
-  def apply(executorPods: Seq[Pod]): ExecutorPodsSnapshot = {
-    ExecutorPodsSnapshot(toStatesByExecutorId(executorPods))
+  def apply(executorPods: Seq[Pod], fullSnapshotTs: Long): ExecutorPodsSnapshot = {
+    ExecutorPodsSnapshot(toStatesByExecutorId(executorPods), fullSnapshotTs)
   }
 
-  def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorPodState])
+  def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorPodState], 0)
 
   def setShouldCheckAllContainers(watchAllContainers: Boolean): Unit = {
     shouldCheckAllContainers = watchAllContainers
@@ -80,23 +82,21 @@ object ExecutorPodsSnapshot extends Logging {
               .anyMatch(t => t != null && t.getExitCode != 0)) {
             PodFailed(pod)
           } else {
-            // Otherwise look for the Spark container
-            val sparkContainerStatusOpt = pod.getStatus.getContainerStatuses.asScala
-              .find(_.getName() == sparkContainerName)
-            sparkContainerStatusOpt match {
-              case Some(sparkContainerStatus) =>
-                sparkContainerStatus.getState.getTerminated match {
-                  case t if t.getExitCode != 0 =>
-                    PodFailed(pod)
-                  case t if t.getExitCode == 0 =>
+            // Otherwise look for the Spark container and get the exit code if present.
+            val sparkContainerExitCode = pod.getStatus.getContainerStatuses.asScala
+              .find(_.getName() == sparkContainerName).flatMap(x => Option(x.getState))
+              .flatMap(x => Option(x.getTerminated)).flatMap(x => Option(x.getExitCode))
+              .map(_.toInt)
+            sparkContainerExitCode match {
+              case Some(t) =>
+                t match {
+                  case 0 =>
                     PodSucceeded(pod)
                   case _ =>
-                    PodRunning(pod)
+                    PodFailed(pod)
                 }
-              // If we can't find the Spark container status, fall back to the pod status
+              // No exit code means we are running.
               case _ =>
-                logWarning(s"Unable to find container ${sparkContainerName} in pod ${pod} " +
-                  "defaulting to entire pod status (running).")
                 PodRunning(pod)
             }
           }

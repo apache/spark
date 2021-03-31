@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -81,7 +80,7 @@ object DecimalPrecision extends TypeCoercionRule {
     PromotePrecision(Cast(e, dataType))
   }
 
-  private def nullOnOverflow: Boolean = !SQLConf.get.ansiEnabled
+  private def nullOnOverflow: Boolean = !conf.ansiEnabled
 
   override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // fix decimal precision for expressions
@@ -99,7 +98,7 @@ object DecimalPrecision extends TypeCoercionRule {
 
     case a @ Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
       val resultScale = max(s1, s2)
-      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
+      val resultType = if (conf.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
           resultScale)
       } else {
@@ -112,7 +111,7 @@ object DecimalPrecision extends TypeCoercionRule {
     case s @ Subtract(e1 @ DecimalType.Expression(p1, s1),
         e2 @ DecimalType.Expression(p2, s2), _) =>
       val resultScale = max(s1, s2)
-      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
+      val resultType = if (conf.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
           resultScale)
       } else {
@@ -124,7 +123,7 @@ object DecimalPrecision extends TypeCoercionRule {
 
     case m @ Multiply(
         e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
+      val resultType = if (conf.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(p1 + p2 + 1, s1 + s2)
       } else {
         DecimalType.bounded(p1 + p2 + 1, s1 + s2)
@@ -135,7 +134,7 @@ object DecimalPrecision extends TypeCoercionRule {
         resultType, nullOnOverflow)
 
     case d @ Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
+      val resultType = if (conf.decimalOperationsAllowPrecisionLoss) {
         // Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
         // Scale: max(6, s1 + p2 + 1)
         val intDig = p1 - s1 + s2
@@ -159,7 +158,7 @@ object DecimalPrecision extends TypeCoercionRule {
 
     case r @ Remainder(
         e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
+      val resultType = if (conf.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
       } else {
         DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
@@ -171,7 +170,7 @@ object DecimalPrecision extends TypeCoercionRule {
         resultType, nullOnOverflow)
 
     case p @ Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
-      val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
+      val resultType = if (conf.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
       } else {
         DecimalType.bounded(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
@@ -319,11 +318,11 @@ object DecimalPrecision extends TypeCoercionRule {
         // become DECIMAL(38, 16), safely having a much lower precision loss.
         case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType] &&
             l.dataType.isInstanceOf[IntegralType] &&
-            SQLConf.get.literalPickMinimumPrecision =>
+            conf.literalPickMinimumPrecision =>
           b.makeCopy(Array(Cast(l, DecimalType.fromLiteral(l)), r))
         case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType] &&
             r.dataType.isInstanceOf[IntegralType] &&
-            SQLConf.get.literalPickMinimumPrecision =>
+            conf.literalPickMinimumPrecision =>
           b.makeCopy(Array(l, Cast(r, DecimalType.fromLiteral(r))))
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles

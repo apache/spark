@@ -61,13 +61,13 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("count distinct is partially aggregated") {
-    val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.analyzed
+    val query = testData.groupBy('value).agg(count_distinct('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
-      testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
+      testData.groupBy('value).agg(count('value), count_distinct('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
@@ -728,8 +728,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       case r: Range => r
     }
     assert(ranges.length == 2)
-    // Ensure the two Range instances are equal according to their equal method
-    assert(ranges.head == ranges.last)
     val execRanges = df.queryExecution.sparkPlan.collect {
       case r: RangeExec => r
     }

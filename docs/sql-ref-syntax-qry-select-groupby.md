@@ -32,7 +32,7 @@ When a FILTER clause is attached to an aggregate function, only the matching row
 GROUP BY group_expression [ , group_expression [ , ... ] ]
     [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
 
-GROUP BY GROUPING SETS (grouping_set [ , ...])
+GROUP BY { group_expression | { ROLLUP | CUBE | GROUPING SETS } (grouping_set [ , ...]) } [ , ... ]
 ```
 
 While aggregate functions are defined as
@@ -42,40 +42,50 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 ### Parameters
 
-* **GROUPING SETS**
-
-    Groups the rows for each subset of the expressions specified in the grouping sets. For example,
-    `GROUP BY GROUPING SETS (warehouse, product)` is semantically equivalent
-    to union of results of `GROUP BY warehouse` and `GROUP BY product`. This clause
-    is a shorthand for a `UNION ALL` where each leg of the `UNION ALL`
-    operator performs aggregation of subset of the columns specified in the `GROUPING SETS` clause.
-
-* **grouping_set**
-
-    A grouping set is specified by zero or more comma-separated expressions in parentheses.
-
-    **Syntax:** `( [ expression [ , ... ] ] )`
-
 * **grouping_expression**
 
     Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
-    result values of the grouping expressions. A grouping expression may be a column alias, a column position
-    or an expression.
+    result values of the grouping expressions. A grouping expression may be a column name like `GROUP BY a`, a column position like
+    `GROUP BY 0`, or an expression like `GROUP BY a + b`.
+
+* **grouping_set**
+
+    A grouping set is specified by zero or more comma-separated expressions in parentheses. When the
+    grouping set has only one element, parentheses can be omitted. For example, `GROUPING SETS ((a), (b))`
+    is the same as `GROUPING SETS (a, b)`.
+
+    **Syntax:** `{ ( [ expression [ , ... ] ] ) | expression }`
+
+* **GROUPING SETS**
+
+    Groups the rows for each grouping set specified after GROUPING SETS. For example,
+    `GROUP BY GROUPING SETS ((warehouse), (product))` is semantically equivalent
+    to union of results of `GROUP BY warehouse` and `GROUP BY product`. This clause
+    is a shorthand for a `UNION ALL` where each leg of the `UNION ALL`
+    operator performs aggregation of each grouping set specified in the `GROUPING SETS` clause.
+    Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
+    equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
+    and global aggregate.
 
 * **ROLLUP**
 
     Specifies multiple levels of aggregations in a single statement. This clause is used to compute aggregations
     based on multiple grouping sets. `ROLLUP` is a shorthand for `GROUPING SETS`. For example,
-    `GROUP BY warehouse, product WITH ROLLUP` is equivalent to `GROUP BY GROUPING SETS
-    ((warehouse, product), (warehouse), ())`.
+    `GROUP BY warehouse, product WITH ROLLUP` or `GROUP BY ROLLUP(warehouse, product)` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product), (warehouse), ())`.
+    `GROUP BY ROLLUP(warehouse, product, (warehouse, location))` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse), ())`.
     The N elements of a `ROLLUP` specification results in N+1 `GROUPING SETS`.
 
 * **CUBE**
 
     `CUBE` clause is used to perform aggregations based on combination of grouping columns specified in the
     `GROUP BY` clause. `CUBE` is a shorthand for `GROUPING SETS`. For example,
-    `GROUP BY warehouse, product WITH CUBE` is equivalent to `GROUP BY GROUPING SETS
-    ((warehouse, product), (warehouse), (product), ())`.
+    `GROUP BY warehouse, product WITH CUBE` or `GROUP BY CUBE(warehouse, product)` is equivalent to 
+    `GROUP BY GROUPING SETS((warehouse, product), (warehouse), (product), ())`.
+    `GROUP BY CUBE(warehouse, product, (warehouse, location))` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse, location),
+     (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
 
 * **aggregate_name**

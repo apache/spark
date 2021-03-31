@@ -85,7 +85,7 @@ public class JavaDataFrameSuite {
           udaf.distinct(col("value")),
           udaf.apply(col("value")),
           registeredUDAF.apply(col("value")),
-          callUDF("mydoublesum", col("value")));
+          callUDF("mydoublesum", col("value")));  // test deprecated one
 
     List<Row> expectedResult = new ArrayList<>();
     expectedResult.add(RowFactory.create(4950.0, 9900.0, 9900.0, 9900.0));

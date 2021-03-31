@@ -7,7 +7,7 @@ WholeStageCodegen (13)
             BroadcastHashJoin [d_week_seq1,d_week_seq2]
               Project [d_week_seq,sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales]
                 BroadcastHashJoin [d_week_seq,d_week_seq]
-                  HashAggregate [d_week_seq,sum,sum,sum,sum,sum,sum,sum] [sum(UnscaledValue(CASE WHEN (d_day_name = Sunday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Monday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Tuesday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Wednesday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Thursday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Friday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Saturday) THEN sales_price ELSE null END)),sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,sum,sum,sum,sum,sum,sum,sum]
+                  HashAggregate [d_week_seq,sum,sum,sum,sum,sum,sum,sum] [sum(UnscaledValue(CASE WHEN (d_day_name = Sunday   ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Monday   ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Tuesday  ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Wednesday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Thursday ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Friday   ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Saturday ) THEN sales_price ELSE null END)),sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,sum,sum,sum,sum,sum,sum,sum]
                     InputAdapter
                       Exchange [d_week_seq] #2
                         WholeStageCodegen (4)
@@ -18,16 +18,14 @@ WholeStageCodegen (13)
                                   Union
                                     WholeStageCodegen (1)
                                       Project [ws_sold_date_sk,ws_ext_sales_price]
-                                        Filter [ws_sold_date_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.web_sales [ws_sold_date_sk,ws_ext_sales_price]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.web_sales [ws_ext_sales_price,ws_sold_date_sk]
                                     WholeStageCodegen (2)
                                       Project [cs_sold_date_sk,cs_ext_sales_price]
-                                        Filter [cs_sold_date_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.catalog_sales [cs_sold_date_sk,cs_ext_sales_price]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.catalog_sales [cs_ext_sales_price,cs_sold_date_sk]
                                 InputAdapter
                                   BroadcastExchange #3
                                     WholeStageCodegen (3)
@@ -48,7 +46,7 @@ WholeStageCodegen (13)
                   WholeStageCodegen (11)
                     Project [d_week_seq,sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales]
                       BroadcastHashJoin [d_week_seq,d_week_seq]
-                        HashAggregate [d_week_seq,sum,sum,sum,sum,sum,sum,sum] [sum(UnscaledValue(CASE WHEN (d_day_name = Sunday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Monday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Tuesday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Wednesday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Thursday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Friday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Saturday) THEN sales_price ELSE null END)),sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,sum,sum,sum,sum,sum,sum,sum]
+                        HashAggregate [d_week_seq,sum,sum,sum,sum,sum,sum,sum] [sum(UnscaledValue(CASE WHEN (d_day_name = Sunday   ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Monday   ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Tuesday  ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Wednesday) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Thursday ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Friday   ) THEN sales_price ELSE null END)),sum(UnscaledValue(CASE WHEN (d_day_name = Saturday ) THEN sales_price ELSE null END)),sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,sum,sum,sum,sum,sum,sum,sum]
                           InputAdapter
                             ReusedExchange [d_week_seq,sum,sum,sum,sum,sum,sum,sum] #2
                         InputAdapter

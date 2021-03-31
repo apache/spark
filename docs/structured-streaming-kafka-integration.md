@@ -878,7 +878,13 @@ group id, however, please read warnings for this option and use it with caution.
  where to start instead. Structured Streaming manages which offsets are consumed internally, rather
  than rely on the kafka Consumer to do it. This will ensure that no data is missed when new
  topics/partitions are dynamically subscribed. Note that `startingOffsets` only applies when a new
- streaming query is started, and that resuming will always pick up from where the query left off.
+ streaming query is started, and that resuming will always pick up from where the query left off. Note
+ that when the offsets consumed by a streaming application no longer exist in Kafka (e.g., topics are deleted,
+ offsets are out of range, or offsets are removed after retention period), the offsets will not be reset
+ and the streaming application will see data loss. In extreme cases, for example the throughput of the
+ streaming application cannot catch up the retention speed of Kafka, the input rows of a batch might be
+ gradually reduced until zero when the offset ranges of the batch are completely not in Kafka. Enabling
+ `failOnDataLoss` option can ask Structured Streaming to fail the query for such cases.
 - **key.deserializer**: Keys are always deserialized as byte arrays with ByteArrayDeserializer. Use
  DataFrame operations to explicitly deserialize the keys.
 - **value.deserializer**: Values are always deserialized as byte arrays with ByteArrayDeserializer.
@@ -1005,6 +1011,14 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>3.0.0</td>
   </tr>
   <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.type</code></td>
+    <td>None</td>
+    <td>
+      The file format of the trust store file. For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+    <td>3.2.0</td>
+  </tr>
+  <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code></td>
     <td>None</td>
     <td>
@@ -1020,6 +1034,15 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
     <td>3.0.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.type</code></td>
+    <td>None</td>
+    <td>
+      The file format of the key store file. This is optional for client.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+    <td>3.2.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.location</code></td>

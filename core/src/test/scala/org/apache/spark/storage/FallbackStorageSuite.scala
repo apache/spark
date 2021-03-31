@@ -16,11 +16,12 @@
  */
 package org.apache.spark.storage
 
-import java.io.{DataOutputStream, FileOutputStream, IOException}
+import java.io.{DataOutputStream, File, FileOutputStream, IOException}
 import java.nio.file.Files
 
 import scala.concurrent.duration._
 
+import org.apache.hadoop.conf.Configuration
 import org.mockito.{ArgumentMatchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
@@ -104,6 +105,24 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       FallbackStorage.read(conf, ShuffleBlockId(1, 1L, 0))
     }
     FallbackStorage.read(conf, ShuffleBlockId(1, 2L, 0))
+  }
+
+  test("SPARK-34142: fallback storage API - cleanUp") {
+    withTempDir { dir =>
+      Seq(true, false).foreach { cleanUp =>
+        val appId = s"test$cleanUp"
+        val conf = new SparkConf(false)
+          .set("spark.app.id", appId)
+          .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH, dir.getAbsolutePath + "/")
+          .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, cleanUp)
+
+        val location = new File(dir, appId)
+        assert(location.mkdir())
+        assert(location.exists())
+        FallbackStorage.cleanUp(conf, new Configuration())
+        assert(location.exists() != cleanUp)
+      }
+    }
   }
 
   test("migrate shuffle data to fallback storage") {

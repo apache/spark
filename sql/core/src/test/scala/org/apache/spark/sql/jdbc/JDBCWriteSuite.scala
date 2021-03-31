@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.DriverManager
+import java.sql.{Date, DriverManager, Timestamp}
+import java.time.{Instant, LocalDate}
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
@@ -81,6 +82,9 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE1', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
+
+    conn1.prepareStatement("create table test.timetypes (d DATE, t TIMESTAMP)").executeUpdate()
+    conn.commit()
   }
 
   after {
@@ -605,5 +609,56 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
 
     sparkContext.removeSparkListener(listener)
     taskMetrics.sum
+  }
+
+  test("SPARK-34144: write and read java.time LocalDate and Instant") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val schema = new StructType().add("d", DateType).add("t", TimestampType);
+      val values = Seq(Row.apply(LocalDate.parse("2020-01-01"),
+        Instant.parse("2020-02-02T12:13:14.56789Z")))
+      val df = spark.createDataFrame(sparkContext.makeRDD(values), schema)
+
+      df.write.jdbc(url, "TEST.TIMETYPES", new Properties())
+
+      val rows = spark.read.jdbc(url, "TEST.TIMETYPES", new Properties()).collect()
+      assert(1 === rows.length);
+      assert(rows(0).getAs[LocalDate](0) === LocalDate.parse("2020-01-01"))
+      assert(rows(0).getAs[Instant](1) === Instant.parse("2020-02-02T12:13:14.56789Z"))
+    }
+  }
+
+  test("SPARK-34144: write Date and Timestampt, read LocalDate and Instant") {
+    val schema = new StructType().add("d", DateType).add("t", TimestampType);
+    val values = Seq(Row.apply(Date.valueOf("2020-01-01"),
+      Timestamp.valueOf("2020-02-02 12:13:14.56789")))
+    val df = spark.createDataFrame(sparkContext.makeRDD(values), schema)
+
+    df.write.jdbc(url, "TEST.TIMETYPES", new Properties())
+
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val rows = spark.read.jdbc(url, "TEST.TIMETYPES", new Properties()).collect()
+      assert(1 === rows.length);
+      assert(rows(0).getAs[LocalDate](0) === LocalDate.parse("2020-01-01"))
+      // 8 hour difference since Timestamp was America/Los_Angeles and Instant is GMT
+      assert(rows(0).getAs[Instant](1) === Instant.parse("2020-02-02T20:13:14.56789Z"))
+    }
+  }
+
+  test("SPARK-34144: write LocalDate and Instant, read Date and Timestampt") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val schema = new StructType().add("d", DateType).add("t", TimestampType);
+      val values = Seq(Row.apply(LocalDate.parse("2020-01-01"),
+        Instant.parse("2020-02-02T12:13:14.56789Z")))
+      val df = spark.createDataFrame(sparkContext.makeRDD(values), schema)
+
+      df.write.jdbc(url, "TEST.TIMETYPES", new Properties())
+    }
+
+    val rows = spark.read.jdbc(url, "TEST.TIMETYPES", new Properties()).collect()
+    assert(1 === rows.length);
+    assert(rows(0).getAs[java.sql.Date](0) === java.sql.Date.valueOf("2020-01-01"))
+    // -8 hour difference since Instant was GMT and Timestamp is America/Los_Angeles
+    assert(rows(0).getAs[java.sql.Timestamp](1)
+      === java.sql.Timestamp.valueOf("2020-02-02 04:13:14.56789"))
   }
 }

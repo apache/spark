@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types._
 
 abstract class UnevaluableBooleanAggBase(arg: Expression)
-  extends UnevaluableAggregate with ImplicitCastInputTypes {
+  extends UnevaluableAggregate with ImplicitCastInputTypes with UnaryLike[Expression] {
 
-  override def children: Seq[Expression] = arg :: Nil
+  override def child: Expression = arg
 
   override def dataType: DataType = BooleanType
 
