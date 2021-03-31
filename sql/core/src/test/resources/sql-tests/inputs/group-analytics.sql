@@ -18,14 +18,24 @@ AS courseSales(course, year, earnings);
 
 -- ROLLUP
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year) ORDER BY course, year;
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year, (course, year)) ORDER BY course, year;
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year, (course, year), ()) ORDER BY course, year;
 
 -- CUBE
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year) ORDER BY course, year;
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, (course, year)) ORDER BY course, year;
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, (course, year), ()) ORDER BY course, year;
 
 -- GROUPING SETS
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course, year);
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course, year, ());
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course);
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(year);
+
+-- Partial ROLLUP/CUBE/GROUPING SETS
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, CUBE(course, year) ORDER BY course, year;
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year), ROLLUP(course, year) ORDER BY course, year;
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year), ROLLUP(course, year), GROUPING SETS(course, year) ORDER BY course, year;
 
 -- GROUPING SETS with aggregate functions containing groupBy columns
 SELECT course, SUM(earnings) AS sum FROM courseSales

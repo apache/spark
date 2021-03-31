@@ -1603,7 +1603,9 @@ case class MonthsBetween(
   def this(date1: Expression, date2: Expression, roundOff: Expression) =
     this(date1, date2, roundOff, None)
 
-  override def children: Seq[Expression] = Seq(date1, date2, roundOff)
+  override def first: Expression = date1
+  override def second: Expression = date2
+  override def third: Expression = roundOff
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType, BooleanType)
 
@@ -2000,7 +2002,9 @@ case class MakeDate(
   def this(year: Expression, month: Expression, day: Expression) =
     this(year, month, day, SQLConf.get.ansiEnabled)
 
-  override def children: Seq[Expression] = Seq(year, month, day)
+  override def first: Expression = year
+  override def second: Expression = month
+  override def third: Expression = day
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
   override def dataType: DataType = DateType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
@@ -2372,21 +2376,49 @@ case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expressi
 
 /**
  * Returns the interval from the `left` date (inclusive) to the `right` date (exclusive).
+ *   - When the SQL config `spark.sql.legacy.interval.enabled` is `true`,
+ *     it returns `CalendarIntervalType` in which the `microseconds` field is set to 0 and
+ *     the `months` and `days` fields are initialized to the difference between the given dates.
+ *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in days
+ *     between the given dates.
  */
-case class SubtractDates(left: Expression, right: Expression)
+case class SubtractDates(
+    left: Expression,
+    right: Expression,
+    legacyInterval: Boolean)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.legacyIntervalEnabled)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
-  override def dataType: DataType = CalendarIntervalType
+  override def dataType: DataType =
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
+
+  @transient
+  private lazy val evalFunc: (Int, Int) => Any = legacyInterval match {
+    case false => (leftDays: Int, rightDays: Int) =>
+      Math.multiplyExact(Math.subtractExact(leftDays, rightDays), MICROS_PER_DAY)
+    case true => (leftDays: Int, rightDays: Int) => subtractDates(leftDays, rightDays)
+  }
 
   override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
-    DateTimeUtils.subtractDates(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
+    evalFunc(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (leftDays, rightDays) => {
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      s"$dtu.subtractDates($leftDays, $rightDays)"
-    })
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = legacyInterval match {
+    case false =>
+      val m = classOf[Math].getName
+      defineCodeGen(ctx, ev, (leftDays, rightDays) =>
+        s"$m.multiplyExact($m.subtractExact($leftDays, $rightDays), ${MICROS_PER_DAY}L)")
+    case true =>
+      defineCodeGen(ctx, ev, (leftDays, rightDays) => {
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        s"$dtu.subtractDates($leftDays, $rightDays)"
+      })
   }
+}
+
+object SubtractDates {
+  def apply(left: Expression, right: Expression): SubtractDates = new SubtractDates(left, right)
 }

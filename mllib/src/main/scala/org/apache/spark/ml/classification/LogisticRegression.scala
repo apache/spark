@@ -941,19 +941,21 @@ class LogisticRegression @Since("1.2.0") (
       optimizer: FirstOrderMinimizer[BDV[Double], DiffFunction[BDV[Double]]]) = {
     val multinomial = checkMultinomial(numClasses)
 
-    // for binary LR, we can center the input vector, if and only if:
+    // for LR, we can center the input vector, if and only if:
     // 1, fitIntercept is true;
     // 2, no penalty on the intercept, which is always true in existing impl;
     // 3, no bounds on the intercept.
-    val fitWithMean = !multinomial && $(fitIntercept) &&
-      (!isSet(lowerBoundsOnIntercepts) || $(lowerBoundsOnIntercepts)(0).isNegInfinity) &&
-      (!isSet(upperBoundsOnIntercepts) || $(upperBoundsOnIntercepts)(0).isPosInfinity)
+    val fitWithMean = $(fitIntercept) &&
+      (!isSet(lowerBoundsOnIntercepts) ||
+        $(lowerBoundsOnIntercepts).toArray.forall(_.isNegInfinity)) &&
+      (!isSet(upperBoundsOnIntercepts) ||
+        $(upperBoundsOnIntercepts).toArray.forall(_.isPosInfinity))
 
     val numFeatures = featuresStd.length
     val inverseStd = featuresStd.map(std => if (std != 0) 1.0 / std else 0.0)
     val scaledMean = Array.tabulate(numFeatures)(i => inverseStd(i) * featuresMean(i))
     val bcInverseStd = instances.context.broadcast(inverseStd)
-    var bcObjects = Seq(bcInverseStd)
+    val bcScaledMean = instances.context.broadcast(scaledMean)
 
     val scaled = instances.mapPartitions { iter =>
       val func = StandardScalerModel.getTransformFunc(Array.empty, bcInverseStd.value, false, true)
@@ -966,25 +968,30 @@ class LogisticRegression @Since("1.2.0") (
       .setName(s"$uid: training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val costFun = if (multinomial) {
-      // TODO: create a separate MultinomialLogisticBlockAggregator for clearness
-      val getAggregatorFunc = new BlockLogisticAggregator(numFeatures, numClasses,
-         $(fitIntercept), true)(_)
+      val getAggregatorFunc = new MultinomialLogisticBlockAggregator(bcInverseStd, bcScaledMean,
+         $(fitIntercept), fitWithMean)(_)
       new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
     } else {
-      val bcScaledMean = instances.context.broadcast(scaledMean)
-      bcObjects +:= bcScaledMean
       val getAggregatorFunc = new BinaryLogisticBlockAggregator(bcInverseStd, bcScaledMean,
          $(fitIntercept), fitWithMean)(_)
       new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
     }
 
     if (fitWithMean) {
-      // orginal `initialCoefWithInterceptArray` is for problem:
-      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
-      // we should adjust it to the initial solution for problem:
-      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
-      val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, initialSolution, 1, scaledMean, 1)
-      initialSolution(numFeatures) += adapt
+      if (multinomial) {
+        val adapt = Array.ofDim[Double](numClasses)
+        BLAS.f2jBLAS.dgemv("N", numClasses, numFeatures, 1.0,
+          initialSolution, numClasses, scaledMean, 1, 0.0, adapt, 1)
+        BLAS.getBLAS(numFeatures).daxpy(numClasses, 1.0, adapt, 0, 1,
+          initialSolution, numClasses * numFeatures, 1)
+      } else {
+        // orginal `initialCoefWithInterceptArray` is for problem:
+        // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+        // we should adjust it to the initial solution for problem:
+        // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+        val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, initialSolution, 1, scaledMean, 1)
+        initialSolution(numFeatures) += adapt
+      }
     }
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
@@ -1002,16 +1009,25 @@ class LogisticRegression @Since("1.2.0") (
       arrayBuilder += state.adjustedValue
     }
     blocks.unpersist()
-    bcObjects.foreach(_.destroy())
+    bcInverseStd.destroy()
+    bcScaledMean.destroy()
 
     val solution = if (state == null) null else state.x.toArray
     if (fitWithMean && solution != null) {
-      // the final solution is for problem:
-      // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
-      // we should adjust it back for original problem:
-      // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
-      val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, solution, 1, scaledMean, 1)
-      solution(numFeatures) -= adapt
+      if (multinomial) {
+        val adapt = Array.ofDim[Double](numClasses)
+        BLAS.f2jBLAS.dgemv("N", numClasses, numFeatures, 1.0,
+          solution, numClasses, scaledMean, 1, 0.0, adapt, 1)
+        BLAS.getBLAS(numFeatures).daxpy(numClasses, -1.0, adapt, 0, 1,
+          solution, numClasses * numFeatures, 1)
+      } else {
+        // the final solution is for problem:
+        // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
+        // we should adjust it back for original problem:
+        // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
+        val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, solution, 1, scaledMean, 1)
+        solution(numFeatures) -= adapt
+      }
     }
     (solution, arrayBuilder.result)
   }
