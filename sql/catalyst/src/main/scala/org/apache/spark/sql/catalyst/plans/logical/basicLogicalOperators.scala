@@ -121,8 +121,10 @@ case class Generate(
 
   val unrequiredSet: Set[Int] = unrequiredChildIndex.toSet
 
-  lazy val requiredChildOutput: Seq[Attribute] =
+  lazy val requiredChildOutput: Seq[Attribute] = {
+    val unrequiredSet = unrequiredChildIndex.toSet
     child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
+  }
 
   override lazy val resolved: Boolean = {
     generator.resolved &&
@@ -146,8 +148,7 @@ case class Generate(
   }
 
   def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
-  override def metadataOutput: Seq[Attribute] =
-    child.metadataOutput.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
+  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
@@ -386,7 +387,7 @@ case class Join(
 
   override def metadataOutput: Seq[Attribute] = {
     joinType match {
-      case j: ExistenceJoin =>
+      case ExistenceJoin(_) =>
         left.metadataOutput
       case LeftExistence(_) =>
         left.metadataOutput
