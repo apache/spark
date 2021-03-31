@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -30,9 +31,10 @@ import org.apache.spark.sql.types._
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
 abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZero: Boolean)
-  extends DeclarativeAggregate with ImplicitCastInputTypes {
+  extends DeclarativeAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  override def children: Seq[Expression] = Seq(x, y)
+  override def left: Expression = x
+  override def right: Expression = y
   override def nullable: Boolean = true
   override def dataType: DataType = DoubleType
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)

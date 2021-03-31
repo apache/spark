@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 
 trait DynamicPruning extends Predicate
 
@@ -46,9 +47,10 @@ case class DynamicPruningSubquery(
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId)
   with DynamicPruning
-  with Unevaluable {
+  with Unevaluable
+  with UnaryLike[Expression] {
 
-  override def children: Seq[Expression] = Seq(pruningKey)
+  override def child: Expression = pruningKey
 
   override def plan: LogicalPlan = buildQuery
 

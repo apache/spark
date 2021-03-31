@@ -194,7 +194,7 @@ View Text           	select * from char_tbl
 View Original Text  	select * from char_tbl	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]              	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[]]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.legacy.interval.enabled=true]
 
 
 -- !query
@@ -343,7 +343,7 @@ View Text           	select * from char_tbl2
 View Original Text  	select * from char_tbl2	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]              	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[]]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.legacy.interval.enabled=true]
 
 
 -- !query
@@ -402,7 +402,7 @@ View Text           	select * from char_tbl2
 View Original Text  	select * from char_tbl2	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]              	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], yes=no]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.legacy.interval.enabled=true, yes=no]
 
 
 -- !query
@@ -460,7 +460,7 @@ View Text           	select * from char_tbl2
 View Original Text  	select * from char_tbl2	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]              	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[]]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.legacy.interval.enabled=true]
 
 
 -- !query

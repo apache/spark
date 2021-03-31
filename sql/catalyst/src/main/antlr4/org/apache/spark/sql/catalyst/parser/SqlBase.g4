@@ -588,11 +588,21 @@ fromClause
     ;
 
 aggregationClause
-    : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
+    : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
+        (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
+    | GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
-    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
+    ;
+
+groupByClause
+    : groupingAnalytics
+    | expression
+    ;
+
+groupingAnalytics
+    : (ROLLUP | CUBE | GROUPING SETS)  '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupingSet
