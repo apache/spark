@@ -930,7 +930,7 @@ getOne <- function(x, envir, inherits = TRUE, ifnotfound = NULL) {
 }
 
 # Returns a vector of parent directories, traversing up count times, starting with a full path
-# eg. traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1) should return
+# e.g. traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1) should return
 # this "/Users/user/Library/Caches/spark/spark2.2"
 # and  "/Users/user/Library/Caches/spark"
 traverseParentDirs <- function(x, count) {

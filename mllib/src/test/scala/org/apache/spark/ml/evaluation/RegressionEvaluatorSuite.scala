@@ -36,7 +36,7 @@ class RegressionEvaluatorSuite
   test("Regression Evaluator: default params") {
     /**
      * Here is the instruction describing how to export the test data into CSV format
-     * so we can validate the metrics compared with R's mmetric package.
+     * so we can validate the metrics compared with R's mmetric function.
      *
      * import org.apache.spark.mllib.util.LinearDataGenerator
      * val data = sc.parallelize(LinearDataGenerator.generateLinearInput(6.3,

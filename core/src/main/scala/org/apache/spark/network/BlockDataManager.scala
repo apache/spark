@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.TaskContext
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
-import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, StorageLevel}
 
 private[spark]
 trait BlockDataManager {

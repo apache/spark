@@ -35,10 +35,13 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
  * be merged instead of for fetching them from remote shuffle services. This is used by
  * ShuffleWriter when the block push process is initiated. The supplied BlockFetchingListener
  * is used to handle the success or failure in pushing each blocks.
+ *
+ * @since 3.1.0
  */
 public class OneForOneBlockPusher {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockPusher.class);
   private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
+  public static final String SHUFFLE_PUSH_BLOCK_PREFIX = "shufflePush";
 
   private final TransportClient client;
   private final String appId;
@@ -115,7 +118,13 @@ public class OneForOneBlockPusher {
     for (int i = 0; i < blockIds.length; i++) {
       assert buffers.containsKey(blockIds[i]) : "Could not find the block buffer for block "
         + blockIds[i];
-      ByteBuffer header = new PushBlockStream(appId, blockIds[i], i).toByteBuffer();
+      String[] blockIdParts = blockIds[i].split("_");
+      if (blockIdParts.length != 4 || !blockIdParts[0].equals(SHUFFLE_PUSH_BLOCK_PREFIX)) {
+        throw new IllegalArgumentException(
+          "Unexpected shuffle push block id format: " + blockIds[i]);
+      }
+      ByteBuffer header = new PushBlockStream(appId, Integer.parseInt(blockIdParts[1]),
+        Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]) , i).toByteBuffer();
       client.uploadStream(new NioManagedBuffer(header), buffers.get(blockIds[i]),
         new BlockPushCallback(i, blockIds[i]));
     }

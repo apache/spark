@@ -17,9 +17,11 @@ select position('bar' in 'foobarbar'), position(null, 'foobarbar'), position('aa
 
 -- left && right
 select left("abcd", 2), left("abcd", 5), left("abcd", '2'), left("abcd", null);
-select left(null, -2), left("abcd", -2), left("abcd", 0), left("abcd", 'a');
+select left(null, -2);
+select left("abcd", -2), left("abcd", 0), left("abcd", 'a');
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null);
-select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a');
+select right(null, -2);
+select right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 
 -- split function
 SELECT split('aa1cc2ee3', '[1-9]+');
@@ -50,6 +52,22 @@ SELECT trim(TRAILING 'xyz' FROM 'testxxzx');
 SELECT trim(TRAILING 'xyz' FROM 'xyztestxxzx');
 SELECT trim(TRAILING 'xy' FROM 'TURNERyxXxy');
 
+-- btrim
+SELECT btrim('xyxtrimyyx', 'xy');
+SELECT btrim(encode(" xyz ", 'utf-8'));
+SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'));
+SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'));
+
 -- Check lpad/rpad with invalid length parameter
 SELECT lpad('hi', 'invalid_length');
 SELECT rpad('hi', 'invalid_length');
+
+-- decode
+select decode();
+select decode(encode('abc', 'utf-8'));
+select decode(encode('abc', 'utf-8'), 'utf-8');
+select decode(1, 1, 'Southlake');
+select decode(2, 1, 'Southlake');
+select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');

@@ -57,14 +57,9 @@ private[sql] trait LookupCatalog extends Logging {
    * Extract session catalog and identifier from a multi-part identifier.
    */
   object SessionCatalogAndIdentifier {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
     def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = parts match {
       case CatalogAndIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
-        if (ident.namespace.length != 1) {
-          throw new AnalysisException(
-            s"The namespace in session catalog must have exactly one name part: ${parts.quoted}")
-        }
         Some(catalog, ident)
       case _ => None
     }
@@ -140,19 +135,22 @@ private[sql] trait LookupCatalog extends Logging {
    * For legacy support only. Please use [[CatalogAndIdentifier]] instead on DSv2 code paths.
    */
   object AsTableIdentifier {
-    def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndMultipartIdentifier(None, names)
+    def unapply(parts: Seq[String]): Option[TableIdentifier] = {
+      def namesToTableIdentifier(names: Seq[String]): Option[TableIdentifier] = names match {
+        case Seq(name) => Some(TableIdentifier(name))
+        case Seq(database, name) => Some(TableIdentifier(name, Some(database)))
+        case _ => None
+      }
+      parts match {
+        case CatalogAndMultipartIdentifier(None, names)
           if CatalogV2Util.isSessionCatalog(currentCatalog) =>
-        names match {
-          case Seq(name) =>
-            Some(TableIdentifier(name))
-          case Seq(database, name) =>
-            Some(TableIdentifier(name, Some(database)))
-          case _ =>
-            None
-        }
-      case _ =>
-        None
+          namesToTableIdentifier(names)
+        case CatalogAndMultipartIdentifier(Some(catalog), names)
+          if CatalogV2Util.isSessionCatalog(catalog) &&
+             CatalogV2Util.isSessionCatalog(currentCatalog) =>
+          namesToTableIdentifier(names)
+        case _ => None
+      }
     }
   }
 

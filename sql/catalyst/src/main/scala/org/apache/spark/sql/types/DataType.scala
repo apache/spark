@@ -31,7 +31,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
@@ -124,13 +124,15 @@ abstract class DataType extends AbstractDataType {
 object DataType {
 
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
+  private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
+  private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
       ddl,
       CatalystSqlParser.parseDataType,
       "Cannot parse the data type: ",
-      fallbackParser = CatalystSqlParser.parseTableSchema)
+      fallbackParser = str => CatalystSqlParser.parseTableSchema(str))
   }
 
   /**
@@ -166,9 +168,10 @@ object DataType {
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
-  private val nonDecimalNameToType = {
+  private val otherTypes = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
-      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
+      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
+      DayTimeIntervalType, YearMonthIntervalType)
       .map(t => t.typeName -> t).toMap
   }
 
@@ -177,7 +180,9 @@ object DataType {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case other => nonDecimalNameToType.getOrElse(
+      case CHAR_TYPE(length) => CharType(length.toInt)
+      case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      case other => otherTypes.getOrElse(
         other,
         throw new IllegalArgumentException(
           s"Failed to convert the JSON string '$name' to a data type."))
@@ -186,7 +191,7 @@ object DataType {
 
   private object JSortedObject {
     def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
-      case JObject(seq) => Some(seq.toList.sortBy(_._1))
+      case JObject(seq) => Some(seq.sortBy(_._1))
       case _ => None
     }
   }
@@ -303,21 +308,49 @@ object DataType {
    *   of `fromField.nullable` and `toField.nullable` are false.
    */
   private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
+    equalsIgnoreCompatibleNullability(from, to, ignoreName = false)
+  }
+
+  /**
+   * Compares two types, ignoring compatible nullability of ArrayType, MapType, StructType, and
+   * also the field name. It compares based on the position.
+   *
+   * Compatible nullability is defined as follows:
+   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
+   *   if and only if `to.containsNull` is true, or both of `from.containsNull` and
+   *   `to.containsNull` are false.
+   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to`
+   *   if and only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
+   *   `to.valueContainsNull` are false.
+   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to`
+   *   if and only if for all every pair of fields, `to.nullable` is true, or both
+   *   of `fromField.nullable` and `toField.nullable` are false.
+   */
+  private[sql] def equalsIgnoreNameAndCompatibleNullability(
+      from: DataType,
+      to: DataType): Boolean = {
+    equalsIgnoreCompatibleNullability(from, to, ignoreName = true)
+  }
+
+  private def equalsIgnoreCompatibleNullability(
+      from: DataType,
+      to: DataType,
+      ignoreName: Boolean = false): Boolean = {
     (from, to) match {
       case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
-        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
+        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement, ignoreName)
 
       case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
         (tn || !fn) &&
-          equalsIgnoreCompatibleNullability(fromKey, toKey) &&
-          equalsIgnoreCompatibleNullability(fromValue, toValue)
+          equalsIgnoreCompatibleNullability(fromKey, toKey, ignoreName) &&
+          equalsIgnoreCompatibleNullability(fromValue, toValue, ignoreName)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields).forall { case (fromField, toField) =>
-            fromField.name == toField.name &&
+            (ignoreName || fromField.name == toField.name) &&
               (toField.nullable || !fromField.nullable) &&
-              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType, ignoreName)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType

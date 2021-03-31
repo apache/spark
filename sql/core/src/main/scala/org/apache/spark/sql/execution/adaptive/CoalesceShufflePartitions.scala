@@ -18,15 +18,19 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-object CoalesceShufflePartitions extends Rule[SparkPlan] {
+case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffleReaderRule {
+
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS, REPARTITION)
+
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
       return plan
@@ -47,7 +51,7 @@ object CoalesceShufflePartitions extends Rule[SparkPlan] {
     val shuffleStages = collectShuffleStages(plan)
     // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
-    if (!shuffleStages.forall(_.shuffle.canChangeNumPartitions)) {
+    if (!shuffleStages.forall(s => supportCoalesce(s.shuffle))) {
       plan
     } else {
       // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
@@ -63,7 +67,7 @@ object CoalesceShufflePartitions extends Rule[SparkPlan] {
         // We fall back to Spark default parallelism if the minimum number of coalesced partitions
         // is not set, so to avoid perf regressions compared to no coalescing.
         val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
-          .getOrElse(SparkSession.active.sparkContext.defaultParallelism)
+          .getOrElse(session.sparkContext.defaultParallelism)
         val partitionSpecs = ShufflePartitionsUtil.coalescePartitions(
           validMetrics.toArray,
           advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
@@ -81,5 +85,9 @@ object CoalesceShufflePartitions extends Rule[SparkPlan] {
         plan
       }
     }
+  }
+
+  private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
+    s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
 }

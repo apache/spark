@@ -219,7 +219,7 @@ private[joins] class UnsafeHashedRelation(
   var resultRow = new UnsafeRow(numFields)
 
   // re-used in getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
-  var valueRowWithKeyIndex = new ValueRowWithKeyIndex
+  val valueRowWithKeyIndex = new ValueRowWithKeyIndex
 
   override def get(key: InternalRow): Iterator[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
@@ -426,9 +426,9 @@ private[joins] class UnsafeHashedRelation(
       readBuffer(valuesBuffer, 0, valuesSize)
 
       val loc = binaryMap.lookup(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize)
-      val putSuceeded = loc.append(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize,
+      val putSucceeded = loc.append(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize,
         valuesBuffer, Platform.BYTE_ARRAY_OFFSET, valuesSize)
-      if (!putSuceeded) {
+      if (!putSucceeded) {
         binaryMap.free()
         throw new IOException("Could not allocate memory to grow BytesToBytesMap")
       }
@@ -523,7 +523,7 @@ private[joins] object UnsafeHashedRelation {
  * see http://java-performance.info/implementing-world-fastest-java-int-to-int-hash-map/
  */
 private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, capacity: Int)
-  extends MemoryConsumer(mm) with Externalizable with KryoSerializable {
+  extends MemoryConsumer(mm, MemoryMode.ON_HEAP) with Externalizable with KryoSerializable {
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false

@@ -18,6 +18,7 @@
 package org.apache.spark.network.protocol;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 import io.netty.buffer.ByteBuf;
@@ -46,7 +47,11 @@ public class Encoders {
     }
   }
 
-  /** Bitmaps are encoded with their serialization length followed by the serialization bytes. */
+  /**
+   * Bitmaps are encoded with their serialization length followed by the serialization bytes.
+   *
+   * @since 3.1.0
+   */
   public static class Bitmaps {
     public static int encodedLength(RoaringBitmap b) {
       // Compress the bitmap before serializing it. Note that since BlockTransferMessage
@@ -57,13 +62,20 @@ public class Encoders {
       return b.serializedSizeInBytes();
     }
 
+    /**
+     * The input ByteBuf for this encoder should have enough write capacity to fit the serialized
+     * bitmap. Other encoders which use {@link io.netty.buffer.AbstractByteBuf#writeBytes(byte[])}
+     * to write can expand the buf as writeBytes calls {@link ByteBuf#ensureWritable} internally.
+     * However, this encoder doesn't rely on netty's writeBytes and will fail if the input buf
+     * doesn't have enough write capacity.
+     */
     public static void encode(ByteBuf buf, RoaringBitmap b) {
-      int encodedLength = b.serializedSizeInBytes();
       // RoaringBitmap requires nio ByteBuffer for serde. We expose the netty ByteBuf as a nio
       // ByteBuffer. Here, we need to explicitly manage the index so we can write into the
       // ByteBuffer, and the write is reflected in the underneath ByteBuf.
-      b.serialize(buf.nioBuffer(buf.writerIndex(), encodedLength));
-      buf.writerIndex(buf.writerIndex() + encodedLength);
+      ByteBuffer byteBuffer = buf.nioBuffer(buf.writerIndex(), buf.writableBytes());
+      b.serialize(byteBuffer);
+      buf.writerIndex(buf.writerIndex() + byteBuffer.position());
     }
 
     public static RoaringBitmap decode(ByteBuf buf) {
@@ -172,7 +184,11 @@ public class Encoders {
     }
   }
 
-  /** Bitmap arrays are encoded with the number of bitmaps followed by per-Bitmap encoding. */
+  /**
+   * Bitmap arrays are encoded with the number of bitmaps followed by per-Bitmap encoding.
+   *
+   * @since 3.1.0
+   */
   public static class BitmapArrays {
     public static int encodedLength(RoaringBitmap[] bitmaps) {
       int totalLength = 4;

@@ -12,7 +12,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_moy,i_category,d_year,psum,
                       InputAdapter
                         Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #1
                           WholeStageCodegen (12)
-                            Filter [d_year,avg_monthly_sales,sum_sales,rn]
+                            Filter [d_year,avg_monthly_sales,sum_sales]
                               InputAdapter
                                 Window [d_year,d_moy,i_category,i_brand,s_store_name,s_company_name]
                                   WholeStageCodegen (11)
@@ -45,10 +45,12 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_moy,i_category,d_year,psum,
                                                                                         BroadcastHashJoin [ss_store_sk,s_store_sk]
                                                                                           Project [ss_item_sk,ss_store_sk,ss_sales_price,d_year,d_moy]
                                                                                             BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                                                              Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
+                                                                                              Filter [ss_item_sk,ss_store_sk]
                                                                                                 ColumnarToRow
                                                                                                   InputAdapter
-                                                                                                    Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_sales_price]
+                                                                                                    Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                                                                                                      SubqueryBroadcast [d_date_sk] #1
+                                                                                                        ReusedExchange [d_date_sk,d_year,d_moy] #6
                                                                                               InputAdapter
                                                                                                 BroadcastExchange #6
                                                                                                   WholeStageCodegen (1)
@@ -80,28 +82,26 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_moy,i_category,d_year,psum,
                         Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #9
                           WholeStageCodegen (23)
                             Project [i_category,i_brand,s_store_name,s_company_name,sum_sales,rn]
-                              Filter [rn]
-                                InputAdapter
-                                  Window [d_year,d_moy,i_category,i_brand,s_store_name,s_company_name]
-                                    WholeStageCodegen (22)
-                                      Sort [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy]
-                                        InputAdapter
-                                          Exchange [i_category,i_brand,s_store_name,s_company_name] #10
-                                            WholeStageCodegen (21)
-                                              HashAggregate [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,sum]
-                                                InputAdapter
-                                                  ReusedExchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] #4
+                              InputAdapter
+                                Window [d_year,d_moy,i_category,i_brand,s_store_name,s_company_name]
+                                  WholeStageCodegen (22)
+                                    Sort [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy]
+                                      InputAdapter
+                                        Exchange [i_category,i_brand,s_store_name,s_company_name] #10
+                                          WholeStageCodegen (21)
+                                            HashAggregate [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,sum]
+                                              InputAdapter
+                                                ReusedExchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum] #11
         InputAdapter
           WholeStageCodegen (36)
             Sort [i_category,i_brand,s_store_name,s_company_name,rn]
               InputAdapter
-                Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #11
+                Exchange [i_category,i_brand,s_store_name,s_company_name,rn] #12
                   WholeStageCodegen (35)
                     Project [i_category,i_brand,s_store_name,s_company_name,sum_sales,rn]
-                      Filter [rn]
-                        InputAdapter
-                          Window [d_year,d_moy,i_category,i_brand,s_store_name,s_company_name]
-                            WholeStageCodegen (34)
-                              Sort [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy]
-                                InputAdapter
-                                  ReusedExchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum_sales] #10
+                      InputAdapter
+                        Window [d_year,d_moy,i_category,i_brand,s_store_name,s_company_name]
+                          WholeStageCodegen (34)
+                            Sort [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy]
+                              InputAdapter
+                                ReusedExchange [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,sum_sales] #10

@@ -19,12 +19,13 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
-
 
 /**
  * The MergedShuffleFileManager is used to process push based shuffle when enabled. It works
@@ -33,7 +34,10 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
  * remotely pushed streams of shuffle blocks to merge them into merged shuffle files. Right
  * now, support for push based shuffle is only implemented for external shuffle service in
  * YARN mode.
+ *
+ * @since 3.1.0
  */
+@Evolving
 public interface MergedShuffleFileManager {
   /**
    * Provides the stream callback used to process a remotely pushed block. The callback is
@@ -56,25 +60,15 @@ public interface MergedShuffleFileManager {
   MergeStatuses finalizeShuffleMerge(FinalizeShuffleMerge msg) throws IOException;
 
   /**
-   * Registers an application when it starts. It also stores the username which is necessary
-   * for generating the host local directories for merged shuffle files.
-   * Right now, this is invoked by YarnShuffleService.
+   * Registers an executor with MergedShuffleFileManager. This executor-info provides
+   * the directories and number of sub-dirs per dir so that MergedShuffleFileManager knows where to
+   * store and look for shuffle data for a given application. It is invoked by the RPC call when
+   * executor tries to register with the local shuffle service.
    *
    * @param appId application ID
-   * @param user username
+   * @param executorInfo The list of local dirs that this executor gets granted from NodeManager
    */
-  void registerApplication(String appId, String user);
-
-  /**
-   * Registers an executor with its local dir list when it starts. This provides the specific path
-   * so MergedShuffleFileManager knows where to store and look for shuffle data for a
-   * given application. It is invoked by the RPC call when executor tries to register with the
-   * local shuffle service.
-   *
-   * @param appId application ID
-   * @param localDirs The list of local dirs that this executor gets granted from NodeManager
-   */
-  void registerExecutor(String appId, String[] localDirs);
+  void registerExecutor(String appId, ExecutorShuffleInfo executorInfo);
 
   /**
    * Invoked when an application finishes. This cleans up any remaining metadata associated with

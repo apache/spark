@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import java.lang.{Long => JLong}
 import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, RoundingMode}
 
 import scala.util.Try

@@ -99,7 +99,7 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
 
     val metadata = spark.read.json(s"$hashingTFPath/metadata")
     val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
-    assert(sparkVersionStr == "2.4.4")
+    assert(sparkVersionStr === "2.4.4")
 
     intercept[IllegalArgumentException] {
       loadedHashingTF.save(hashingTFPath)

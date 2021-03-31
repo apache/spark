@@ -19,7 +19,6 @@ import functools
 import warnings
 from inspect import getfullargspec
 
-from pyspark import since
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
@@ -39,7 +38,6 @@ class PandasUDFType(object):
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
 
-@since(2.3)
 def pandas_udf(f=None, returnType=None, functionType=None):
     """
     Creates a pandas user defined function (a.k.a. vectorized user defined function).
@@ -50,14 +48,22 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     additional configuration is required. A Pandas UDF behaves as a regular PySpark function
     API in general.
 
-    :param f: user-defined function. A python function if used as a standalone function
-    :param returnType: the return type of the user-defined function. The value can be either a
+    .. versionadded:: 2.3.0
+
+    Parameters
+    ----------
+    f : function, optional
+        user-defined function. A python function if used as a standalone function
+    returnType : :class:`pyspark.sql.types.DataType` or str, optional
+        the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-    :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
-        Default: SCALAR.
+    functionType : int, optional
+        an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
+        Default: SCALAR. This parameter exists for compatibility.
+        Using Python type hints is encouraged.
 
-        .. note:: This parameter exists for compatibility. Using Python type hints is encouraged.
-
+    Examples
+    --------
     In order to use this API, customarily the below are imported:
 
     >>> import pandas as pd
@@ -93,7 +99,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     ...     s3['col2'] = s1 + s2.str.len()
     ...     return s3
     ...
-    >>> # Create a Spark DataFrame that has three columns including a sturct column.
+    >>> # Create a Spark DataFrame that has three columns including a struct column.
     ... df = spark.createDataFrame(
     ...     [[1, "a string", ("a nested string",)]],
     ...     "long_col long, string_col string, struct_col struct<col1:string>")
@@ -108,7 +114,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     |    |-- col1: string (nullable = true)
     |    |-- col2: long (nullable = true)
 
-    In the following sections, it describes the cominations of the supported type hints. For
+    In the following sections, it describes the combinations of the supported type hints. For
     simplicity, `pandas.DataFrame` variant is omitted.
 
     * Series to Series
@@ -263,30 +269,32 @@ def pandas_udf(f=None, returnType=None, functionType=None):
             Therefore, mutating the input series is not allowed and will cause incorrect results.
             For the same reason, users should also not rely on the index of the input series.
 
-        .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
+    Notes
+    -----
+    The user-defined functions do not support conditional expressions or short circuiting
+    in boolean expressions and it ends up with being executed all internally. If the functions
+    can fail on special rows, the workaround is to incorporate the condition into the functions.
 
-    .. note:: The user-defined functions do not support conditional expressions or short circuiting
-        in boolean expressions and it ends up with being executed all internally. If the functions
-        can fail on special rows, the workaround is to incorporate the condition into the functions.
+    The user-defined functions do not take keyword arguments on the calling side.
 
-    .. note:: The user-defined functions do not take keyword arguments on the calling side.
+    The data type of returned `pandas.Series` from the user-defined functions should be
+    matched with defined `returnType` (see :meth:`types.to_arrow_type` and
+    :meth:`types.from_arrow_type`). When there is mismatch between them, Spark might do
+    conversion on returned data. The conversion is not guaranteed to be correct and results
+    should be checked for accuracy by users.
 
-    .. note:: The data type of returned `pandas.Series` from the user-defined functions should be
-        matched with defined `returnType` (see :meth:`types.to_arrow_type` and
-        :meth:`types.from_arrow_type`). When there is mismatch between them, Spark might do
-        conversion on returned data. The conversion is not guaranteed to be correct and results
-        should be checked for accuracy by users.
+    Currently,
+    :class:`pyspark.sql.types.ArrayType` of :class:`pyspark.sql.types.TimestampType` and
+    nested :class:`pyspark.sql.types.StructType`
+    are currently not supported as output types.
 
-    .. note:: Currently,
-        :class:`pyspark.sql.types.MapType`,
-        :class:`pyspark.sql.types.ArrayType` of :class:`pyspark.sql.types.TimestampType` and
-        nested :class:`pyspark.sql.types.StructType`
-        are currently not supported as output types.
-
-    .. seealso:: :meth:`pyspark.sql.DataFrame.mapInPandas`
-    .. seealso:: :meth:`pyspark.sql.GroupedData.applyInPandas`
-    .. seealso:: :meth:`pyspark.sql.PandasCogroupedOps.applyInPandas`
-    .. seealso:: :meth:`pyspark.sql.UDFRegistration.register`
+    See Also
+    --------
+    pyspark.sql.GroupedData.agg
+    pyspark.sql.DataFrame.mapInPandas
+    pyspark.sql.GroupedData.applyInPandas
+    pyspark.sql.PandasCogroupedOps.applyInPandas
+    pyspark.sql.UDFRegistration.register
     """
 
     # The following table shows most of Pandas data and SQL type conversions in Pandas UDFs that

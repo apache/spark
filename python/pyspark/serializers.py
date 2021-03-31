@@ -24,6 +24,9 @@ By default, PySpark uses :class:`PickleSerializer` to serialize objects using Py
 Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
 
+
+Examples
+--------
 The serializer is chosen when creating :class:`SparkContext`:
 
 >>> from pyspark.context import SparkContext

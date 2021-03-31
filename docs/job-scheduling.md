@@ -79,18 +79,19 @@ are no longer used and request them again later when there is demand. This featu
 useful if multiple applications share resources in your Spark cluster.
 
 This feature is disabled by default and available on all coarse-grained cluster managers, i.e.
-[standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html), and
-[Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes).
+[standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html),
+[Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes) and [K8s mode](running-on-kubernetes.html).
+
 
 ### Configuration and Setup
 
-There are two requirements for using this feature. First, your application must set
-`spark.dynamicAllocation.enabled` to `true`. Second, you must set up an *external shuffle service*
-on each worker node in the same cluster and set `spark.shuffle.service.enabled` to true in your
-application. The purpose of the external shuffle service is to allow executors to be removed
+There are two ways for using this feature.
+First, your application must set both `spark.dynamicAllocation.enabled` and `spark.dynamicAllocation.shuffleTracking.enabled` to `true`.
+Second, your application must set both `spark.dynamicAllocation.enabled` and `spark.shuffle.service.enabled` to `true`
+after you set up an *external shuffle service* on each worker node in the same cluster.
+The purpose of the shuffle tracking or the external shuffle service is to allow executors to be removed
 without deleting shuffle files written by them (more detail described
-[below](job-scheduling.html#graceful-decommission-of-executors)). The way to set up this service
-varies across cluster managers:
+[below](job-scheduling.html#graceful-decommission-of-executors)). While it is simple to enable shuffle tracking, the way to set up the external shuffle service varies across cluster managers:
 
 In standalone mode, simply start your workers with `spark.shuffle.service.enabled` set to `true`.
 

@@ -21,12 +21,12 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{ContextAwareIterator, SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -89,7 +89,7 @@ trait EvalPythonExec extends UnaryExecNode {
 
     inputRDD.mapPartitions { iter =>
       val context = TaskContext.get()
-      val contextAwareIterator = new ContextAwareIterator(iter, context)
+      val contextAwareIterator = new ContextAwareIterator(context, iter)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
@@ -137,19 +137,4 @@ trait EvalPythonExec extends UnaryExecNode {
       }
     }
   }
-}
-
-/**
- * A TaskContext aware iterator.
- *
- * As the Python evaluation consumes the parent iterator in a separate thread,
- * it could consume more data from the parent even after the task ends and the parent is closed.
- * Thus, we should use ContextAwareIterator to stop consuming after the task ends.
- */
-class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends Iterator[IN] {
-
-  override def hasNext: Boolean =
-    !context.isCompleted() && !context.isInterrupted() && iter.hasNext
-
-  override def next(): IN = iter.next()
 }

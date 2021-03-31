@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -96,7 +95,7 @@ abstract class DisableUnnecessaryBucketedScanSuite
         ("SELECT i FROM t1", 0, 1),
         ("SELECT j FROM t1", 0, 0),
         // Filter on bucketed column
-        ("SELECT * FROM t1 WHERE i = 1", 1, 1),
+        ("SELECT * FROM t1 WHERE i = 1", 0, 1),
         // Filter on non-bucketed column
         ("SELECT * FROM t1 WHERE j = 1", 0, 1),
         // Join with same buckets

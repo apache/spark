@@ -1,3 +1,5 @@
+-- test cases for like all
+
 CREATE OR REPLACE TEMPORARY VIEW like_all_table AS SELECT * FROM (VALUES
   ('google', '%oo%'),
   ('facebook', '%oo%'),

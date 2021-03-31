@@ -274,10 +274,9 @@ of the most common options to set are:
  <td><code>spark.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.10, with minimum of 384 </td>
   <td>
-    Amount of additional memory to be allocated per executor process in cluster mode, in MiB unless
-    otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
-    other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
-    This option is currently supported on YARN and Kubernetes.
+    Amount of additional memory to be allocated per executor process, in MiB unless otherwise specified.
+    This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
+    This tends to grow with the executor size (typically 6-10%). This option is currently supported on YARN and Kubernetes.
     <br/>
     <em>Note:</em> Additional memory includes PySpark executor memory 
     (when <code>spark.executor.pyspark.memory</code> is not configured) and memory used by other
@@ -786,6 +785,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.archives</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of archives to be extracted into the working directory of each executor.
+    .jar, .tar.gz, .tgz and .zip are supported. You can specify the directory name to unpack via
+    adding <code>#</code> after the file name to unpack, for example, <code>file.zip#directory</code>.
+    This configuration is experimental.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.pyspark.driver.python</code></td>
   <td></td>
   <td>
@@ -918,8 +928,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Enables the external shuffle service. This service preserves the shuffle files written by
-    executors so the executors can be safely removed. This must be enabled if
-    <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
+    executors so the executors can be safely removed. The external shuffle service
     must be set up in order to enable it. See
     <a href="job-scheduling.html#configuration-and-setup">dynamic allocation
     configuration and setup documentation</a> for more information.
@@ -1031,10 +1040,15 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.compression.codec</code></td>
-  <td></td>
+  <td>zstd</td>
   <td>
-    The codec to compress logged events. If this is not given,
-    <code>spark.io.compression.codec</code> will be used.
+    The codec to compress logged events. By default, Spark provides four codecs:
+    <code>lz4</code>, <code>lzf</code>, <code>snappy</code>, and <code>zstd</code>.
+    You can also use fully qualified class names to specify the codec, e.g.
+    <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    <code>org.apache.spark.io.LZFCompressionCodec</code>,
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>,
+    and <code>org.apache.spark.io.ZStdCompressionCodec</code>.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1909,7 +1923,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>120s</td>
   <td>
     Default timeout for all network interactions. This config will be used in place of
-    <code>spark.core.connection.ack.wait.timeout</code>,
     <code>spark.storage.blockManagerHeartbeatTimeoutMs</code>,
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
@@ -1971,16 +1984,6 @@ Apart from these, the following properties are also available, and may be useful
     Duration for an RPC remote endpoint lookup operation to wait before timing out.
   </td>
   <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.core.connection.ack.wait.timeout</code></td>
-  <td><code>spark.network.timeout</code></td>
-  <td>
-    How long for the connection to wait for ack to occur before timing
-    out and giving up. To avoid unwilling timeout caused by long pause like GC,
-    you can set larger value.
-  </td>
-  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
@@ -2171,7 +2174,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>120s</td>
   <td>
     The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
-    TaskSet which is unschedulable because all executors are exluded due to task failures.
+    TaskSet which is unschedulable because all executors are excluded due to task failures.
   </td>
   <td>2.4.1</td>
 </tr>
@@ -2309,6 +2312,15 @@ Apart from these, the following properties are also available, and may be useful
     Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
   <td>0.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.speculation.min.threshold</code></td>
+  <td>100ms</td>
+  <td>
+    Minimum amount of time a task runs before being considered for speculation.
+    This can be used to avoid launching speculative copies of tasks that are very short.
+  </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.speculation.task.duration.threshold</code></td>
@@ -3052,6 +3064,6 @@ See your cluster manager specific page for requirements and details on each of -
 # Stage Level Scheduling Overview
 
 The stage level scheduling feature allows users to specify task and executor resource requirements at the stage level. This allows for different stages to run with executors that have different resources. A prime example of this is one ETL stage runs with executors with just CPUs, the next stage is an ML stage that needs GPUs. Stage level scheduling allows for user to request different executors that have GPUs when the ML stage runs rather then having to acquire executors with GPUs at the start of the application and them be idle while the ETL stage is being run.
-This is only available for the RDD API in Scala, Java, and Python and requires dynamic allocation to be enabled.  It is only available on YARN at this time. See the [YARN](running-on-yarn.html#stage-level-scheduling-overview) page for more implementation details.
+This is only available for the RDD API in Scala, Java, and Python.  It is available on YARN and Kubernetes when dynamic allocation is enabled. See the [YARN](running-on-yarn.html#stage-level-scheduling-overview) page or [Kubernetes](running-on-kubernetes.html#stage-level-scheduling-overview) page for more implementation details.
 
 See the `RDD.withResources` and `ResourceProfileBuilder` API's for using this feature. The current implementation acquires new executors for each `ResourceProfile`  created and currently has to be an exact match. Spark does not try to fit tasks into an executor that require a different ResourceProfile than the executor was created with. Executors that are not in use will idle timeout with the dynamic allocation logic. The default configuration for this feature is to only allow one ResourceProfile per stage. If the user associates more then 1 ResourceProfile to an RDD, Spark will throw an exception by default. See config `spark.scheduler.resource.profileMergeConflicts` to control that behavior. The current merge strategy Spark implements when `spark.scheduler.resource.profileMergeConflicts` is enabled is a simple max of each resource within the conflicting ResourceProfiles. Spark will create a new ResourceProfile with the max of each of the resources.

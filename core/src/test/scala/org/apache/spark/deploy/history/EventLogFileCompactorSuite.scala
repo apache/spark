@@ -23,10 +23,9 @@ import scala.io.{Codec, Source}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.jackson.JsonMethods.parse
 
-import org.apache.spark.{SparkConf, SparkFunSuite, Success}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper.writeEventsToRollingWriter
-import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.status.ListenerEventsTestHelper._

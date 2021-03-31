@@ -89,8 +89,6 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
 
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        import spark.implicits._
-
         spark.internalCreateDataFrame(spark.sparkContext.emptyRDD, schema, isStreaming = true)
       }
 
@@ -432,8 +430,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .load()
 
-    var w = df.writeStream
-    var e = intercept[IllegalArgumentException](w.foreach(null))
+    val w = df.writeStream
+    val e = intercept[IllegalArgumentException](w.foreach(null))
     Seq("foreach", "null").foreach { s =>
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
@@ -449,8 +447,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       override def process(value: Row): Unit = {}
       override def close(errorOrNull: Throwable): Unit = {}
     }
-    var w = df.writeStream.partitionBy("value")
-    var e = intercept[AnalysisException](w.foreach(foreachWriter).start())
+    val w = df.writeStream.partitionBy("value")
+    val e = intercept[AnalysisException](w.foreach(foreachWriter).start())
     Seq("foreach", "partitioning").foreach { s =>
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }

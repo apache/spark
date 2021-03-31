@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, ZoneId}
+import java.text.{ParseException, SimpleDateFormat}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, Period, ZoneId}
+import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -520,30 +522,51 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("add_months") {
-    checkEvaluation(AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(1)),
+  private def testAddMonths(dataType: DataType): Unit = {
+    def addMonths(date: Literal, months: Any): AddMonthsBase = dataType match {
+      case IntegerType => AddMonths(date, Literal.create(months, dataType))
+      case YearMonthIntervalType =>
+        val period = if (months == null) null else Period.ofMonths(months.asInstanceOf[Int])
+        DateAddYMInterval(date, Literal.create(period, dataType))
+    }
+    checkEvaluation(addMonths(Literal(Date.valueOf("2015-01-30")), 1),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
-    checkEvaluation(AddMonths(Literal(Date.valueOf("2016-03-30")), Literal(-1)),
+    checkEvaluation(addMonths(Literal(Date.valueOf("2016-03-30")), -1),
       DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2015-01-30")), Literal.create(null, IntegerType)),
+      addMonths(Literal(Date.valueOf("2015-01-30")), null),
       null)
-    checkEvaluation(AddMonths(Literal.create(null, DateType), Literal(1)), null)
-    checkEvaluation(AddMonths(Literal.create(null, DateType), Literal.create(null, IntegerType)),
+    checkEvaluation(addMonths(Literal.create(null, DateType), 1), null)
+    checkEvaluation(addMonths(Literal.create(null, DateType), null),
       null)
     // Valid range of DateType is [0001-01-01, 9999-12-31]
     val maxMonthInterval = 10000 * 12
     checkEvaluation(
-      AddMonths(Literal(LocalDate.parse("0001-01-01")), Literal(maxMonthInterval)),
+      addMonths(Literal(LocalDate.parse("0001-01-01")), maxMonthInterval),
       LocalDate.of(10001, 1, 1).toEpochDay.toInt)
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("9999-12-31")), Literal(-1 * maxMonthInterval)), -719529)
+      addMonths(Literal(Date.valueOf("9999-12-31")), -1 * maxMonthInterval), -719529)
+  }
+
+  test("add_months") {
+    testAddMonths(IntegerType)
     // Test evaluation results between Interpreted mode and Codegen mode
     forAll (
       LiteralGenerator.randomGen(DateType),
       LiteralGenerator.monthIntervalLiterGen
     ) { (l1: Literal, l2: Literal) =>
       cmpInterpretWithCodegen(EmptyRow, AddMonths(l1, l2))
+    }
+  }
+
+  test("SPARK-34721: add a year-month interval to a date") {
+    testAddMonths(YearMonthIntervalType)
+    // Test evaluation results between Interpreted mode and Codegen mode
+    forAll (
+      LiteralGenerator.randomGen(DateType),
+      LiteralGenerator.yearMonthIntervalLiteralGen
+    ) { (l1: Literal, l2: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, DateAddYMInterval(l1, l2))
     }
   }
 
@@ -639,13 +662,33 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testNextDay("2015-07-23", "Fri", "2015-07-24")
     testNextDay("2015-07-23", "fr", "2015-07-24")
 
-    checkEvaluation(NextDay(Literal(Date.valueOf("2015-07-23")), Literal("xx")), null)
-    checkEvaluation(NextDay(Literal.create(null, DateType), Literal("xx")), null)
-    checkEvaluation(
-      NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
-    // Test escaping of dayOfWeek
-    GenerateUnsafeProjection.generate(
-      NextDay(Literal(Date.valueOf("2015-07-23")), Literal("\"quote")) :: Nil)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        var expr: Expression = NextDay(Literal(Date.valueOf("2015-07-23")), Literal("xx"))
+        if (ansiEnabled) {
+          val errMsg = "Illegal input for day of week: xx"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        expr = NextDay(Literal.create(null, DateType), Literal("xx"))
+        checkEvaluation(expr, null)
+
+        expr = NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType))
+        checkEvaluation(expr, null)
+
+        // Test escaping of dayOfWeek
+        expr = NextDay(Literal(Date.valueOf("2015-07-23")), Literal("\"quote"))
+        GenerateUnsafeProjection.generate(expr :: Nil)
+        if (ansiEnabled) {
+          val errMsg = """Illegal input for day of week: "quote"""
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+      }
+    }
   }
 
   private def testTruncDate(input: Date, fmt: String, expected: Date): Unit = {
@@ -1013,49 +1056,97 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("creating values of DateType via make_date") {
-    checkEvaluation(MakeDate(Literal(2013), Literal(7), Literal(15)), Date.valueOf("2013-7-15"))
-    checkEvaluation(MakeDate(Literal.create(null, IntegerType), Literal(7), Literal(15)), null)
-    checkEvaluation(MakeDate(Literal(2019), Literal.create(null, IntegerType), Literal(19)), null)
-    checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal.create(null, IntegerType)), null)
-    checkEvaluation(MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)), null)
-    checkEvaluation(MakeDate(Literal(2019), Literal(13), Literal(19)), null)
-    checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
+    Seq(true, false).foreach({ ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        checkEvaluation(MakeDate(Literal(2013), Literal(7), Literal(15)), Date.valueOf("2013-7-15"))
+        checkEvaluation(MakeDate(Literal.create(null, IntegerType), Literal(7), Literal(15)), null)
+        checkEvaluation(MakeDate(Literal(2019), Literal.create(null, IntegerType), Literal(19)),
+          null)
+        checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal.create(null, IntegerType)),
+          null)
+      }
+    })
+
+    // ansi test
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[DateTimeException](MakeDate(Literal(Int.MaxValue), Literal(13),
+        Literal(19)), EmptyRow, "Invalid value for Year")
+      checkExceptionInExpression[DateTimeException](MakeDate(Literal(2019),
+        Literal(13), Literal(19)), EmptyRow, "Invalid value for Month")
+      checkExceptionInExpression[DateTimeException](MakeDate(Literal(2019), Literal(7),
+        Literal(32)), EmptyRow, "Invalid value for Day")
+    }
+
+    // non-ansi test
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)), null)
+      checkEvaluation(MakeDate(Literal(2019), Literal(13), Literal(19)), null)
+      checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
+    }
   }
 
   test("creating values of TimestampType via make_timestamp") {
-    var makeTimestampExpr = MakeTimestamp(
-      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
-      Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
     val expected = Timestamp.valueOf("2013-7-15 8:15:23.5")
-    checkEvaluation(makeTimestampExpr, expected)
-    checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
 
-    checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null)
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        var makeTimestampExpr = MakeTimestamp(
+          Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
+          Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
+        checkEvaluation(makeTimestampExpr, expected)
+        checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
+        checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
 
-    checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(month = Literal(13)), null)
+        Seq(
+          (makeTimestampExpr.copy(year = Literal(Int.MaxValue)), "Invalid value for Year"),
+          (makeTimestampExpr.copy(month = Literal(13)), "Invalid value for Month"),
+          (makeTimestampExpr.copy(day = Literal(32)), "Invalid value for Day"),
+          (makeTimestampExpr.copy(hour = Literal(25)), "Invalid value for Hour"),
+          (makeTimestampExpr.copy(min = Literal(65)), "Invalid value for Min"),
+          (makeTimestampExpr.copy(sec = Literal(Decimal(
+            BigDecimal(70.0), 8, 6))), "Invalid value for Second")
+        ).foreach { entry =>
+          if (ansi) {
+            checkExceptionInExpression[DateTimeException](entry._1, EmptyRow, entry._2)
+          } else {
+            checkEvaluation(entry._1, null)
+          }
+        }
 
-    checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(day = Literal(32)), null)
+        makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+          Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
+        if (ansi) {
+          checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(
+            Decimal(BigDecimal(60.5), 8, 6))), EmptyRow, "The fraction of sec must be zero")
+        } else {
+          checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
+        }
 
-    checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(hour = Literal(25)), null)
+        makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12), Literal(0),
+          Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+        checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+      }
+    }
 
-    checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(min = Literal(65)), null)
+    // non-ansi test
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+        Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
+      checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 8, 6))), null)
+    }
 
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(70.0), 8, 6))), null)
-
-    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
-      Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
-    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 8, 6))), null)
-
-    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
-      Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
-    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
+          Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+        checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+      }
+    }
   }
 
   test("ISO 8601 week-numbering year") {
@@ -1196,6 +1287,75 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkResult(Int.MinValue.toLong - 100)
   }
 
+  test("DATE_FROM_UNIX_DATE") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        DateFromUnixDate(Literal(value.intValue())),
+        LocalDate.ofEpochDay(value.intValue()))
+    }
+    // test null input
+    checkEvaluation(DateFromUnixDate(Literal(null, IntegerType)), null)
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+  }
+
+  test("UNIX_DATE") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        UnixDate(Literal(LocalDate.ofEpochDay(value.intValue()))),
+        value.intValue())
+    }
+    // test null input
+    checkEvaluation(UnixDate(Literal(null, DateType)), null)
+    // test various inputs
+    testIntegralInput(testIntegralFunc)
+  }
+
+  test("UNIX_SECONDS") {
+    checkEvaluation(UnixSeconds(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixSeconds(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    // -1ms is considered to be in -1st second, as 0-999ms is in 0th second.
+    timestamp = Literal(new Timestamp(-1L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    // Truncates higher levels of precision
+    timestamp = Literal(new Timestamp(1999L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+  }
+
+  test("UNIX_MILLIS") {
+    checkEvaluation(UnixMillis(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMillis(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMillis(timestamp), 1000L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMillis(timestamp), -1000L)
+    // Truncates higher levels of precision
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(999999)
+    checkEvaluation(UnixMillis(Literal(timestampWithNanos)), 1000L)
+  }
+
+  test("UNIX_MICROS") {
+    checkEvaluation(UnixMicros(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMicros(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMicros(timestamp), 1000000L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMicros(timestamp), -1000000L)
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(1000) // 1 microsecond
+    checkEvaluation(UnixMicros(Literal(timestampWithNanos)), 1000001L)
+  }
+
   test("TIMESTAMP_SECONDS") {
     def testIntegralFunc(value: Number): Unit = {
       checkEvaluation(
@@ -1247,6 +1407,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       SecondsToTimestamp(Literal(123.456789123)),
       Instant.ofEpochSecond(123, 456789000))
+    checkEvaluation(SecondsToTimestamp(Literal(16777215.0f)), Instant.ofEpochSecond(16777215))
   }
 
   test("TIMESTAMP_MILLIS") {
@@ -1285,5 +1446,152 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test max/min input
     testIntegralFunc(Long.MaxValue)
     testIntegralFunc(Long.MinValue)
+  }
+
+  test("SPARK-33498: GetTimestamp,UnixTimestamp,ToUnixTimestamp with parseError") {
+    Seq(true, false).foreach { ansiEnabled =>
+      Seq("LEGACY", "CORRECTED", "EXCEPTION").foreach { policy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+
+          val exprSeq = Seq[Expression](
+            GetTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            GetTimestamp(Literal("Unparseable"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            UnixTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            UnixTimestamp(Literal("Unparseable"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            ToUnixTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            ToUnixTimestamp(Literal("Unparseable"), Literal("yyyy-MM-dd HH:mm:ss.SSS"))
+          )
+
+          if (!ansiEnabled) {
+            exprSeq.foreach(checkEvaluation(_, null))
+          } else if (policy == "LEGACY") {
+            exprSeq.foreach(checkExceptionInExpression[ParseException](_, "Unparseable"))
+          } else {
+            exprSeq.foreach(
+              checkExceptionInExpression[DateTimeParseException](_, "could not be parsed"))
+          }
+
+          // LEGACY works, CORRECTED failed, EXCEPTION with SparkUpgradeException
+          val exprSeq2 = Seq[(Expression, Long)](
+            (GetTimestamp(Literal("2020-01-27T20:06:11.847!!!"),
+              Literal("yyyy-MM-dd'T'HH:mm:ss.SSS")), 1580184371847000L),
+            (UnixTimestamp(Literal("2020-01-27T20:06:11.847!!!"),
+              Literal("yyyy-MM-dd'T'HH:mm:ss.SSS")), 1580184371L),
+            (ToUnixTimestamp(Literal("2020-01-27T20:06:11.847!!!"),
+              Literal("yyyy-MM-dd'T'HH:mm:ss.SSS")), 1580184371L)
+          )
+
+          if (policy == "LEGACY") {
+            exprSeq2.foreach(pair => checkEvaluation(pair._1, pair._2))
+          } else if (policy == "EXCEPTION") {
+            exprSeq2.foreach(pair =>
+              checkExceptionInExpression[SparkUpgradeException](
+                pair._1,
+                  "You may get a different result due to the upgrading of Spark 3.0"))
+          } else {
+            if (ansiEnabled) {
+              exprSeq2.foreach(pair =>
+                checkExceptionInExpression[DateTimeParseException](pair._1, "could not be parsed"))
+            } else {
+              exprSeq2.foreach(pair => checkEvaluation(pair._1, null))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-34739: add a year-month interval to a timestamp") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    for (zid <- outstandingZoneIds) {
+      val timeZoneId = Option(zid.getId)
+      sdf.setTimeZone(TimeZone.getTimeZone(zid))
+
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:11:12.123").getTime)),
+          Literal(Period.ofMonths(2)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2016-03-29 10:11:12.123").getTime)))
+
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal.create(null, TimestampType),
+          Literal(Period.ofMonths(1)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
+          Literal.create(null, YearMonthIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal.create(null, TimestampType),
+          Literal.create(null, YearMonthIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, interval: Expression) => TimestampAddYMInterval(ts, interval, timeZoneId),
+        TimestampType, YearMonthIntervalType)
+    }
+  }
+
+  test("SPARK-34761: add a day-time interval to a timestamp") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    for (zid <- outstandingZoneIds) {
+      val timeZoneId = Option(zid.getId)
+      sdf.setTimeZone(TimeZone.getTimeZone(zid))
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+          Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2021-01-11 00:10:00.444").getTime)))
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:10:00.123").getTime)),
+          Literal(Duration.ofDays(-10).minusMinutes(9).minusMillis(120)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2020-12-22 00:01:00.003").getTime)))
+
+      val e = intercept[Exception] {
+        checkEvaluation(
+          TimeAdd(
+            Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+            Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+            timeZoneId),
+          null)
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal(Duration.ofDays(1)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+          Literal.create(null, DayTimeIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal.create(null, DayTimeIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, interval: Expression) => TimeAdd(ts, interval, timeZoneId),
+        TimestampType, DayTimeIntervalType)
+    }
   }
 }

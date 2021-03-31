@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.HyperLogLogPlusPlusHelper
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 // scalastyle:off
@@ -90,6 +90,8 @@ case class HyperLogLogPlusPlus(
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
+  override def defaultResult: Option[Literal] = Option(Literal.create(0L, dataType))
+
   val hllppHelper = new HyperLogLogPlusPlusHelper(relativeSD)
 
   /** Allocate enough words to store all registers. */
@@ -144,6 +146,6 @@ object HyperLogLogPlusPlus {
     case Literal(d: Double, DoubleType) => d
     case Literal(dec: Decimal, _) => dec.toDouble
     case _ =>
-      throw new AnalysisException("The second argument should be a double literal.")
+      throw QueryCompilationErrors.secondArgumentNotDoubleLiteralError
   }
 }

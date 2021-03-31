@@ -21,20 +21,20 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSeq, BindReferences, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal, PredicateHelper}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan, SubqueryBroadcastExec}
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins._
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This planner rule aims at rewriting dynamic pruning predicates in order to reuse the
  * results of broadcast. For joins that are not planned as broadcast hash joins we keep
  * the fallback mechanism with subquery duplicate.
 */
-object PlanDynamicPruningFilters extends Rule[SparkPlan] with PredicateHelper {
+case class PlanDynamicPruningFilters(sparkSession: SparkSession)
+    extends Rule[SparkPlan] with PredicateHelper {
 
   /**
    * Identify the shape in which keys of a given plan are broadcasted.
@@ -45,7 +45,7 @@ object PlanDynamicPruningFilters extends Rule[SparkPlan] with PredicateHelper {
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!SQLConf.get.dynamicPartitionPruningEnabled) {
+    if (!conf.dynamicPartitionPruningEnabled) {
       return plan
     }
 
@@ -53,10 +53,10 @@ object PlanDynamicPruningFilters extends Rule[SparkPlan] with PredicateHelper {
       case DynamicPruningSubquery(
           value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId) =>
         val sparkPlan = QueryExecution.createSparkPlan(
-          SparkSession.active, SparkSession.active.sessionState.planner, buildPlan)
+          sparkSession, sparkSession.sessionState.planner, buildPlan)
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
-        val canReuseExchange = SQLConf.get.exchangeReuseEnabled && buildKeys.nonEmpty &&
+        val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
           plan.find {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
               left.sameResult(sparkPlan)
@@ -66,7 +66,7 @@ object PlanDynamicPruningFilters extends Rule[SparkPlan] with PredicateHelper {
           }.isDefined
 
         if (canReuseExchange) {
-          val executedPlan = QueryExecution.prepareExecutedPlan(SparkSession.active, sparkPlan)
+          val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, sparkPlan)
           val mode = broadcastMode(buildKeys, executedPlan.output)
           // plan a broadcast exchange of the build side of the join
           val exchange = BroadcastExchangeExec(mode, executedPlan)

@@ -16,9 +16,6 @@
  */
 package org.apache.spark.sql.hive
 
-import scala.collection.JavaConverters._
-import scala.language.implicitConversions
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 

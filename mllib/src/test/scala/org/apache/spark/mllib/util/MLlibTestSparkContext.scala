@@ -48,7 +48,7 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
   override def afterAll(): Unit = {
     try {
       Utils.deleteRecursively(new File(checkpointDir))
-      SparkSession.clearActiveSessionInternal()
+      SparkSession.clearActiveSession()
       if (spark != null) {
         spark.stop()
       }

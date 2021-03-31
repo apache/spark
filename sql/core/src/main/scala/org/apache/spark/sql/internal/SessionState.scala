@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -33,7 +34,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
-import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
+import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.util.DependencyUtils
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -52,7 +54,8 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
  * @param planner Planner that converts optimized logical plans to physical plans.
  * @param streamingQueryManagerBuilder A function to create a streaming query manager to
  *                                     start and stop streaming queries.
- * @param listenerManager Interface to register custom [[QueryExecutionListener]]s.
+ * @param listenerManager Interface to register custominternal/SessionState.scala
+ *                        [[org.apache.spark.sql.util.QueryExecutionListener]]s.
  * @param resourceLoaderBuilder a function to create a session shared resource loader to load JARs,
  *                              files, etc.
  * @param createQueryExecution Function used to create QueryExecution objects.
@@ -116,10 +119,6 @@ private[sql] class SessionState(
   // ------------------------------------------------------
 
   def executePlan(plan: LogicalPlan): QueryExecution = createQueryExecution(plan)
-
-  def refreshTable(tableName: String): Unit = {
-    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
-  }
 }
 
 private[sql] object SessionState {
@@ -136,10 +135,9 @@ private[sql] object SessionState {
 @Unstable
 class SessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState],
-    options: Map[String, String])
-  extends BaseSessionStateBuilder(session, parentState, options) {
-  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _, Map.empty)
+    parentState: Option[SessionState])
+  extends BaseSessionStateBuilder(session, parentState) {
+  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
 }
 
 /**
@@ -158,6 +156,13 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     }
   }
 
+  def resolveJars(path: URI): Seq[String] = {
+    path.getScheme match {
+      case "ivy" => DependencyUtils.resolveMavenDependencies(path)
+      case _ => path.toString :: Nil
+    }
+  }
+
   /**
    * Add a jar path to [[SparkContext]] and the classloader.
    *
@@ -166,16 +171,19 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * [[SessionState]].
    */
   def addJar(path: String): Unit = {
-    session.sparkContext.addJar(path)
-    val uri = new Path(path).toUri
-    val jarURL = if (uri.getScheme == null) {
-      // `path` is a local file path without a URL scheme
-      new File(path).toURI.toURL
-    } else {
-      // `path` is a URL with a scheme
-      uri.toURL
+    val uri = URI.create(path)
+    resolveJars(uri).foreach { p =>
+      session.sparkContext.addJar(p)
+      val uri = new Path(p).toUri
+      val jarURL = if (uri.getScheme == null) {
+        // `path` is a local file path without a URL scheme
+        new File(p).toURI.toURL
+      } else {
+        // `path` is a URL with a scheme
+        uri.toURL
+      }
+      session.sharedState.jarClassLoader.addURL(jarURL)
     }
-    session.sharedState.jarClassLoader.addURL(jarURL)
     Thread.currentThread().setContextClassLoader(session.sharedState.jarClassLoader)
   }
 }

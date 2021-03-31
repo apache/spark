@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExcept
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -50,7 +51,7 @@ case class WindowSpecDefinition(
       frameSpecification.isInstanceOf[SpecifiedWindowFrame]
 
   override def nullable: Boolean = true
-  override def dataType: DataType = throw new UnsupportedOperationException("dataType")
+  override def dataType: DataType = throw QueryExecutionErrors.dataTypeOperationUnsupportedError
 
   override def checkInputDataTypes(): TypeCheckResult = {
     frameSpecification match {
@@ -165,7 +166,7 @@ case object CurrentRow extends SpecialFrameBoundary {
  */
 sealed trait WindowFrame extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
-  override def dataType: DataType = throw new UnsupportedOperationException("dataType")
+  override def dataType: DataType = throw QueryExecutionErrors.dataTypeOperationUnsupportedError
   override def nullable: Boolean = false
 }
 
@@ -173,7 +174,7 @@ sealed trait WindowFrame extends Expression with Unevaluable {
 case object UnspecifiedFrame extends WindowFrame
 
 /**
- * A specified Window Frame. The val lower/uppper can be either a foldable [[Expression]] or a
+ * A specified Window Frame. The val lower/upper can be either a foldable [[Expression]] or a
  * [[SpecialFrameBoundary]].
  */
 case class SpecifiedWindowFrame(
@@ -271,8 +272,8 @@ case class UnresolvedWindowExpression(
     child: Expression,
     windowSpec: WindowSpecReference) extends UnaryExpression with Unevaluable {
 
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 }
 
@@ -327,7 +328,7 @@ object WindowFunctionType {
   }
 }
 
-trait OffsetWindowSpec extends Expression {
+trait OffsetWindowFunction extends WindowFunction {
   /**
    * Input expression to evaluate against a row which a number of rows below or above (depending on
    * the value and sign of the offset) the starting row (current row if isRelative=true, or the
@@ -356,23 +357,21 @@ trait OffsetWindowSpec extends Expression {
   val ignoreNulls: Boolean
 
   /**
-   * Whether the offset is starts with the current row. If `isRelative` is true, `offset` means
-   * the offset is start with the current row. otherwise, the offset is starts with the first
-   * row of the entire window frame.
+   * A fake window frame which is used to hold the offset information. It's used as a key to group
+   * by offset window functions in `WindowExecBase.windowFrameExpressionFactoryPairs`, as offset
+   * window functions with the same offset and same window frame can be evaluated together.
    */
-  val isRelative: Boolean
-
   lazy val fakeFrame = SpecifiedWindowFrame(RowFrame, offset, offset)
 }
 
 /**
  * A frameless offset window function is a window function that cannot specify window frame and
- * returns the value of the input column offset by a number of rows within the partition.
- * For instance: a FrameLessOffsetWindowFunction for value x with offset -2, will get the value of
- * x 2 rows back in the partition.
+ * returns the value of the input column offset by a number of rows according to the current row
+ * within the partition. For instance: a FrameLessOffsetWindowFunction for value x with offset -2,
+ * will get the value of x 2 rows back from the current row in the partition.
  */
-abstract class FrameLessOffsetWindowFunction
-  extends WindowFunction with OffsetWindowSpec with Unevaluable with ImplicitCastInputTypes {
+sealed abstract class FrameLessOffsetWindowFunction
+  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(input, offset, default)
 
@@ -388,10 +387,6 @@ abstract class FrameLessOffsetWindowFunction
    */
 
   override def nullable: Boolean = default == null || default.nullable || input.nullable
-
-  override val ignoreNulls = false
-
-  override val isRelative = true
 
   override lazy val frame: WindowFrame = fakeFrame
 
@@ -447,8 +442,12 @@ abstract class FrameLessOffsetWindowFunction
   since = "2.0.0",
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
-case class Lead(input: Expression, offset: Expression, default: Expression)
+case class Lead(
+    input: Expression, offset: Expression, default: Expression, ignoreNulls: Boolean)
     extends FrameLessOffsetWindowFunction {
+
+  def this(input: Expression, offset: Expression, default: Expression) =
+    this(input, offset, default, false)
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
 
@@ -489,10 +488,14 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   since = "2.0.0",
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
-case class Lag(input: Expression, inputOffset: Expression, default: Expression)
+case class Lag(
+    input: Expression, inputOffset: Expression, default: Expression, ignoreNulls: Boolean)
     extends FrameLessOffsetWindowFunction {
 
-  def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
+  def this(input: Expression, inputOffset: Expression, default: Expression) =
+    this(input, inputOffset, default, false)
+
+  def this(input: Expression, inputOffset: Expression) = this(input, inputOffset, Literal(null))
 
   def this(input: Expression) = this(input, Literal(1))
 
@@ -512,7 +515,7 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override lazy val mergeExpressions =
-    throw new UnsupportedOperationException("Window Functions do not support merging.")
+    throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError
 }
 
 abstract class RowNumberLike extends AggregateWindowFunction {
@@ -523,6 +526,7 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   override val aggBufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
   override val initialValues: Seq[Expression] = zero :: Nil
   override val updateExpressions: Seq[Expression] = rowNumber + one :: Nil
+  override def nullable: Boolean = false
 }
 
 /**
@@ -630,13 +634,11 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
-    extends AggregateWindowFunction with OffsetWindowSpec with ImplicitCastInputTypes {
+    extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes {
 
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
   override lazy val default = Literal.create(null, input.dataType)
-
-  override val isRelative = false
 
   override def children: Seq[Expression] = input :: offset :: Nil
 
@@ -833,6 +835,7 @@ abstract class RankLike extends AggregateWindowFunction {
   override val updateExpressions = increaseRank +: increaseRowNumber +: children
   override val evaluateExpression: Expression = rank
 
+  override def nullable: Boolean = false
   override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}()"
 
   def withOrder(order: Seq[Expression]): RankLike

@@ -30,12 +30,12 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
 
+import org.apache.spark.sql.avro.AvroUtils.toFieldStr
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -48,11 +48,14 @@ private[sql] class AvroDeserializer(
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     filters: StructFilters) {
 
-  def this(rootAvroType: Schema, rootCatalystType: DataType) {
+  def this(
+      rootAvroType: Schema,
+      rootCatalystType: DataType,
+      datetimeRebaseMode: String) = {
     this(
       rootAvroType,
       rootCatalystType,
-      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)),
+      LegacyBehaviorPolicy.withName(datetimeRebaseMode),
       new NoopFilters)
   }
 
@@ -64,30 +67,35 @@ private[sql] class AvroDeserializer(
   private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
     datetimeRebaseMode, "Avro")
 
-  private val converter: Any => Option[Any] = rootCatalystType match {
-    // A shortcut for empty schema.
-    case st: StructType if st.isEmpty =>
-      (data: Any) => Some(InternalRow.empty)
+  private val converter: Any => Option[Any] = try {
+    rootCatalystType match {
+      // A shortcut for empty schema.
+      case st: StructType if st.isEmpty =>
+        (_: Any) => Some(InternalRow.empty)
 
-    case st: StructType =>
-      val resultRow = new SpecificInternalRow(st.map(_.dataType))
-      val fieldUpdater = new RowUpdater(resultRow)
-      val applyFilters = filters.skipRow(resultRow, _)
-      val writer = getRecordWriter(rootAvroType, st, Nil, applyFilters)
-      (data: Any) => {
-        val record = data.asInstanceOf[GenericRecord]
-        val skipRow = writer(fieldUpdater, record)
-        if (skipRow) None else Some(resultRow)
-      }
+      case st: StructType =>
+        val resultRow = new SpecificInternalRow(st.map(_.dataType))
+        val fieldUpdater = new RowUpdater(resultRow)
+        val applyFilters = filters.skipRow(resultRow, _)
+        val writer = getRecordWriter(rootAvroType, st, Nil, Nil, applyFilters)
+        (data: Any) => {
+          val record = data.asInstanceOf[GenericRecord]
+          val skipRow = writer(fieldUpdater, record)
+          if (skipRow) None else Some(resultRow)
+        }
 
-    case _ =>
-      val tmpRow = new SpecificInternalRow(Seq(rootCatalystType))
-      val fieldUpdater = new RowUpdater(tmpRow)
-      val writer = newWriter(rootAvroType, rootCatalystType, Nil)
-      (data: Any) => {
-        writer(fieldUpdater, 0, data)
-        Some(tmpRow.get(0, rootCatalystType))
-      }
+      case _ =>
+        val tmpRow = new SpecificInternalRow(Seq(rootCatalystType))
+        val fieldUpdater = new RowUpdater(tmpRow)
+        val writer = newWriter(rootAvroType, rootCatalystType, Nil, Nil)
+        (data: Any) => {
+          writer(fieldUpdater, 0, data)
+          Some(tmpRow.get(0, rootCatalystType))
+        }
+    }
+  } catch {
+    case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
+      s"Cannot convert Avro type $rootAvroType to SQL type ${rootCatalystType.sql}.", ise)
   }
 
   def deserialize(data: Any): Option[Any] = converter(data)
@@ -99,7 +107,13 @@ private[sql] class AvroDeserializer(
   private def newWriter(
       avroType: Schema,
       catalystType: DataType,
-      path: List[String]): (CatalystDataUpdater, Int, Any) => Unit =
+      avroPath: Seq[String],
+      catalystPath: Seq[String]): (CatalystDataUpdater, Int, Any) => Unit = {
+    val errorPrefix = s"Cannot convert Avro ${toFieldStr(avroPath)} to " +
+        s"SQL ${toFieldStr(catalystPath)} because "
+    val incompatibleMsg = errorPrefix +
+        s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
+
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
         updater.setNullAt(ordinal)
@@ -127,8 +141,8 @@ private[sql] class AvroDeserializer(
         case _: TimestampMicros => (updater, ordinal, value) =>
           val micros = value.asInstanceOf[Long]
           updater.setLong(ordinal, timestampRebaseFunc(micros))
-        case other => throw new IncompatibleSchemaException(
-          s"Cannot convert Avro logical type ${other} to Catalyst Timestamp type.")
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type ${TimestampType.sql}.")
       }
 
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
@@ -165,33 +179,37 @@ private[sql] class AvroDeserializer(
             b.get(bytes)
             bytes
           case b: Array[Byte] => b
-          case other => throw new RuntimeException(s"$other is not a valid avro binary.")
+          case other =>
+            throw new RuntimeException(errorPrefix + s"$other is not a valid avro binary.")
         }
         updater.set(ordinal, bytes)
 
-      case (FIXED, d: DecimalType) => (updater, ordinal, value) =>
-        val bigDecimal = decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType,
-          LogicalTypes.decimal(d.precision, d.scale))
-        val decimal = createDecimal(bigDecimal, d.precision, d.scale)
+      case (FIXED, _: DecimalType) => (updater, ordinal, value) =>
+        val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
+        val bigDecimal = decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType, d)
+        val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
         updater.setDecimal(ordinal, decimal)
 
-      case (BYTES, d: DecimalType) => (updater, ordinal, value) =>
-        val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType,
-          LogicalTypes.decimal(d.precision, d.scale))
-        val decimal = createDecimal(bigDecimal, d.precision, d.scale)
+      case (BYTES, _: DecimalType) => (updater, ordinal, value) =>
+        val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
+        val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType, d)
+        val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
         updater.setDecimal(ordinal, decimal)
 
       case (RECORD, st: StructType) =>
         // Avro datasource doesn't accept filters with nested attributes. See SPARK-32328.
         // We can always return `false` from `applyFilters` for nested records.
-        val writeRecord = getRecordWriter(avroType, st, path, applyFilters = _ => false)
+        val writeRecord =
+          getRecordWriter(avroType, st, avroPath, catalystPath, applyFilters = _ => false)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
           updater.set(ordinal, row)
 
       case (ARRAY, ArrayType(elementType, containsNull)) =>
-        val elementWriter = newWriter(avroType.getElementType, elementType, path)
+        val avroElementPath = avroPath :+ "element"
+        val elementWriter = newWriter(avroType.getElementType, elementType,
+          avroElementPath, catalystPath :+ "element")
         (updater, ordinal, value) =>
           val collection = value.asInstanceOf[java.util.Collection[Any]]
           val result = createArrayData(elementType, collection.size())
@@ -203,8 +221,8 @@ private[sql] class AvroDeserializer(
             val element = iter.next()
             if (element == null) {
               if (!containsNull) {
-                throw new RuntimeException(s"Array value at path ${path.mkString(".")} is not " +
-                  "allowed to be null")
+                throw new RuntimeException(
+                  s"Array value at path ${toFieldStr(avroElementPath)} is not allowed to be null")
               } else {
                 elementUpdater.setNullAt(i)
               }
@@ -217,8 +235,10 @@ private[sql] class AvroDeserializer(
           updater.set(ordinal, result)
 
       case (MAP, MapType(keyType, valueType, valueContainsNull)) if keyType == StringType =>
-        val keyWriter = newWriter(SchemaBuilder.builder().stringType(), StringType, path)
-        val valueWriter = newWriter(avroType.getValueType, valueType, path)
+        val keyWriter = newWriter(SchemaBuilder.builder().stringType(), StringType,
+          avroPath :+ "key", catalystPath :+ "key")
+        val valueWriter = newWriter(avroType.getValueType, valueType,
+          avroPath :+ "value", catalystPath :+ "value")
         (updater, ordinal, value) =>
           val map = value.asInstanceOf[java.util.Map[AnyRef, AnyRef]]
           val keyArray = createArrayData(keyType, map.size())
@@ -233,8 +253,8 @@ private[sql] class AvroDeserializer(
             keyWriter(keyUpdater, i, entry.getKey)
             if (entry.getValue == null) {
               if (!valueContainsNull) {
-                throw new RuntimeException(s"Map value at path ${path.mkString(".")} is not " +
-                  "allowed to be null")
+                throw new RuntimeException(
+                  s"Map value at path ${toFieldStr(avroPath :+ "value")} is not allowed to be null")
               } else {
                 valueUpdater.setNullAt(i)
               }
@@ -254,7 +274,7 @@ private[sql] class AvroDeserializer(
         val nonNullAvroType = Schema.createUnion(nonNullTypes.asJava)
         if (nonNullTypes.nonEmpty) {
           if (nonNullTypes.length == 1) {
-            newWriter(nonNullTypes.head, catalystType, path)
+            newWriter(nonNullTypes.head, catalystType, avroPath, catalystPath)
           } else {
             nonNullTypes.map(_.getType).toSeq match {
               case Seq(a, b) if Set(a, b) == Set(INT, LONG) && catalystType == LongType =>
@@ -275,7 +295,8 @@ private[sql] class AvroDeserializer(
                 catalystType match {
                   case st: StructType if st.length == nonNullTypes.size =>
                     val fieldWriters = nonNullTypes.zip(st.fields).map {
-                      case (schema, field) => newWriter(schema, field.dataType, path :+ field.name)
+                      case (schema, field) =>
+                        newWriter(schema, field.dataType, avroPath, catalystPath :+ field.name)
                     }.toArray
                     (updater, ordinal, value) => {
                       val row = new SpecificInternalRow(st)
@@ -285,27 +306,17 @@ private[sql] class AvroDeserializer(
                       updater.set(ordinal, row)
                     }
 
-                  case _ =>
-                    throw new IncompatibleSchemaException(
-                      s"Cannot convert Avro to catalyst because schema at path " +
-                        s"${path.mkString(".")} is not compatible " +
-                        s"(avroType = $avroType, sqlType = $catalystType).\n" +
-                        s"Source Avro schema: $rootAvroType.\n" +
-                        s"Target Catalyst type: $rootCatalystType")
+                  case _ => throw new IncompatibleSchemaException(incompatibleMsg)
                 }
             }
           }
         } else {
-          (updater, ordinal, value) => updater.setNullAt(ordinal)
+          (updater, ordinal, _) => updater.setNullAt(ordinal)
         }
 
-      case _ =>
-        throw new IncompatibleSchemaException(
-          s"Cannot convert Avro to catalyst because schema at path ${path.mkString(".")} " +
-            s"is not compatible (avroType = $avroType, sqlType = $catalystType).\n" +
-            s"Source Avro schema: $rootAvroType.\n" +
-            s"Target Catalyst type: $rootCatalystType")
+      case _ => throw new IncompatibleSchemaException(incompatibleMsg)
     }
+  }
 
   // TODO: move the following method in Decimal object on creating Decimal from BigDecimal?
   private def createDecimal(decimal: BigDecimal, precision: Int, scale: Int): Decimal = {
@@ -320,37 +331,36 @@ private[sql] class AvroDeserializer(
 
   private def getRecordWriter(
       avroType: Schema,
-      sqlType: StructType,
-      path: List[String],
+      catalystType: StructType,
+      avroPath: Seq[String],
+      catalystPath: Seq[String],
       applyFilters: Int => Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
     val validFieldIndexes = ArrayBuffer.empty[Int]
     val fieldWriters = ArrayBuffer.empty[(CatalystDataUpdater, Any) => Unit]
 
-    val length = sqlType.length
+    val length = catalystType.length
     var i = 0
     while (i < length) {
-      val sqlField = sqlType.fields(i)
-      val avroField = avroType.getField(sqlField.name)
-      if (avroField != null) {
-        validFieldIndexes += avroField.pos()
+      val catalystField = catalystType.fields(i)
+      AvroUtils.getAvroFieldByName(avroType, catalystField.name, avroPath) match {
+        case Some(avroField) =>
+          validFieldIndexes += avroField.pos()
 
-        val baseWriter = newWriter(avroField.schema(), sqlField.dataType, path :+ sqlField.name)
-        val ordinal = i
-        val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
-          if (value == null) {
-            fieldUpdater.setNullAt(ordinal)
-          } else {
-            baseWriter(fieldUpdater, ordinal, value)
+          val baseWriter = newWriter(avroField.schema(), catalystField.dataType,
+            avroPath :+ avroField.name, catalystPath :+ catalystField.name)
+          val ordinal = i
+          val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
+            if (value == null) {
+              fieldUpdater.setNullAt(ordinal)
+            } else {
+              baseWriter(fieldUpdater, ordinal, value)
+            }
           }
-        }
-        fieldWriters += fieldWriter
-      } else if (!sqlField.nullable) {
-        throw new IncompatibleSchemaException(
-          s"""
-             |Cannot find non-nullable field ${path.mkString(".")}.${sqlField.name} in Avro schema.
-             |Source Avro schema: $rootAvroType.
-             |Target Catalyst type: $rootCatalystType.
-           """.stripMargin)
+          fieldWriters += fieldWriter
+        case None if !catalystField.nullable =>
+          throw new IncompatibleSchemaException(s"Cannot find non-nullable " +
+              s"${toFieldStr(catalystPath :+ catalystField.name)} in Avro schema.")
+        case _ => // nothing to do
       }
       i += 1
     }

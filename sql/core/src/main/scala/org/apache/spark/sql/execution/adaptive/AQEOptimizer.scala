@@ -29,7 +29,7 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
   private val defaultBatches = Seq(
     Batch("Demote BroadcastHashJoin", Once,
       DemoteBroadcastHashJoin),
-    Batch("Eliminate Join to Empty Relation", Once, EliminateJoinToEmptyRelation)
+    Batch("Eliminate Unnecessary Join", Once, EliminateUnnecessaryJoin)
   )
 
   final override protected def batches: Seq[Batch] = {

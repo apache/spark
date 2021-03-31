@@ -24,6 +24,7 @@ import javax.security.auth.login.Configuration
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig}
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod.KERBEROS
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.jdbc.connection.{DB2ConnectionProvider, SecureConnectionProvider}
@@ -75,6 +76,8 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
       )
     }
   }
+
+  override val connectionTimeout = timeout(3.minutes)
 
   override protected def setAuthentication(keytabFile: String, principal: String): Unit = {
     val config = new SecureConnectionProvider.JDBCConfiguration(

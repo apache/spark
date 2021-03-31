@@ -35,7 +35,6 @@ import org.apache.spark.util.CompletionIterator
 class UnsafeCartesianRDD(
     left : RDD[UnsafeRow],
     right : RDD[UnsafeRow],
-    numFieldsOfRight: Int,
     inMemoryBufferThreshold: Int,
     spillThreshold: Int)
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
@@ -81,7 +80,6 @@ case class CartesianProductExec(
     val pair = new UnsafeCartesianRDD(
       leftResults,
       rightResults,
-      right.output.size,
       sqlContext.conf.cartesianProductExecBufferInMemoryThreshold,
       sqlContext.conf.cartesianProductExecBufferSpillThreshold)
     pair.mapPartitionsWithIndexInternal { (index, iter) =>

@@ -23,9 +23,14 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 
 case class RefreshTableExec(
     catalog: TableCatalog,
-    ident: Identifier) extends V2CommandExec {
+    ident: Identifier,
+    refreshCache: () => Unit) extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     catalog.invalidateTable(ident)
+
+    // Refresh all caches referencing the given table
+    refreshCache()
+
     Seq.empty
   }
 

@@ -134,7 +134,6 @@ object ScroogeLikeExample {
 }
 
 trait ScroogeLikeExample extends Product1[Int] with Serializable {
-  import ScroogeLikeExample._
 
   def x: Int
 

@@ -20,7 +20,6 @@
 import itertools
 from argparse import ArgumentParser
 import os
-import random
 import re
 import sys
 import subprocess
@@ -240,37 +239,28 @@ def run_sparkr_style_checks():
 
 def build_spark_documentation():
     set_title_and_block("Building Spark Documentation", "BLOCK_DOCUMENTATION")
-    os.environ["PRODUCTION"] = "1 jekyll build"
+    os.environ["PRODUCTION"] = "1"
 
     os.chdir(os.path.join(SPARK_HOME, "docs"))
 
-    jekyll_bin = which("jekyll")
+    bundle_bin = which("bundle")
 
-    if not jekyll_bin:
-        print("[error] Cannot find a version of `jekyll` on the system; please",
-              " install one and retry to build documentation.")
+    if not bundle_bin:
+        print("[error] Cannot find a version of `bundle` on the system; please",
+              " install one with `gem install bundler` and retry to build documentation.")
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
-        run_cmd([jekyll_bin, "build"])
+        run_cmd([bundle_bin, "install"])
+        run_cmd([bundle_bin, "exec", "jekyll", "build"])
 
     os.chdir(SPARK_HOME)
-
-
-def get_zinc_port():
-    """
-    Get a randomized port on which to start Zinc
-    """
-    return random.randrange(3030, 4030)
 
 
 def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    zinc_port = get_zinc_port()
-    os.environ["ZINC_PORT"] = "%s" % zinc_port
-    zinc_flag = "-DzincPort=%s" % zinc_port
-    flags = [os.path.join(SPARK_HOME, "build", "mvn"), zinc_flag]
+    flags = [os.path.join(SPARK_HOME, "build", "mvn")]
     run_cmd(flags + mvn_args)
 
 
@@ -483,6 +473,12 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
+    if "GITHUB_ACTIONS" in os.environ:
+        # See SPARK-33565. Python 3.8 was temporarily removed as its default Python executables
+        # to test because of Jenkins environment issue. Once Jenkins has Python 3.8 to test,
+        # we should remove this change back and add python3.8 into python/run-tests.py script.
+        command.append("--python-executable=%s" % ','.join(
+            x for x in ["python3.6", "python3.8", "pypy3"] if which(x)))
     run_cmd(command)
 
     if with_coverage:
@@ -515,10 +511,13 @@ def post_python_tests_results():
         # 6. Commit current HTMLs.
         run_cmd([
             "git",
+            "-c",
+            "user.name='Apache Spark Test Account'",
+            "-c",
+            "user.email='sparktestacc@gmail.com'",
             "commit",
             "-am",
-            "Coverage report at latest commit in Apache Spark",
-            '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
+            "Coverage report at latest commit in Apache Spark"])
         # 7. Delete the old branch.
         run_cmd(["git", "branch", "-D", "gh-pages"])
         # 8. Rename the temporary branch to master.
@@ -636,7 +635,7 @@ def main():
         # /home/jenkins/anaconda2/envs/py36/bin
         os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
     else:
-        # else we're running locally or Github Actions.
+        # else we're running locally or GitHub Actions.
         build_tool = "sbt"
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
@@ -654,12 +653,12 @@ def main():
     included_tags = []
     excluded_tags = []
     if should_only_test_modules:
-        # If we're running the tests in Github Actions, attempt to detect and test
+        # If we're running the tests in GitHub Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
             if os.environ["GITHUB_INPUT_BRANCH"] != "":
                 # Dispatched request
-                # Note that it assumes Github Actions has already merged
+                # Note that it assumes GitHub Actions has already merged
                 # the given `GITHUB_INPUT_BRANCH` branch.
                 changed_files = identify_changed_files_from_git_commits(
                     "HEAD", target_branch=os.environ["GITHUB_SHA"])
@@ -745,7 +744,7 @@ def main():
             run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment
-    # note - the below commented out until *all* Jenkins workers can get `jekyll` installed
+    # note - the below commented out until *all* Jenkins workers can get the Bundler gem installed
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 

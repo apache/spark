@@ -51,7 +51,7 @@ abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructT
 
   /**
    * Resets states of pushed down filters. The method must be called before
-   * precessing any new row otherwise `skipRow()` may return wrong result.
+   * processing any new row otherwise `skipRow()` may return wrong result.
    */
   def reset(): Unit
 

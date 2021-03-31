@@ -173,6 +173,7 @@ class StreamingQueryProgress private[sql](
  * @param description            Description of the source.
  * @param startOffset            The starting offset for data being read.
  * @param endOffset              The ending offset for data being read.
+ * @param latestOffset           The latest offset from this source.
  * @param numInputRows           The number of records read from this source.
  * @param inputRowsPerSecond     The rate at which data is arriving from this source.
  * @param processedRowsPerSecond The rate at which data from this source is being processed by
@@ -184,6 +185,7 @@ class SourceProgress protected[sql](
   val description: String,
   val startOffset: String,
   val endOffset: String,
+  val latestOffset: String,
   val numInputRows: Long,
   val inputRowsPerSecond: Double,
   val processedRowsPerSecond: Double) extends Serializable {
@@ -204,6 +206,7 @@ class SourceProgress protected[sql](
     ("description" -> JString(description)) ~
       ("startOffset" -> tryParse(startOffset)) ~
       ("endOffset" -> tryParse(endOffset)) ~
+      ("latestOffset" -> tryParse(latestOffset)) ~
       ("numInputRows" -> JInt(numInputRows)) ~
       ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
       ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond))
@@ -231,7 +234,7 @@ class SinkProgress protected[sql](
     val numOutputRows: Long) extends Serializable {
 
   /** SinkProgress without custom metrics. */
-  protected[sql] def this(description: String) {
+  protected[sql] def this(description: String) = {
     this(description, DEFAULT_NUM_OUTPUT_ROWS)
   }
 

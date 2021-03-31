@@ -26,7 +26,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarro
 from pyspark.testing.utils import QuietTest
 
 if have_pandas:
-    from pandas.util.testing import assert_frame_equal
+    from pandas.testing import assert_frame_equal
 
 
 @unittest.skipIf(
@@ -43,7 +43,11 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def python_plus_one(self):
-        return udf(lambda v: v + 1, 'double')
+        @udf('double')
+        def plus_one(v):
+            assert isinstance(v, float)
+            return v + 1
+        return plus_one
 
     @property
     def pandas_scalar_time_two(self):
@@ -241,14 +245,14 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
         array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
         result1 = df.withColumn('v2', array_udf(df['v']).over(w))
-        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+        self.assertEqual(result1.first()['v2'], [1.0, 2.0])
 
     def test_invalid_args(self):
         df = self.data
         w = self.unbounded_window
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     AnalysisException,
                     '.*not supported within a window function'):
                 foo_udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUPED_MAP)

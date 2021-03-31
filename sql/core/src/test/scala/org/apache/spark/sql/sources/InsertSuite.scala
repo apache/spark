@@ -731,13 +731,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue1 to long causes overflow"))
+        assert(msg.contains(s"Casting $outOfRangeValue1 to bigint causes overflow"))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue2 to long causes overflow"))
+        assert(msg.contains(s"Casting $outOfRangeValue2 to bigint causes overflow"))
       }
     }
   }
@@ -756,23 +756,43 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
-    SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
-      withSQLConf(
-        SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
-        withTable("t") {
-          sql("create table t(a int, b string) using parquet partitioned by (a)")
-          policy match {
-            case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
-              val errorMsg = intercept[NumberFormatException] {
-                sql("insert into t partition(a='ansi') values('ansi')")
-              }.getMessage
-              assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
-            case SQLConf.StoreAssignmentPolicy.LEGACY =>
-              sql("insert into t partition(a='ansi') values('ansi')")
-              checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
-          }
-        }
+  test("SPARK-33354: Throw exceptions on inserting invalid cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("CREATE TABLE t(i int, t timestamp) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': timestamp to int"))
+        assert(msg.contains("Cannot safely cast 't': int to timestamp"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(i int, d date) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (date('2010-09-02'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': date to int"))
+        assert(msg.contains("Cannot safely cast 'd': int to date"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(b boolean, t timestamp) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': timestamp to boolean"))
+        assert(msg.contains("Cannot safely cast 't': boolean to timestamp"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(b boolean, d date) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (date('2010-09-02'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': date to boolean"))
+        assert(msg.contains("Cannot safely cast 'd': boolean to date"))
       }
     }
   }
@@ -804,7 +824,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         .add("s", StringType, false)
       val newTable = CatalogTable(
         identifier = TableIdentifier("test_table", None),
-        tableType = CatalogTableType.EXTERNAL,
+        tableType = CatalogTableType.MANAGED,
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -910,7 +930,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |)
           """.stripMargin)
       }.getMessage
-      assert(msg.contains("cannot resolve '`c3`' given input columns"))
+      assert(msg.contains("cannot resolve 'c3' given input columns"))
     }
   }
 }

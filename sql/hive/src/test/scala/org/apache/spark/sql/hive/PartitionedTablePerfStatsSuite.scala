@@ -300,7 +300,7 @@ class PartitionedTablePerfStatsSuite
 
           HiveCatalogMetrics.reset()
           assert(spark.sql("show partitions test").count() == 100)
-          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() <= 10)
         }
       }
     }
@@ -323,7 +323,7 @@ class PartitionedTablePerfStatsSuite
 
           HiveCatalogMetrics.reset()
           assert(spark.sql("show partitions test").count() == 100)
-          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() <= 10)
         }
       }
     }
@@ -390,8 +390,8 @@ class PartitionedTablePerfStatsSuite
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
       withTable("test") {
         withTempDir { dir =>
-          HiveCatalogMetrics.reset()
           setupPartitionedHiveTable("test", dir, 50)
+          HiveCatalogMetrics.reset()
           // select the table in multi-threads
           val executorPool = Executors.newFixedThreadPool(10)
           (1 to 10).map(threadId => {

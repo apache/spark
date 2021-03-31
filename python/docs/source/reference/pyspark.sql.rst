@@ -73,6 +73,17 @@ See also :class:`SparkSession`.
     SparkSession.version
 
 
+Configuration
+-------------
+
+.. currentmodule:: pyspark.sql.conf
+
+.. autosummary::
+    :toctree: api/
+
+    RuntimeConfig
+
+
 Input and Output
 ----------------
 
@@ -307,6 +318,7 @@ Functions
 
     abs
     acos
+    acosh
     add_months
     aggregate
     approxCountDistinct
@@ -331,12 +343,15 @@ Functions
     asc_nulls_last
     ascii
     asin
+    asinh
     assert_true
     atan
+    atanh
     atan2
     avg
     base64
     bin
+    bitwise_not
     bitwiseNOT
     broadcast
     bround
@@ -355,6 +370,7 @@ Functions
     cos
     cosh
     count
+    count_distinct
     countDistinct
     covar_pop
     covar_samp
@@ -458,6 +474,7 @@ Functions
     posexplode
     posexplode_outer
     pow
+    product
     quarter
     radians
     raise_error
@@ -479,9 +496,9 @@ Functions
     sequence
     sha1
     sha2
-    shiftLeft
-    shiftRight
-    shiftRightUnsigned
+    shiftleft
+    shiftright
+    shiftrightunsigned
     shuffle
     signum
     sin
@@ -501,6 +518,7 @@ Functions
     substring
     substring_index
     sum
+    sum_distinct
     sumDistinct
     tan
     tanh
@@ -583,4 +601,3 @@ Grouping
     GroupedData.pivot
     GroupedData.sum
     PandasCogroupedOps.applyInPandas
-

@@ -22,6 +22,7 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.hadoop.net.{Node, NodeBase}
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -50,6 +51,9 @@ class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
     if (hostName == "host3") "/rack2" else "/rack1"
   }
 
+  override def resolve(hostNames: Seq[String]): Seq[Node] =
+    hostNames.map(n => new NodeBase(n, resolve(n)))
+
 }
 
 class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
@@ -75,7 +79,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   // priority has to be 0 to match default profile id
   val RM_REQUEST_PRIORITY = Priority.newInstance(0)
   val defaultRPId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-  val defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  var defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -114,6 +118,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     for ((name, value) <- additionalConfigs) {
       sparkConfClone.set(name, value)
     }
+    // different spark confs means we need to reinit the default profile
+    ResourceProfile.clearDefaultProfile()
+    defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConfClone)
 
     val allocator = new YarnAllocator(
       "not used",
@@ -268,12 +275,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       Map(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${GPU}.${AMOUNT}" -> "2G"))
 
     handler.updateResourceRequests()
-    val container = createContainer("host1", resource = handler.defaultResource)
+    val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+    val container = createContainer("host1", resource = defaultResource)
     handler.handleAllocatedContainers(Array(container))
 
     // get amount of memory and vcores from resource, so effectively skipping their validation
-    val expectedResources = Resource.newInstance(handler.defaultResource.getMemory(),
-      handler.defaultResource.getVirtualCores)
+    val expectedResources = Resource.newInstance(defaultResource.getMemory(),
+      defaultResource.getVirtualCores)
     setResourceRequests(Map("gpu" -> "2G"), expectedResources)
     val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
 
@@ -296,7 +304,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val (handler, _) = createAllocator(1, mockAmClient, sparkResources)
 
     handler.updateResourceRequests()
-    val yarnRInfo = ResourceRequestTestHelper.getResources(handler.defaultResource)
+    val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+    val yarnRInfo = ResourceRequestTestHelper.getResources(defaultResource)
     val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.name -> rInfo.value) ).toMap
     assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
     assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
@@ -656,9 +665,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       sparkConf.set(MEMORY_OFFHEAP_SIZE, offHeapMemoryInByte)
       val (handler, _) = createAllocator(maxExecutors = 1,
         additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
-      val memory = handler.defaultResource.getMemory
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemory
       assert(memory ==
-        executorMemory + offHeapMemoryInMB + YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN)
+        executorMemory + offHeapMemoryInMB + ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)
     } finally {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)

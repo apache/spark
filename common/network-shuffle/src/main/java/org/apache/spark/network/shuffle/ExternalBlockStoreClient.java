@@ -159,6 +159,35 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   }
 
   @Override
+  public void finalizeShuffleMerge(
+      String host,
+      int port,
+      int shuffleId,
+      MergeFinalizerListener listener) {
+    checkInit();
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      ByteBuffer finalizeShuffleMerge = new FinalizeShuffleMerge(appId, shuffleId).toByteBuffer();
+      client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+          listener.onShuffleMergeSuccess(
+            (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response));
+        }
+
+        @Override
+        public void onFailure(Throwable e) {
+          listener.onShuffleMergeFailure(e);
+        }
+      });
+    } catch (Exception e) {
+      logger.error("Exception while sending finalizeShuffleMerge request to {}:{}",
+        host, port, e);
+      listener.onShuffleMergeFailure(e);
+    }
+  }
+
+  @Override
   public MetricSet shuffleMetrics() {
     checkInit();
     return clientFactory.getAllMetrics();

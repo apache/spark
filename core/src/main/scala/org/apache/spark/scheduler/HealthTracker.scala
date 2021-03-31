@@ -32,7 +32,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  * additional logic for exclusion of executors and nodes for individual tasks and stages which
  * works in concert with the logic here.
  *
- * The tracker needs to deal with a variety of workloads, eg.:
+ * The tracker needs to deal with a variety of workloads, e.g.:
  *
  *  * bad user code -- this may lead to many task failures, but that should not count against
  *      individual executors
@@ -40,6 +40,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  *      stage, but still many failures over the entire application
  *  * "flaky" executors -- they don't fail every task, but are still faulty enough to merit
  *      excluding
+ *  * missing shuffle files -- may trigger fetch failures on healthy executors.
  *
  * See the design doc on SPARK-8425 for a more in-depth discussion. Note SPARK-32037 renamed
  * the feature.
@@ -64,6 +65,8 @@ private[scheduler] class HealthTracker (
   val EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS = HealthTracker.getExludeOnFailureTimeout(conf)
   private val EXCLUDE_FETCH_FAILURE_ENABLED =
     conf.get(config.EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED)
+  private val EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED =
+    conf.get(config.EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED)
 
   /**
    * A map from executorId to information on task failures. Tracks the time of each task failure,
@@ -154,11 +157,21 @@ private[scheduler] class HealthTracker (
   }
 
   private def killExecutor(exec: String, msg: String): Unit = {
+    val fullMsg = if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
+      s"${msg} (actually decommissioning)"
+    } else {
+      msg
+    }
     allocationClient match {
       case Some(a) =>
-        logInfo(msg)
-        a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
-          force = true)
+        logInfo(fullMsg)
+        if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
+          a.decommissionExecutor(exec, ExecutorDecommissionInfo(fullMsg),
+            adjustTargetNumExecutors = false)
+        } else {
+          a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
+            force = true)
+        }
       case None =>
         logInfo(s"Not attempting to kill excluded executor id $exec " +
           s"since allocation client is not defined.")
@@ -182,10 +195,18 @@ private[scheduler] class HealthTracker (
     if (conf.get(config.EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
       allocationClient match {
         case Some(a) =>
-          logInfo(s"Killing all executors on excluded host $node " +
-            s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
-          if (a.killExecutorsOnHost(node) == false) {
-            logError(s"Killing executors on node $node failed.")
+          if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
+            logInfo(s"Decommissioning all executors on excluded host $node " +
+              s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
+            if (!a.decommissionExecutorsOnHost(node)) {
+              logError(s"Decommissioning executors on $node failed.")
+            }
+          } else {
+            logInfo(s"Killing all executors on excluded host $node " +
+              s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
+            if (!a.killExecutorsOnHost(node)) {
+              logError(s"Killing executors on node $node failed.")
+            }
           }
         case None =>
           logWarning(s"Not attempting to kill executors on excluded host $node " +
@@ -362,7 +383,7 @@ private[scheduler] class HealthTracker (
      * Apply the timeout to individual tasks.  This is to prevent one-off failures that are very
      * spread out in time (and likely have nothing to do with problems on the executor) from
      * triggering exlusion.  However, note that we do *not* remove executors and nodes from
-     * being excluded as we expire individual task failures -- each have their own timeout.  Eg.,
+     * being excluded as we expire individual task failures -- each have their own timeout.  E.g.,
      * suppose:
      *  * timeout = 10, maxFailuresPerExec = 2
      *  * Task 1 fails on exec 1 at time 0

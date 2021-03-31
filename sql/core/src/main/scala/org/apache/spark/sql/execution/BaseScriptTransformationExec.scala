@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{BufferedReader, InputStream, InputStreamReader, OutputStream}
+import java.io.{BufferedReader, File, InputStream, InputStreamReader, OutputStream}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkException, SparkFiles, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -72,6 +72,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   protected def initProc: (OutputStream, Process, InputStream, CircularBuffer) = {
     val cmd = List("/bin/bash", "-c", script)
     val builder = new ProcessBuilder(cmd.asJava)
+      .directory(new File(SparkFiles.getRootDirectory()))
+    val path = System.getenv("PATH") + File.pathSeparator +
+      SparkFiles.getRootDirectory()
+    builder.environment().put("PATH", path)
 
     val proc = builder.start()
     val inputStream = proc.getInputStream
@@ -104,16 +108,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
 
       val outputRowFormat = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
-
-      val padNull = if (conf.legacyPadNullWhenValueLessThenSchema) {
-        (arr: Array[String], size: Int) => arr.padTo(size, null)
-      } else {
-        (arr: Array[String], size: Int) => arr
-      }
       val processRowWithoutSerde = if (!ioschema.schemaLess) {
         prevLine: String =>
           new GenericInternalRow(
-            padNull(prevLine.split(outputRowFormat), outputFieldWriters.size)
+            prevLine.split(outputRowFormat).padTo(outputFieldWriters.size, null)
               .zip(outputFieldWriters)
               .map { case (data, writer) => writer(data) })
       } else {
@@ -124,7 +122,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
           new GenericInternalRow(
-            padNull(prevLine.split(outputRowFormat).slice(0, 2), 2)
+            prevLine.split(outputRowFormat).slice(0, 2).padTo(2, null)
               .map(kvWriter))
       }
 
@@ -341,7 +339,7 @@ case class ScriptTransformationIOSchema(
 
 object ScriptTransformationIOSchema {
   val defaultFormat = Map(
-    ("TOK_TABLEROWFORMATFIELD", "\t"),
+    ("TOK_TABLEROWFORMATFIELD", "\u0001"),
     ("TOK_TABLEROWFORMATLINES", "\n")
   )
 

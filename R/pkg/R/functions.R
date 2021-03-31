@@ -144,7 +144,7 @@ NULL
 #' @param y Column to compute on.
 #' @param pos In \itemize{
 #'                \item \code{locate}: a start position of search.
-#'                \item \code{overlay}: a start postiton for replacement.
+#'                \item \code{overlay}: a start position for replacement.
 #'                }
 #' @param len In \itemize{
 #'               \item \code{lpad} the maximum length of each output result.
@@ -247,7 +247,7 @@ NULL
 #'            used to transform the data.  The first argument is the key, the second argument
 #'            is the value.
 #'          }
-#' @param zero a \code{Column} used as the initial value in \code{array_aggregate}
+#' @param initialValue a \code{Column} used as the initial value in \code{array_aggregate}
 #' @param merge a \code{function} a binary function \code{(Column, Column) -> Column}
 #'          used in \code{array_aggregate}to merge values (the second argument)
 #'          into accumulator (the first argument).
@@ -357,7 +357,57 @@ NULL
 #' @examples
 #' \dontrun{
 #' df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
-#' head(select(df, vector_to_array(df$features)))
+#' head(
+#'   withColumn(
+#'     withColumn(df, "array", vector_to_array(df$features)),
+#'     "vector",
+#'     array_to_vector(column("array"))
+#'   )
+#' )
+#' }
+NULL
+
+#' Avro processing functions for Column operations
+#'
+#' Avro processing functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param jsonFormatSchema character Avro schema in JSON string format
+#' @param ... additional argument(s) passed as parser options.
+#' @name column_avro_functions
+#' @rdname column_avro_functions
+#' @family avro functions
+#' @note Avro is built-in but external data source module since Spark 2.4.
+#'   Please deploy the application as per
+#'   \href{https://spark.apache.org/docs/latest/sql-data-sources-avro.html#deploying}{
+#'     the deployment section
+#'   } of "Apache Avro Data Source Guide".
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(iris)
+#' schema <- paste(
+#'   c(
+#'     '{"type": "record", "namespace": "example.avro", "name": "Iris", "fields": [',
+#'     '{"type": ["double", "null"], "name": "Sepal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Sepal_Width"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Width"},',
+#'     '{"type": ["string", "null"], "name": "Species"}]}'
+#'   ),
+#'   collapse="\\n"
+#' )
+#'
+#' df_serialized <- select(
+#'   df,
+#'   alias(to_avro(alias(struct(column("*")), "fields")), "payload")
+#' )
+#'
+#' df_deserialized <- select(
+#'   df_serialized,
+#'   from_avro(df_serialized$payload, schema)
+#' )
+#'
+#' head(df_deserialized)
 #' }
 NULL
 
@@ -412,6 +462,19 @@ setMethod("acos",
           })
 
 #' @details
+#' \code{acosh}: Computes inverse hyperbolic cosine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases acosh acosh,Column-method
+#' @note acosh since 3.1.0
+setMethod("acosh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "acosh", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{approx_count_distinct}: Returns the approximate number of distinct items in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -421,7 +484,7 @@ setMethod("acos",
 #' \dontrun{
 #' head(select(df, approx_count_distinct(df$gear)))
 #' head(select(df, approx_count_distinct(df$gear, 0.02)))
-#' head(select(df, countDistinct(df$gear, df$cyl)))
+#' head(select(df, count_distinct(df$gear, df$cyl)))
 #' head(select(df, n_distinct(df$gear)))
 #' head(distinct(select(df, "gear")))}
 #' @note approx_count_distinct(Column) since 3.0.0
@@ -479,6 +542,19 @@ setMethod("asin",
           })
 
 #' @details
+#' \code{asinh}: Computes inverse hyperbolic sine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases asinh asinh,Column-method
+#' @note asinh since 3.1.0
+setMethod("asinh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "asinh", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{atan}: Returns the inverse tangent of the given value,
 #' as if computed by \code{java.lang.Math.atan()}
 #'
@@ -489,6 +565,19 @@ setMethod("atan",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "atan", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{atanh}: Computes inverse hyperbolic tangent of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases atanh atanh,Column-method
+#' @note atanh since 3.1.0
+setMethod("atanh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "atanh", x@jc)
             column(jc)
           })
 
@@ -547,20 +636,33 @@ setMethod("bin",
           })
 
 #' @details
+#' \code{bitwise_not}: Computes bitwise NOT.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases bitwise_not bitwise_not,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, bitwise_not(cast(df$vs, "int"))))}
+#' @note bitwise_not since 3.2.0
+setMethod("bitwise_not",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bitwise_not", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{bitwiseNOT}: Computes bitwise NOT.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases bitwiseNOT bitwiseNOT,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' head(select(df, bitwiseNOT(cast(df$vs, "int"))))}
 #' @note bitwiseNOT since 1.5.0
 setMethod("bitwiseNOT",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "bitwiseNOT", x@jc)
-            column(jc)
+            .Deprecated("bitwise_not")
+            bitwise_not(x)
           })
 
 #' @details
@@ -1472,6 +1574,19 @@ setMethod("overlay",
   })
 
 #' @details
+#' \code{product}: Returns the product of the values in a group.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases product product,Column-method
+#' @note product since 3.2.0
+setMethod("product",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "product", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
@@ -1848,21 +1963,34 @@ setMethod("sum",
           })
 
 #' @details
+#' \code{sum_distinct}: Returns the sum of distinct values in the expression.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases sum_distinct sum_distinct,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, sum_distinct(df$gear)))
+#' head(distinct(select(df, "gear")))}
+#' @note sum_distinct since 3.2.0
+setMethod("sum_distinct",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sum_distinct", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{sumDistinct}: Returns the sum of distinct values in the expression.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases sumDistinct sumDistinct,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' head(select(df, sumDistinct(df$gear)))
-#' head(distinct(select(df, "gear")))}
 #' @note sumDistinct since 1.4.0
 setMethod("sumDistinct",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "sumDistinct", x@jc)
-            column(jc)
+            .Deprecated("sum_distinct")
+            sum_distinct(x)
           })
 
 #' @details
@@ -2380,7 +2508,27 @@ setMethod("approxCountDistinct",
           })
 
 #' @details
+#' \code{count_distinct}: Returns the number of distinct items in a group.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases count_distinct count_distinct,Column-method
+#' @note count_distinct since 3.2.0
+setMethod("count_distinct",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(...), function(x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "count_distinct", x@jc,
+                              jcols)
+            column(jc)
+          })
+
+#' @details
 #' \code{countDistinct}: Returns the number of distinct items in a group.
+#'
+#' An alias of \code{count_distinct}, and it is encouraged to use \code{count_distinct} directly.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases countDistinct countDistinct,Column-method
@@ -2388,13 +2536,7 @@ setMethod("approxCountDistinct",
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(...), function(x) {
-              stopifnot(class(x) == "Column")
-              x@jc
-            })
-            jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
-                              jcols)
-            column(jc)
+            count_distinct(x, ...)
           })
 
 #' @details
@@ -2461,7 +2603,7 @@ setMethod("least",
 #' @note n_distinct since 1.4.0
 setMethod("n_distinct", signature(x = "Column"),
           function(x, ...) {
-            countDistinct(x, ...)
+            count_distinct(x, ...)
           })
 
 #' @rdname count
@@ -2805,6 +2947,21 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
+#' \code{shiftleft}: Shifts the given value numBits left. If the given value is a long value,
+#' this function will return a long value else it will return an integer value.
+#'
+#' @rdname column_math_functions
+#' @aliases shiftleft shiftleft,Column,numeric-method
+#' @note shiftleft since 3.2.0
+setMethod("shiftleft", signature(y = "Column", x = "numeric"),
+          function(y, x) {
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "shiftleft",
+                              y@jc, as.integer(x))
+            column(jc)
+          })
+
+#' @details
 #' \code{shiftLeft}: Shifts the given value numBits left. If the given value is a long value,
 #' this function will return a long value else it will return an integer value.
 #'
@@ -2813,8 +2970,21 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
 #' @note shiftLeft since 1.5.0
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
+            .Deprecated("shiftleft")
+            shiftleft(y, x)
+          })
+
+#' @details
+#' \code{shiftright}: (Signed) shifts the given value numBits right. If the given value is a long
+#' value, it will return a long value else it will return an integer value.
+#'
+#' @rdname column_math_functions
+#' @aliases shiftright shiftright,Column,numeric-method
+#' @note shiftright since 3.2.0
+setMethod("shiftright", signature(y = "Column", x = "numeric"),
+          function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
-                              "shiftLeft",
+                              "shiftright",
                               y@jc, as.integer(x))
             column(jc)
           })
@@ -2828,14 +2998,27 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 #' @note shiftRight since 1.5.0
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
+            .Deprecated("shiftright")
+            shiftright(y, x)
+          })
+
+#' @details
+#' \code{shiftrightunsigned}: (Unsigned) shifts the given value numBits right. If the given value is
+#' a long value, it will return a long value else it will return an integer value.
+#'
+#' @rdname column_math_functions
+#' @aliases shiftrightunsigned shiftrightunsigned,Column,numeric-method
+#' @note shiftrightunsigned since 3.2.0
+setMethod("shiftrightunsigned", signature(y = "Column", x = "numeric"),
+          function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
-                              "shiftRight",
+                              "shiftrightunsigned",
                               y@jc, as.integer(x))
             column(jc)
           })
 
 #' @details
-#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' \code{shiftRightUnsigned}: (Unsigned) shifts the given value numBits right. If the given value is
 #' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
@@ -2843,10 +3026,8 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
 #' @note shiftRightUnsigned since 1.5.0
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
-            jc <- callJStatic("org.apache.spark.sql.functions",
-                              "shiftRightUnsigned",
-                              y@jc, as.integer(x))
-            column(jc)
+            .Deprecated("shiftrightunsigned")
+            shiftrightunsigned(y, x)
           })
 
 #' @details
@@ -3577,11 +3758,11 @@ invoke_higher_order_function <- function(name, cols, funs) {
 #' @aliases array_aggregate array_aggregate,characterOrColumn,Column,function-method
 #' @note array_aggregate since 3.1.0
 setMethod("array_aggregate",
-          signature(x = "characterOrColumn", zero = "Column", merge = "function"),
-          function(x, zero, merge, finish = NULL) {
+          signature(x = "characterOrColumn", initialValue = "Column", merge = "function"),
+          function(x, initialValue, merge, finish = NULL) {
             invoke_higher_order_function(
               "ArrayAggregate",
-              cols = list(x, zero),
+              cols = list(x, initialValue),
               funs = if (is.null(finish)) {
                 list(merge)
               } else {
@@ -4527,6 +4708,24 @@ setMethod("timestamp_seconds",
           })
 
 #' @details
+#' \code{array_to_vector} Converts a column of array of numeric type into
+#' a column of dense vectors in MLlib
+#'
+#' @rdname column_ml_functions
+#' @aliases array_to_vector array_to_vector,Column-method
+#' @note array_to_vector since 3.1.0
+setMethod("array_to_vector",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "array_to_vector",
+              x@jc
+            )
+            column(jc)
+          })
+
+#' @details
 #' \code{vector_to_array} Converts a column of MLlib sparse/dense vectors into
 #' a column of dense arrays.
 #'
@@ -4545,5 +4744,62 @@ setMethod("vector_to_array",
               x@jc,
               dtype
             )
+            column(jc)
+          })
+
+#' @details
+#' \code{from_avro} Converts a binary column of Avro format into its corresponding catalyst value.
+#' The specified schema must match the read data, otherwise the behavior is undefined:
+#' it may fail or return arbitrary result.
+#' To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
+#' set via the option avroSchema.
+#'
+#' @rdname column_avro_functions
+#' @aliases from_avro from_avro,Column-method
+#' @note from_avro since 3.1.0
+setMethod("from_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema, ...) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic(
+              "org.apache.spark.sql.avro.functions", "from_avro",
+              x@jc,
+              jsonFormatSchema,
+              options
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{to_avro} Converts a column into binary of Avro format.
+#'
+#' @rdname column_avro_functions
+#' @aliases to_avro to_avro,Column-method
+#' @note to_avro since 3.1.0
+setMethod("to_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema = NULL) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            jc <- if (is.null(jsonFormatSchema)) {
+              callJStatic("org.apache.spark.sql.avro.functions", "to_avro", x@jc)
+            } else {
+              callJStatic(
+                "org.apache.spark.sql.avro.functions",
+                "to_avro",
+                x@jc,
+                jsonFormatSchema
+              )
+            }
             column(jc)
           })

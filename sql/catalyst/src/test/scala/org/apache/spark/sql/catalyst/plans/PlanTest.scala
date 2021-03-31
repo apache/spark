@@ -22,6 +22,7 @@ import org.scalatest.Suite
 import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -43,12 +44,18 @@ trait CodegenInterpretedPlanTest extends PlanTest {
     val codegenMode = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
     val interpretedMode = CodegenObjectFactoryMode.NO_CODEGEN.toString
 
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
-      super.test(testName + " (codegen path)", testTags: _*)(testFun)(pos)
-    }
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) {
-      super.test(testName + " (interpreted path)", testTags: _*)(testFun)(pos)
-    }
+    super.test(testName + " (codegen path)", testTags: _*)(
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) { testFun })(pos)
+    super.test(testName + " (interpreted path)", testTags: _*)(
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) { testFun })(pos)
+  }
+
+  protected def testFallback(
+      testName: String,
+      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+    val codegenMode = CodegenObjectFactoryMode.FALLBACK.toString
+    super.test(testName + " (codegen fallback mode)", testTags: _*)(
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) { testFun })(pos)
   }
 }
 
@@ -56,10 +63,7 @@ trait CodegenInterpretedPlanTest extends PlanTest {
  * Provides helper methods for comparing plans, but without the overhead of
  * mandating a FunSuite.
  */
-trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
-
-  // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
-  protected def conf = SQLConf.get
+trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { self: Suite =>
 
   /**
    * Since attribute references are given globally unique ids during analysis,

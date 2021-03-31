@@ -376,7 +376,7 @@ object TPCDSTableStats {
       "s_closed_date_sk" -> CatalogColumnStat(Some(70L), Some("2450823"), Some("2451313"), Some(296), Some(4), Some(4), None, CatalogColumnStat.VERSION),
       "s_store_id" -> CatalogColumnStat(Some(210L), None, None, Some(0), Some(16), Some(16), None, CatalogColumnStat.VERSION),
       "s_geography_class" -> CatalogColumnStat(Some(1L), None, None, Some(3), Some(7), Some(7), None, CatalogColumnStat.VERSION),
-      "s_tax_precentage" -> CatalogColumnStat(Some(12L), Some("0.00"), Some("0.11"), Some(5), Some(8), Some(8), None, CatalogColumnStat.VERSION)
+      "s_tax_percentage" -> CatalogColumnStat(Some(12L), Some("0.00"), Some("0.11"), Some(5), Some(8), Some(8), None, CatalogColumnStat.VERSION)
     )),
     "store_returns" -> CatalogStatistics(4837573440L, Some(28795080L), Map(
       "sr_item_sk" -> CatalogColumnStat(Some(197284L), Some("1"), Some("204000"), Some(0), Some(8), Some(8), None, CatalogColumnStat.VERSION),
