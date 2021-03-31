@@ -381,7 +381,7 @@ public class VectorizedColumnReader {
           if (offset < num) {
             switch (typeName) {
               case INT64:
-                _column.putLongs(rowId, num, column.getLongs(offset, num - offset), 0);
+                _column.putLongs(rowId, num - offset, column.getLongs(offset, num - offset), 0);
                 break;
               case BINARY:
                 for (int i = 0; i < num - offset; i++) {
@@ -389,18 +389,17 @@ public class VectorizedColumnReader {
                 }
                 break;
             }
-            currentRow += num;
             rowId += (num - offset);
             total -= (num - offset);
-          } else {
-            currentRow += num;
           }
         } else {
           // need to check every row
-          for (int i = 0; i < num; ) {
-            while (currentRow < rowIndexes[rowId]) {
+          for (int i = 0; i < num && total > 0; ) {
+            while (currentRow + i < rowIndexes[rowId] && i < num) {
               i++;
-              currentRow++;
+            }
+            if (i >= num) {
+              break;
             }
             switch (typeName) {
               case INT64:
@@ -418,6 +417,7 @@ public class VectorizedColumnReader {
         total -= num;
       }
 
+      currentRow += num;
       valuesRead += num;
     }
   }

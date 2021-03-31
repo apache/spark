@@ -114,5 +114,16 @@ object ParquetColumnIndexBenchmark extends SqlBasedBenchmark {
       }
     }
 
+    runBenchmark("Pushdown for multi range filter") {
+      withTempPath { dir =>
+        withTempTable("parquetTable") {
+          prepareTable(dir, numRows)
+          filterPushDownBenchmark(numRows,
+            "multi range filters",
+            s" (_1 > ($numRows - 3000000) and _1 < ($numRows - 2000000)) or ( _1 > ($numRows - 1000000) and _1 < ($numRows - 1000))")
+        }
+      }
+    }
+
   }
 }
