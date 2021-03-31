@@ -70,7 +70,6 @@ private[sql] object Dataset {
   val DATASET_ID_KEY = "__dataset_id"
   val COL_POS_KEY = "__col_position"
   val DATASET_ID_TAG = TreeNodeTag[Long]("dataset_id")
-  val DATASET_EAGER_RUN_TAG = TreeNodeTag[Boolean]("dataset_eager_run")
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
     val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
@@ -225,10 +224,8 @@ class Dataset[T] private[sql](
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
     def eagerRun(plan: LogicalPlan): LogicalPlan = {
-      val relation =
-        LocalRelation(plan.output, withAction("command", queryExecution)(_.executeCollect()))
-      relation.setTagValue(Dataset.DATASET_EAGER_RUN_TAG, true)
-      relation
+      LocalRelation(plan.output, withAction("command", queryExecution)(_.executeCollect()),
+        fromCommand = true)
     }
 
     val plan = queryExecution.analyzed match {

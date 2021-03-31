@@ -49,11 +49,13 @@ object LocalRelation {
  *
  * @param data The local collection holding the data. It doesn't need to be sent to executors
  *             and then doesn't need to be serializable.
+ * @param fromCommand Indicates whether the relation data is result of [[Command]]
+ * @param isStreaming Indicates whether this relation has data from a streaming source
  */
 case class LocalRelation(
     output: Seq[Attribute],
     data: Seq[InternalRow] = Nil,
-    // Indicates whether this relation has data from a streaming source.
+    fromCommand: Boolean = false,
     override val isStreaming: Boolean = false)
   extends LeafNode with analysis.MultiInstanceRelation {
 
@@ -66,7 +68,8 @@ case class LocalRelation(
    * query.
    */
   override final def newInstance(): this.type = {
-    LocalRelation(output.map(_.newInstance()), data, isStreaming).asInstanceOf[this.type]
+    LocalRelation(output.map(_.newInstance()), data, fromCommand, isStreaming)
+      .asInstanceOf[this.type]
   }
 
   override protected def stringArgs: Iterator[Any] = {
