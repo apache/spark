@@ -42,7 +42,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 ### Parameters
 
-* **grouping_expression**
+* **group_expression**
 
     Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
     result values of the grouping expressions. A grouping expression may be a column name like `GROUP BY a`, a column position like
@@ -66,6 +66,8 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
     equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
     and global aggregate.
+    
+    
 
 * **ROLLUP**
 
@@ -88,6 +90,41 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
      (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
 
+* **Partial Groupings**
+
+    Partial Groupings means there are both `group_expression` and `CUBE|ROLLUP|GROUPING SETS`
+    in GROUP BY clause. For example:
+    `GROUP BY warehouse, CUBE(product, location)` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse, location), (warehouse))`.
+    `GROUP BY warehouse, ROLLUP(product, location)` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse))`.
+    `GROUP BY warehouse, GROUPING SETS((product, location), (producet), ())` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, location), (warehouse))`.
+
+* **Concatenated Groupings**
+  
+    Concatenated groupings offer a concise way to generate useful combinations of groupings. Groupings specified
+    with concatenated groupings yield the cross-product of groupings from each grouping set. The cross-product 
+    operation enables even a small number of concatenated groupings to generate a large number of final groups. 
+    The concatenated groupings are specified simply by listing multiple `GROUPING SETS`, `CUBES`, and `ROLLUP`, 
+    and separating them with commas. For example:
+    `GROUP BY GROUPING SETS((warehouse), (producet)), GROUPING SETS((location), (size))` is equivalent to 
+    `GROUP BY GROUPING SETS((warehouse, location), (warehouse, size), (product, location), (product, size))`.
+    `GROUP BY CUBE((warehouse), (producet)), ROLLUP((location), (size))` is equivalent to 
+    `GROUP BY GROUPING SETS((warehouse, product), (warehouse), (producet), ()), GROUPING SETS((location, size), (location), ())`
+    `GROUP BY GROUPING SETS(
+        (warehouse, product, location, size), (warehouse, product, location), (warehouse, product),
+        (warehouse, location, size), (warehouse, location), (warehouse),
+        (product, location, size), (product, location), (product),
+        (location, size), (location), ())`.
+    `GROUP BY order, CUBE((warehouse), (producet)), ROLLUP((location), (size))` is equivalent to 
+    `GROUP BY order, GROUPING SETS((warehouse, product), (warehouse), (producet), ()), GROUPING SETS((location, size), (location), ())`
+    `GROUP BY GROUPING SETS(
+        (order, warehouse, product, location, size), (order, warehouse, product, location), (order, warehouse, product),
+        (order, warehouse, location, size), (order, warehouse, location), (order, warehouse),
+        (order, product, location, size), (order, product, location), (order, product),
+        (order, location, size), (order, location), (order))`.
+    
 * **aggregate_name**
 
     Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).
