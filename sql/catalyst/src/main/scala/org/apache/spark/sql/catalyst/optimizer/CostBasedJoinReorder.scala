@@ -354,8 +354,8 @@ object JoinReorderDP extends PredicateHelper with Logging {
       } else {
         val relativeRows = BigDecimal(this.planCost.card) / BigDecimal(other.planCost.card)
         val relativeSize = BigDecimal(this.planCost.size) / BigDecimal(other.planCost.size)
-        Math.pow(relativeRows.doubleValue(), conf.joinReorderCardWeight) *
-          Math.pow(relativeSize.doubleValue(), 1 - conf.joinReorderCardWeight) < 1
+        Math.pow(relativeRows.doubleValue, conf.joinReorderCardWeight) *
+          Math.pow(relativeSize.doubleValue, 1 - conf.joinReorderCardWeight) < 1
       }
     }
   }
