@@ -367,6 +367,17 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Maven local repository
       uses: actions/cache@v2
       with:
@@ -392,6 +403,17 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
@@ -414,6 +436,17 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
@@ -450,6 +483,17 @@ jobs:
         repository: maropu/spark-tpcds-sf-1
         ref: 6b660a53091bd6d23cbe58b0f09aae08e71cc667
         path: ./tpcds-sf-1
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
