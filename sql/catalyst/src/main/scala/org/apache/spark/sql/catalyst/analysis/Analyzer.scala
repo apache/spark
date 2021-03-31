@@ -1744,7 +1744,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
-        q.mapExpressions(resolveExpressionByPlanChildren(_, q, withMetadata = true))
+        q.mapExpressions(resolveExpressionByPlanChildren(_, q))
     }
 
     def resolveAssignments(
@@ -1981,12 +1981,11 @@ class Analyzer(override val catalogManager: CatalogManager)
   def resolveExpressionByPlanOutput(
       expr: Expression,
       plan: LogicalPlan,
-      throws: Boolean = false,
-      withMetadata: Boolean = false): Expression = {
+      throws: Boolean = false): Expression = {
     resolveExpression(
       expr,
       resolveColumnByName = nameParts => {
-        plan.resolve(nameParts, resolver, withMetadata = withMetadata)
+        plan.resolve(nameParts, resolver)
       },
       getAttrCandidates = () => plan.output,
       throws = throws)
@@ -2002,12 +2001,11 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   def resolveExpressionByPlanChildren(
       e: Expression,
-      q: LogicalPlan,
-      withMetadata: Boolean = false): Expression = {
+      q: LogicalPlan): Expression = {
     resolveExpression(
       e,
       resolveColumnByName = nameParts => {
-        q.resolveChildren(nameParts, resolver, withMetadata = withMetadata)
+        q.resolveChildren(nameParts, resolver)
       },
       getAttrCandidates = () => {
         assert(q.children.length == 1)

@@ -80,10 +80,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
 
-  override def metadataOutput: Seq[Attribute] = {
-    child.metadataOutput ++
-      getTagValue(Project.hiddenOutputTag).getOrElse(Seq.empty[Attribute])
-  }
+  override def metadataOutput: Seq[Attribute] =
+    getTagValue(Project.hiddenOutputTag).getOrElse(Seq.empty[Attribute])
 }
 
 object Project {

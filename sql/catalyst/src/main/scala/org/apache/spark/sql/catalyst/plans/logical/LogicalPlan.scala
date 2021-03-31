@@ -107,14 +107,9 @@ abstract class LogicalPlan
    */
   def resolveChildren(
       nameParts: Seq[String],
-      resolver: Resolver,
-      withMetadata: Boolean = true): Option[NamedExpression] = {
-    val maybeResolvedExpression = childAttributes.resolve(nameParts, resolver)
-    if (withMetadata) {
-      maybeResolvedExpression.orElse(childMetadataAttributes.resolve(nameParts, resolver))
-    } else {
-      maybeResolvedExpression
-    }
+      resolver: Resolver): Option[NamedExpression] = {
+    childAttributes.resolve(nameParts, resolver)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
   }
 
   /**
@@ -124,14 +119,9 @@ abstract class LogicalPlan
    */
   def resolve(
       nameParts: Seq[String],
-      resolver: Resolver,
-      withMetadata: Boolean = true): Option[NamedExpression] = {
-    val maybeResolvedExpression = outputAttributes.resolve(nameParts, resolver)
-    if (withMetadata) {
-      maybeResolvedExpression.orElse(outputMetadataAttributes.resolve(nameParts, resolver))
-    } else {
-      maybeResolvedExpression
-    }
+      resolver: Resolver): Option[NamedExpression] = {
+    outputAttributes.resolve(nameParts, resolver)
+      .orElse(outputMetadataAttributes.resolve(nameParts, resolver))
   }
 
   /**
