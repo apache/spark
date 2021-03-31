@@ -82,8 +82,9 @@ private[spark] class LocalEndpoint(
     case KillTask(taskId, interruptThread, reason) =>
       executor.killTask(taskId, interruptThread, reason)
 
-    case UpdateDelegationTokens(tokens) =>
-      SparkHadoopUtil.get.addDelegationTokens(tokens, scheduler.conf)
+    case UpdateDelegationTokens(tokenBytes) =>
+      logInfo(s"Received tokens of ${tokenBytes.length} bytes")
+      SparkHadoopUtil.get.addDelegationTokens(tokenBytes, scheduler.conf)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -122,6 +123,7 @@ private[spark] class LocalSchedulerBackend(
     override def conf: SparkConf = LocalSchedulerBackend.this.conf
     override def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
   }
+  private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
   /**
    * Returns a list of URLs representing the user classpath.
@@ -181,6 +183,7 @@ private[spark] class LocalSchedulerBackend(
 
   private def stop(finalState: SparkAppHandle.State): Unit = {
     localEndpoint.ask(StopExecutor)
+    delegationTokenManager.foreach(_.stop())
     try {
       launcherBackend.setState(finalState)
     } finally {
@@ -190,21 +193,25 @@ private[spark] class LocalSchedulerBackend(
 
   private def updateDelegationTokens(): Unit = {
     if (UserGroupInformation.isSecurityEnabled()) {
-      val delegationTokenManager =
-        new HadoopDelegationTokenManager(conf, scheduler.sc.hadoopConfiguration, localEndpoint)
-      val ugi = UserGroupInformation.getCurrentUser()
-      val tokens = if (delegationTokenManager.renewalEnabled) {
-        delegationTokenManager.start()
-      } else {
-        val creds = ugi.getCredentials()
-        delegationTokenManager.obtainDelegationTokens(creds)
-        if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
-          SparkHadoopUtil.get.serialize(creds)
+      delegationTokenManager = Some(
+        new HadoopDelegationTokenManager(conf, scheduler.sc.hadoopConfiguration, localEndpoint))
+      delegationTokenManager.foreach { dtm =>
+        val ugi = UserGroupInformation.getCurrentUser()
+        val tokens = if (dtm.renewalEnabled) {
+          dtm.start()
         } else {
-          null
+          val creds = ugi.getCredentials()
+          dtm.obtainDelegationTokens(creds)
+          if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
+            SparkHadoopUtil.get.serialize(creds)
+          } else {
+            null
+          }
+        }
+        if (tokens != null) {
+          SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
         }
       }
-      SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
     }
   }
 }
