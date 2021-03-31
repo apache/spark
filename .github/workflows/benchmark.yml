@@ -1,0 +1,68 @@
+name: Run benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      class:
+        description: 'Benchmark class'
+        required: true
+        default: '*'
+      jdk:
+        description: 'JDK version: 8 or 11'
+        required: true
+        default: '8'
+
+jobs:
+  benchmark:
+    name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }})"
+    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
+      # In order to get diff files
+      with:
+        fetch-depth: 0
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Coursier local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/coursier
+        key: benchmark-coursier-${{ github.event.inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          benchmark-coursier-${{ github.event.inputs.jdk }}
+    - name: Install Java ${{ github.event.inputs.jdk }}
+      uses: actions/setup-java@v1
+      with:
+        java-version: ${{ github.event.inputs.jdk }}
+    - name: Run benchmarks
+      run: |
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl test:package
+        # Make less noisy
+        cp conf/log4j.properties.template conf/log4j.properties
+        sed -i 's/log4j.rootCategory=INFO, console/log4j.rootCategory=WARN, console/g' conf/log4j.properties
+        # In benchmark, we use local as master so set driver memory only. Note that GitHub Actions has 7 GB memory limit.
+        SPARK_GENERATE_BENCHMARK_FILES=1 bin/spark-submit \
+          --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \
+          --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`" \
+          "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
+          "${{ github.event.inputs.class }}"
+        # To keep the directory structure and file permissions, tar them
+        # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
+        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}.tar `git diff --name-only`
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v2
+      with:
+        name: benchmark-results-${{ github.event.inputs.jdk }}
+        path: benchmark-results-${{ github.event.inputs.jdk }}.tar
+
