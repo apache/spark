@@ -624,7 +624,7 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 java.lang.ArithmeticException
-Casting 4567890123456789 to short causes overflow
+Casting 4567890123456789 to smallint causes overflow
 
 
 -- !query

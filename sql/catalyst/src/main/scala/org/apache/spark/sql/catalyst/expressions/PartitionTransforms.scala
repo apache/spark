@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -32,7 +33,8 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  *   df.writeTo("catalog.db.table").partitionedBy($"category", days($"timestamp")).create()
  * }}}
  */
-abstract class PartitionTransformExpression extends Expression with Unevaluable {
+abstract class PartitionTransformExpression extends Expression with Unevaluable
+    with UnaryLike[Expression] {
   override def nullable: Boolean = true
 }
 
@@ -41,7 +43,6 @@ abstract class PartitionTransformExpression extends Expression with Unevaluable 
  */
 case class Years(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override def children: Seq[Expression] = Seq(child)
 }
 
 /**
@@ -49,7 +50,6 @@ case class Years(child: Expression) extends PartitionTransformExpression {
  */
 case class Months(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override def children: Seq[Expression] = Seq(child)
 }
 
 /**
@@ -57,7 +57,6 @@ case class Months(child: Expression) extends PartitionTransformExpression {
  */
 case class Days(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override def children: Seq[Expression] = Seq(child)
 }
 
 /**
@@ -65,7 +64,6 @@ case class Days(child: Expression) extends PartitionTransformExpression {
  */
 case class Hours(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override def children: Seq[Expression] = Seq(child)
 }
 
 /**
@@ -73,5 +71,4 @@ case class Hours(child: Expression) extends PartitionTransformExpression {
  */
 case class Bucket(numBuckets: Literal, child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override def children: Seq[Expression] = Seq(numBuckets, child)
 }

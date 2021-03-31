@@ -2681,4 +2681,71 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     assert(e.isInstanceOf[ArithmeticException])
     assert(e.getMessage.contains("/ by zero"))
   }
+
+  test("SPARK-34875: divide day-time interval by numeric") {
+    checkAnswer(
+      Seq((Duration.ZERO, 10.toByte)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ZERO))
+    checkAnswer(
+      Seq((Duration.ofDays(10), 3.toShort)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofDays(10).dividedBy(3)))
+    checkAnswer(
+      Seq((Duration.ofHours(1000), "2")).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofHours(500)))
+    checkAnswer(
+      Seq((Duration.of(1, ChronoUnit.MICROS).multipliedBy(Long.MaxValue), Long.MaxValue))
+        .toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.of(1, ChronoUnit.MICROS)))
+    checkAnswer(
+      Seq((Duration.ofMinutes(-1), 60L)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofSeconds(-1)))
+    checkAnswer(
+      Seq((Duration.ofDays(-1), 0.5f)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofDays(-2)))
+    checkAnswer(
+      Seq((Duration.ofMillis(10000000), 10000000d)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofMillis(1)))
+    checkAnswer(
+      Seq((Duration.of(-1, ChronoUnit.MICROS), BigDecimal(10000.0001)))
+        .toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.of(-1, ChronoUnit.MICROS).multipliedBy(10000).dividedBy(100000001)))
+
+    val e = intercept[SparkException] {
+      Seq((Duration.ofDays(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e.isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("/ by zero"))
+  }
+
+  test("SPARK-34896: return day-time interval from dates subtraction") {
+    withSQLConf(
+      SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+      SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
+      outstandingTimezonesIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid) {
+          Seq(
+            (LocalDate.of(1582, 10, 15), LocalDate.of(1582, 10, 4)),
+            (LocalDate.of(1900, 10, 1), LocalDate.of(1900, 10, 1)),
+            (LocalDate.of(1969, 12, 1), LocalDate.of(1970, 1, 1)),
+            (LocalDate.of(2021, 3, 1), LocalDate.of(2020, 2, 29)),
+            (LocalDate.of(2021, 3, 15), LocalDate.of(2021, 3, 14)),
+            (LocalDate.of(1, 1, 1), LocalDate.of(2021, 3, 29))
+          ).foreach { case (end, start) =>
+            val df = Seq((end, start)).toDF("end", "start")
+            val daysBetween = Duration.ofDays(ChronoUnit.DAYS.between(start, end))
+            checkAnswer(df.select($"end" - $"start"), Row(daysBetween))
+          }
+        }
+      }
+
+      val e = intercept[SparkException] {
+        Seq((LocalDate.ofEpochDay(0), LocalDate.of(500000, 1, 1)))
+          .toDF("start", "end")
+          .select($"end" - $"start")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+    }
+  }
 }
