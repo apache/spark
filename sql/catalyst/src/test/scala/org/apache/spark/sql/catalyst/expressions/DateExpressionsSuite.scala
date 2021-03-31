@@ -1227,6 +1227,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Duration.ZERO)
       }.getMessage
       assert(errMsg.contains("overflow"))
+
+      Seq(false, true).foreach { legacy =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (end: Expression, start: Expression) => SubtractTimestamps(end, start, legacy, Some(tz)),
+          TimestampType, TimestampType)
+      }
     }
   }
 
