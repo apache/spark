@@ -85,7 +85,7 @@ select c7, c8, v, s from char_tbl4 where v = 'Spark ';
 select c7, c8, v, s from char_tbl4 order by c7;
 select c7, c8, v, s from char_tbl4 order by v;
 
-select ascii(c7), ascii(c8), ascii(v), ascii(s), from char_tbl4;
+select ascii(c7), ascii(c8), ascii(v), ascii(s) from char_tbl4;
 select base64(c7), base64(c8), base64(v), ascii(s) from char_tbl4;
 select bit_length(c7), bit_length(c8), bit_length(v), bit_length(s) from char_tbl4;
 select char_length(c7), char_length(c8), char_length(v), char_length(s) from char_tbl4;

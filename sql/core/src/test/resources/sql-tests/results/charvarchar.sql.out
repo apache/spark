@@ -800,12 +800,19 @@ NetEase	NetEase 	Spark-	NetEase
 
 
 -- !query
-select ascii(c7), ascii(c8), ascii(v), ascii(s), from char_tbl4
+select ascii(c7), ascii(c8), ascii(v), ascii(s) from char_tbl4
 -- !query schema
-struct<>
+struct<ascii(c7):int,ascii(c8):int,ascii(v):int,ascii(s):int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'c7' given input columns: []; line 1 pos 13
+78	78	78	78
+78	78	83	78
+78	78	83	78
+78	78	83	78
+78	78	83	78
+78	78	83	78
+78	78	83	78
+NULL	NULL	83	NULL
+NULL	NULL	NULL	NULL
 
 
 -- !query
