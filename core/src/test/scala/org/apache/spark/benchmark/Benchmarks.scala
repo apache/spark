@@ -82,6 +82,8 @@ object Benchmarks {
         FileSystems.getDefault.getPathMatcher(s"glob:$pattern"))
       if (
           info.getName.endsWith("Benchmark") &&
+          // TPCDSQueryBenchmark requires setup and arguments. Exclude it for now.
+          !info.getName.endsWith("TPCDSQueryBenchmark") &&
           matcher.forall(_.matches(Paths.get(info.getName))) &&
           Try(runBenchmark).isSuccess && // Does this has a main method?
           !Modifier.isAbstract(clazz.getModifiers) // Is this a regular class?
