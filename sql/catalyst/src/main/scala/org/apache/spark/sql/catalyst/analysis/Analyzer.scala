@@ -266,7 +266,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
-      SubstituteUnresolvedOrdinals ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
