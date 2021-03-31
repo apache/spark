@@ -428,3 +428,51 @@ jobs:
     - name: Build with SBT
       run: |
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Phadoop-2.7 compile test:compile
+
+  tpcds-1g:
+    name: Run TPC-DS queries with SF=1
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
+    - name: Cache TPC-DS generated data
+      id: cache-tpcds-sf-1
+      uses: actions/cache@v2
+      with:
+        path: ./tpcds-sf-1
+        key: tpcds-${{ hashFiles('tpcds-sf-1/.spark-tpcds-sf-1.md5') }}
+        restore-keys: |
+          tpcds-
+    - name: Checkout TPC-DS (SF=1) generated data repository
+      if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
+      uses: actions/checkout@v2
+      with:
+        repository: maropu/spark-tpcds-sf-1
+        ref: 6b660a53091bd6d23cbe58b0f09aae08e71cc667
+        path: ./tpcds-sf-1
+    - name: Cache Coursier local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/coursier
+        key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          tpcds-coursier-
+    - name: Install Java 8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 8
+    - name: Run TPC-DS queries
+      run: |
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
+    - name: Upload test results to report
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-results-tpcds--8-hadoop3.2-hive2.3
+        path: "**/target/test-reports/*.xml"
+    - name: Upload unit tests log files
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: unit-tests-log-tpcds--8-hadoop3.2-hive2.3
+        path: "**/target/unit-tests.log"
