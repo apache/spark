@@ -369,9 +369,6 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     val plan1 = JoinPlan(null, null, null, Cost(300, 80))
     val plan2 = JoinPlan(null, null, null, Cost(500, 30))
 
-    // cost1 = 300*0.7 + 80*0.3 = 234
-    // cost2 = 500*0.7 + 30*0.3 = 359
-
     assert(!plan1.betterThan(plan1, conf))
     assert(!plan2.betterThan(plan2, conf))
 
