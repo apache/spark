@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -157,11 +158,11 @@ object GroupingSets {
   since = "2.0.0",
   group = "agg_funcs")
 // scalastyle:on line.size.limit line.contains.tab
-case class Grouping(child: Expression) extends Expression with Unevaluable {
+case class Grouping(child: Expression) extends Expression with Unevaluable
+    with UnaryLike[Expression] {
   @transient
   override lazy val references: AttributeSet =
     AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
-  override def children: Seq[Expression] = child :: Nil
   override def dataType: DataType = ByteType
   override def nullable: Boolean = false
 }

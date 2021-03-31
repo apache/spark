@@ -3112,6 +3112,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_INTERVAL_ENABLED = buildConf("spark.sql.legacy.interval.enabled")
+    .internal()
+    .doc("When set to true, Spark SQL uses the mixed legacy interval type `CalendarIntervalType` " +
+      "instead of the ANSI compliant interval types `YearMonthIntervalType` and " +
+      "`DayTimeIntervalType`. For instance, the date subtraction expression returns " +
+      "`CalendarIntervalType` when the SQL config is set to `true` otherwise an ANSI interval.")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3793,6 +3803,8 @@ class SQLConf extends Serializable with Logging {
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
+
+  def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

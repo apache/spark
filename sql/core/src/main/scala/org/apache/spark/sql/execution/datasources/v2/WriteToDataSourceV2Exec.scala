@@ -28,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -44,8 +44,8 @@ import org.apache.spark.util.{LongAccumulator, Utils}
  */
 @deprecated("Use specific logical plans like AppendData instead", "2.4.0")
 case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
-  extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Seq(query)
+  extends UnaryNode {
+  override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
 }
 
