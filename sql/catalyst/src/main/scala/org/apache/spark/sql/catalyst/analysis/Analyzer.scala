@@ -1950,15 +1950,38 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
       case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
-        groups.exists(_.isInstanceOf[UnresolvedOrdinal]) =>
-        val newGroups = groups.map {
-          case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
-            aggs(index - 1)
-          case ordinal @ UnresolvedOrdinal(index) =>
-            throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
-          case o => o
-        }
+        groups.exists(containUnresolvedOrdinal) =>
+        val newGroups = groups.map((resolveGroupByExpressionOrdinal(_, aggs)))
         Aggregate(newGroups, aggs, child)
+    }
+
+    private def containUnresolvedOrdinal(e: Expression): Boolean = e match {
+      case _: UnresolvedOrdinal => true
+      case Cube(_, groupByExprs) => groupByExprs.exists(containUnresolvedOrdinal)
+      case Rollup(_, groupByExprs) => groupByExprs.exists(containUnresolvedOrdinal)
+      case GroupingSets(_, flatGroupingSets, groupByExprs) =>
+        flatGroupingSets.exists(containUnresolvedOrdinal) ||
+          groupByExprs.exists(containUnresolvedOrdinal)
+      case _ => false
+    }
+
+    private def resolveGroupByExpressionOrdinal(
+        expr: Expression,
+        aggs: Seq[Expression]): Expression = expr match {
+      case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
+        aggs(index - 1)
+      case ordinal @ UnresolvedOrdinal(index) =>
+        throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
+      case cube @ Cube(_, groupByExprs) =>
+        cube.copy(children = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
+      case rollup @ Rollup(_, groupByExprs) =>
+        rollup.copy(children = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
+      case groupingSets @ GroupingSets(_, flatGroupingSets, groupByExprs) =>
+        groupingSets.copy(
+          flatGroupingSets = flatGroupingSets.map(resolveGroupByExpressionOrdinal(_, aggs)),
+          groupByExprs = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs))
+        )
+      case others => others
     }
   }
 

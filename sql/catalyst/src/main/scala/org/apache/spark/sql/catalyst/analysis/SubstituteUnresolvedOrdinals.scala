@@ -36,7 +36,7 @@ object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def resolveOrdinal(expression: Expression): Expression = expression match {
+  private def substituteUnresolvedOrdinal(expression: Expression): Expression = expression match {
     case ordinal @ Literal(index: Int, IntegerType) =>
       withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
     case e => e
@@ -57,13 +57,14 @@ object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
         case ordinal @ Literal(index: Int, IntegerType) =>
           withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
         case cube @ Cube(_, children) =>
-          withOrigin(cube.origin)(cube.copy(children = children.map(resolveOrdinal)))
+          withOrigin(cube.origin)(cube.copy(children = children.map(substituteUnresolvedOrdinal)))
         case rollup @ Rollup(_, children) =>
-          withOrigin(rollup.origin)(rollup.copy(children = children.map(resolveOrdinal)))
-        case groupingSets@GroupingSets(_, flatGroupingSets, groupByExprs) =>
+          withOrigin(rollup.origin)(rollup.copy(
+            children = children.map(substituteUnresolvedOrdinal)))
+        case groupingSets @ GroupingSets(_, flatGroupingSets, groupByExprs) =>
           withOrigin(groupingSets.origin)(groupingSets.copy(
-            flatGroupingSets = flatGroupingSets.map(resolveOrdinal),
-            groupByExprs = groupByExprs.map(resolveOrdinal)))
+            flatGroupingSets = flatGroupingSets.map(substituteUnresolvedOrdinal),
+            groupByExprs = groupByExprs.map(substituteUnresolvedOrdinal)))
         case other => other
       }
       withOrigin(a.origin)(a.copy(groupingExpressions = newGroups))
