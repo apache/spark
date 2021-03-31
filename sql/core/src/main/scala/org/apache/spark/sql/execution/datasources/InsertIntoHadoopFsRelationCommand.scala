@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.IOException
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
