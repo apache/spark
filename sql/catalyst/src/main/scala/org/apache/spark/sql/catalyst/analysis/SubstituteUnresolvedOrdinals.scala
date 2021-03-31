@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cube, Expression, Literal, Rollup, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GroupingSets, LogicalPlan, Sort}
+import org.apache.spark.sql.catalyst.expressions.{Cube, Expression, GroupingSets, Literal, Rollup, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.types.IntegerType
@@ -29,8 +29,10 @@ import org.apache.spark.sql.types.IntegerType
 object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
   private def containIntLiteral(e: Expression): Boolean = e match {
     case Literal(_, IntegerType) => true
-    case Cube(groupByExprs) => groupByExprs.exists(containIntLiteral)
-    case Rollup(groupByExprs) => groupByExprs.exists(containIntLiteral)
+    case Cube(_, groupByExprs) => groupByExprs.exists(containIntLiteral)
+    case Rollup(_, groupByExprs) => groupByExprs.exists(containIntLiteral)
+    case GroupingSets(_, flatGroupingSets, groupByExprs) =>
+      flatGroupingSets.exists(containIntLiteral) || groupByExprs.exists(containIntLiteral)
     case _ => false
   }
 
@@ -54,19 +56,16 @@ object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
       val newGroups = a.groupingExpressions.map {
         case ordinal @ Literal(index: Int, IntegerType) =>
           withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
-        case cube @ Cube(groupByExprs) =>
-          withOrigin(cube.origin)(cube.copy(groupByExprs = groupByExprs.map(resolveOrdinal)))
-        case rollup @ Rollup(groupByExprs) =>
-          withOrigin(rollup.origin)(rollup.copy(groupByExprs = groupByExprs.map(resolveOrdinal)))
+        case cube @ Cube(_, children) =>
+          withOrigin(cube.origin)(cube.copy(children = children.map(resolveOrdinal)))
+        case rollup @ Rollup(_, children) =>
+          withOrigin(rollup.origin)(rollup.copy(children = children.map(resolveOrdinal)))
+        case groupingSets@GroupingSets(_, flatGroupingSets, groupByExprs) =>
+          withOrigin(groupingSets.origin)(groupingSets.copy(
+            flatGroupingSets = flatGroupingSets.map(resolveOrdinal),
+            groupByExprs = groupByExprs.map(resolveOrdinal)))
         case other => other
       }
       withOrigin(a.origin)(a.copy(groupingExpressions = newGroups))
-
-    case gs: GroupingSets if conf.orderByOrdinal &&
-      (gs.selectedGroupByExprs.exists(_.exists(containIntLiteral)) ||
-        gs.groupByExprs.exists(containIntLiteral)) =>
-      withOrigin(gs.origin)(gs.copy(
-        selectedGroupByExprs = gs.selectedGroupByExprs.map(_.map(resolveOrdinal)),
-        groupByExprs = gs.groupByExprs.map(resolveOrdinal)))
   }
 }

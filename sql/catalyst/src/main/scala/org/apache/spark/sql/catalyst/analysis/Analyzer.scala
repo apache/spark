@@ -1960,25 +1960,6 @@ class Analyzer(override val catalogManager: CatalogManager)
           case o => o
         }
         Aggregate(newGroups, aggs, child)
-
-      case GroupingSets(selectedGroups, groups, child, aggs) if aggs.forall(_.resolved) &&
-        (groups.exists(_.find(_.isInstanceOf[UnresolvedOrdinal]).isDefined) ||
-          selectedGroups.exists(_.exists(_.find(_.isInstanceOf[UnresolvedOrdinal]).isDefined))) =>
-        val newSelectedGroups = selectedGroups.map(_.map(resolveOrdinal(aggs, _)))
-        val newGroups = groups.map(resolveOrdinal(aggs, _))
-        GroupingSets(newSelectedGroups, newGroups, child, aggs)
-    }
-
-    def resolveOrdinal(aggs: Seq[Expression], expr: Expression): Expression = {
-      expr.transformDown {
-        case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
-          aggs(index - 1)
-        case ordinal @ UnresolvedOrdinal(index) =>
-          ordinal.failAnalysis(
-            s"GROUP BY position $index is not in select list " +
-              s"(valid range is [1, ${aggs.size}])")
-        case o => o
-      }
     }
   }
 
