@@ -214,7 +214,7 @@ object GroupingID {
 }
 
 
-object GroupByOperator {
+object GroupingAnalytics {
   def unapply(exprs: Seq[Expression]):
   Option[(Seq[Seq[Expression]], Seq[Seq[Expression]], Seq[Expression])] = {
 
