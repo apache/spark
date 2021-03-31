@@ -36,8 +36,7 @@ private[v1] class StagesResource extends BaseAppResource {
       @QueryParam("details") @DefaultValue("false") details: Boolean,
       @QueryParam("withSummaries") @DefaultValue("false") withSummaries: Boolean,
       @QueryParam("quantiles") @DefaultValue("0.0,0.25,0.5,0.75,1.0") quantileString: String,
-      @QueryParam("taskStatus") taskStatus: JList[TaskStatus])
-  : Seq[StageData] = {
+      @QueryParam("taskStatus") taskStatus: JList[TaskStatus]): Seq[StageData] = {
     withUI {
       val quantiles = parseQuantileString(quantileString)
       ui => {
