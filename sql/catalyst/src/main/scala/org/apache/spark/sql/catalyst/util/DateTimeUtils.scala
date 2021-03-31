@@ -970,4 +970,20 @@ object DateTimeUtils {
     val days = period.getDays
     new CalendarInterval(months, days, 0)
   }
+
+  /**
+   * Subtracts two timestamps expressed as microseconds since 1970-01-01 00:00:00Z, and returns
+   * the difference in microseconds between local timestamps at the given time zone.
+   *
+   * @param end The end timestamp as microseconds since the epoch, exclusive
+   * @param start The end timestamp as microseconds since the epoch, inclusive
+   * @param zoneId The time zone ID in which the subtraction is performed
+   * @return The difference in microseconds between local timestamps corresponded to the input
+   *         instants `end` and `start`.
+   */
+  def subtractTimestamps(end: Long, start: Long, zoneId: ZoneId): Long = {
+    val localEndTs = getLocalDateTime(end, zoneId)
+    val localStartTs = getLocalDateTime(start, zoneId)
+    ChronoUnit.MICROS.between(localStartTs, localEndTs)
+  }
 }
