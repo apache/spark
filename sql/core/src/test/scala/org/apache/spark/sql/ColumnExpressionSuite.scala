@@ -2716,4 +2716,36 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     assert(e.isInstanceOf[ArithmeticException])
     assert(e.getMessage.contains("/ by zero"))
   }
+
+  test("SPARK-34896: return day-time interval from dates subtraction") {
+    withSQLConf(
+      SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+      SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
+      outstandingTimezonesIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid) {
+          Seq(
+            (LocalDate.of(1582, 10, 15), LocalDate.of(1582, 10, 4)),
+            (LocalDate.of(1900, 10, 1), LocalDate.of(1900, 10, 1)),
+            (LocalDate.of(1969, 12, 1), LocalDate.of(1970, 1, 1)),
+            (LocalDate.of(2021, 3, 1), LocalDate.of(2020, 2, 29)),
+            (LocalDate.of(2021, 3, 15), LocalDate.of(2021, 3, 14)),
+            (LocalDate.of(1, 1, 1), LocalDate.of(2021, 3, 29))
+          ).foreach { case (end, start) =>
+            val df = Seq((end, start)).toDF("end", "start")
+            val daysBetween = Duration.ofDays(ChronoUnit.DAYS.between(start, end))
+            checkAnswer(df.select($"end" - $"start"), Row(daysBetween))
+          }
+        }
+      }
+
+      val e = intercept[SparkException] {
+        Seq((LocalDate.ofEpochDay(0), LocalDate.of(500000, 1, 1)))
+          .toDF("start", "end")
+          .select($"end" - $"start")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+    }
+  }
 }
