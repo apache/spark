@@ -20,7 +20,7 @@ from sqlalchemy import func
 
 from airflow.api_connexion import security
 from airflow.api_connexion.exceptions import NotFound
-from airflow.api_connexion.parameters import check_limit, format_parameters
+from airflow.api_connexion.parameters import apply_sorting, check_limit, format_parameters
 from airflow.api_connexion.schemas.user_schema import (
     UserCollection,
     user_collection_item_schema,
@@ -41,11 +41,24 @@ def get_user(username):
 
 @security.requires_access([(permissions.ACTION_CAN_LIST, permissions.RESOURCE_USER_DB_MODELVIEW)])
 @format_parameters({'limit': check_limit})
-def get_users(limit=None, offset=None):
+def get_users(limit, order_by='id', offset=None):
     """Get users"""
     appbuilder = current_app.appbuilder
     session = appbuilder.get_session
     total_entries = session.query(func.count(User.id)).scalar()
-    users = session.query(User).order_by(User.id).offset(offset).limit(limit).all()
+    to_replace = {"user_id": "id"}
+    allowed_filter_attrs = [
+        "user_id",
+        'id',
+        "first_name",
+        "last_name",
+        "user_name",
+        "email",
+        "is_active",
+        "role",
+    ]
+    query = session.query(User)
+    query = apply_sorting(query, order_by, to_replace, allowed_filter_attrs)
+    users = query.offset(offset).limit(limit).all()
 
     return user_collection_schema.dump(UserCollection(users=users, total_entries=total_entries))

@@ -203,6 +203,15 @@ class TestGetUsersPagination(TestUserEndpoint):
         assert response.json["total_entries"] == 200 + len(['test', 'test_no_permissions'])
         assert len(response.json["users"]) == 100
 
+    def test_should_response_400_with_invalid_order_by(self):
+        users = self._create_users(2)
+        self.session.add_all(users)
+        self.session.commit()
+        response = self.client.get("/api/v1/users?order_by=myname", environ_overrides={'REMOTE_USER': "test"})
+        assert response.status_code == 400
+        msg = "Ordering with 'myname' is disallowed or the attribute does not exist on the model"
+        assert response.json['detail'] == msg
+
     def test_limit_of_zero_should_return_default(self):
         users = self._create_users(200)
         self.session.add_all(users)
