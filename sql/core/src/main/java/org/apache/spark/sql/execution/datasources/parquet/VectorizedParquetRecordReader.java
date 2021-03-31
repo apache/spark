@@ -280,7 +280,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     int num = (int) Math.min((long) capacity, totalCountLoadedSoFar - rowsReturned);
     for (int i = 0; i < columnReaders.length; ++i) {
       if (columnReaders[i] == null) continue;
-      columnReaders[i].readBatch(num, columnVectors[i]);
+      columnReaders[i].readBatch(num, capacity, columnVectors[i]);
     }
     rowsReturned += num;
     columnarBatch.setNumRows(num);
@@ -337,7 +337,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         convertTz,
         datetimeRebaseMode,
         int96RebaseMode,
-        pages.getRowIndexes());
+        pages.getRowIndexes().orElse(null));
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

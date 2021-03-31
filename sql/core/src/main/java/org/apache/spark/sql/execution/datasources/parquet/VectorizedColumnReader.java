@@ -113,10 +113,10 @@ public class VectorizedColumnReader {
   private final String int96RebaseMode;
 
   // TODO handle and init these filed properly
-  private Optional<PrimitiveIterator.OfLong> rowIndexesIterator;
-  private long[] rowIndexes;
-  private WritableColumnVector tempVector;
-  private Long currentRow;
+  private PrimitiveIterator.OfLong rowIndexesIterator;
+  private long[] rowIndexes; // row indexes of current row group
+  private long currentRow = 0; // current row to read
+  private WritableColumnVector tempColumnVector;
 
   private boolean isDecimalTypeMatched(DataType dt) {
     DecimalType d = (DecimalType) dt;
@@ -148,7 +148,7 @@ public class VectorizedColumnReader {
       ZoneId convertTz,
       String datetimeRebaseMode,
       String int96RebaseMode,
-      Optional<PrimitiveIterator.OfLong> rowIndexesIterator
+      PrimitiveIterator.OfLong rowIndexesIterator
       ) throws IOException {
     this.rowIndexesIterator = rowIndexesIterator;
     this.descriptor = descriptor;
@@ -258,30 +258,27 @@ public class VectorizedColumnReader {
   /**
    * Reads `total` values from this columnReader into column.
    */
-  void readBatch(int total, WritableColumnVector _column) throws IOException {
+  void readBatch(int total, int columnSize, WritableColumnVector resultColumn) throws IOException {
+    PrimitiveType.PrimitiveTypeName typeName =
+            descriptor.getPrimitiveType().getPrimitiveTypeName();
+
     WritableColumnVector column;
-    if (rowIndexesIterator.isPresent()) {
-      if (tempVector == null) {
-        switch (descriptor.getPrimitiveType().getPrimitiveTypeName()) {
-          case INT64:
-            tempVector = new OnHeapColumnVector(4096, DataTypes.LongType);
-            break;
-          case BINARY:
-            tempVector = new OnHeapColumnVector(4096, DataTypes.BinaryType);
-            break;
-        }
+
+    if (rowIndexesIterator != null) {
+      if (tempColumnVector == null) {
+        tempColumnVector = new OnHeapColumnVector(columnSize, resultColumn.dataType());
       }
-      column = tempVector;
+      column = tempColumnVector;
       column.reset();
 
       rowIndexes = new long[total];
       for (int i = 0; i < total; i++) {
-        rowIndexes[i] = rowIndexesIterator.get().next();
+        rowIndexes[i] = rowIndexesIterator.next();
       }
     } else {
-      column = _column;
+      // write to result column directly if no row indexes if present
+      column = resultColumn;
     }
-
 
     int rowId = 0;
     WritableColumnVector dictionaryIds = null;
@@ -300,8 +297,6 @@ public class VectorizedColumnReader {
         leftInPage = (int) (endOfPageValueCount - valuesRead);
       }
       int num = Math.min(total, leftInPage);
-      PrimitiveType.PrimitiveTypeName typeName =
-        descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
         // Read and decode dictionary ids.
         defColumn.readIntegers(
@@ -373,21 +368,57 @@ public class VectorizedColumnReader {
         }
       }
 
-      if (rowIndexesIterator.isPresent()) {
+      if (rowIndexesIterator != null) {
+        // copy values from temp column to result column
         boolean continuousRange = (rowIndexes[total - 1] - rowIndexes[0] + 1) == total;
         if (continuousRange) {
           // skip to offset pos and dump all remaining values
           int offset = (int) (rowIndexes[rowId] - currentRow);
           if (offset < num) {
+            int validValueNum = num - offset;
             switch (typeName) {
-              case INT64:
-                _column.putLongs(rowId, num - offset, column.getLongs(offset, num - offset), 0);
-                break;
-              case BINARY:
-                for (int i = 0; i < num - offset; i++) {
-                  _column.putByteArray(rowId + i, column.getBinary(i + offset));
+              case BOOLEAN:
+                for (int i = 0; i < validValueNum; i++) {
+                  resultColumn.putBoolean(rowId + i, column.getBoolean(offset + i));
                 }
                 break;
+              case INT32:// TODO handle column types
+                resultColumn.putInts(rowId, validValueNum, column.getInts(offset, validValueNum), 0);
+                break;
+              case INT64:// TODO handle column types
+                resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
+                break;
+              case FLOAT:
+                resultColumn.putFloats(rowId, validValueNum, column.getFloats(offset, validValueNum), 0);
+                break;
+              case DOUBLE:
+                resultColumn.putDoubles(rowId, validValueNum, column.getDoubles(offset, validValueNum), 0);
+                break;
+              case INT96:
+              case BINARY:
+                if (column.dataType() == DataTypes.TimestampType) {
+                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
+                } else {
+                  for (int i = 0; i < num - offset; i++) {
+                    resultColumn.putByteArray(rowId + i, column.getBinary(offset + i));
+                  }
+                }
+                break;
+              case FIXED_LEN_BYTE_ARRAY:
+                if (canReadAsIntDecimal(column.dataType())) {
+                  resultColumn.putInts(rowId, validValueNum, column.getInts(offset, validValueNum), 0);
+                } else if (canReadAsLongDecimal(column.dataType())) {
+                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
+                } else if (canReadAsBinaryDecimal(column.dataType())) {
+                  for (int i = 0; i < num - offset; i++) {
+                    resultColumn.putByteArray(rowId + i, column.getBinary(offset + i));
+                  }
+                } else {
+                  throw constructConvertNotSupportedException(descriptor, column);
+                }
+                break;
+              default:
+                throw new IOException("Unsupported type: " + typeName);
             }
             rowId += (num - offset);
             total -= (num - offset);
@@ -403,10 +434,10 @@ public class VectorizedColumnReader {
             }
             switch (typeName) {
               case INT64:
-                _column.putLong(rowId, column.getLong(i));
+                resultColumn.putLong(rowId, column.getLong(i));
                 break;
               case BINARY:
-                _column.putByteArray(rowId, column.getBinary(i));
+                resultColumn.putByteArray(rowId, column.getBinary(i));
             }
             rowId++;
             total--;
