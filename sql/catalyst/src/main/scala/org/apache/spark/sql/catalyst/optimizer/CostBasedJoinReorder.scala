@@ -349,11 +349,14 @@ object JoinReorderDP extends PredicateHelper with Logging {
     }
 
     def betterThan(other: JoinPlan, conf: SQLConf): Boolean = {
-      val thisCost = BigDecimal(this.planCost.card) * conf.joinReorderCardWeight +
-        BigDecimal(this.planCost.size) * (1 - conf.joinReorderCardWeight)
-      val otherCost = BigDecimal(other.planCost.card) * conf.joinReorderCardWeight +
-        BigDecimal(other.planCost.size) * (1 - conf.joinReorderCardWeight)
-      thisCost < otherCost
+      if (other.planCost.card == 0 || other.planCost.size == 0) {
+        false
+      } else {
+        val relativeRows = BigDecimal(this.planCost.card) / BigDecimal(other.planCost.card)
+        val relativeSize = BigDecimal(this.planCost.size) / BigDecimal(other.planCost.size)
+        Math.pow(relativeRows.doubleValue(), conf.joinReorderCardWeight) *
+          Math.pow(relativeSize.doubleValue(), 1 - conf.joinReorderCardWeight) < 1
+      }
     }
   }
 }
