@@ -479,11 +479,10 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
     <td>
       A list of all attempts for the given stage.
-        <br><code>?details=true</code> lists all attempts with task data for the given stage.
-        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
         <br><code>?details=true</code> lists all attempts with the task data for the given stage.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
         <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution of each attempt.
-        <br><code>?quantiles=0.1,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
+        <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
       <br>Example:
         <br><code>?details=true</code>
         <br><code>?details=true&taskStatus=RUNNING</code>
@@ -498,7 +497,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
         <br><code>?details=true</code> lists all task data for the given stage attempt.
         <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
         <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution for the given stage attempt.
-        <br><code>?quantiles=0.1,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
+        <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
       <br>Example:
         <br><code>?details=true</code>
         <br><code>?details=true&taskStatus=RUNNING</code>
