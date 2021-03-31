@@ -23,7 +23,7 @@ import java.nio.file.Files
 import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION

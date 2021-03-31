@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 trait LocalStreamingContext extends BeforeAndAfterEach { self: Suite =>
 
   @transient var ssc: StreamingContext = _
-  @transient var stopSparkContext: Boolean = true
+  @transient val stopSparkContext: Boolean = true
 
   override def afterEach(): Unit = {
     try {

@@ -399,7 +399,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val df = Seq((1, "1")).toDF("key", "value")
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
-    assert(e.message.contains("cannot resolve '`invalid`' given input columns: [key, value]"))
+    assert(e.message.contains("cannot resolve 'invalid' given input columns: [key, value]"))
   }
 
   test("numerical aggregate functions on string column") {
@@ -669,6 +669,41 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("b", 2, null, null, null, null)))
   }
 
+  test("nth_value with ignoreNulls over offset window frame") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, nullStr),
+      ("b", 1, nullStr),
+      ("b", 2, nullStr)).
+      toDF("key", "order", "value")
+    val window1 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    val window2 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window1),
+        nth_value($"value", 2, ignoreNulls = false).over(window1),
+        nth_value($"value", 2, ignoreNulls = true).over(window1),
+        nth_value($"value", 2).over(window2),
+        nth_value($"value", 2, ignoreNulls = false).over(window2),
+        nth_value($"value", 2, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 0, "x", "x", "y", null, null, null),
+        Row("a", 1, "x", "x", "y", "x", "x", null),
+        Row("a", 2, "x", "x", "y", "x", "x", "y"),
+        Row("a", 3, "x", "x", "y", "x", "x", "y"),
+        Row("a", 4, "x", "x", "y", "x", "x", "y"),
+        Row("b", 1, null, null, null, null, null, null),
+        Row("b", 2, null, null, null, null, null, null)))
+  }
+
   test("nth_value on descending ordered window") {
     val nullStr: String = null
     val df = Seq(
@@ -698,6 +733,61 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("b", 1, "l", "l", "k"),
         Row("b", 2, "l", "l", null),
         Row("b", 3, null, null, null)))
+  }
+
+  test("lead/lag with ignoreNulls") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("b", 2, nullStr),
+      ("c", 3, nullStr),
+      ("a", 4, "y"),
+      ("b", 5, nullStr),
+      ("a", 6, "z"),
+      ("a", 7, "v"),
+      ("a", 8, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.orderBy($"order")
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        $"value",
+        lead($"value", 1).over(window),
+        lead($"value", 2).over(window),
+        lead($"value", 0, null, true).over(window),
+        lead($"value", 1, null, true).over(window),
+        lead($"value", 2, null, true).over(window),
+        lead($"value", 3, null, true).over(window),
+        lead(concat($"value", $"key"), 1, null, true).over(window),
+        lag($"value", 1).over(window),
+        lag($"value", 2).over(window),
+        lag($"value", 0, null, true).over(window),
+        lag($"value", 1, null, true).over(window),
+        lag($"value", 2, null, true).over(window),
+        lag($"value", 3, null, true).over(window),
+        lag(concat($"value", $"key"), 1, null, true).over(window))
+        .orderBy($"order"),
+      Seq(
+        Row("a", 0, null, "x", null, null, "x", "y", "z", "xa",
+          null, null, null, null, null, null, null),
+        Row("a", 1, "x", null, null, "x", "y", "z", "v", "ya",
+          null, null, "x", null, null, null, null),
+        Row("b", 2, null, null, "y", null, "y", "z", "v", "ya",
+          "x", null, null, "x", null, null, "xa"),
+        Row("c", 3, null, "y", null, null, "y", "z", "v", "ya",
+          null, "x", null, "x", null, null, "xa"),
+        Row("a", 4, "y", null, "z", "y", "z", "v", null, "za",
+          null, null, "y", "x", null, null, "xa"),
+        Row("b", 5, null, "z", "v", null, "z", "v", null, "za",
+          "y", null, null, "y", "x", null, "ya"),
+        Row("a", 6, "z", "v", null, "z", "v", null, null, "va",
+          null, "y", "z", "y", "x", null, "ya"),
+        Row("a", 7, "v", null, null, "v", null, null, null, null,
+          "z", null, "v", "z", "y", "x", "za"),
+        Row("a", 8, null, null, null, null, null, null, null, null,
+          "v", "z", null, "v", "z", "y", "va")))
   }
 
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
@@ -953,5 +1043,31 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       Seq(
         Row(Seq(-0.0f, 0.0f), Row(-0.0d, Double.NaN), Seq(Row(-0.0d, Double.NaN)), 2),
         Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
+  }
+
+  test("SPARK-34227: WindowFunctionFrame should clear its states during preparation") {
+    // This creates a single partition dataframe with 3 records:
+    //   "a", 0, null
+    //   "a", 1, "x"
+    //   "b", 0, null
+    val df = spark.range(0, 3, 1, 1).select(
+      when($"id" < 2, lit("a")).otherwise(lit("b")).as("key"),
+      ($"id" % 2).cast("int").as("order"),
+      when($"id" % 2 === 0, lit(null)).otherwise(lit("x")).as("value"))
+
+    val window1 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    val window2 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 1, ignoreNulls = true).over(window1),
+        nth_value($"value", 1, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 0, "x", null),
+        Row("a", 1, "x", "x"),
+        Row("b", 0, null, null)))
   }
 }

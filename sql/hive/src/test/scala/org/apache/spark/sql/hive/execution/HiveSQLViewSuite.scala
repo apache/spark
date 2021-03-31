@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.SQLViewSuite
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.{NullType, StructType}
 
 /**

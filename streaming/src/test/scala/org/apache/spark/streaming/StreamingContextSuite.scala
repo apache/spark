@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{File, NotSerializableException}
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
@@ -293,8 +294,7 @@ class StreamingContextSuite
     }
   }
 
-  // TODO (SPARK-31728): re-enable it
-  ignore("stop gracefully") {
+  test("stop gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.dummyTimeConfig", "3600s")
     val sc = new SparkContext(conf)
@@ -910,7 +910,7 @@ class StreamingContextSuite
   def createCorruptedCheckpoint(): String = {
     val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
     val fakeCheckpointFile = Checkpoint.checkpointFile(checkpointDirectory, Time(1000))
-    FileUtils.write(new File(fakeCheckpointFile.toString()), "blablabla")
+    FileUtils.write(new File(fakeCheckpointFile.toString()), "blablabla", StandardCharsets.UTF_8)
     assert(Checkpoint.getCheckpointFiles(checkpointDirectory).nonEmpty)
     checkpointDirectory
   }

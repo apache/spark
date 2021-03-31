@@ -147,6 +147,22 @@ public class JavaSQLDataSourceExample {
     // |file1.parquet|
     // +-------------+
     // $example off:load_with_path_glob_filter$
+    // $example on:load_with_modified_time_filter$
+    Dataset<Row> beforeFilterDF = spark.read().format("parquet")
+            // Only load files modified before 7/1/2020 at 05:30
+            .option("modifiedBefore", "2020-07-01T05:30:00")
+            // Only load files modified after 6/1/2020 at 05:30
+            .option("modifiedAfter", "2020-06-01T05:30:00")
+            // Interpret both times above relative to CST timezone
+            .option("timeZone", "CST")
+            .load("examples/src/main/resources/dir1");
+    beforeFilterDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // +-------------+
+    // $example off:load_with_modified_time_filter$
   }
 
   private static void runBasicDataSourceExample(SparkSession spark) {
@@ -188,15 +204,15 @@ public class JavaSQLDataSourceExample {
       .save("namesPartByColor.parquet");
     // $example off:write_partitioning$
     // $example on:write_partition_and_bucket$
-    peopleDF
+    usersDF
       .write()
       .partitionBy("favorite_color")
       .bucketBy(42, "name")
-      .saveAsTable("people_partitioned_bucketed");
+      .saveAsTable("users_partitioned_bucketed");
     // $example off:write_partition_and_bucket$
 
     spark.sql("DROP TABLE IF EXISTS people_bucketed");
-    spark.sql("DROP TABLE IF EXISTS people_partitioned_bucketed");
+    spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed");
   }
 
   private static void runBasicParquetExample(SparkSession spark) {

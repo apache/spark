@@ -40,7 +40,6 @@ import org.apache.hive.service.server.HiveServer2;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
-import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TServerEventHandler;
 import org.apache.thrift.transport.TTransport;
 import org.slf4j.Logger;
@@ -61,8 +60,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   protected int portNum;
   protected InetAddress serverIPAddress;
   protected String hiveHost;
-  protected TServer server;
-  protected org.eclipse.jetty.server.Server httpServer;
+  private Thread serverThread = null;
 
   private boolean isStarted = false;
   protected boolean isEmbedded = false;
@@ -177,26 +175,23 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     super.start();
     if (!isStarted && !isEmbedded) {
       initializeServer();
-      new Thread(this).start();
+      serverThread = new Thread(this);
+      serverThread.setName(getName());
+      serverThread.start();
       isStarted = true;
     }
   }
 
+  protected abstract void stopServer();
+
   @Override
   public synchronized void stop() {
     if (isStarted && !isEmbedded) {
-      if(server != null) {
-        server.stop();
-        LOG.info("Thrift server has stopped");
+      if (serverThread != null) {
+        serverThread.interrupt();
+        serverThread = null;
       }
-      if((httpServer != null) && httpServer.isStarted()) {
-        try {
-          httpServer.stop();
-          LOG.info("Http server has stopped");
-        } catch (Exception e) {
-          LOG.error("Error stopping Http server: ", e);
-        }
-      }
+      stopServer();
       isStarted = false;
     }
     super.stop();
@@ -260,6 +255,28 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       resp.setStatus(HiveSQLException.toTStatus(e));
     }
     return resp;
+  }
+
+  @Override
+  public TSetClientInfoResp SetClientInfo(TSetClientInfoReq req) throws TException {
+    // TODO: We don't do anything for now, just log this for debugging.
+    //       We may be able to make use of this later, e.g. for workload management.
+    if (req.isSetConfiguration()) {
+      StringBuilder sb = null;
+      for (Map.Entry<String, String> e : req.getConfiguration().entrySet()) {
+        if (sb == null) {
+          SessionHandle sh = new SessionHandle(req.getSessionHandle());
+          sb = new StringBuilder("Client information for ").append(sh).append(": ");
+        } else {
+          sb.append(", ");
+        }
+        sb.append(e.getKey()).append(" = ").append(e.getValue());
+      }
+      if (sb != null) {
+        LOG.info("{}", sb);
+      }
+    }
+    return new TSetClientInfoResp(OK_STATUS);
   }
 
   private String getIpAddress() {
@@ -673,6 +690,15 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   }
 
   protected abstract void initializeServer();
+
+  @Override
+  public TGetQueryIdResp GetQueryId(TGetQueryIdReq req) throws TException {
+    try {
+      return new TGetQueryIdResp(cliService.getQueryId(req.getOperationHandle()));
+    } catch (HiveSQLException e) {
+      throw new TException(e);
+    }
+  }
 
   @Override
   public abstract void run();

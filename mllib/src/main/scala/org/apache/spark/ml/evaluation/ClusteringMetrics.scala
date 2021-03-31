@@ -37,13 +37,18 @@ class ClusteringMetrics private[spark](dataset: Dataset[_]) {
 
   def getDistanceMeasure: String = distanceMeasure
 
-  def setDistanceMeasure(value: String) : Unit = distanceMeasure = value
+  def setDistanceMeasure(value: String) : this.type = {
+    require(value.equalsIgnoreCase("squaredEuclidean") ||
+      value.equalsIgnoreCase("cosine"))
+    distanceMeasure = value
+    this
+  }
 
   /**
    * Returns the silhouette score
    */
   @Since("3.1.0")
-  lazy val silhouette: Double = {
+  def silhouette(): Double = {
     val columns = dataset.columns.toSeq
     if (distanceMeasure.equalsIgnoreCase("squaredEuclidean")) {
       SquaredEuclideanSilhouette.computeSilhouetteScore(
@@ -127,7 +132,7 @@ private[evaluation] abstract class Silhouette {
  * `$a_{i}$` can be interpreted as how well `i` is assigned to its cluster
  * (the smaller the value, the better the assignment), while `$b_{i}$` is
  * a measure of how well `i` has not been assigned to its "neighboring cluster",
- * ie. the nearest cluster to `i`.
+ * i.e. the nearest cluster to `i`.
  *
  * Unfortunately, the naive implementation of the algorithm requires to compute
  * the distance of each couple of points in the dataset. Since the computation of
@@ -486,7 +491,7 @@ private[evaluation] object CosineSilhouette extends Silhouette {
    *                      for the point.
    * @param weightCol The name of the column which contains the instance weight.
    * @return A [[scala.collection.immutable.Map]] which associates each cluster id to a
-   *         its statistics (ie. the precomputed values `N` and `$\Omega_{\Gamma}$`).
+   *         its statistics (i.e. the precomputed values `N` and `$\Omega_{\Gamma}$`).
    */
   def computeClusterStats(
       df: DataFrame,

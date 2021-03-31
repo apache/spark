@@ -33,7 +33,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -488,7 +488,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: getPartitionsByFilter") {
       // Only one partition [1, 1] for key2 == 1
       val result = client.getPartitionsByFilter(client.getTable("default", "src_part"),
-        Seq(EqualTo(AttributeReference("key2", IntegerType)(), Literal(1))))
+        Seq(EqualTo(AttributeReference("key2", IntegerType)(), Literal(1))),
+        versionSpark.conf.sessionLocalTimeZone)
 
       // Hive 0.12 doesn't support getPartitionsByFilter, it ignores the filter condition.
       if (version != "0.12") {
@@ -591,6 +592,27 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
 
       assert(client.getPartitionOption("default", "src_part", spec).isEmpty)
+    }
+
+    test(s"$version: createPartitions if already exists") {
+      val partitions = Seq(CatalogTablePartition(
+        Map("key1" -> "101", "key2" -> "102"),
+        storageFormat))
+      try {
+        client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
+        val errMsg = intercept[PartitionsAlreadyExistException] {
+          client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
+        }.getMessage
+        assert(errMsg.contains("partitions already exists"))
+      } finally {
+        client.dropPartitions(
+          "default",
+          "src_part",
+          partitions.map(_.spec),
+          ignoreIfNotExists = true,
+          purge = false,
+          retainData = false)
+      }
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -797,6 +819,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         versionSpark.sql(
           """
             |CREATE TABLE tbl(c1 string)
+            |USING hive
             |PARTITIONED BY (ds STRING)
           """.stripMargin)
         versionSpark.sql("INSERT OVERWRITE TABLE tbl partition (ds='2') SELECT '1'")

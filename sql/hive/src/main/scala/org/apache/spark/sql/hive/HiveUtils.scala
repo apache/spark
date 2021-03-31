@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
-import scala.language.implicitConversions
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
@@ -61,7 +60,7 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_VERSION = buildStaticConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        "<code>0.12.0</code> through <code>2.3.7</code> and " +
+        "<code>0.12.0</code> through <code>2.3.8</code> and " +
         "<code>3.0.0</code> through <code>3.1.2</code>.")
     .version("1.4.0")
     .stringConf
@@ -78,7 +77,7 @@ private[spark] object HiveUtils extends Logging {
   val HIVE_METASTORE_JARS = buildStaticConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
-      | This property can be one of four options: "
+      | This property can be one of four options:
       | 1. "builtin"
       |   Use Hive ${builtinHiveVersion}, which is bundled with the Spark assembly when
       |   <code>-Phive</code> is enabled. When this option is chosen,
@@ -88,25 +87,28 @@ private[spark] object HiveUtils extends Logging {
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. "path"
       |   Use Hive jars configured by `spark.sql.hive.metastore.jars.path`
-      |   in comma separated format. Support both local or remote paths.
-      | 4. A classpath in the standard format for both Hive and Hadoop.
+      |   in comma separated format. Support both local or remote paths.The provided jars
+      |   should be the same version as ${HIVE_METASTORE_VERSION}.
+      | 4. A classpath in the standard format for both Hive and Hadoop. The provided jars
+      |   should be the same version as ${HIVE_METASTORE_VERSION}.
       """.stripMargin)
     .version("1.4.0")
     .stringConf
     .createWithDefault("builtin")
 
   val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
-    .doc(s"Comma separated URL of Hive jars, support both local and remote paths," +
-      s"Such as: " +
-      s" 1. file://path/to/jar/xxx.jar\n" +
-      s" 2. hdfs://nameservice/path/to/jar/xxx.jar\n" +
-      s" 3. /path/to/jar/ (path without URI scheme follow conf `fs.defaultFS`'s URI schema)\n" +
-      s" 4. [http/https/ftp]://path/to/jar/xxx.jar\n" +
-      s"Notice: `http/https/ftp` doesn't support wildcard, but other URLs support" +
-      s"nested path wildcard, Such as: " +
-      s" 1. file://path/to/jar/*, file://path/to/jar/*/*\n" +
-      s" 2. hdfs://nameservice/path/to/jar/*, hdfs://nameservice/path/to/jar/*/*\n" +
-      s"When ${HIVE_METASTORE_JARS.key} is set to `path`, we will use Hive jars configured by this")
+    .doc(s"""
+      | Comma-separated paths of the jars that used to instantiate the HiveMetastoreClient.
+      | This configuration is useful only when `{$HIVE_METASTORE_JARS.key}` is set as `path`.
+      | The paths can be any of the following format:
+      | 1. file://path/to/jar/foo.jar
+      | 2. hdfs://nameservice/path/to/jar/foo.jar
+      | 3. /path/to/jar/ (path without URI scheme follow conf `fs.defaultFS`'s URI schema)
+      | 4. [http/https/ftp]://path/to/jar/foo.jar
+      | Note that 1, 2, and 3 support wildcard. For example:
+      | 1. file://path/to/jar/*,file://path2/to/jar/*/*.jar
+      | 2. hdfs://nameservice/path/to/jar/*,hdfs://nameservice2/path/to/jar/*/*.jar
+      """.stripMargin)
     .version("3.1.0")
     .stringConf
     .toSequence
@@ -369,10 +371,10 @@ private[spark] object HiveUtils extends Logging {
           logWarning(s"Hive jar path '${file.getPath}' does not exist.")
           Nil
         } else {
-          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURL).toSeq
+          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURI.toURL).toSeq
         }
       } else {
-        file.toURL :: Nil
+        file.toURI.toURL :: Nil
       }
     }
 
@@ -460,7 +462,7 @@ private[spark] object HiveUtils extends Logging {
         version = metaVersion,
         sparkConf = conf,
         hadoopConf = hadoopConf,
-        execJars = jars.toSeq,
+        execJars = jars,
         config = configurations,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,

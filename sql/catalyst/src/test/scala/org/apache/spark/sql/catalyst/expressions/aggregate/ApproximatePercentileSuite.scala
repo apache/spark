@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{ArrayData, QuantileSummaries}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
-import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType}
+import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType}
 import org.apache.spark.util.SizeEstimator
 
 class ApproximatePercentileSuite extends SparkFunSuite {
@@ -170,12 +170,12 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     val defaultAccuracy = ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
     // sql, single percentile
     assertEqual(
-      s"percentile_approx(`a`, 0.5D, $defaultAccuracy)",
+      s"percentile_approx(a, 0.5D, $defaultAccuracy)",
       new ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D)).sql: String)
 
     // sql, array of percentile
     assertEqual(
-      s"percentile_approx(`a`, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
+      s"percentile_approx(a, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
       new ApproximatePercentile(
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))
@@ -183,13 +183,13 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
     // sql(isDistinct = false), single percentile
     assertEqual(
-      s"percentile_approx(`a`, 0.5D, $defaultAccuracy)",
+      s"percentile_approx(a, 0.5D, $defaultAccuracy)",
       new ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D))
         .sql(isDistinct = false))
 
     // sql(isDistinct = false), array of percentile
     assertEqual(
-      s"percentile_approx(`a`, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
+      s"percentile_approx(a, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
       new ApproximatePercentile(
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))
@@ -197,13 +197,13 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
     // sql(isDistinct = true), single percentile
     assertEqual(
-      s"percentile_approx(DISTINCT `a`, 0.5D, $defaultAccuracy)",
+      s"percentile_approx(DISTINCT a, 0.5D, $defaultAccuracy)",
       new ApproximatePercentile("a".attr, percentageExpression = Literal(0.5D))
         .sql(isDistinct = true))
 
     // sql(isDistinct = true), array of percentile
     assertEqual(
-      s"percentile_approx(DISTINCT `a`, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
+      s"percentile_approx(DISTINCT a, array(0.25D, 0.5D, 0.75D), $defaultAccuracy)",
       new ApproximatePercentile(
         "a".attr,
         percentageExpression = CreateArray(Seq(0.25D, 0.5D, 0.75D).map(Literal(_)))

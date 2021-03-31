@@ -170,6 +170,8 @@ public final class ArrowColumnVector extends ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         childColumns[i] = new ArrowColumnVector(structVector.getVectorById(i));
       }
+    } else if (vector instanceof NullVector) {
+      accessor = new NullAccessor((NullVector) vector);
     } else {
       throw new UnsupportedOperationException();
     }
@@ -497,6 +499,13 @@ public final class ArrowColumnVector extends ColumnVector {
       int offset = accessor.getOffsetBuffer().getInt(index);
       int length = accessor.getInnerValueCountAt(rowId);
       return new ColumnarMap(keys, values, offset, length);
+    }
+  }
+
+  private static class NullAccessor extends ArrowVectorAccessor {
+
+    NullAccessor(NullVector vector) {
+      super(vector);
     }
   }
 }

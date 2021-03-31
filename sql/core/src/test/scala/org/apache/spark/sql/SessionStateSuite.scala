@@ -48,7 +48,7 @@ class SessionStateSuite extends SparkFunSuite {
       if (activeSession != null) {
         activeSession.stop()
         activeSession = null
-        SparkSession.clearActiveSessionInternal()
+        SparkSession.clearActiveSession()
         SparkSession.clearDefaultSession()
       }
     } finally {

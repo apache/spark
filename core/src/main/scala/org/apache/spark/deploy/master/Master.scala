@@ -22,9 +22,7 @@ import java.util.{Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.collection.mutable
 import scala.util.Random
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
@@ -89,9 +87,9 @@ private[deploy] class Master(
   Utils.checkHost(address.host)
 
   private val masterMetricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MASTER, conf, securityMgr)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MASTER, conf)
   private val applicationMetricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATIONS, conf, securityMgr)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATIONS, conf)
   private val masterSource = new MasterSource(this)
 
   // After onStart, webUi will be set
@@ -145,9 +143,15 @@ private[deploy] class Master(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
-    masterWebUiUrl = s"${webUi.scheme}$masterPublicAddress:${webUi.boundPort}"
+    masterWebUiUrl = webUi.webUrl
     if (reverseProxy) {
-      masterWebUiUrl = conf.get(UI_REVERSE_PROXY_URL).orElse(Some(masterWebUiUrl)).get
+      val uiReverseProxyUrl = conf.get(UI_REVERSE_PROXY_URL).map(_.stripSuffix("/"))
+      if (uiReverseProxyUrl.nonEmpty) {
+        System.setProperty("spark.ui.proxyBase", uiReverseProxyUrl.get)
+        // If the master URL has a path component, it must end with a slash.
+        // Otherwise the browser generates incorrect relative links
+        masterWebUiUrl = uiReverseProxyUrl.get + "/"
+      }
       webUi.addProxy()
       logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
        s"Applications UIs are available at $masterWebUiUrl")
@@ -304,54 +308,6 @@ private[deploy] class Master(
         persistenceEngine.addApplication(app)
         driver.send(RegisteredApplication(app.id, self))
         schedule()
-      }
-
-    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
-      val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
-      execOption match {
-        case Some(exec) =>
-          val appInfo = idToApp(appId)
-          val oldState = exec.state
-          exec.state = state
-
-          if (state == ExecutorState.RUNNING) {
-            assert(oldState == ExecutorState.LAUNCHING,
-              s"executor $execId state transfer from $oldState to RUNNING is illegal")
-            appInfo.resetRetryCount()
-          }
-
-          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus, None))
-
-          if (ExecutorState.isFinished(state)) {
-            // Remove this executor from the worker and app
-            logInfo(s"Removing executor ${exec.fullId} because it is $state")
-            // If an application has already finished, preserve its
-            // state to display its information properly on the UI
-            if (!appInfo.isFinished) {
-              appInfo.removeExecutor(exec)
-            }
-            exec.worker.removeExecutor(exec)
-
-            val normalExit = exitStatus == Some(0)
-            // Only retry certain number of times so we don't go into an infinite loop.
-            // Important note: this code path is not exercised by tests, so be very careful when
-            // changing this `if` condition.
-            // We also don't count failures from decommissioned workers since they are "expected."
-            if (!normalExit
-                && oldState != ExecutorState.DECOMMISSIONED
-                && appInfo.incrementRetryCount() >= maxExecutorRetries
-                && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
-              val execs = appInfo.executors.values
-              if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
-                  s"${appInfo.retryCount} times; removing it")
-                removeApplication(appInfo, ApplicationState.FAILED)
-              }
-            }
-          }
-          schedule()
-        case None =>
-          logWarning(s"Got status update for unknown executor $appId/$execId")
       }
 
     case DriverStateChanged(driverId, state, exception) =>
@@ -546,6 +502,55 @@ private[deploy] class Master(
       } else {
         context.reply(0)
       }
+
+    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
+      val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
+      execOption match {
+        case Some(exec) =>
+          val appInfo = idToApp(appId)
+          val oldState = exec.state
+          exec.state = state
+
+          if (state == ExecutorState.RUNNING) {
+            assert(oldState == ExecutorState.LAUNCHING,
+              s"executor $execId state transfer from $oldState to RUNNING is illegal")
+            appInfo.resetRetryCount()
+          }
+
+          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus, None))
+
+          if (ExecutorState.isFinished(state)) {
+            // Remove this executor from the worker and app
+            logInfo(s"Removing executor ${exec.fullId} because it is $state")
+            // If an application has already finished, preserve its
+            // state to display its information properly on the UI
+            if (!appInfo.isFinished) {
+              appInfo.removeExecutor(exec)
+            }
+            exec.worker.removeExecutor(exec)
+
+            val normalExit = exitStatus == Some(0)
+            // Only retry certain number of times so we don't go into an infinite loop.
+            // Important note: this code path is not exercised by tests, so be very careful when
+            // changing this `if` condition.
+            // We also don't count failures from decommissioned workers since they are "expected."
+            if (!normalExit
+              && oldState != ExecutorState.DECOMMISSIONED
+              && appInfo.incrementRetryCount() >= maxExecutorRetries
+              && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
+              val execs = appInfo.executors.values
+              if (!execs.exists(_.state == ExecutorState.RUNNING)) {
+                logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
+                  s"${appInfo.retryCount} times; removing it")
+                removeApplication(appInfo, ApplicationState.FAILED)
+              }
+            }
+          }
+          schedule()
+        case None =>
+          logWarning(s"Got status update for unknown executor $appId/$execId")
+      }
+      context.reply(true)
   }
 
   override def onDisconnected(address: RpcAddress): Unit = {

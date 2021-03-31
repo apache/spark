@@ -30,7 +30,7 @@ of Spark's features such as Spark SQL, DataFrame, Streaming, MLlib
 (Machine Learning) and Spark Core.
 
 .. image:: ../../../docs/img/pyspark-components.png
-  :alt: PySpark Compoenents
+  :alt: PySpark Components
 
 **Spark SQL and DataFrame**
 

@@ -64,7 +64,7 @@ class PartitionAlreadyExistsException(message: String) extends AnalysisException
 }
 
 class PartitionsAlreadyExistException(message: String) extends AnalysisException(message) {
-  def this(db: String, table: String, specs: Seq[TablePartitionSpec]) {
+  def this(db: String, table: String, specs: Seq[TablePartitionSpec]) = {
     this(s"The following partitions already exists in table '$table' database '$db':\n"
       + specs.mkString("\n===\n"))
   }

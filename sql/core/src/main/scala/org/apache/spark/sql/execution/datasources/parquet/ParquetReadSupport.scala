@@ -31,6 +31,7 @@ import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
@@ -59,7 +60,7 @@ class ParquetReadSupport(
   extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
-  def this() {
+  def this() = {
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
     // used in the vectorized reader, where we get the convertTz/rebaseDateTime value directly,
     // and the values here are ignored.
@@ -342,8 +343,8 @@ object ParquetReadSupport {
             if (parquetTypes.size > 1) {
               // Need to fail if there is ambiguity, i.e. more than one field is matched
               val parquetTypesString = parquetTypes.map(_.getName).mkString("[", ", ", "]")
-              throw new RuntimeException(s"""Found duplicate field(s) "${f.name}": """ +
-                s"$parquetTypesString in case-insensitive mode")
+              throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
+                f.name, parquetTypesString)
             } else {
               clipParquetType(parquetTypes.head, f.dataType, caseSensitive)
             }

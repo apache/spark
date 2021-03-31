@@ -128,7 +128,7 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, isRootLevel = true)
+      pathsToFetch.toSeq, hadoopConf, filter, sparkSession)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -146,32 +146,22 @@ object InMemoryFileIndex extends Logging {
       paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
-      sparkSession: SparkSession,
-      isRootLevel: Boolean): Seq[(Path, Seq[FileStatus])] = {
+      sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
     HadoopFSUtils.parallelListLeafFiles(
       sc = sparkSession.sparkContext,
       paths = paths,
       hadoopConf = hadoopConf,
-      filter = filter,
-      isRootLevel = isRootLevel,
+      filter = new PathFilterWrapper(filter),
       ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles,
       ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
       parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
-      parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism,
-      filterFun = Some(shouldFilterOut))
- }
+      parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+  }
 
-  /** Checks if we should filter out this path name. */
-  def shouldFilterOut(pathName: String): Boolean = {
-    // We filter follow paths:
-    // 1. everything that starts with _ and ., except _common_metadata and _metadata
-    // because Parquet needs to find those metadata files from leaf files returned by this method.
-    // We should refactor this logic to not mix metadata files with data files.
-    // 2. everything that ends with `._COPYING_`, because this is a intermediate state of file. we
-    // should skip this file in case of double reading.
-    val exclude = (pathName.startsWith("_") && !pathName.contains("=")) ||
-      pathName.startsWith(".") || pathName.endsWith("._COPYING_")
-    val include = pathName.startsWith("_common_metadata") || pathName.startsWith("_metadata")
-    exclude && !include
+}
+
+private class PathFilterWrapper(val filter: PathFilter) extends PathFilter with Serializable {
+  override def accept(path: Path): Boolean = {
+    (filter == null || filter.accept(path)) && !HadoopFSUtils.shouldFilterOutPathName(path.getName)
   }
 }

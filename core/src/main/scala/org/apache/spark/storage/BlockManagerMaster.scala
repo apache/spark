@@ -125,6 +125,26 @@ class BlockManagerMaster(
     driverEndpoint.askSync[Seq[BlockManagerId]](GetPeers(blockManagerId))
   }
 
+  /**
+   * Get a list of unique shuffle service locations where an executor is successfully
+   * registered in the past for block push/merge with push based shuffle.
+   */
+  def getShufflePushMergerLocations(
+      numMergersNeeded: Int,
+      hostsToFilter: Set[String]): Seq[BlockManagerId] = {
+    driverEndpoint.askSync[Seq[BlockManagerId]](
+      GetShufflePushMergerLocations(numMergersNeeded, hostsToFilter))
+  }
+
+  /**
+   * Remove the host from the candidate list of shuffle push mergers. This can be
+   * triggered if there is a FetchFailedException on the host
+   * @param host
+   */
+  def removeShufflePushMergerLocation(host: String): Unit = {
+    driverEndpoint.askSync[Seq[BlockManagerId]](RemoveShufflePushMergerLocation(host))
+  }
+
   def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
     driverEndpoint.askSync[Option[RpcEndpointRef]](GetExecutorEndpointRef(executorId))
   }

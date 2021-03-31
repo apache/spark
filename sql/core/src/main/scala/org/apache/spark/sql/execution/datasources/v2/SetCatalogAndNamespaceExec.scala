@@ -32,8 +32,8 @@ case class SetCatalogAndNamespaceExec(
   override protected def run(): Seq[InternalRow] = {
     // The catalog is updated first because CatalogManager resets the current namespace
     // when the current catalog is set.
-    catalogName.map(catalogManager.setCurrentCatalog)
-    namespace.map(ns => catalogManager.setCurrentNamespace(ns.toArray))
+    catalogName.foreach(catalogManager.setCurrentCatalog)
+    namespace.foreach(ns => catalogManager.setCurrentNamespace(ns.toArray))
 
     Seq.empty
   }

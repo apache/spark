@@ -28,9 +28,12 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
     Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE
   }
 
+  override protected def userFeatureStepsConf: ConfigEntry[_] = {
+    Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS
+  }
+
   override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
     val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
     new KubernetesDriverBuilder().buildFromFeatures(conf, client).pod
   }
-
 }

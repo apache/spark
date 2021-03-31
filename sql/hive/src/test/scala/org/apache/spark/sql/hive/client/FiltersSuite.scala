@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
+import java.sql.Date
 import java.util.Collections
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A set of tests for the filter conversion logic used when pushing partition pruning into the
@@ -63,6 +65,28 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (Literal(1) === a("intcol", IntegerType)) :: (Literal("a") === a("strcol", IntegerType)) :: Nil,
     "1 = intcol and \"a\" = strcol")
 
+  filterTest("date filter",
+    (a("datecol", DateType) === Literal(Date.valueOf("2019-01-01"))) :: Nil,
+    "datecol = 2019-01-01")
+
+  filterTest("date filter with IN predicate",
+    (a("datecol", DateType) in
+      (Literal(Date.valueOf("2019-01-01")), Literal(Date.valueOf("2019-01-07")))) :: Nil,
+    "(datecol = 2019-01-01 or datecol = 2019-01-07)")
+
+  filterTest("date and string filter",
+    (Literal(Date.valueOf("2019-01-01")) === a("datecol", DateType)) ::
+      (Literal("a") === a("strcol", IntegerType)) :: Nil,
+    "2019-01-01 = datecol and \"a\" = strcol")
+
+  filterTest("date filter with null",
+    (a("datecol", DateType) ===  Literal(null)) :: Nil,
+    "")
+
+  filterTest("string filter with InSet predicate",
+    InSet(a("strcol", StringType), Set("1", "2").map(s => UTF8String.fromString(s))) :: Nil,
+    "(strcol = \"1\" or strcol = \"2\")")
+
   filterTest("skip varchar",
     (Literal("") === a("varchar", StringType)) :: Nil,
     "")
@@ -75,6 +99,55 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
   filterTest("SPARK-24879 null literals should be ignored for IN constructs",
     (a("intcol", IntegerType) in (Literal(1), Literal(null))) :: Nil,
     "(intcol = 1)")
+
+  filterTest("NOT: int and string filters",
+    (a("intcol", IntegerType) =!= Literal(1)) :: (Literal("a") =!= a("strcol", IntegerType)) :: Nil,
+    """intcol != 1 and "a" != strcol""")
+
+  filterTest("NOT: date filter",
+    (a("datecol", DateType) =!= Literal(Date.valueOf("2019-01-01"))) :: Nil,
+    "datecol != 2019-01-01")
+
+  filterTest("not-in, string filter",
+    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"))))) :: Nil,
+    """(strcol != "a" and strcol != "b")""")
+
+  filterTest("not-in, string filter with null",
+    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"), Literal(null))))) :: Nil,
+    "")
+
+  filterTest("not-in, date filter",
+    (Not(In(a("datecol", DateType),
+      Seq(Literal(Date.valueOf("2021-01-01")), Literal(Date.valueOf("2021-01-02")))))) :: Nil,
+    """(datecol != 2021-01-01 and datecol != 2021-01-02)""")
+
+  filterTest("not-in, date filter with null",
+    (Not(In(a("datecol", DateType),
+      Seq(Literal(Date.valueOf("2021-01-01")), Literal(Date.valueOf("2021-01-02")),
+        Literal(null))))) :: Nil,
+    "")
+
+  filterTest("not-inset, string filter",
+    (Not(InSet(a("strcol", StringType), Set(Literal("a").eval(), Literal("b").eval())))) :: Nil,
+    """(strcol != "a" and strcol != "b")""")
+
+  filterTest("not-inset, string filter with null",
+    (Not(InSet(a("strcol", StringType),
+      Set(Literal("a").eval(), Literal("b").eval(), Literal(null).eval())))) :: Nil,
+    "")
+
+  filterTest("not-inset, date filter",
+    (Not(InSet(a("datecol", DateType),
+      Set(Literal(Date.valueOf("2020-01-01")).eval(),
+        Literal(Date.valueOf("2020-01-02")).eval())))) :: Nil,
+    """(datecol != 2020-01-01 and datecol != 2020-01-02)""")
+
+  filterTest("not-inset, date filter with null",
+    (Not(InSet(a("datecol", DateType),
+      Set(Literal(Date.valueOf("2020-01-01")).eval(),
+        Literal(Date.valueOf("2020-01-02")).eval(),
+        Literal(null).eval())))) :: Nil,
+    "")
 
   // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
   // will be applied by Catalyst, this filter converter does not need to account for this.
@@ -89,7 +162,7 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
   private def filterTest(name: String, filters: Seq[Expression], result: String) = {
     test(name) {
       withSQLConf(SQLConf.ADVANCED_PARTITION_PREDICATE_PUSHDOWN.key -> "true") {
-        val converted = shim.convertFilters(testTable, filters)
+        val converted = shim.convertFilters(testTable, filters, conf.sessionLocalTimeZone)
         if (converted != result) {
           fail(s"Expected ${filters.mkString(",")} to convert to '$result' but got '$converted'")
         }
@@ -104,13 +177,77 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
         val filters =
           (Literal(1) === a("intcol", IntegerType) ||
             Literal(2) === a("intcol", IntegerType)) :: Nil
-        val converted = shim.convertFilters(testTable, filters)
+        val converted = shim.convertFilters(testTable, filters, conf.sessionLocalTimeZone)
         if (enabled) {
           assert(converted == "(1 = intcol or 2 = intcol)")
         } else {
           assert(converted.isEmpty)
         }
       }
+    }
+  }
+
+  test("SPARK-33416: Avoid Hive metastore stack overflow when InSet predicate have many values") {
+    def checkConverted(inSet: InSet, result: String): Unit = {
+      assert(shim.convertFilters(testTable, inSet :: Nil, conf.sessionLocalTimeZone) == result)
+    }
+
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "15") {
+      checkConverted(
+        InSet(a("intcol", IntegerType),
+          Range(1, 20).map(s => Literal(s).eval(EmptyRow)).toSet),
+        "(intcol >= 1 and intcol <= 19)")
+
+      checkConverted(
+        InSet(a("stringcol", StringType),
+          Range(1, 20).map(s => Literal(s.toString).eval(EmptyRow)).toSet),
+        "(stringcol >= \"1\" and stringcol <= \"9\")")
+
+      checkConverted(
+        InSet(a("intcol", IntegerType).cast(LongType),
+          Range(1, 20).map(s => Literal(s.toLong).eval(EmptyRow)).toSet),
+        "(intcol >= 1 and intcol <= 19)")
+
+      checkConverted(
+        InSet(a("doublecol", DoubleType),
+          Range(1, 20).map(s => Literal(s.toDouble).eval(EmptyRow)).toSet),
+        "")
+
+      checkConverted(
+        InSet(a("datecol", DateType),
+          Range(1, 20).map(d => Literal(d, DateType).eval(EmptyRow)).toSet),
+        "(datecol >= 1970-01-02 and datecol <= 1970-01-20)")
+    }
+  }
+
+  test("SPARK-34515: Fix NPE if InSet contains null value during getPartitionsByFilter") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "2") {
+      val filter = InSet(a("p", IntegerType), Set(null, 1, 2))
+      val converted = shim.convertFilters(testTable, Seq(filter), conf.sessionLocalTimeZone)
+      assert(converted == "(p >= 1 and p <= 2)")
+    }
+  }
+
+  test("Don't push not inset if it's values exceeds the threshold") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "2") {
+      val filter = Not(InSet(a("p", IntegerType), Set(1, 2, 3)))
+      val converted = shim.convertFilters(testTable, Seq(filter), conf.sessionLocalTimeZone)
+      assert(converted.isEmpty)
+    }
+  }
+
+  test("SPARK-34538: Skip InSet null value during push filter to Hive metastore") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "3") {
+      val intFilter = InSet(a("p", IntegerType), Set(null, 1, 2))
+      val intConverted = shim.convertFilters(testTable, Seq(intFilter), conf.sessionLocalTimeZone)
+      assert(intConverted == "(p = 1 or p = 2)")
+    }
+
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "3") {
+      val dateFilter = InSet(a("p", DateType), Set(null,
+        Literal(Date.valueOf("2020-01-01")).eval(), Literal(Date.valueOf("2021-01-01")).eval()))
+      val dateConverted = shim.convertFilters(testTable, Seq(dateFilter), conf.sessionLocalTimeZone)
+      assert(dateConverted == "(p = 2020-01-01 or p = 2021-01-01)")
     }
   }
 

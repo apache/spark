@@ -43,7 +43,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     val newSession = sqlContext.newSession()
     assert(SQLContext.getOrCreate(sc).eq(sqlContext),
       "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
-    SparkSession.setActiveSessionInternal(newSession.sparkSession)
+    SparkSession.setActiveSession(newSession.sparkSession)
     assert(SQLContext.getOrCreate(sc).eq(newSession),
       "SQLContext.getOrCreate after explicitly setActive() did not return the active context")
   }
@@ -122,7 +122,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     df.createOrReplaceTempView("listtablessuitetable")
 
     val expectedSchema = StructType(
-      StructField("database", StringType, false) ::
+      StructField("namespace", StringType, false) ::
         StructField("tableName", StringType, false) ::
         StructField("isTemporary", BooleanType, false) :: Nil)
 

@@ -63,11 +63,17 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
 
   protected def checkGeneratedCode(plan: SparkPlan, checkMethodCodeSize: Boolean = true): Unit = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
-    plan foreach {
-      case s: WholeStageCodegenExec =>
-        codegenSubtrees += s
-      case _ =>
+
+    def findSubtrees(plan: SparkPlan): Unit = {
+      plan foreach {
+        case s: WholeStageCodegenExec =>
+          codegenSubtrees += s
+        case s =>
+          s.subqueries.foreach(findSubtrees)
+      }
     }
+
+    findSubtrees(plan)
     codegenSubtrees.toSeq.foreach { subtree =>
       val code = subtree.doCodeGen()._2
       val (_, ByteCodeStats(maxMethodCodeSize, _, _)) = try {

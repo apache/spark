@@ -195,6 +195,7 @@ object StaticSQLConf {
 
   val SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS =
     buildStaticConf("spark.sql.legacy.sessionInitWithConfigDefaults")
+      .internal()
       .doc("Flag to revert to legacy behavior where a cloned SparkSession receives SparkConf " +
         "defaults, dropping any overrides in its parent SparkSession.")
       .version("3.0.0")
@@ -250,12 +251,15 @@ object StaticSQLConf {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefault(-1)
 
-  val LEGACY_ALLOW_MODIFY_ACTIVE_SESSION =
-    buildStaticConf("spark.sql.legacy.allowModifyActiveSession")
+  val ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST =
+    buildStaticConf("spark.sql.streaming.ui.enabledCustomMetricList")
       .internal()
-      .doc("When set to true, user is allowed to use setActiveSession or clearActiveSession " +
-        "to modify the current active SparkSession, otherwise an exception will be thrown.")
+      .doc("Configures a list of custom metrics on Structured Streaming UI, which are enabled. " +
+        "The list contains the name of the custom metrics separated by comma. In aggregation" +
+        "only sum used. The list of supported custom metrics is state store provider specific " +
+        "and it can be found out for example from query progress log entry.")
       .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 }

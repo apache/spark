@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
@@ -33,7 +32,6 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CompletionIterator, NextIterator, Utils}
@@ -60,7 +58,7 @@ case class StatefulOperatorStateInfo(
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
 
-  protected def getStateInfo: StatefulOperatorStateInfo = attachTree(this) {
+  protected def getStateInfo: StatefulOperatorStateInfo = {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
@@ -247,7 +245,7 @@ case class StateStoreRestoreExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    child.execute().mapPartitionsWithStateStore(
+    child.execute().mapPartitionsWithReadStateStore(
       getStateInfo,
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,

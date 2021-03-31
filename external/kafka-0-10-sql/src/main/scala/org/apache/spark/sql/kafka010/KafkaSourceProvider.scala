@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, SupportsTruncate, WriteBuilder}
@@ -93,7 +93,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       caseInsensitiveParameters, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
       STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
-    val kafkaOffsetReader = new KafkaOffsetReader(
+    val kafkaOffsetReader = KafkaOffsetReader.build(
       strategy(caseInsensitiveParameters),
       kafkaParamsForDriver(specifiedKafkaParams),
       caseInsensitiveParameters,
@@ -460,7 +460,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         caseInsensitiveOptions, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
         STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
-      val kafkaOffsetReader = new KafkaOffsetReader(
+      val kafkaOffsetReader = KafkaOffsetReader.build(
         strategy(caseInsensitiveOptions),
         kafkaParamsForDriver(specifiedKafkaParams),
         caseInsensitiveOptions,
@@ -489,7 +489,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         caseInsensitiveOptions, STARTING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
         STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
-      val kafkaOffsetReader = new KafkaOffsetReader(
+      val kafkaOffsetReader = KafkaOffsetReader.build(
         strategy(caseInsensitiveOptions),
         kafkaParamsForDriver(specifiedKafkaParams),
         caseInsensitiveOptions,

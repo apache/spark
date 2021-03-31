@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Disable unnecessary bucketed table scan based on actual physical query plan.
@@ -99,9 +98,11 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
         exchange.mapChildren(disableBucketWithInterestingPartition(
           _, withInterestingPartition, true, withAllowedNode))
       case scan: FileSourceScanExec =>
-        if (isBucketedScanWithoutFilter(scan)) {
+        if (scan.bucketedScan) {
           if (!withInterestingPartition || (withExchange && withAllowedNode)) {
-            scan.copy(disableBucketedScan = true)
+            val nonBucketedScan = scan.copy(disableBucketedScan = true)
+            scan.logicalLink.foreach(nonBucketedScan.setLogicalLink)
+            nonBucketedScan
           } else {
             scan
           }
@@ -139,20 +140,13 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
     }
   }
 
-  private def isBucketedScanWithoutFilter(scan: FileSourceScanExec): Boolean = {
-    // Do not disable bucketed table scan if it has filter pruning,
-    // because bucketed table scan is still useful here to save CPU/IO cost with
-    // only reading selected bucket files.
-    scan.bucketedScan && scan.optionalBucketSet.isEmpty
-  }
-
   def apply(plan: SparkPlan): SparkPlan = {
-    lazy val hasBucketedScanWithoutFilter = plan.find {
-      case scan: FileSourceScanExec => isBucketedScanWithoutFilter(scan)
+    lazy val hasBucketedScan = plan.find {
+      case scan: FileSourceScanExec => scan.bucketedScan
       case _ => false
     }.isDefined
 
-    if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScanWithoutFilter) {
+    if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScan) {
       plan
     } else {
       disableBucketWithInterestingPartition(plan, false, false, true)

@@ -92,17 +92,13 @@ abstract class AbstractCommandBuilder {
   List<String> buildJavaCommand(String extraClassPath) throws IOException {
     List<String> cmd = new ArrayList<>();
 
-    String[] candidateJavaHomes = new String[] {
-      javaHome,
+    String firstJavaHome = firstNonEmpty(javaHome,
       childEnv.get("JAVA_HOME"),
       System.getenv("JAVA_HOME"),
-      System.getProperty("java.home")
-    };
-    for (String javaHome : candidateJavaHomes) {
-      if (javaHome != null) {
-        cmd.add(join(File.separator, javaHome, "bin", "java"));
-        break;
-      }
+      System.getProperty("java.home"));
+
+    if (firstJavaHome != null) {
+      cmd.add(join(File.separator, firstJavaHome, "bin", "java"));
     }
 
     // Load extra JAVA_OPTS from conf/java-opts, if it exists.

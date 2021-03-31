@@ -34,6 +34,8 @@ import org.apache.spark.network.protocol.Encoders;
  * 1. Number of chunks in a merged shuffle block.
  * 2. Bitmaps for each chunk in the merged block. A chunk bitmap contains all the mapIds that were
  *    merged to that merged block chunk.
+ *
+ * @since 3.1.0
  */
 public class MergedBlockMeta {
   private final int numChunks;

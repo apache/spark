@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Type, Union
 
 import array
 from collections import namedtuple
@@ -27,7 +27,7 @@ from pyspark.mllib.common import JavaModelWrapper
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 
 class Rating(namedtuple("Rating", ["user", "product", "rating"])):
-    def __reduce__(self): ...
+    def __reduce__(self) -> Tuple[Type[Rating], Tuple[int, int, float]]: ...
 
 class MatrixFactorizationModel(
     JavaModelWrapper, JavaSaveable, JavaLoader[MatrixFactorizationModel]

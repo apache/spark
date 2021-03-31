@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
 
 /**
  * A logical node that represents a non-query command to be executed by the system.  For example,
@@ -26,9 +27,13 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
  */
 trait Command extends LogicalPlan {
   override def output: Seq[Attribute] = Seq.empty
-  override def children: Seq[LogicalPlan] = Seq.empty
+  override def producedAttributes: AttributeSet = outputSet
   // Commands are eagerly executed. They will be converted to LocalRelation after the DataFrame
   // is created. That said, the statistics of a command is useless. Here we just return a dummy
   // statistics to avoid unnecessary statistics calculation of command's children.
   override def stats: Statistics = Statistics.DUMMY
 }
+
+trait LeafCommand extends Command with LeafLike[LogicalPlan]
+trait UnaryCommand extends Command with UnaryLike[LogicalPlan]
+trait BinaryCommand extends Command with BinaryLike[LogicalPlan]

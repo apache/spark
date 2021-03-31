@@ -165,7 +165,11 @@ if __name__ == "__main__":
          None, "TypeConverters.toString"),
         ("blockSize", "block size for stacking input data in matrices. Data is stacked within "
          "partitions. If block size is more than remaining data in a partition then it is "
-         "adjusted to the size of this data.", None, "TypeConverters.toInt")]
+         "adjusted to the size of this data.", None, "TypeConverters.toInt"),
+        ("maxBlockSizeInMB", "maximum memory in MB for stacking input data into blocks. Data is " +
+         "stacked within partitions. If more than remaining data size in a partition then it " +
+         "is adjusted to the data size. Default 0.0 represents choosing optimal value, depends " +
+         "on specific algorithm. Must be >= 0.", "0.0", "TypeConverters.toFloat")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:

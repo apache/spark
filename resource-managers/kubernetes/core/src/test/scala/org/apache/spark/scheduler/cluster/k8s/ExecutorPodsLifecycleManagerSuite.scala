@@ -16,7 +16,6 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{DoneablePod, Pod}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
@@ -53,18 +52,16 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
   private var eventHandlerUnderTest: ExecutorPodsLifecycleManager = _
 
   before {
-    MockitoAnnotations.initMocks(this)
-    val removedExecutorsCache = CacheBuilder.newBuilder().build[java.lang.Long, java.lang.Long]
+    MockitoAnnotations.openMocks(this).close()
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     namedExecutorPods = mutable.Map.empty[String, PodResource[Pod, DoneablePod]]
-    when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty[String])
+    when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map.empty[String, Long])
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(any(classOf[String]))).thenAnswer(namedPodsAnswer())
     eventHandlerUnderTest = new ExecutorPodsLifecycleManager(
       new SparkConf(),
       kubernetesClient,
-      snapshotsStore,
-      removedExecutorsCache)
+      snapshotsStore)
     eventHandlerUnderTest.start(schedulerBackend)
   }
 
@@ -92,13 +89,23 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
 
   test("When the scheduler backend lists executor ids that aren't present in the cluster," +
     " remove those executors from Spark.") {
-    when(schedulerBackend.getExecutorIds()).thenReturn(Seq("1"))
-    val msg = s"The executor with ID 1 was not found in the cluster but we didn't" +
-      s" get a reason why. Marking the executor as failed. The executor may have been" +
-      s" deleted but the driver missed the deletion event."
-    val expectedLossReason = ExecutorExited(-1, exitCausedByApp = false, msg)
+      when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map("1" -> 7L))
+    val missingPodDelta =
+      eventHandlerUnderTest.conf.get(Config.KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA)
+    snapshotsStore.clock.advance(missingPodDelta + 7)
     snapshotsStore.replaceSnapshot(Seq.empty[Pod])
     snapshotsStore.notifySubscribers()
+    verify(schedulerBackend, never()).doRemoveExecutor(any(), any())
+
+    // 1 more millisecond and the accepted delta is over so the missing POD will be detected
+    snapshotsStore.clock.advance(1)
+    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
+    snapshotsStore.notifySubscribers()
+    val msg = "The executor with ID 1 (registered at 7 ms) was not found in the cluster at " +
+      "the polling time (30008 ms) which is after the accepted detect delta time (30000 ms) " +
+      "configured by `spark.kubernetes.executor.missingPodDetectDelta`. The executor may have " +
+      "been deleted but the driver missed the deletion event. Marking this executor as failed."
+    val expectedLossReason = ExecutorExited(-1, exitCausedByApp = false, msg)
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
   }
 

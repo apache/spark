@@ -29,7 +29,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 object FileStreamSink extends Logging {
   // The name of the subdirectory that is used to store metadata about which files are valid.
@@ -136,8 +136,9 @@ class FileStreamSink(
   private val basePath = new Path(path)
   private val logPath = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
     sparkSession.sessionState.conf)
-  private val fileLog =
-    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toString)
+  private val retention = options.get("retention").map(Utils.timeStringAsMs)
+  private val fileLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession,
+    logPath.toString, retention)
 
   private def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)

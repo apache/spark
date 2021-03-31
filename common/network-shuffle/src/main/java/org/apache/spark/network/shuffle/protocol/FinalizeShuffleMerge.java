@@ -25,6 +25,8 @@ import org.apache.spark.network.protocol.Encoders;
 /**
  * Request to finalize merge for a given shuffle.
  * Returns {@link MergeStatuses}
+ *
+ * @since 3.1.0
  */
 public class FinalizeShuffleMerge extends BlockTransferMessage {
   public final String appId;

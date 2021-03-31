@@ -32,7 +32,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
-import org.apache.spark.rdd.RDDOperationScope
+import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -498,6 +498,7 @@ private[spark] object JsonProtocol {
     ("Parent IDs" -> parentIds) ~
     ("Storage Level" -> storageLevel) ~
     ("Barrier" -> rddInfo.isBarrier) ~
+    ("DeterministicLevel" -> rddInfo.outputDeterministicLevel.toString) ~
     ("Number of Partitions" -> rddInfo.numPartitions) ~
     ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
     ("Memory Size" -> rddInfo.memSize) ~
@@ -757,7 +758,7 @@ private[spark] object JsonProtocol {
 
   def taskResourceRequestMapFromJson(json: JValue): Map[String, TaskResourceRequest] = {
     val jsonFields = json.asInstanceOf[JObject].obj
-    jsonFields.map { case JField(k, v) =>
+    jsonFields.collect { case JField(k, v) =>
       val req = taskResourceRequestFromJson(v)
       (k, req)
     }.toMap
@@ -765,7 +766,7 @@ private[spark] object JsonProtocol {
 
   def executorResourceRequestMapFromJson(json: JValue): Map[String, ExecutorResourceRequest] = {
     val jsonFields = json.asInstanceOf[JObject].obj
-    jsonFields.map { case JField(k, v) =>
+    jsonFields.collect { case JField(k, v) =>
       val req = executorResourceRequestFromJson(v)
       (k, req)
     }.toMap
@@ -1175,8 +1176,12 @@ private[spark] object JsonProtocol {
     val memSize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
 
+    val outputDeterministicLevel = DeterministicLevel.withName(
+      jsonOption(json \ "DeterministicLevel").map(_.extract[String]).getOrElse("DETERMINATE"))
+
     val rddInfo =
-      new RDDInfo(rddId, name, numPartitions, storageLevel, isBarrier, parentIds, callsite, scope)
+      new RDDInfo(rddId, name, numPartitions, storageLevel, isBarrier, parentIds, callsite, scope,
+        outputDeterministicLevel)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
     rddInfo.diskSize = diskSize
@@ -1229,7 +1234,7 @@ private[spark] object JsonProtocol {
 
   def resourcesMapFromJson(json: JValue): Map[String, ResourceInformation] = {
     val jsonFields = json.asInstanceOf[JObject].obj
-    jsonFields.map { case JField(k, v) =>
+    jsonFields.collect { case JField(k, v) =>
       val resourceInfo = ResourceInformation.parseJson(v)
       (k, resourceInfo)
     }.toMap
@@ -1241,7 +1246,7 @@ private[spark] object JsonProtocol {
 
   def mapFromJson(json: JValue): Map[String, String] = {
     val jsonFields = json.asInstanceOf[JObject].obj
-    jsonFields.map { case JField(k, JString(v)) => (k, v) }.toMap
+    jsonFields.collect { case JField(k, JString(v)) => (k, v) }.toMap
   }
 
   def propertiesFromJson(json: JValue): Properties = {

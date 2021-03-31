@@ -55,7 +55,6 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
-import org.apache.spark.shuffle.{ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
@@ -259,6 +258,15 @@ private[spark] class BlockManager(
   @inline final private def isDecommissioning() = {
     decommissioner.isDefined
   }
+
+  @inline final private def checkShouldStore(blockId: BlockId) = {
+    // Don't reject broadcast blocks since they may be stored during task exec and
+    // don't need to be migrated.
+    if (isDecommissioning() && !blockId.isBroadcast) {
+        throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
+    }
+  }
+
   // This is a lazy val so someone can migrating RDDs even if they don't have a MigratableResolver
   // for shuffles. Used in BlockManagerDecommissioner & block puts.
   private[storage] lazy val migratableResolver: MigratableResolver = {
@@ -628,7 +636,16 @@ private[spark] class BlockManager(
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
       logDebug(s"Getting local shuffle block ${blockId}")
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      try {
+        shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      } catch {
+        case e: IOException =>
+          if (conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+            FallbackStorage.read(conf, blockId)
+          } else {
+            throw e
+          }
+      }
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -662,9 +679,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[_]): StreamCallbackWithID = {
 
-    if (isDecommissioning()) {
-       throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
-    }
+    checkShouldStore(blockId)
 
     if (blockId.isShuffle) {
       logDebug(s"Putting shuffle block ${blockId}")
@@ -1104,7 +1119,7 @@ private[spark] class BlockManager(
       blockSize: Long): Option[ManagedBuffer] = {
     val file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId.name)
     if (file.exists()) {
-      val mangedBuffer = securityManager.getIOEncryptionKey() match {
+      val managedBuffer = securityManager.getIOEncryptionKey() match {
         case Some(key) =>
           // Encrypted blocks cannot be memory mapped; return a special object that does decryption
           // and provides InputStream / FileRegion implementations for reading the data.
@@ -1115,7 +1130,7 @@ private[spark] class BlockManager(
           val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
           new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
       }
-      Some(mangedBuffer)
+      Some(managedBuffer)
     } else {
       None
     }
@@ -1313,9 +1328,7 @@ private[spark] class BlockManager(
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
-    if (isDecommissioning()) {
-      throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
-    }
+    checkShouldStore(blockId)
 
     val putBlockInfo = {
       val newInfo = new BlockInfo(level, classTag, tellMaster)
@@ -1581,7 +1594,12 @@ private[spark] class BlockManager(
         lastPeerFetchTimeNs = System.nanoTime()
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
-      cachedPeers
+      if (cachedPeers.isEmpty &&
+          conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+        Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)
+      } else {
+        cachedPeers
+      }
     }
   }
 

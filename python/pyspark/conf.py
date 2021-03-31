@@ -15,53 +15,6 @@
 # limitations under the License.
 #
 
-"""
->>> from pyspark.conf import SparkConf
->>> from pyspark.context import SparkContext
->>> conf = SparkConf()
->>> conf.setMaster("local").setAppName("My app")
-<pyspark.conf.SparkConf object at ...>
->>> conf.get("spark.master")
-'local'
->>> conf.get("spark.app.name")
-'My app'
->>> sc = SparkContext(conf=conf)
->>> sc.master
-'local'
->>> sc.appName
-'My app'
->>> sc.sparkHome is None
-True
-
->>> conf = SparkConf(loadDefaults=False)
->>> conf.setSparkHome("/path")
-<pyspark.conf.SparkConf object at ...>
->>> conf.get("spark.home")
-'/path'
->>> conf.setExecutorEnv("VAR1", "value1")
-<pyspark.conf.SparkConf object at ...>
->>> conf.setExecutorEnv(pairs = [("VAR3", "value3"), ("VAR4", "value4")])
-<pyspark.conf.SparkConf object at ...>
->>> conf.get("spark.executorEnv.VAR1")
-'value1'
->>> print(conf.toDebugString())
-spark.executorEnv.VAR1=value1
-spark.executorEnv.VAR3=value3
-spark.executorEnv.VAR4=value4
-spark.home=/path
->>> sorted(conf.getAll(), key=lambda p: p[0])
-[('spark.executorEnv.VAR1', 'value1'), ('spark.executorEnv.VAR3', 'value3'), \
-('spark.executorEnv.VAR4', 'value4'), ('spark.home', '/path')]
->>> conf._jconf.setExecutorEnv("VAR5", "value5")
-JavaObject id...
->>> print(conf.toDebugString())
-spark.executorEnv.VAR1=value1
-spark.executorEnv.VAR3=value3
-spark.executorEnv.VAR4=value4
-spark.executorEnv.VAR5=value5
-spark.home=/path
-"""
-
 __all__ = ['SparkConf']
 
 import sys
@@ -85,20 +38,76 @@ class SparkConf(object):
     All setter methods in this class support chaining. For example,
     you can write ``conf.setMaster("local").setAppName("My app")``.
 
-    .. note:: Once a SparkConf object is passed to Spark, it is cloned
-        and can no longer be modified by the user.
+    Parameters
+    ----------
+    loadDefaults : bool
+        whether to load values from Java system properties (True by default)
+    _jvm : class:`py4j.java_gateway.JVMView`
+        internal parameter used to pass a handle to the
+        Java VM; does not need to be set by users
+    _jconf : class:`py4j.java_gateway.JavaObject`
+        Optionally pass in an existing SparkConf handle
+        to use its parameters
+
+    Notes
+    -----
+    Once a SparkConf object is passed to Spark, it is cloned
+    and can no longer be modified by the user.
+
+    Examples
+    --------
+    >>> from pyspark.conf import SparkConf
+    >>> from pyspark.context import SparkContext
+    >>> conf = SparkConf()
+    >>> conf.setMaster("local").setAppName("My app")
+    <pyspark.conf.SparkConf object at ...>
+    >>> conf.get("spark.master")
+    'local'
+    >>> conf.get("spark.app.name")
+    'My app'
+    >>> sc = SparkContext(conf=conf)
+    >>> sc.master
+    'local'
+    >>> sc.appName
+    'My app'
+    >>> sc.sparkHome is None
+    True
+
+    >>> conf = SparkConf(loadDefaults=False)
+    >>> conf.setSparkHome("/path")
+    <pyspark.conf.SparkConf object at ...>
+    >>> conf.get("spark.home")
+    '/path'
+    >>> conf.setExecutorEnv("VAR1", "value1")
+    <pyspark.conf.SparkConf object at ...>
+    >>> conf.setExecutorEnv(pairs = [("VAR3", "value3"), ("VAR4", "value4")])
+    <pyspark.conf.SparkConf object at ...>
+    >>> conf.get("spark.executorEnv.VAR1")
+    'value1'
+    >>> print(conf.toDebugString())
+    spark.executorEnv.VAR1=value1
+    spark.executorEnv.VAR3=value3
+    spark.executorEnv.VAR4=value4
+    spark.home=/path
+    >>> for p in sorted(conf.getAll(), key=lambda p: p[0]):
+    ...     print(p)
+    ('spark.executorEnv.VAR1', 'value1')
+    ('spark.executorEnv.VAR3', 'value3')
+    ('spark.executorEnv.VAR4', 'value4')
+    ('spark.home', '/path')
+    >>> conf._jconf.setExecutorEnv("VAR5", "value5")
+    JavaObject id...
+    >>> print(conf.toDebugString())
+    spark.executorEnv.VAR1=value1
+    spark.executorEnv.VAR3=value3
+    spark.executorEnv.VAR4=value4
+    spark.executorEnv.VAR5=value5
+    spark.home=/path
     """
 
     def __init__(self, loadDefaults=True, _jvm=None, _jconf=None):
         """
         Create a new Spark configuration.
-
-        :param loadDefaults: whether to load values from Java system
-               properties (True by default)
-        :param _jvm: internal parameter used to pass a handle to the
-               Java VM; does not need to be set by users
-        :param _jconf: Optionally pass in an existing SparkConf handle
-               to use its parameters
         """
         if _jconf:
             self._jconf = _jconf
@@ -160,7 +169,10 @@ class SparkConf(object):
         """
         Set multiple parameters, passed as a list of key-value pairs.
 
-        :param pairs: list of key-value pairs to set
+        Parameters
+        ----------
+        pairs : iterable of tuples
+            list of key-value pairs to set
         """
         for (k, v) in pairs:
             self.set(k, v)

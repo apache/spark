@@ -23,14 +23,14 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2DataFrameSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
@@ -126,7 +126,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
 
         newTable
       case _ =>
-        throw new NoSuchTableException(ident)
+        throw QueryCompilationErrors.noSuchTableError(ident)
     }
   }
 }

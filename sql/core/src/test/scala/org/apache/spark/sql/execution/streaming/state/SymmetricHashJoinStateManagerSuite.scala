@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
 class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter {
 
   before {
-    SparkSession.setActiveSessionInternal(spark) // set this before force initializing 'joinExec'
+    SparkSession.setActiveSession(spark) // set this before force initializing 'joinExec'
     spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 

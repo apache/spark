@@ -21,14 +21,18 @@ import java.net.ConnectException;
 
 import com.google.common.base.Throwables;
 
+import org.apache.spark.annotation.Evolving;
+
 /**
  * Plugs into {@link RetryingBlockFetcher} to further control when an exception should be retried
  * and logged.
  * Note: {@link RetryingBlockFetcher} will delegate the exception to this handler only when
  * - remaining retries < max retries
  * - exception is an IOException
+ *
+ * @since 3.1.0
  */
-
+@Evolving
 public interface ErrorHandler {
 
   boolean shouldRetryError(Throwable t);
@@ -44,6 +48,8 @@ public interface ErrorHandler {
 
   /**
    * The error handler for pushing shuffle blocks to remote shuffle services.
+   *
+   * @since 3.1.0
    */
   class BlockPushErrorHandler implements ErrorHandler {
     /**
@@ -64,6 +70,15 @@ public interface ErrorHandler {
      */
     public static final String BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX =
       "Couldn't find an opportunity to write block";
+
+    /**
+     * String constant used for generating exception messages indicating the server encountered
+     * IOExceptions multiple times, greater than the configured threshold, while trying to merged
+     * shuffle blocks of the same shuffle partition. When the client receives this this response,
+     * it will stop pushing any more blocks for the same shuffle partition.
+     */
+    public static final String IOEXCEPTIONS_EXCEEDED_THRESHOLD_PREFIX =
+      "IOExceptions exceeded the threshold";
 
     @Override
     public boolean shouldRetryError(Throwable t) {
