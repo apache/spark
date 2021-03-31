@@ -67,29 +67,29 @@ insert into char_tbl4 values
     (null, 'E'),
     ('N', null),
     ('Ne', 'Ea'),
-    ('Ne ', 'Ea '),
-    ('Ne ', 'Ea '),
     ('Ne  ', 'Ea  '),
     ('Net', 'Ease'),
     ('Net ', 'Ease '),
-    ('Net  ', 'Ease  ');
-
-insert into char_tbl4 values ('Net   ', 'Ease  ');
+    ('NetEa ', 'Ease  ');
+insert into char_tbl4 values ('NetE  ', 'NetEas');
+insert into char_tbl4 values ('NetE  ', 'NetEase');
+insert into char_tbl4 values ('NetEase', '');
+create table char_tbl5(c char(6)) using parquet;
+insert into char_tbl5 select c from char_tbl4;
 
 select c, v from char_tbl4;
 select c from char_tbl4 order by c;
 select v from char_tbl4 order by v;
 select ascii(c), ascii(v) from char_tbl4;
 select base64(c), base64(v) from char_tbl4;
-select bit_length(c), bit_length(v) from char_tbl4;
-select char_length(c), char_length(v) from char_tbl4;
-select octet_length(c), octet_length(v) from char_tbl4;
-select concat_ws('|', c, c), concat_ws('|', c, v) from char_tbl4;
-select concat(c, c), concat_ws(v, c) from char_tbl4;
-select like(c, 'Ne  _')from char_tbl4;
-select like(v, 'Ea_')from char_tbl4;
-select lower(c), lower(v) from char_tbl4;
-select upper(c), upper(v) from char_tbl4;
+select bit_length(t1.c), bit_length(t2.c), bit_length(v) from char_tbl4 t1 join char_tbl5 t2 on t1.c = t2.c;
+select char_length(t1.c), char_length(t2.c), char_length(v) from char_tbl4 t1 join char_tbl5 t2 on t1.c = t2.c;
+select octet_length(t1.c), octet_length(t2.c), octet_length(v) from char_tbl4 t1 join char_tbl5 t2 on t1.c = t2.c;
+select concat_ws('|', t1.c, t2.c), concat_ws('|', t2.c, t1.c) from char_tbl4 t1 join char_tbl5 t2 on t1.c = t2.c;
+select concat(t1.c, t2.c), concat(t2.c, t1.c) from char_tbl4 t1 join char_tbl5 t2 on t1.c = t2.c;
+select like(c, 'Ne  _') from char_tbl4;
+select like(v, 'Ea_') from char_tbl4;
+select upper(t1.c), lower(t2.c), upper(t1.c) = upper(t2.c), lower(t1.c) = lower(t2.c) from char_tbl4 t1 join char_tbl5 t2 on t1.c = t2.c;
 select printf('Hey, %s%s', c, v) from char_tbl4;
 select repect(c, 2), repect(v, 2) from char_tbl4;
 select replace(c, 'Ne', 'Ca'), replace(v, 'Ea', 'Ri') from char_tbl4;
@@ -113,8 +113,10 @@ select cast(NULL as varchar(1));
 select cast('abcde' as varchar(1));
 select cast('abcde' as varchar(5));
 select cast('abcde' as varchar(10));
+
 -- char_tbl has renamed to char_tbl1
 drop table char_tbl1;
 drop table char_tbl2;
 drop table char_tbl3;
 drop table char_tbl4;
+drop table char_tbl5;
