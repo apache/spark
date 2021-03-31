@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
 import org.apache.spark.sql.types.StructType
 
 
@@ -89,10 +90,13 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes =
-    AttributeSeq(children.flatMap(c => c.output ++ c.metadataOutput))
+  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+
+  private[this] lazy val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
 
   private[this] lazy val outputAttributes = AttributeSeq(output)
+
+  private[this] lazy val outputMetadataAttributes = AttributeSeq(metadataOutput)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
@@ -103,6 +107,7 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
     childAttributes.resolve(nameParts, resolver)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -113,6 +118,7 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
     outputAttributes.resolve(nameParts, resolver)
+      .orElse(outputMetadataAttributes.resolve(nameParts, resolver))
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -122,7 +128,7 @@ abstract class LogicalPlan
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    outputAttributes.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
+    resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
   }
 
   /**
@@ -153,8 +159,7 @@ abstract class LogicalPlan
 /**
  * A logical plan node with no children.
  */
-abstract class LeafNode extends LogicalPlan {
-  override final def children: Seq[LogicalPlan] = Nil
+trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
 
   /** Leaf nodes that can survive analysis must define their own statistics. */
@@ -164,11 +169,7 @@ abstract class LeafNode extends LogicalPlan {
 /**
  * A logical plan node with single child.
  */
-abstract class UnaryNode extends LogicalPlan {
-  def child: LogicalPlan
-
-  override final def children: Seq[LogicalPlan] = child :: Nil
-
+trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
   /**
    * Generates all valid constraints including an set of aliased constraints by replacing the
    * original constraint expressions with the corresponding alias
@@ -235,12 +236,7 @@ abstract class UnaryNode extends LogicalPlan {
 /**
  * A logical plan node with a left and right child.
  */
-abstract class BinaryNode extends LogicalPlan {
-  def left: LogicalPlan
-  def right: LogicalPlan
-
-  override final def children: Seq[LogicalPlan] = Seq(left, right)
-}
+trait BinaryNode extends LogicalPlan with BinaryLike[LogicalPlan]
 
 abstract class OrderPreservingUnaryNode extends UnaryNode {
   override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -268,7 +264,7 @@ object LogicalPlanIntegrity {
       // NOTE: we still need to filter resolved expressions here because the output of
       // some resolved logical plans can have unresolved references,
       // e.g., outer references in `ExistenceJoin`.
-      p.output.filter(_.resolved).map { a => (a.exprId, a.dataType) }
+      p.output.filter(_.resolved).map { a => (a.exprId, a.dataType.asNullable) }
     }.flatten
 
     val ignoredExprIds = plan.collect {

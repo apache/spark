@@ -213,10 +213,14 @@ private[hive] case class HiveGenericUDTF(
   }
 
   @transient
-  protected lazy val inputInspectors = children.map(toInspector)
+  protected lazy val inputInspector = {
+    val inspectors = children.map(toInspector)
+    val fields = inspectors.indices.map(index => s"_col$index").asJava
+    ObjectInspectorFactory.getStandardStructObjectInspector(fields, inspectors.asJava)
+  }
 
   @transient
-  protected lazy val outputInspector = function.initialize(inputInspectors.toArray)
+  protected lazy val outputInspector = function.initialize(inputInspector)
 
   @transient
   protected lazy val udtInput = new Array[AnyRef](children.length)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.util.Utils
@@ -130,6 +130,22 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
       transformUpWithNewOutput(rule, skipCond = _.analyzed, canGetOutput = _.resolved)
     } else {
       self
+    }
+  }
+
+  override def transformUpWithNewOutput(
+      rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])],
+      skipCond: LogicalPlan => Boolean,
+      canGetOutput: LogicalPlan => Boolean): LogicalPlan = {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      super.transformUpWithNewOutput(rule, skipCond, canGetOutput)
+    }
+  }
+
+  override def updateOuterReferencesInSubquery(plan: LogicalPlan, attrMap: AttributeMap[Attribute])
+    : LogicalPlan = {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      super.updateOuterReferencesInSubquery(plan, attrMap)
     }
   }
 

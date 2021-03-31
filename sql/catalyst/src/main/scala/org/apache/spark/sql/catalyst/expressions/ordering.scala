@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 
@@ -69,7 +70,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
           case s: StructType if order.direction == Descending =>
             - s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case other =>
-            throw new IllegalArgumentException(s"Type $other does not support ordered operations")
+            throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(other)
         }
         if (comparison != 0) {
           return comparison

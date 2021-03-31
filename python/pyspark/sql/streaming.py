@@ -667,7 +667,8 @@ class DataStreamReader(OptionUtils):
         else:
             raise TypeError("path can be only a single string")
 
-    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
+    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
+                datetimeRebaseMode=None, int96RebaseMode=None):
         """
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
@@ -688,6 +689,30 @@ class DataStreamReader(OptionUtils):
             recursively scan a directory for files. Using this option
             disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        datetimeRebaseMode : str, optional
+            the rebasing mode for the values of the ``DATE``, ``TIMESTAMP_MICROS``,
+            ``TIMESTAMP_MILLIS`` logical types from the Julian to Proleptic Gregorian calendar.
+
+                * ``EXCEPTION``: Spark fails in reads of ancient dates/timestamps
+                                 that are ambiguous between the two calendars.
+                *  ``CORRECTED``: loading of dates/timestamps without rebasing.
+                *  ``LEGACY``: perform rebasing of ancient dates/timestamps from the Julian
+                               to Proleptic Gregorian calendar.
+
+            If None is set, the value of the SQL config
+            ``spark.sql.parquet.datetimeRebaseModeInRead`` is used by default.
+        int96RebaseMode : str, optional
+            the rebasing mode for ``INT96`` timestamps from the Julian to
+            Proleptic Gregorian calendar.
+
+                * ``EXCEPTION``: Spark fails in reads of ancient ``INT96`` timestamps
+                                 that are ambiguous between the two calendars.
+                *  ``CORRECTED``: loading of ``INT96`` timestamps without rebasing.
+                *  ``LEGACY``: perform rebasing of ancient ``INT96`` timestamps from the Julian
+                               to Proleptic Gregorian calendar.
+
+            If None is set, the value of the SQL config
+            ``spark.sql.parquet.int96RebaseModeInRead`` is used by default.
 
         Examples
         --------
@@ -698,7 +723,8 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup)
+                       recursiveFileLookup=recursiveFileLookup,
+                       datetimeRebaseMode=datetimeRebaseMode, int96RebaseMode=int96RebaseMode)
         if isinstance(path, str):
             return self._df(self._jreader.parquet(path))
         else:
@@ -1498,8 +1524,7 @@ class DataStreamWriter(object):
         Starts the execution of the streaming query, which will continually output results to the
         given table as new data arrives.
 
-        A new table will be created if the table not exists. The returned
-        :class:`StreamingQuery` object can be used to interact with the stream.
+        The returned :class:`StreamingQuery` object can be used to interact with the stream.
 
         .. versionadded:: 3.1.0
 
@@ -1531,6 +1556,15 @@ class DataStreamWriter(object):
         -----
         This API is evolving.
 
+        For v1 table, partitioning columns provided by `partitionBy` will be respected no matter
+        the table exists or not. A new table will be created if the table not exists.
+
+        For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will
+        be respected only if the v2 table does not exist. Besides, the v2 table created by this API
+        lacks some functionalities (e.g., customized properties, options, and serde info). If you
+        need them, please create the v2 table manually before the execution to avoid creating a
+        table with incomplete information.
+
         Examples
         --------
         >>> sdf.writeStream.format('parquet').queryName('query').toTable('output_table')
@@ -1543,7 +1577,6 @@ class DataStreamWriter(object):
         ...     format='parquet',
         ...     checkpointLocation='/tmp/checkpoint') # doctest: +SKIP
         """
-        # TODO(SPARK-33659): document the current behavior for DataStreamWriter.toTable API
         self.options(**options)
         if outputMode is not None:
             self.outputMode(outputMode)

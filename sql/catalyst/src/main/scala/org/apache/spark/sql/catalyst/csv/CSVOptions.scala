@@ -166,8 +166,6 @@ class CSVOptions(
 
   val quoteAll = getBool("quoteAll", false)
 
-  val inputBufferSize = 128
-
   /**
    * The max error content length in CSV parser/writer exception message.
    */
@@ -259,7 +257,6 @@ class CSVOptions(
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
-    settings.setInputBufferSize(inputBufferSize)
     settings.setMaxColumns(maxColumns)
     settings.setNullValue(nullValue)
     settings.setEmptyValue(emptyValueInRead)

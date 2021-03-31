@@ -18,15 +18,47 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.{InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.test.SharedSparkSession
 
+/**
+ * The trait contains settings and utility functions. It can be mixed to the test suites for
+ * datasource v2 catalogs (in-memory test catalogs). This trait complements the trait
+ * `org.apache.spark.sql.execution.command.DDLCommandTestUtils` with common utility functions
+ * for all unified datasource V1 and V2 test suites.
+ */
 trait CommandSuiteBase extends SharedSparkSession {
-  def version: String = "V2"
-  def catalog: String = "test_catalog"
-  def defaultUsing: String = "USING _"
+  def version: String = "V2" // The prefix is added to test names
+  def catalog: String = "test_catalog" // The default V2 catalog for testing
+  def defaultUsing: String = "USING _" // The clause is used in creating v2 tables under testing
 
+  // V2 catalogs created and used especially for testing
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
     .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
+
+  def checkLocation(
+      t: String,
+      spec: TablePartitionSpec,
+      expected: String): Unit = {
+    import CatalogV2Implicits._
+
+    val tablePath = t.split('.')
+    val catalogName = tablePath.head
+    val namespaceWithTable = tablePath.tail
+    val namespaces = namespaceWithTable.init
+    val tableName = namespaceWithTable.last
+    val catalogPlugin = spark.sessionState.catalogManager.catalog(catalogName)
+    val partTable = catalogPlugin.asTableCatalog
+      .loadTable(Identifier.of(namespaces, tableName))
+      .asInstanceOf[InMemoryPartitionTable]
+    val ident = ResolvePartitionSpec.convertToPartIdent(spec, partTable.partitionSchema.fields)
+    val partMetadata = partTable.loadPartitionMetadata(ident)
+
+    assert(partMetadata.containsKey("location"))
+    assert(partMetadata.get("location") === expected)
+  }
 }

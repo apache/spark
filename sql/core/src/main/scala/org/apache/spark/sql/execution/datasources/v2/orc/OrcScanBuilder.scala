@@ -54,7 +54,7 @@ case class OrcScanBuilder(
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
-      _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, filters).toArray
+      _pushedFilters = OrcFilters.convertibleFilters(dataTypeMap, filters).toArray
     }
     filters
   }

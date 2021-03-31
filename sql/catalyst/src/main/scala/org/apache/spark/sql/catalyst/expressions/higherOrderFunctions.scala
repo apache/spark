@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -39,12 +40,12 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
 
-  override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
-  override def qualifier: Seq[String] = throw new UnresolvedException(this, "qualifier")
-  override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
-  override def newInstance(): NamedExpression = throw new UnresolvedException(this, "newInstance")
+  override def exprId: ExprId = throw new UnresolvedException("exprId")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
+  override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override lazy val resolved = false
 
   override def toString: String = s"lambda '$name"
@@ -278,7 +279,8 @@ case class ArrayTransform(
       if (indexVar.isDefined) {
         indexVar.get.value.set(i)
       }
-      result.update(i, f.eval(inputRow))
+      val v = InternalRow.copyValue(f.eval(inputRow))
+      result.update(i, v)
       i += 1
     }
     result
@@ -804,7 +806,7 @@ case class TransformKeys(
     while (i < map.numElements) {
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
-      val result = functionForEval.eval(inputRow)
+      val result = InternalRow.copyValue(functionForEval.eval(inputRow))
       resultKeys.update(i, result)
       i += 1
     }
@@ -852,7 +854,8 @@ case class TransformValues(
     while (i < map.numElements) {
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
-      resultValues.update(i, functionForEval.eval(inputRow))
+      val v = InternalRow.copyValue(functionForEval.eval(inputRow))
+      resultValues.update(i, v)
       i += 1
     }
     new ArrayBasedMapData(map.keyArray(), resultValues)
@@ -961,9 +964,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   private def assertSizeOfArrayBuffer(size: Int): Unit = {
     if (size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw new RuntimeException(s"Unsuccessful try to zip maps with $size " +
-        s"unique keys due to exceeding the array size limit " +
-        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+      throw QueryExecutionErrors.mapSizeExceedArraySizeWhenZipMapError(size)
     }
   }
 
@@ -1036,7 +1037,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
       value1Var.value.set(v1)
       value2Var.value.set(v2)
       keys.update(i, key)
-      values.update(i, functionForEval.eval(inputRow))
+      val v = InternalRow.copyValue(functionForEval.eval(inputRow))
+      values.update(i, v)
       i += 1
     }
     new ArrayBasedMapData(keys, values)
@@ -1109,7 +1111,8 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
           } else {
             rightElemVar.value.set(null)
           }
-          result.update(i, f.eval(input))
+          val v = InternalRow.copyValue(f.eval(input))
+          result.update(i, v)
           i += 1
         }
         result

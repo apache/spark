@@ -19,18 +19,22 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 
+/**
+ * This base suite contains unified tests for the `DROP TABLE` command that check V1 and V2
+ * table catalogs. The tests that cannot run for all supported catalogs are located in more
+ * specific test suites:
+ *
+ *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.DropTableSuite`
+ *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.DropTableSuiteBase`
+ *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DropTableSuite`
+ *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropTableSuite`
+ */
 trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DROP TABLE"
 
   protected def createTable(tableName: String): Unit = {
     sql(s"CREATE TABLE $tableName (c int) $defaultUsing")
     sql(s"INSERT INTO $tableName SELECT 0")
-  }
-
-  protected def checkTables(namespace: String, expectedTables: String*): Unit = {
-    val tables = sql(s"SHOW TABLES IN $catalog.$namespace").select("tableName")
-    val rows = expectedTables.map(Row(_))
-    checkAnswer(tables, rows)
   }
 
   test("basic") {
@@ -112,9 +116,10 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(s"SELECT * FROM $view"),
           spark.table("source").select("id").collect())
 
-        assert(!spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        val oldTable = spark.table(view)
+        assert(spark.sharedState.cacheManager.lookupCachedData(oldTable).isDefined)
         sql(s"DROP TABLE $t")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        assert(spark.sharedState.cacheManager.lookupCachedData(oldTable).isEmpty)
       }
     }
   }

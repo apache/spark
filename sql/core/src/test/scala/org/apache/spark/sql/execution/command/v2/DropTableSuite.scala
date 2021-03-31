@@ -22,6 +22,9 @@ import org.apache.spark.sql.connector.InMemoryTableSessionCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 
+/**
+ * The class contains tests for the `DROP TABLE` command to check V2 table catalogs.
+ */
 class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
   test("purge option") {
     withNamespaceAndTable("ns", "tbl") { t =>
@@ -29,8 +32,8 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
       val errMsg = intercept[UnsupportedOperationException] {
         sql(s"DROP TABLE $catalog.ns.tbl PURGE")
       }.getMessage
-      // The default TableCatalog.dropTable implementation doesn't support the purge option.
-      assert(errMsg.contains("Purge option is not supported"))
+      // The default TableCatalog.purgeTable implementation throws an exception.
+      assert(errMsg.contains("Purge table is not supported"))
     }
   }
 

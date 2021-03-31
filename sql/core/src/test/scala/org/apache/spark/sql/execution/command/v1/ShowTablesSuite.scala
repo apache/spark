@@ -20,21 +20,17 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
+/**
+ * This base suite contains unified tests for the `SHOW TABLES` command that check V1
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowTablesSuite`
+ *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowTablesSuite`
+ */
 trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
-  override def showSchema: StructType = {
-    new StructType()
-      .add("database", StringType, nullable = false)
-      .add("tableName", StringType, nullable = false)
-      .add("isTemporary", BooleanType, nullable = false)
-  }
-  override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
-    showRows.map {
-      case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)
-    }
-  }
 
   private def withSourceViews(f: => Unit): Unit = {
     withTable("source", "source2") {
@@ -51,31 +47,25 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     withSourceViews {
       runShowTablesSql(
         "SHOW TABLES FROM default",
-        Seq(ShowRow("", "source", true), ShowRow("", "source2", true)))
+        Seq(Row("", "source", true), Row("", "source2", true)))
     }
   }
 
-  test("v1 SHOW TABLES only support single-level namespace") {
-    val exception = intercept[AnalysisException] {
+  test("only support single-level namespace") {
+    val errMsg = intercept[AnalysisException] {
       runShowTablesSql("SHOW TABLES FROM a.b", Seq())
-    }
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+    }.getMessage
+    assert(errMsg.contains("Nested databases are not supported by v1 session catalog: a.b"))
   }
 
   test("SHOW TABLE EXTENDED from default") {
     withSourceViews {
       val expected = Seq(Row("", "source", true), Row("", "source2", true))
-      val schema = new StructType()
-        .add("database", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-        .add("isTemporary", BooleanType, nullable = false)
-        .add("information", StringType, nullable = false)
 
       val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
       val result = df.collect()
       val resultWithoutInfo = result.map { case Row(db, table, temp, _) => Row(db, table, temp) }
 
-      assert(df.schema === schema)
       assert(resultWithoutInfo === expected)
       result.foreach { case Row(_, _, _, info: String) => assert(info.nonEmpty) }
     }
@@ -100,8 +90,48 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       }
     }
   }
+
+  test("no database specified") {
+    Seq(
+      s"SHOW TABLES IN $catalog",
+      s"SHOW TABLE EXTENDED IN $catalog LIKE '*tbl'").foreach { showTableCmd =>
+      val errMsg = intercept[AnalysisException] {
+        sql(showTableCmd)
+      }.getMessage
+      assert(errMsg.contains("Database from v1 session catalog is not specified"))
+    }
+  }
+
+  test("SPARK-34157: Unify output of SHOW TABLES and pass output attributes properly") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      sql(s"USE $catalog.ns")
+      withTable("tbl") {
+        sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
+        checkAnswer(sql("show tables"), Row("ns", "tbl", false))
+        assert(sql("show tables").schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary"))
+        assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
+        assert(sql("show table extended like 'tbl'").schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary", "information"))
+
+        // Keep the legacy output schema
+        withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
+          checkAnswer(sql("show tables"), Row("ns", "tbl", false))
+          assert(sql("show tables").schema.fieldNames ===
+            Seq("database", "tableName", "isTemporary"))
+          assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
+          assert(sql("show table extended like 'tbl'").schema.fieldNames ===
+            Seq("database", "tableName", "isTemporary", "information"))
+        }
+      }
+    }
+  }
 }
 
+/**
+ * The class contains tests for the `SHOW TABLES` command to check V1 In-Memory table catalog.
+ */
 class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
   test("SPARK-33670: show partitions from a datasource table") {
     import testImplicits._

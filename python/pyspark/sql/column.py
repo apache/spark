@@ -323,7 +323,8 @@ class Column(object):
                 "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
                 "be supported in the future release. Use `column[key]` or `column.key` syntax "
                 "instead.",
-                DeprecationWarning)
+                FutureWarning
+            )
         return self[key]
 
     def getField(self, name):
@@ -354,7 +355,8 @@ class Column(object):
                 "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
                 "be supported in the future release. Use `column[name]` or `column.name` syntax "
                 "instead.",
-                DeprecationWarning)
+                FutureWarning
+            )
         return self[name]
 
     def withField(self, fieldName, col):

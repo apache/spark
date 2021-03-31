@@ -27,9 +27,10 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.BaseRelation
@@ -64,8 +65,7 @@ object DataSourceUtils {
   def verifySchema(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportDataType(field.dataType)) {
-        throw new AnalysisException(
-          s"$format data source does not support ${field.dataType.catalogString} data type.")
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
   }
@@ -132,37 +132,26 @@ object DataSourceUtils {
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
-    val config = format match {
-      case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key
-      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
-      case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
-      case _ => throw new IllegalStateException("unrecognized format " + format)
+    val (config, option) = format match {
+      case "Parquet INT96" =>
+        (SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key, ParquetOptions.INT96_REBASE_MODE)
+      case "Parquet" =>
+        (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
+      case "Avro" =>
+        (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
+      case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
     }
-    new SparkUpgradeException("3.0", "reading dates before 1582-10-15 or timestamps before " +
-      s"1900-01-01T00:00:00Z from $format files can be ambiguous, as the files may be written by " +
-      "Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar that is " +
-      "different from Spark 3.0+'s Proleptic Gregorian calendar. See more details in " +
-      s"SPARK-31404. You can set $config to 'LEGACY' to rebase the datetime values w.r.t. " +
-      s"the calendar difference during reading. Or set $config to 'CORRECTED' to read the " +
-      "datetime values as it is.", null)
+    QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
   }
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
     val config = format match {
-      case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key
-      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
-      case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key
-      case _ => throw new IllegalStateException("unrecognized format " + format)
+      case "Parquet INT96" => SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key
+      case "Parquet" => SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
+      case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
+      case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
     }
-    new SparkUpgradeException("3.0", "writing dates before 1582-10-15 or timestamps before " +
-      s"1900-01-01T00:00:00Z into $format files can be dangerous, as the files may be read by " +
-      "Spark 2.x or legacy versions of Hive later, which uses a legacy hybrid calendar that is " +
-      "different from Spark 3.0+'s Proleptic Gregorian calendar. See more details in " +
-      s"SPARK-31404. You can set $config to 'LEGACY' to rebase the datetime values w.r.t. " +
-      "the calendar difference during writing, to get maximum interoperability. Or set " +
-      s"$config to 'CORRECTED' to write the datetime values as it is, if you are 100% sure that " +
-      "the written files will only be read by Spark 3.0+ or other systems that use Proleptic " +
-      "Gregorian calendar.", null)
+    QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
   }
 
   def creteDateRebaseFuncInRead(
@@ -221,13 +210,7 @@ object DataSourceUtils {
       // Check the same key with different values
       table.storage.properties.foreach { case (k, v) =>
         if (extraOptions.containsKey(k) && extraOptions.get(k) != v) {
-          throw new AnalysisException(
-            s"Fail to resolve data source for the table ${table.identifier} since the table " +
-              s"serde property has the duplicated key $k with extra options specified for this " +
-              "scan operation. To fix this, you can rollback to the legacy behavior of ignoring " +
-              "the extra options by setting the config " +
-              s"${SQLConf.LEGACY_EXTRA_OPTIONS_BEHAVIOR.key} to `false`, or address the " +
-              s"conflicts of the same config.")
+          throw QueryCompilationErrors.failToResolveDataSourceForTableError(table, k)
         }
       }
       // To keep the original key from table properties, here we filter all case insensitive

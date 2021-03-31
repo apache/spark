@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.sql.Date
+import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -27,7 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 
 class PushFoldableIntoBranchesSuite
@@ -53,7 +55,7 @@ class PushFoldableIntoBranchesSuite
 
   test("Push down EqualTo through If") {
     assertEquivalent(EqualTo(ifExp, Literal(4)), FalseLiteral)
-    assertEquivalent(EqualTo(ifExp, Literal(3)), Not(a))
+    assertEquivalent(EqualTo(ifExp, Literal(3)), Not(a <=> TrueLiteral))
 
     // Push down at most one not foldable expressions.
     assertEquivalent(
@@ -102,7 +104,7 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(Remainder(ifExp, Literal(4)), If(a, Literal(2), Literal(3)))
     assertEquivalent(Divide(If(a, Literal(2.0), Literal(3.0)), Literal(1.0)),
       If(a, Literal(2.0), Literal(3.0)))
-    assertEquivalent(And(If(a, FalseLiteral, TrueLiteral), TrueLiteral), Not(a))
+    assertEquivalent(And(If(a, FalseLiteral, TrueLiteral), TrueLiteral), Not(a <=> TrueLiteral))
     assertEquivalent(Or(If(a, FalseLiteral, TrueLiteral), TrueLiteral), TrueLiteral)
   }
 
@@ -141,7 +143,7 @@ class PushFoldableIntoBranchesSuite
       CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal(1))), Some(Literal(2)))
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(2)),
-      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), FalseLiteral)), Some(TrueLiteral)))
+      GreaterThanOrEqual(Rand(1), Literal(0.5)))
     assertEquivalent(EqualTo(nonDeterministic, Literal(3)),
       CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), FalseLiteral)), Some(FalseLiteral)))
 
@@ -257,5 +259,101 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None).cast(StringType), Literal("4")),
       CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), None))
+  }
+
+  test("SPARK-33848: Push down dateTimeExpression with binary expression through If/CaseWhen") {
+    val d = Date.valueOf("2021-01-01")
+    // If
+    assertEquivalent(AddMonths(Literal(d),
+      If(a, Literal(1), Literal(2))),
+      If(a, Literal(Date.valueOf("2021-02-01")), Literal(Date.valueOf("2021-03-01"))))
+    assertEquivalent(DateAdd(Literal(d),
+      If(a, Literal(1), Literal(2))),
+      If(a, Literal(Date.valueOf("2021-01-02")), Literal(Date.valueOf("2021-01-03"))))
+    assertEquivalent(DateAddInterval(Literal(d),
+      If(a, Literal(new CalendarInterval(1, 1, 0)),
+        Literal(new CalendarInterval(1, 2, 0)))),
+      If(a, Literal(Date.valueOf("2021-02-02")), Literal(Date.valueOf("2021-02-03"))))
+    assertEquivalent(DateAddYMInterval(Literal(d),
+      If(a, Literal.create(Period.ofMonths(1), YearMonthIntervalType),
+        Literal.create(Period.ofMonths(2), YearMonthIntervalType))),
+      If(a, Literal(Date.valueOf("2021-02-01")), Literal(Date.valueOf("2021-03-01"))))
+    assertEquivalent(DateDiff(Literal(d),
+      If(a, Literal(Date.valueOf("2021-02-01")), Literal(Date.valueOf("2021-03-01")))),
+      If(a, Literal(-31), Literal(-59)))
+    assertEquivalent(DateSub(Literal(d),
+      If(a, Literal(1), Literal(2))),
+      If(a, Literal(Date.valueOf("2020-12-31")), Literal(Date.valueOf("2020-12-30"))))
+    assertEquivalent(TimestampAddYMInterval(
+      Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
+      If(a, Literal.create(Period.ofMonths(1), YearMonthIntervalType),
+        Literal.create(Period.ofMonths(2), YearMonthIntervalType))),
+      If(a, Literal.create(Timestamp.valueOf("2021-02-01 00:00:00"), TimestampType),
+        Literal.create(Timestamp.valueOf("2021-03-01 00:00:00"), TimestampType)))
+    assertEquivalent(TimeAdd(
+      Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
+      If(a, Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
+        Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(456)))),
+      If(a, Literal.create(Timestamp.valueOf("2021-01-11 00:10:00.321"), TimestampType),
+        Literal.create(Timestamp.valueOf("2021-01-11 00:10:00.456"), TimestampType)))
+
+    // CaseWhen
+    assertEquivalent(AddMonths(Literal(d),
+      CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None)),
+      CaseWhen(Seq((a, Literal(Date.valueOf("2021-02-01"))),
+        (c, Literal(Date.valueOf("2021-03-01")))), None))
+    assertEquivalent(DateAdd(Literal(d),
+      CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None)),
+      CaseWhen(Seq((a, Literal(Date.valueOf("2021-01-02"))),
+        (c, Literal(Date.valueOf("2021-01-03")))), None))
+    assertEquivalent(DateAddInterval(Literal(d),
+      CaseWhen(Seq((a, Literal(new CalendarInterval(1, 1, 0))),
+        (c, Literal(new CalendarInterval(1, 2, 0)))), None)),
+      CaseWhen(Seq((a, Literal(Date.valueOf("2021-02-02"))),
+        (c, Literal(Date.valueOf("2021-02-03")))), None))
+    assertEquivalent(DateAddYMInterval(Literal(d),
+      CaseWhen(Seq((a, Literal.create(Period.ofMonths(1), YearMonthIntervalType)),
+        (c, Literal.create(Period.ofMonths(2), YearMonthIntervalType))), None)),
+      CaseWhen(Seq((a, Literal(Date.valueOf("2021-02-01"))),
+        (c, Literal(Date.valueOf("2021-03-01")))), None))
+    assertEquivalent(DateDiff(Literal(d),
+      CaseWhen(Seq((a, Literal(Date.valueOf("2021-02-01"))),
+        (c, Literal(Date.valueOf("2021-03-01")))), None)),
+      CaseWhen(Seq((a, Literal(-31)), (c, Literal(-59))), None))
+    assertEquivalent(DateSub(Literal(d),
+      CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None)),
+      CaseWhen(Seq((a, Literal(Date.valueOf("2020-12-31"))),
+        (c, Literal(Date.valueOf("2020-12-30")))), None))
+    assertEquivalent(TimestampAddYMInterval(
+      Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
+      CaseWhen(Seq((a, Literal.create(Period.ofMonths(1), YearMonthIntervalType)),
+        (c, Literal.create(Period.ofMonths(2), YearMonthIntervalType))), None)),
+      CaseWhen(Seq((a, Literal.create(Timestamp.valueOf("2021-02-01 00:00:00"), TimestampType)),
+        (c, Literal.create(Timestamp.valueOf("2021-03-01 00:00:00"), TimestampType))), None))
+    assertEquivalent(TimeAdd(
+      Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
+      CaseWhen(Seq((a, Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321))),
+        (c, Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(456)))), None)),
+      CaseWhen(Seq((a, Literal.create(Timestamp.valueOf("2021-01-11 00:10:00.321"), TimestampType)),
+        (c, Literal.create(Timestamp.valueOf("2021-01-11 00:10:00.456"), TimestampType))), None))
+  }
+
+  test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq((a, Literal.create(null, IntegerType)))), Literal(2)),
+      Literal.create(null, BooleanType))
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal("str")))).cast(IntegerType),
+        Literal(2)),
+      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal.create(null, BooleanType)))))
+  }
+
+  test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(0)),
+      'a > 10 <=> TrueLiteral)
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)),
+      Not('a > 10 <=> TrueLiteral))
   }
 }

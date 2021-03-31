@@ -25,7 +25,6 @@ import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Physical plan node for append into a v2 table using V1 write interfaces.
@@ -34,7 +33,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 case class AppendDataExecV1(
     table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan,
     refreshCache: () => Unit,
     write: V1Write) extends V1FallbackWriters
@@ -52,7 +50,6 @@ case class AppendDataExecV1(
  */
 case class OverwriteByExpressionExecV1(
     table: SupportsWrite,
-    writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan,
     refreshCache: () => Unit,
     write: V1Write) extends V1FallbackWriters
@@ -63,7 +60,6 @@ sealed trait V1FallbackWriters extends V2CommandExec with SupportsV1Write {
   override final def children: Seq[SparkPlan] = Nil
 
   def table: SupportsWrite
-  def writeOptions: CaseInsensitiveStringMap
   def refreshCache: () => Unit
   def write: V1Write
 

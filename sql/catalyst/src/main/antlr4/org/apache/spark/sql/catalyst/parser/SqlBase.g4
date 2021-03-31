@@ -134,6 +134,8 @@ statement
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+    | ANALYZE TABLES ((FROM | IN) multipartIdentifier)? COMPUTE STATISTICS
+        (identifier)?                                                  #analyzeTables
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
@@ -229,7 +231,8 @@ statement
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
-    | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
+    | MSCK REPAIR TABLE multipartIdentifier
+        (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
@@ -585,11 +588,21 @@ fromClause
     ;
 
 aggregationClause
-    : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
+    : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
+        (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
+    | GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
-    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
+    ;
+
+groupByClause
+    : groupingAnalytics
+    | expression
+    ;
+
+groupingAnalytics
+    : (ROLLUP | CUBE | GROUPING SETS)  '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupingSet
@@ -692,7 +705,7 @@ inlineTable
     ;
 
 functionTable
-    : funcName=errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
+    : funcName=functionName '(' (expression (',' expression)*)? ')' tableAlias
     ;
 
 tableAlias
@@ -803,7 +816,8 @@ primaryExpression
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
     | functionName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
-       (FILTER '(' WHERE where=booleanExpression ')')? (OVER windowSpec)?                      #functionCall
+       (FILTER '(' WHERE where=booleanExpression ')')?
+       (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
     | identifier '->' expression                                                               #lambda
     | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -1143,6 +1157,7 @@ ansiNonReserved
     | REPAIR
     | REPLACE
     | RESET
+    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -1171,6 +1186,7 @@ ansiNonReserved
     | STRUCT
     | SUBSTR
     | SUBSTRING
+    | SYNC
     | TABLES
     | TABLESAMPLE
     | TBLPROPERTIES
@@ -1397,6 +1413,7 @@ nonReserved
     | REPAIR
     | REPLACE
     | RESET
+    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -1426,6 +1443,7 @@ nonReserved
     | STRUCT
     | SUBSTR
     | SUBSTRING
+    | SYNC
     | TABLE
     | TABLES
     | TABLESAMPLE
@@ -1651,6 +1669,7 @@ RENAME: 'RENAME';
 REPAIR: 'REPAIR';
 REPLACE: 'REPLACE';
 RESET: 'RESET';
+RESPECT: 'RESPECT';
 RESTRICT: 'RESTRICT';
 REVOKE: 'REVOKE';
 RIGHT: 'RIGHT';
@@ -1683,6 +1702,7 @@ STRATIFY: 'STRATIFY';
 STRUCT: 'STRUCT';
 SUBSTR: 'SUBSTR';
 SUBSTRING: 'SUBSTRING';
+SYNC: 'SYNC';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLESAMPLE: 'TABLESAMPLE';

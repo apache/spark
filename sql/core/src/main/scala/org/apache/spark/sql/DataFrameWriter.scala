@@ -314,11 +314,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, df.sparkSession.sessionState.conf)
 
-      val optionsWithPath = if (path.isEmpty) {
-        extraOptions
-      } else {
-        extraOptions + ("path" -> path.get)
-      }
+      val optionsWithPath = getOptionsWithPath(path)
 
       val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
         optionsWithPath.originalMap
@@ -416,6 +412,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
+  private def getOptionsWithPath(path: Option[String]): CaseInsensitiveMap[String] = {
+    if (path.isEmpty) {
+      extraOptions
+    } else {
+      extraOptions + ("path" -> path.get)
+    }
+  }
+
   private def saveToV1Source(path: Option[String]): Unit = {
     partitioningColumns.foreach { columns =>
       extraOptions = extraOptions + (
@@ -423,11 +427,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         DataSourceUtils.encodePartitioningColumns(columns))
     }
 
-    val optionsWithPath = if (path.isEmpty) {
-      extraOptions
-    } else {
-      extraOptions + ("path" -> path.get)
-    }
+    val optionsWithPath = getOptionsWithPath(path)
 
     // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
@@ -885,7 +885,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `snappy`, `zlib`, and `lzo`). This will override
+   * shorten names(`none`, `snappy`, `zlib`, `lzo`, and `zstd`). This will override
    * `orc.compress` and `spark.sql.orc.compression.codec`. If `orc.compress` is given,
    * it overrides `spark.sql.orc.compression.codec`.</li>
    * </ul>

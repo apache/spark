@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure,
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -181,7 +182,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   }
 }
 
-abstract class MultiLikeBase
+sealed abstract class MultiLikeBase
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   protected def patterns: Seq[UTF8String]
@@ -220,7 +221,7 @@ abstract class MultiLikeBase
 /**
  * Optimized version of LIKE ALL, when all pattern values are literal.
  */
-abstract class LikeAllBase extends MultiLikeBase {
+sealed abstract class LikeAllBase extends MultiLikeBase {
 
   override def matches(exprValue: String): Any = {
     if (cache.forall(matchFunc(_, exprValue))) {
@@ -276,7 +277,7 @@ case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends Like
 /**
  * Optimized version of LIKE ANY, when all pattern values are literal.
  */
-abstract class LikeAnyBase extends MultiLikeBase {
+sealed abstract class LikeAnyBase extends MultiLikeBase {
 
   override def matches(exprValue: String): Any = {
     if (cache.exists(matchFunc(_, exprValue))) {
@@ -445,7 +446,9 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   override def dataType: DataType = ArrayType(StringType)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = str :: regex :: limit :: Nil
+  override def first: Expression = str
+  override def second: Expression = regex
+  override def third: Expression = limit
 
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1));
 
@@ -625,10 +628,10 @@ object RegExpReplace {
 object RegExpExtractBase {
   def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
     if (groupIndex < 0) {
-      throw new IllegalArgumentException("The specified group index cannot be less than zero")
+      throw QueryExecutionErrors.regexGroupIndexLessThanZeroError
     } else if (groupCount < groupIndex) {
-      throw new IllegalArgumentException(
-        s"Regex group count is $groupCount, but the specified group index is $groupIndex")
+      throw QueryExecutionErrors.regexGroupIndexExceedGroupCountError(
+        groupCount, groupIndex)
     }
   }
 }
@@ -645,7 +648,9 @@ abstract class RegExpExtractBase
   @transient private var pattern: Pattern = _
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
+  override def first: Expression = subject
+  override def second: Expression = regexp
+  override def third: Expression = idx
 
   protected def getLastMatcher(s: Any, p: Any): Matcher = {
     if (p != lastRegex) {

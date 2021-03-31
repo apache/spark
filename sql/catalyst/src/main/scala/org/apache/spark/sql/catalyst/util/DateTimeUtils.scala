@@ -50,7 +50,10 @@ object DateTimeUtils {
 
   val TIMEZONE_OPTION = "timeZone"
 
-  def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
+  def getZoneId(timeZoneId: String): ZoneId = {
+    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+    ZoneId.of(timeZoneId.replaceFirst("(\\+|\\-)(\\d):", "$10$2:"), ZoneId.SHORT_IDS)
+  }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
   /**
@@ -575,6 +578,42 @@ object DateTimeUtils {
   }
 
   /**
+   * Adds months to a timestamp at the given time zone. It converts the input timestamp to a local
+   * timestamp at the given time zone, adds months, and converts the resulted local timestamp
+   * back to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.
+   *
+   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z
+   * @param months The amount of months to add. It can be positive or negative.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   */
+  def timestampAddMonths(micros: Long, months: Int, zoneId: ZoneId): Long = {
+    instantToMicros(microsToInstant(micros).atZone(zoneId).plusMonths(months).toInstant)
+  }
+
+  /**
+   * Adds a day-time interval expressed in microseconds to a timestamp at the given time zone.
+   * It converts the input timestamp to a local timestamp, and adds the interval by:
+   *   - Splitting the interval to days and microsecond adjustment in a day, and
+   *   - First of all, it adds days and then the time part.
+   * The resulted local timestamp is converted back to an instant at the given time zone.
+   *
+   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @param dayTime The amount of microseconds to add. It can be positive or negative.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   */
+  def timestampAddDayTime(micros: Long, dayTime: Long, zoneId: ZoneId): Long = {
+    val days = dayTime / MICROS_PER_DAY
+    val microseconds = dayTime - days * MICROS_PER_DAY
+    val resultTimestamp = microsToInstant(micros)
+      .atZone(zoneId)
+      .plusDays(days)
+      .plus(microseconds, ChronoUnit.MICROS)
+    instantToMicros(resultTimestamp.toInstant)
+  }
+
+  /**
    * Adds a full interval (months, days, microseconds) a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
@@ -670,9 +709,10 @@ object DateTimeUtils {
   private val FRIDAY = 1
   private val SATURDAY = 2
 
-  /*
+  /**
    * Returns day of week from String. Starting from Thursday, marked as 0.
    * (Because 1970-01-01 is Thursday).
+   * @throws IllegalArgumentException if the input is not a valid day of week.
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
     val dowString = string.toString.toUpperCase(Locale.ROOT)
@@ -684,7 +724,8 @@ object DateTimeUtils {
       case "TH" | "THU" | "THURSDAY" => THURSDAY
       case "FR" | "FRI" | "FRIDAY" => FRIDAY
       case "SA" | "SAT" | "SATURDAY" => SATURDAY
-      case _ => -1
+      case _ =>
+        throw new IllegalArgumentException(s"""Illegal input for day of week: $string""")
     }
   }
 

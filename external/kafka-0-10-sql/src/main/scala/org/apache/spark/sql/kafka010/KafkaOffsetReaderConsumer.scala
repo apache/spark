@@ -116,9 +116,6 @@ private[kafka010] class KafkaOffsetReaderConsumer(
 
   override def toString(): String = consumerStrategy.toString
 
-  /**
-   * Closes the connection to Kafka, and cleans up state.
-   */
   override def close(): Unit = {
     if (_consumer != null) uninterruptibleThreadRunner.runUninterruptibly { stopConsumer() }
     uninterruptibleThreadRunner.shutdown()
@@ -137,10 +134,6 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       partitions.asScala.toSet
   }
 
-  /**
-   * Fetch the partition offsets for the topic partitions that are indicated
-   * in the [[ConsumerStrategy]] and [[KafkaOffsetRangeLimit]].
-   */
   override def fetchPartitionOffsets(
       offsetRangeLimit: KafkaOffsetRangeLimit,
       isStartingOffsets: Boolean): Map[TopicPartition, Long] = {
@@ -170,14 +163,6 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     }
   }
 
-  /**
-   * Resolves the specific offsets based on Kafka seek positions.
-   * This method resolves offset value -1 to the latest and -2 to the
-   * earliest Kafka seek position.
-   *
-   * @param partitionOffsets the specific offsets to resolve
-   * @param reportDataLoss callback to either report or log data loss depending on setting
-   */
   override def fetchSpecificOffsets(
       partitionOffsets: Map[TopicPartition, Long],
       reportDataLoss: String => Unit): KafkaSourceOffset = {
@@ -278,10 +263,6 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     KafkaSourceOffset(fetched)
   }
 
-  /**
-   * Fetch the earliest offsets for the topic partitions that are indicated
-   * in the [[ConsumerStrategy]].
-   */
   override def fetchEarliestOffsets(): Map[TopicPartition, Long] = partitionsAssignedToConsumer(
     partitions => {
       logDebug("Seeking to the beginning")
@@ -293,18 +274,10 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     }, fetchingEarliestOffset = true)
 
   /**
-   * Fetch the latest offsets for the topic partitions that are indicated
-   * in the [[ConsumerStrategy]].
-   *
+   * Specific to `KafkaOffsetReaderConsumer`:
    * Kafka may return earliest offsets when we are requesting latest offsets if `poll` is called
    * right before `seekToEnd` (KAFKA-7703). As a workaround, we will call `position` right after
    * `poll` to wait until the potential offset request triggered by `poll(0)` is done.
-   *
-   * In addition, to avoid other unknown issues, we also use the given `knownOffsets` to audit the
-   * latest offsets returned by Kafka. If we find some incorrect offsets (a latest offset is less
-   * than an offset in `knownOffsets`), we will retry at most `maxOffsetFetchAttempts` times. When
-   * a topic is recreated, the latest offsets may be less than offsets in `knownOffsets`. We cannot
-   * distinguish this with KAFKA-7703, so we just return whatever we get from Kafka after retrying.
    */
   override def fetchLatestOffsets(
       knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap =
@@ -364,10 +337,6 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     }
   }
 
-  /**
-   * Fetch the earliest offsets for specific topic partitions.
-   * The return result may not contain some partitions if they are deleted.
-   */
   override def fetchEarliestOffsets(
       newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
     if (newPartitions.isEmpty) {
@@ -387,14 +356,6 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     }
   }
 
-  /**
-   * Return the offset ranges for a Kafka batch query. If `minPartitions` is set, this method may
-   * split partitions to respect it. Since offsets can be early and late binding which are evaluated
-   * on the executors, in order to divvy up the partitions we need to perform some substitutions. We
-   * don't want to send exact offsets to the executors, because data may age out before we can
-   * consume the data. This method makes some approximate splitting, and replaces the special offset
-   * values in the final output.
-   */
   override def getOffsetRangesFromUnresolvedOffsets(
       startingOffsets: KafkaOffsetRangeLimit,
       endingOffsets: KafkaOffsetRangeLimit): Seq[KafkaOffsetRange] = {
@@ -467,11 +428,6 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       .map(_.toString)
   }
 
-  /**
-   * Return the offset ranges for a Kafka streaming batch. If `minPartitions` is set, this method
-   * may split partitions to respect it. If any data lost issue is detected, `reportDataLoss` will
-   * be called.
-   */
   override def getOffsetRangesFromResolvedOffsets(
       fromPartitionOffsets: PartitionOffsetMap,
       untilPartitionOffsets: PartitionOffsetMap,

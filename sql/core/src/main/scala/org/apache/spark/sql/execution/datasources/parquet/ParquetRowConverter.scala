@@ -252,6 +252,11 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
     catalystType match {
+      case LongType if parquetType.getOriginalType == OriginalType.UINT_32 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            updater.setLong(Integer.toUnsignedLong(value))
+        }
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
 
@@ -269,17 +274,51 @@ private[parquet] class ParquetRowConverter(
 
       // For INT32 backed decimals
       case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
-        new ParquetIntDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+        val metadata = parquetType.asPrimitiveType().getDecimalMetadata
+        if (metadata == null) {
+          // If the column is a plain INT32, we should pick the precision that can host the largest
+          // INT32 value.
+          new ParquetIntDictionaryAwareDecimalConverter(
+            DecimalType.IntDecimal.precision, 0, updater)
+        } else {
+          new ParquetIntDictionaryAwareDecimalConverter(
+            metadata.getPrecision, metadata.getScale, updater)
+        }
+
+      // For unsigned int64
+      case _: DecimalType if parquetType.getOriginalType == OriginalType.UINT_64 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
+          }
+        }
 
       // For INT64 backed decimals
       case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
-        new ParquetLongDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+        val metadata = parquetType.asPrimitiveType().getDecimalMetadata
+        if (metadata == null) {
+          // If the column is a plain INT64, we should pick the precision that can host the largest
+          // INT64 value.
+          new ParquetLongDictionaryAwareDecimalConverter(
+            DecimalType.LongDecimal.precision, 0, updater)
+        } else {
+          new ParquetLongDictionaryAwareDecimalConverter(
+            metadata.getPrecision, metadata.getScale, updater)
+        }
 
       // For BINARY and FIXED_LEN_BYTE_ARRAY backed decimals
       case t: DecimalType
         if parquetType.asPrimitiveType().getPrimitiveTypeName == FIXED_LEN_BYTE_ARRAY ||
            parquetType.asPrimitiveType().getPrimitiveTypeName == BINARY =>
-        new ParquetBinaryDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+        val metadata = parquetType.asPrimitiveType().getDecimalMetadata
+        if (metadata == null) {
+          throw new RuntimeException(s"Unable to create Parquet converter for ${t.typeName} " +
+            s"whose Parquet type is $parquetType without decimal metadata. Please read this " +
+            "column/field as Spark BINARY type." )
+        } else {
+          new ParquetBinaryDictionaryAwareDecimalConverter(
+            metadata.getPrecision, metadata.getScale, updater)
+        }
 
       case t: DecimalType =>
         throw new RuntimeException(

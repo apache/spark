@@ -30,7 +30,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.sql.catalyst.{AliasIdentifier, IdentifierWithDatabase}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
@@ -91,7 +90,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
 
-  protected def copyTagsFrom(other: BaseType): Unit = {
+  def copyTagsFrom(other: BaseType): Unit = {
     // SPARK-32753: it only makes sense to copy tags to a new node
     // but it's too expensive to detect other cases likes node removal
     // so we make a compromise here to copy tags to node with no tags
@@ -465,7 +464,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   private def makeCopy(
       newArgs: Array[AnyRef],
-      allowEmptyArgs: Boolean): BaseType = attachTree(this, "makeCopy") {
+      allowEmptyArgs: Boolean): BaseType = {
     val allCtors = getClass.getConstructors
     if (newArgs.isEmpty && allCtors.isEmpty) {
       // This is a singleton object which doesn't have any constructor. Just return `this` as we
@@ -504,8 +503,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
-        throw new TreeNodeException(
-          this,
+        throw new IllegalStateException(
           s"""
              |Failed to copy node.
              |Is otherCopyArgs specified correctly for $nodeName.
@@ -829,4 +827,26 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case storage: CatalogStorageFormat => true
     case _ => false
   }
+}
+
+trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  override final def children: Seq[T] = Nil
+}
+
+trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def child: T
+  @transient override final lazy val children: Seq[T] = child :: Nil
+}
+
+trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def left: T
+  def right: T
+  @transient override final lazy val children: Seq[T] = left :: right :: Nil
+}
+
+trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def first: T
+  def second: T
+  def third: T
+  @transient override final lazy val children: Seq[T] = first :: second :: third :: Nil
 }
