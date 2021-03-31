@@ -2837,26 +2837,29 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-34882: Aggregate with multiple distinct null sensitive aggregators") {
-    spark.udf.register("countNulls", udaf(new Aggregator[JLong, JLong, JLong] {
-      def zero: JLong = 0L
-      def reduce(b: JLong, a: JLong): JLong = if (a == null) {
-        b + 1
-      } else {
-        b
-      }
-      def merge(b1: JLong, b2: JLong): JLong = b1 + b2
-      def finish(r: JLong): JLong = r
-      def bufferEncoder: Encoder[JLong] = Encoders.LONG
-      def outputEncoder: Encoder[JLong] = Encoders.LONG
-    }))
+    withUserDefinedFunction(("countNulls", true)) {
+      spark.udf.register("countNulls", udaf(new Aggregator[JLong, JLong, JLong] {
+        def zero: JLong = 0L
+        def reduce(b: JLong, a: JLong): JLong = if (a == null) {
+          b + 1
+        } else {
+          b
+        }
+        def merge(b1: JLong, b2: JLong): JLong = b1 + b2
+        def finish(r: JLong): JLong = r
+        def bufferEncoder: Encoder[JLong] = Encoders.LONG
+        def outputEncoder: Encoder[JLong] = Encoders.LONG
+      }))
 
-    val result = testData.selectExpr(
-      "countNulls(key)",
-      "countNulls(DISTINCT key)",
-      "countNulls(key) FILTER (WHERE key > 50)",
-      "countNulls(DISTINCT key) FILTER (WHERE key > 50)")
+      val result = testData.selectExpr(
+        "countNulls(key)",
+        "countNulls(DISTINCT key)",
+        "countNulls(key) FILTER (WHERE key > 50)",
+        "countNulls(DISTINCT key) FILTER (WHERE key > 50)",
+        "count(DISTINCT key)")
 
-    checkAnswer(result, Row(0, 0, 0, 0))
+      checkAnswer(result, Row(0, 0, 0, 0, 100))
+    }
   }
 }
 
