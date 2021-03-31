@@ -28,6 +28,8 @@ public interface FunctionCatalog extends CatalogPlugin {
 
   /**
    * List the functions in a namespace from the catalog.
+   * <p>
+   * If there are no functions in the namespace, implementations should return an empty array.
    *
    * @param namespace a multi-part namespace
    * @return an array of Identifiers for functions

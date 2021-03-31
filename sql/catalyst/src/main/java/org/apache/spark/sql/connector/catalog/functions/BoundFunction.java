@@ -21,13 +21,12 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.IntegerType;
 import org.apache.spark.sql.types.StructType;
 
-import java.io.Serializable;
 import java.util.UUID;
 
 /**
  * Represents a function that is bound to an input type.
  */
-public interface BoundFunction extends Function, Serializable {
+public interface BoundFunction extends Function {
 
   /**
    * Returns the required {@link DataType data types} of the input values to this function.
