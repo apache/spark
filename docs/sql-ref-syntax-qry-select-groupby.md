@@ -23,8 +23,9 @@ license: |
 
 The `GROUP BY` clause is used to group the rows based on a set of specified grouping expressions and compute aggregations on
 the group of rows based on one or more specified aggregate functions. Spark also supports advanced aggregations to do multiple
-aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
-When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
+aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses， also spark support partial grouping
+analytics and concatenated grouping analytics. When a FILTER clause is attached to an aggregate function, only the matching
+rows are passed to that function.
 
 ### Syntax
 
@@ -66,8 +67,6 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
     equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
     and global aggregate.
-    
-    
 
 * **ROLLUP**
 
@@ -90,9 +89,9 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
      (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
 
-* **Partial Groupings**
+* **Partial Grouping Analytics**
 
-    Partial Groupings means there are both `group_expression` and `CUBE|ROLLUP|GROUPING SETS`
+    Partial grouping analytics means there are both `group_expression` and `CUBE|ROLLUP|GROUPING SETS`
     in GROUP BY clause. For example:
     `GROUP BY warehouse, CUBE(product, location)` is equivalent to
     `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse, location), (warehouse))`.
@@ -103,7 +102,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 * **Concatenated Groupings**
   
-    Concatenated groupings offer a concise way to generate useful combinations of groupings. Groupings specified
+    Concatenated grouping analytics offer a concise way to generate useful combinations of groupings. Groupings specified
     with concatenated groupings yield the cross-product of groupings from each grouping set. The cross-product 
     operation enables even a small number of concatenated groupings to generate a large number of final groups. 
     The concatenated groupings are specified simply by listing multiple `GROUPING SETS`, `CUBES`, and `ROLLUP`, 
