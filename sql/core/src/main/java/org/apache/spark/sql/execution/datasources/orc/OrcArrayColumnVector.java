@@ -34,11 +34,11 @@ public class OrcArrayColumnVector extends OrcColumnVector {
   private final long[] lengths;
 
   OrcArrayColumnVector(
-    DataType type,
-    ColumnVector vector,
-    OrcColumnVector data,
-    long[] offsets,
-    long[] lengths) {
+      DataType type,
+      ColumnVector vector,
+      OrcColumnVector data,
+      long[] offsets,
+      long[] lengths) {
 
     super(type, vector);
 

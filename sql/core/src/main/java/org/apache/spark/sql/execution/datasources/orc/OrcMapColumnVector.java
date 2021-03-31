@@ -36,12 +36,12 @@ public class OrcMapColumnVector extends OrcColumnVector {
   private final long[] lengths;
 
   OrcMapColumnVector(
-    DataType type,
-    ColumnVector vector,
-    OrcColumnVector keys,
-    OrcColumnVector values,
-    long[] offsets,
-    long[] lengths) {
+      DataType type,
+      ColumnVector vector,
+      OrcColumnVector keys,
+      OrcColumnVector values,
+      long[] offsets,
+      long[] lengths) {
 
     super(type, vector);
 
