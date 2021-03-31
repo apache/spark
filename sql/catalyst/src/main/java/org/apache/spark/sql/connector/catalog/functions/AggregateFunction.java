@@ -33,10 +33,10 @@ import java.io.Serializable;
  * The JVM type of result values produced by this function must be the type used by Spark's
  * InternalRow API for the {@link DataType SQL data type} returned by {@link #resultType()}.
  * <p>
- * All implementations must support partial aggregation by implementing {@link #merge(S, S)} so
- * that Spark can partially aggregate and shuffle intermediate results, instead of shuffling all
- * rows for an aggregate. This reduces the impact of data skew and the amount of data shuffled to
- * produce the result.
+ * All implementations must support partial aggregation by implementing merge so that Spark can
+ * partially aggregate and shuffle intermediate results, instead of shuffling all rows for an
+ * aggregate. This reduces the impact of data skew and the amount of data shuffled to produce the
+ * result.
  * <p>
  * Intermediate aggregation state must be {@link Serializable} so that state produced by parallel
  * tasks can be serialized, shuffled, and then merged to produce a final result.
