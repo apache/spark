@@ -37,4 +37,7 @@ class NumberConverterSuite extends SparkFunSuite {
     checkConv("11abc", 10, 16, "B")
   }
 
+  test("SPARK-34909: convert negative to unsigned") {
+    checkConv("-10", 11, 7, "45012021522523134134555")
+  }
 }
