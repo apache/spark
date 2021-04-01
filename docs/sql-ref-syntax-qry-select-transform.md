@@ -158,7 +158,14 @@ transformClause:
 
 ### Without Hive support Mode
 
+Now Spark Script transform can run without `-Phive` or `SparkSession.builder.enableHiveSupport()`.
+In this case, now we only use script transform with `ROW FORMAT DELIMIT` and treat all value passed
+to script as string. 
+
 ### With Hive Support Mode
+
+When build Spark with `-Phive` and start Spark SQL with `enableHiveSupport()`, we can use script 
+transform with Hive SerDe and both `ROW FORMAT DELIMIT`.
 
 ### Schema-less Script Transforms
 
@@ -173,7 +180,106 @@ between the first tab and the second tab if there are multiple tabs.
 ### Examples
 
 ```sql
+CREATE TABLE person (zip_code INT, name STRING, age INT);
+INSERT INTO person VALUES
+    (94588, 'Zen Hui', 50),
+    (94588, 'Dan Li', 18),
+    (94588, 'Anil K', 27),
+    (94588, 'John V', NULL),
+    (94511, 'David K', 42),
+    (94511, 'Aryan B.', 18),
+    (94511, 'Lalit B.', NULL);
 
+-- With specified out put without data type
+SELECT TRANSFORM(zip_code, name, age)
+ USING 'cat' AS (a, b, c)
+FROM person
+WHERE zip_code > 94511;
++-------+---------+-----+
+|    a  |        b|    c|
++-------+---------+-----+
+|  94588|   Anil K|	  27|
+|  94588|   John V|	NULL|
+|  94588|  Zen Hui|	  50|
+|  94588|   Dan Li|   18|
++-------+---------+-----+
+
+-- With specified out put without data type
+SELECT TRANSFORM(zip_code, name, age)
+ USING 'cat' AS (a STRING, b STRING, c STRING)
+FROM person
+WHERE zip_code > 94511;
++-------+---------+-----+
+|    a  |        b|    c|
++-------+---------+-----+
+|  94588|   Anil K|	  27|
+|  94588|   John V|	NULL|
+|  94588|  Zen Hui|	  50|
+|  94588|   Dan Li|   18|
++-------+---------+-----+
+
+-- ROW FORMAT DELIMIT 
+SELECT TRANSFORM(name, age)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY ','
+  LINES TERMINATED BY '\n'
+  NULL DEFINED AS 'NULL'
+  USING 'cat' AS (name_age string)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '@'
+  LINES TERMINATED BY '\n'
+  NULL DEFINED AS 'NULL'
+FROM person;
++---------------+
+|       name_age|
++---------------+
+|      Anil K,27|
+|    John V,null|
+|     ryan B.,18|
+|     David K,42|
+|     Zen Hui,50|
+|      Dan Li,18|
+|  Lalit B.,null|
++---------------+
+
+-- Hive Serde
+SELECT TRANSFORM(zip_code, name, age)
+  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+  WITH SERDEPROPERTIES (
+    'field.delim' = '\t'
+  )
+  USING 'cat' AS (a STRING, b STRING, c STRING)
+  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+  WITH SERDEPROPERTIES (
+    'field.delim' = '\t'
+  )
+FROM person
+WHERE zip_code > 94511;
++-------+---------+-----+
+|    a  |        b|    c|
++-------+---------+-----+
+|  94588|   Anil K|	  27|
+|  94588|   John V|	NULL|
+|  94588|  Zen Hui|	  50|
+|  94588|   Dan Li|   18|
++-------+---------+-----+
+
+-- Schema-less mode
+SELECT TRANSFORM(zip_code, name, age)
+  USING 'cat'
+FROM person
+WHERE zip_code > 94500;
++-------+-----------------+
+|    key|            value|
++-------+-----------------+
+|  94588|	  Anil K	27|
+|  94588|	  John V	\N|
+|  94511|	Aryan B.	18|
+|  94511|	 David K	42|
+|  94588|	 Zen Hui	50|
+|  94588|	  Dan Li	18|
+|  94511|	Lalit B.	\N|
++-------+-----------------+
 ```
 
 ### Related Statements
