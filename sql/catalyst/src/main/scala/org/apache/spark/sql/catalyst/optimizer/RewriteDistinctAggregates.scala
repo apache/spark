@@ -59,9 +59,9 @@ import org.apache.spark.sql.types.IntegerType
  * {{{
  * Aggregate(
  *    key = ['key]
- *    functions = [count(if (('gid = 1)) 'cat1 else null),
- *                 count(if (('gid = 2)) 'cat2 else null),
- *                 first(if (('gid = 0)) 'total else null) ignore nulls]
+ *    functions = [count('cat1) FILTER (WHERE 'gid = 1),
+ *                 count('cat2) FILTER (WHERE 'gid = 2),
+ *                 first('total) ignore nulls FILTER (WHERE 'gid = 0)]
  *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
  *   Aggregate(
  *      key = ['key, 'cat1, 'cat2, 'gid]
@@ -102,9 +102,9 @@ import org.apache.spark.sql.types.IntegerType
  * {{{
  * Aggregate(
  *    key = ['key]
- *    functions = [count(if (('gid = 1)) 'cat1 else null),
- *                 count(if (('gid = 2)) 'cat2 else null),
- *                 first(if (('gid = 0)) 'total else null) ignore nulls]
+ *    functions = [count('cat1) FILTER (WHERE 'gid = 1),
+ *                 count('cat2) FILTER (WHERE 'gid = 2),
+ *                 first('total) ignore nulls FILTER (WHERE 'gid = 0)]
  *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
  *   Aggregate(
  *      key = ['key, 'cat1, 'cat2, 'gid]
@@ -145,9 +145,9 @@ import org.apache.spark.sql.types.IntegerType
  * {{{
  * Aggregate(
  *    key = ['key]
- *    functions = [count(if (('gid = 1) and 'max_cond1) 'cat1 else null),
- *                 count(if (('gid = 2) and 'max_cond2) 'cat2 else null),
- *                 first(if (('gid = 0)) 'total else null) ignore nulls]
+ *    functions = [count('cat1) FILTER (WHERE 'gid = 1 and 'max_cond1),
+ *                 count('cat2) FILTER (WHERE 'gid = 2 and 'max_cond2),
+ *                 first('total) ignore nulls FILTER (WHERE 'gid = 0)]
  *    output = ['key, 'cat1_cnt, 'cat2_cnt, 'total])
  *   Aggregate(
  *      key = ['key, 'cat1, 'cat2, 'gid]
@@ -242,14 +242,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }
       val groupByAttrs = groupByMap.map(_._2)
 
-      // Functions used to modify aggregate functions and their inputs.
-      def evalWithinGroup(id: Literal, e: Expression, condition: Option[Expression]) =
-        if (condition.isDefined) {
-          If(And(EqualTo(gid, id), condition.get), e, nullify(e))
-        } else {
-          If(EqualTo(gid, id), e, nullify(e))
-        }
-
       def patchAggregateFunctionChildren(
           af: AggregateFunction)(
           attrs: Expression => Option[Expression]): AggregateFunction = {
@@ -294,17 +286,19 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
             val af = e.aggregateFunction
             val condition = e.filter.flatMap(distinctAggFilterAttrLookup.get)
             val naf = if (af.children.forall(_.foldable)) {
-              // If aggregateFunction's children are all foldable, we only put the first child in
-              // distinctAggGroups. So here we only need to rewrite the first child to
-              // `if (gid = ...) ...` or `if (gid = ... and condition) ...`.
-              val firstChild = evalWithinGroup(id, af.children.head, condition)
-              af.withNewChildren(firstChild +: af.children.drop(1)).asInstanceOf[AggregateFunction]
+              af
             } else {
               patchAggregateFunctionChildren(af) { x =>
-                distinctAggChildAttrLookup.get(x).map(evalWithinGroup(id, _, condition))
+                distinctAggChildAttrLookup.get(x)
               }
             }
-            (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = None))
+            val newCondition = if (condition.isDefined) {
+              And(EqualTo(gid, id), condition.get)
+            } else {
+              EqualTo(gid, id)
+            }
+
+            (e, e.copy(aggregateFunction = naf, isDistinct = false, filter = Some(newCondition)))
           }
 
           (projection ++ filterProjection, operators)
@@ -335,9 +329,10 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(
-          aggregate.First(evalWithinGroup(regularGroupId, operator.toAttribute, None), true),
+          aggregate.First(operator.toAttribute, ignoreNulls = true),
           mode = Complete,
-          isDistinct = false)
+          isDistinct = false,
+          filter = Some(EqualTo(gid, regularGroupId)))
 
         // Some aggregate functions (COUNT) have the special property that they can return a
         // non-null result without any input. We need to make sure we return a result in this case.

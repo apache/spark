@@ -130,135 +130,135 @@ Input [4]: [ss_item_sk#14, ss_store_sk#15, ss_sales_price#16, ss_sold_date_sk#17
 Condition : isnotnull(ss_store_sk#15)
 
 (18) ReusedExchange [Reuses operator id: 8]
-Output [1]: [d_date_sk#18]
+Output [1]: [d_date_sk#6]
 
 (19) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_date_sk#17]
-Right keys [1]: [d_date_sk#18]
+Right keys [1]: [d_date_sk#6]
 Join condition: None
 
 (20) Project [codegen id : 4]
 Output [3]: [ss_item_sk#14, ss_store_sk#15, ss_sales_price#16]
-Input [5]: [ss_item_sk#14, ss_store_sk#15, ss_sales_price#16, ss_sold_date_sk#17, d_date_sk#18]
+Input [5]: [ss_item_sk#14, ss_store_sk#15, ss_sales_price#16, ss_sold_date_sk#17, d_date_sk#6]
 
 (21) HashAggregate [codegen id : 4]
 Input [3]: [ss_item_sk#14, ss_store_sk#15, ss_sales_price#16]
 Keys [2]: [ss_store_sk#15, ss_item_sk#14]
 Functions [1]: [partial_sum(UnscaledValue(ss_sales_price#16))]
-Aggregate Attributes [1]: [sum#19]
-Results [3]: [ss_store_sk#15, ss_item_sk#14, sum#20]
+Aggregate Attributes [1]: [sum#18]
+Results [3]: [ss_store_sk#15, ss_item_sk#14, sum#19]
 
 (22) Exchange
-Input [3]: [ss_store_sk#15, ss_item_sk#14, sum#20]
-Arguments: hashpartitioning(ss_store_sk#15, ss_item_sk#14, 5), ENSURE_REQUIREMENTS, [id=#21]
+Input [3]: [ss_store_sk#15, ss_item_sk#14, sum#19]
+Arguments: hashpartitioning(ss_store_sk#15, ss_item_sk#14, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (23) HashAggregate [codegen id : 5]
-Input [3]: [ss_store_sk#15, ss_item_sk#14, sum#20]
+Input [3]: [ss_store_sk#15, ss_item_sk#14, sum#19]
 Keys [2]: [ss_store_sk#15, ss_item_sk#14]
 Functions [1]: [sum(UnscaledValue(ss_sales_price#16))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#16))#22]
-Results [2]: [ss_store_sk#15, MakeDecimal(sum(UnscaledValue(ss_sales_price#16))#22,17,2) AS revenue#23]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#16))#21]
+Results [2]: [ss_store_sk#15, MakeDecimal(sum(UnscaledValue(ss_sales_price#16))#21,17,2) AS revenue#22]
 
 (24) HashAggregate [codegen id : 5]
-Input [2]: [ss_store_sk#15, revenue#23]
+Input [2]: [ss_store_sk#15, revenue#22]
 Keys [1]: [ss_store_sk#15]
-Functions [1]: [partial_avg(revenue#23)]
-Aggregate Attributes [2]: [sum#24, count#25]
-Results [3]: [ss_store_sk#15, sum#26, count#27]
+Functions [1]: [partial_avg(revenue#22)]
+Aggregate Attributes [2]: [sum#23, count#24]
+Results [3]: [ss_store_sk#15, sum#25, count#26]
 
 (25) Exchange
-Input [3]: [ss_store_sk#15, sum#26, count#27]
-Arguments: hashpartitioning(ss_store_sk#15, 5), ENSURE_REQUIREMENTS, [id=#28]
+Input [3]: [ss_store_sk#15, sum#25, count#26]
+Arguments: hashpartitioning(ss_store_sk#15, 5), ENSURE_REQUIREMENTS, [id=#27]
 
 (26) HashAggregate [codegen id : 6]
-Input [3]: [ss_store_sk#15, sum#26, count#27]
+Input [3]: [ss_store_sk#15, sum#25, count#26]
 Keys [1]: [ss_store_sk#15]
-Functions [1]: [avg(revenue#23)]
-Aggregate Attributes [1]: [avg(revenue#23)#29]
-Results [2]: [ss_store_sk#15, avg(revenue#23)#29 AS ave#30]
+Functions [1]: [avg(revenue#22)]
+Aggregate Attributes [1]: [avg(revenue#22)#28]
+Results [2]: [ss_store_sk#15, avg(revenue#22)#28 AS ave#29]
 
 (27) BroadcastExchange
-Input [2]: [ss_store_sk#15, ave#30]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#31]
+Input [2]: [ss_store_sk#15, ave#29]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#30]
 
 (28) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_store_sk#2]
 Right keys [1]: [ss_store_sk#15]
-Join condition: (cast(revenue#13 as decimal(23,7)) <= CheckOverflow((0.100000 * promote_precision(ave#30)), DecimalType(23,7), true))
+Join condition: (cast(revenue#13 as decimal(23,7)) <= CheckOverflow((0.100000 * promote_precision(ave#29)), DecimalType(23,7), true))
 
 (29) Project [codegen id : 8]
 Output [3]: [ss_store_sk#2, ss_item_sk#1, revenue#13]
-Input [5]: [ss_store_sk#2, ss_item_sk#1, revenue#13, ss_store_sk#15, ave#30]
+Input [5]: [ss_store_sk#2, ss_item_sk#1, revenue#13, ss_store_sk#15, ave#29]
 
 (30) Scan parquet default.store
-Output [2]: [s_store_sk#32, s_store_name#33]
+Output [2]: [s_store_sk#31, s_store_name#32]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string>
 
 (31) ColumnarToRow [codegen id : 7]
-Input [2]: [s_store_sk#32, s_store_name#33]
+Input [2]: [s_store_sk#31, s_store_name#32]
 
 (32) Filter [codegen id : 7]
-Input [2]: [s_store_sk#32, s_store_name#33]
-Condition : isnotnull(s_store_sk#32)
+Input [2]: [s_store_sk#31, s_store_name#32]
+Condition : isnotnull(s_store_sk#31)
 
 (33) BroadcastExchange
-Input [2]: [s_store_sk#32, s_store_name#33]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#34]
+Input [2]: [s_store_sk#31, s_store_name#32]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#33]
 
 (34) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_store_sk#2]
-Right keys [1]: [s_store_sk#32]
+Right keys [1]: [s_store_sk#31]
 Join condition: None
 
 (35) Project [codegen id : 8]
-Output [3]: [ss_item_sk#1, revenue#13, s_store_name#33]
-Input [5]: [ss_store_sk#2, ss_item_sk#1, revenue#13, s_store_sk#32, s_store_name#33]
+Output [3]: [ss_item_sk#1, revenue#13, s_store_name#32]
+Input [5]: [ss_store_sk#2, ss_item_sk#1, revenue#13, s_store_sk#31, s_store_name#32]
 
 (36) Exchange
-Input [3]: [ss_item_sk#1, revenue#13, s_store_name#33]
-Arguments: hashpartitioning(ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [id=#35]
+Input [3]: [ss_item_sk#1, revenue#13, s_store_name#32]
+Arguments: hashpartitioning(ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [id=#34]
 
 (37) Sort [codegen id : 9]
-Input [3]: [ss_item_sk#1, revenue#13, s_store_name#33]
+Input [3]: [ss_item_sk#1, revenue#13, s_store_name#32]
 Arguments: [ss_item_sk#1 ASC NULLS FIRST], false, 0
 
 (38) Scan parquet default.item
-Output [5]: [i_item_sk#36, i_item_desc#37, i_current_price#38, i_wholesale_cost#39, i_brand#40]
+Output [5]: [i_item_sk#35, i_item_desc#36, i_current_price#37, i_wholesale_cost#38, i_brand#39]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_desc:string,i_current_price:decimal(7,2),i_wholesale_cost:decimal(7,2),i_brand:string>
 
 (39) ColumnarToRow [codegen id : 10]
-Input [5]: [i_item_sk#36, i_item_desc#37, i_current_price#38, i_wholesale_cost#39, i_brand#40]
+Input [5]: [i_item_sk#35, i_item_desc#36, i_current_price#37, i_wholesale_cost#38, i_brand#39]
 
 (40) Filter [codegen id : 10]
-Input [5]: [i_item_sk#36, i_item_desc#37, i_current_price#38, i_wholesale_cost#39, i_brand#40]
-Condition : isnotnull(i_item_sk#36)
+Input [5]: [i_item_sk#35, i_item_desc#36, i_current_price#37, i_wholesale_cost#38, i_brand#39]
+Condition : isnotnull(i_item_sk#35)
 
 (41) Exchange
-Input [5]: [i_item_sk#36, i_item_desc#37, i_current_price#38, i_wholesale_cost#39, i_brand#40]
-Arguments: hashpartitioning(i_item_sk#36, 5), ENSURE_REQUIREMENTS, [id=#41]
+Input [5]: [i_item_sk#35, i_item_desc#36, i_current_price#37, i_wholesale_cost#38, i_brand#39]
+Arguments: hashpartitioning(i_item_sk#35, 5), ENSURE_REQUIREMENTS, [id=#40]
 
 (42) Sort [codegen id : 11]
-Input [5]: [i_item_sk#36, i_item_desc#37, i_current_price#38, i_wholesale_cost#39, i_brand#40]
-Arguments: [i_item_sk#36 ASC NULLS FIRST], false, 0
+Input [5]: [i_item_sk#35, i_item_desc#36, i_current_price#37, i_wholesale_cost#38, i_brand#39]
+Arguments: [i_item_sk#35 ASC NULLS FIRST], false, 0
 
 (43) SortMergeJoin [codegen id : 12]
 Left keys [1]: [ss_item_sk#1]
-Right keys [1]: [i_item_sk#36]
+Right keys [1]: [i_item_sk#35]
 Join condition: None
 
 (44) Project [codegen id : 12]
-Output [6]: [s_store_name#33, i_item_desc#37, revenue#13, i_current_price#38, i_wholesale_cost#39, i_brand#40]
-Input [8]: [ss_item_sk#1, revenue#13, s_store_name#33, i_item_sk#36, i_item_desc#37, i_current_price#38, i_wholesale_cost#39, i_brand#40]
+Output [6]: [s_store_name#32, i_item_desc#36, revenue#13, i_current_price#37, i_wholesale_cost#38, i_brand#39]
+Input [8]: [ss_item_sk#1, revenue#13, s_store_name#32, i_item_sk#35, i_item_desc#36, i_current_price#37, i_wholesale_cost#38, i_brand#39]
 
 (45) TakeOrderedAndProject
-Input [6]: [s_store_name#33, i_item_desc#37, revenue#13, i_current_price#38, i_wholesale_cost#39, i_brand#40]
-Arguments: 100, [s_store_name#33 ASC NULLS FIRST, i_item_desc#37 ASC NULLS FIRST], [s_store_name#33, i_item_desc#37, revenue#13, i_current_price#38, i_wholesale_cost#39, i_brand#40]
+Input [6]: [s_store_name#32, i_item_desc#36, revenue#13, i_current_price#37, i_wholesale_cost#38, i_brand#39]
+Arguments: 100, [s_store_name#32 ASC NULLS FIRST, i_item_desc#36 ASC NULLS FIRST], [s_store_name#32, i_item_desc#36, revenue#13, i_current_price#37, i_wholesale_cost#38, i_brand#39]
 
 ===== Subqueries =====
 

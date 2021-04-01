@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, File}
+import java.lang.{Long => JLong}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
@@ -41,7 +42,7 @@ import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCod
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -2833,6 +2834,32 @@ class DataFrameSuite extends QueryTest
     val test10 =
       df10.select(zip_with(col("array1"), col("array2"), (b1, b2) => reverseThenConcat2(b1, b2)))
     checkAnswer(test10, Row(Array(Row("cbaihg"), Row("fedlkj"))) :: Nil)
+  }
+
+  test("SPARK-34882: Aggregate with multiple distinct null sensitive aggregators") {
+    withUserDefinedFunction(("countNulls", true)) {
+      spark.udf.register("countNulls", udaf(new Aggregator[JLong, JLong, JLong] {
+        def zero: JLong = 0L
+        def reduce(b: JLong, a: JLong): JLong = if (a == null) {
+          b + 1
+        } else {
+          b
+        }
+        def merge(b1: JLong, b2: JLong): JLong = b1 + b2
+        def finish(r: JLong): JLong = r
+        def bufferEncoder: Encoder[JLong] = Encoders.LONG
+        def outputEncoder: Encoder[JLong] = Encoders.LONG
+      }))
+
+      val result = testData.selectExpr(
+        "countNulls(key)",
+        "countNulls(DISTINCT key)",
+        "countNulls(key) FILTER (WHERE key > 50)",
+        "countNulls(DISTINCT key) FILTER (WHERE key > 50)",
+        "count(DISTINCT key)")
+
+      checkAnswer(result, Row(0, 0, 0, 0, 100))
+    }
   }
 }
 

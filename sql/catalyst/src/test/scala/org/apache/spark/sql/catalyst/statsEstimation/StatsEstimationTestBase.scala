@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.statsEstimation
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.internal.SQLConf
@@ -73,12 +72,11 @@ case class StatsTestPlan(
     outputList: Seq[Attribute],
     rowCount: BigInt,
     attributeStats: AttributeMap[ColumnStat],
-    size: Option[BigInt] = None) extends LeafNode with MultiInstanceRelation {
+    size: Option[BigInt] = None) extends LeafNode {
   override def output: Seq[Attribute] = outputList
   override def computeStats(): Statistics = Statistics(
     // If sizeInBytes is useless in testing, we just use a fake value
     sizeInBytes = size.getOrElse(Int.MaxValue),
     rowCount = Some(rowCount),
     attributeStats = attributeStats)
-  override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
 }

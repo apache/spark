@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1001,6 +1001,7 @@ abstract class RepartitionOperation extends UnaryNode {
   def numPartitions: Int
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  def partitioning: Partitioning
 }
 
 /**
@@ -1012,6 +1013,14 @@ abstract class RepartitionOperation extends UnaryNode {
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+
+  override def partitioning: Partitioning = {
+    require(shuffle, "Partitioning can only be used in shuffle.")
+    numPartitions match {
+      case 1 => SinglePartition
+      case _ => RoundRobinPartitioning(numPartitions)
+    }
+  }
 }
 
 /**
@@ -1029,7 +1038,7 @@ case class RepartitionByExpression(
   val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
-  val partitioning: Partitioning = {
+  override val partitioning: Partitioning = {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
 
     require(sortOrder.isEmpty || nonSortOrder.isEmpty,
@@ -1041,7 +1050,9 @@ case class RepartitionByExpression(
          |NonSortOrder: $nonSortOrder
        """.stripMargin)
 
-    if (sortOrder.nonEmpty) {
+    if (numPartitions == 1) {
+      SinglePartition
+    } else if (sortOrder.nonEmpty) {
       RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
     } else if (nonSortOrder.nonEmpty) {
       HashPartitioning(nonSortOrder, numPartitions)
