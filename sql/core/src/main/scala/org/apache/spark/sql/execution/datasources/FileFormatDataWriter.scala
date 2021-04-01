@@ -252,17 +252,16 @@ class DynamicPartitionDataWriter(
       // See a new partition or bucket - write to a new partition dir (or a new bucket file).
       if (isPartitioned && currentPartitionValues != nextPartitionValues) {
         currentPartitionValues = Some(nextPartitionValues.get.copy())
-        val partitionSpec: Map[String, String] = description.partitionColumns.map(attr => {
-          val proj = UnsafeProjection.create(Seq(attr), description.partitionColumns)
-          val attrRow = proj(currentPartitionValues.get)
-          val value = if (attrRow.isNullAt(0)) {
-            null
-          } else {
-            Cast(Literal(attrRow.get(0, attr.dataType), attr.dataType),
-              StringType, Some(SQLConf.get.sessionLocalTimeZone)).eval().toString
-          }
-          attr.name -> value
-        }).toMap
+        val partitionSpec: Map[String, String] =
+          description.partitionColumns.zipWithIndex.map { case (attr, index) =>
+            val value = if (currentPartitionValues.get.isNullAt(index)) {
+              null
+            } else {
+              Cast(Literal(currentPartitionValues.get.get(index, attr.dataType), attr.dataType),
+                StringType, Some(SQLConf.get.sessionLocalTimeZone)).eval().toString
+            }
+            attr.name -> value
+          }.toMap
         statsTrackers.foreach(_.newPartition(partitionSpec))
       }
       if (isBucketed) {
