@@ -350,7 +350,12 @@ object PartitioningUtils {
    */
   def getPathFragment(spec: TablePartitionSpec, partitionSchema: StructType): String = {
     partitionSchema.map { field =>
-      escapePathName(field.name) + "=" + escapePathName(spec(field.name))
+      val value = if (spec(field.name) == null || spec(field.name).isEmpty) {
+        DEFAULT_PARTITION_NAME
+      } else {
+        escapePathName(spec(field.name))
+      }
+      escapePathName(field.name) + "=" + value
     }.mkString("/")
   }
 
