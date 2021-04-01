@@ -28,4 +28,5 @@ case class WriteToContinuousDataSource(write: StreamingWrite, query: LogicalPlan
   extends UnaryNode {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
+  override protected def withNewChild(newChild: LogicalPlan): LogicalPlan = copy(query = newChild)
 }

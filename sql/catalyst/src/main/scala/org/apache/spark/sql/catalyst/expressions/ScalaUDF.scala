@@ -1195,4 +1195,7 @@ case class ScalaUDF(
 
     resultConverter(result)
   }
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ScalaUDF =
+    copy(children = newChildren)
 }

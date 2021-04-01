@@ -64,4 +64,6 @@ private[avro] case class CatalystDataToAvro(
     defineCodeGen(ctx, ev, input =>
       s"(byte[]) $expr.nullSafeEval($input)")
   }
+
+  override protected def withNewChild(newChild: Expression): Expression = copy(child = newChild)
 }

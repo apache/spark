@@ -125,6 +125,8 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
       defineCodeGen(ctx, ev, c => s"($c).numElements()")
     }
   }
+
+  override protected def withNewChild(newChild: Expression): Size = copy(child = newChild)
 }
 
 object Size {
@@ -159,6 +161,8 @@ case class MapKeys(child: Expression)
   }
 
   override def prettyName: String = "map_keys"
+
+  override protected def withNewChild(newChild: Expression): MapKeys = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -321,6 +325,9 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
   }
 
   override def prettyName: String = "arrays_zip"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArraysZip =
+    copy(children = newChildren)
 }
 
 /**
@@ -351,6 +358,8 @@ case class MapValues(child: Expression)
   }
 
   override def prettyName: String = "map_values"
+
+  override protected def withNewChild(newChild: Expression): MapValues = copy(child = newChild)
 }
 
 /**
@@ -523,6 +532,8 @@ case class MapEntries(child: Expression)
   }
 
   override def prettyName: String = "map_entries"
+
+  override def withNewChild(newChild: Expression): MapEntries = copy(child = newChild)
 }
 
 /**
@@ -642,6 +653,9 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
   }
 
   override def prettyName: String = "map_concat"
+
+  override def withNewChildrenInternal(newChildren: Seq[Expression]): MapConcat =
+    copy(children = newChildren)
 }
 
 /**
@@ -720,6 +734,8 @@ case class MapFromEntries(child: Expression) extends UnaryExpression with NullIn
   }
 
   override def prettyName: String = "map_from_entries"
+
+  override protected def withNewChild(newChild: Expression): MapFromEntries = copy(child = newChild)
 }
 
 
@@ -919,6 +935,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   }
 
   override def prettyName: String = "sort_array"
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): SortArray =
+    copy(base = newLeft, ascendingOrder = newRight)
 }
 
 /**
@@ -1007,6 +1026,8 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
   }
 
   override def freshCopy(): Shuffle = Shuffle(child, randomSeed)
+
+  override def withNewChild(newChild: Expression): Shuffle = copy(child = newChild)
 }
 
 /**
@@ -1083,6 +1104,8 @@ case class Reverse(child: Expression)
   }
 
   override def prettyName: String = "reverse"
+
+  override protected def withNewChild(newChild: Expression): Reverse = copy(child = newChild)
 }
 
 /**
@@ -1180,6 +1203,9 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_contains"
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayContains =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1403,6 +1429,9 @@ case class ArraysOverlap(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "arrays_overlap"
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArraysOverlap =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1516,6 +1545,13 @@ case class Slice(x: Expression, start: Expression, length: Expression)
        |}
      """.stripMargin
   }
+
+  override protected def withNewChildren(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Slice = copy(
+    x = newFirst,
+    start = newSecond,
+    length = newThird
+  )
 }
 
 /**
@@ -1558,6 +1594,16 @@ case class ArrayJoin(
   } else {
     Seq(array, delimiter)
   }
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+    if (nullReplacement.isDefined) {
+      copy(
+        array = newChildren(0),
+        delimiter = newChildren(1),
+        nullReplacement = Some(newChildren(2)))
+    } else {
+      copy(array = newChildren(0), delimiter = newChildren(1))
+    }
 
   override def nullable: Boolean = children.exists(_.nullable)
 
@@ -1756,6 +1802,8 @@ case class ArrayMin(child: Expression)
   }
 
   override def prettyName: String = "array_min"
+
+  override protected def withNewChild(newChild: Expression): ArrayMin = copy(child = newChild)
 }
 
 /**
@@ -1824,6 +1872,8 @@ case class ArrayMax(child: Expression)
   }
 
   override def prettyName: String = "array_max"
+
+  override protected def withNewChild(newChild: Expression): ArrayMax = copy(child = newChild)
 }
 
 
@@ -1903,6 +1953,9 @@ case class ArrayPosition(left: Expression, right: Expression)
        """.stripMargin
     })
   }
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayPosition =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -2085,6 +2138,9 @@ case class ElementAt(
   }
 
   override def prettyName: String = "element_at"
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ElementAt =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -2291,6 +2347,9 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   override def toString: String = s"concat(${children.mkString(", ")})"
 
   override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Concat =
+    copy(children = newChildren)
 }
 
 /**
@@ -2403,6 +2462,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
   }
 
   override def prettyName: String = "flatten"
+
+  override protected def withNewChild(newChild: Expression): Flatten = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -2459,6 +2520,13 @@ case class Sequence(
     copy(timeZoneId = Some(timeZoneId))
 
   override def children: Seq[Expression] = Seq(start, stop) ++ stepOpt
+
+  override def withNewChildrenInternal(newChildren: Seq[Expression]): TimeZoneAwareExpression =
+    if (stepOpt.isDefined) {
+      copy(start = newChildren(0), stop = newChildren(1), stepOpt = Some(newChildren(2)))
+    } else {
+      copy(start = newChildren(0), stop = newChildren(1))
+    }
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -2949,6 +3017,8 @@ case class ArrayRepeat(left: Expression, right: Expression)
      """.stripMargin
   }
 
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayRepeat =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -3063,6 +3133,9 @@ case class ArrayRemove(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_remove"
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayRemove =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -3295,6 +3368,8 @@ case class ArrayDistinct(child: Expression)
   }
 
   override def prettyName: String = "array_distinct"
+
+  override protected def withNewChild(newChild: Expression): ArrayDistinct = copy(child = newChild)
 }
 
 /**
@@ -3497,6 +3572,9 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
   }
 
   override def prettyName: String = "array_union"
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayUnion =
+    copy(left = newLeft, right = newRight)
 }
 
 object ArrayUnion {
@@ -3780,6 +3858,10 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   }
 
   override def prettyName: String = "array_intersect"
+
+  override protected def withNewChildren(
+      newLeft: Expression, newRight: Expression): ArrayIntersect =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -4004,4 +4086,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   }
 
   override def prettyName: String = "array_except"
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayExcept =
+    copy(left = newLeft, right = newRight)
 }

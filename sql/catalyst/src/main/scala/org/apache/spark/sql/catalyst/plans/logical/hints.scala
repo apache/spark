@@ -31,6 +31,9 @@ case class UnresolvedHint(name: String, parameters: Seq[Any], child: LogicalPlan
 
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
+
+  override protected def withNewChild(newChild: LogicalPlan): UnresolvedHint =
+    copy(child = newChild)
 }
 
 /**
@@ -43,6 +46,8 @@ case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
   override def output: Seq[Attribute] = child.output
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
+
+  override protected def withNewChild(newChild: LogicalPlan): ResolvedHint = copy(child = newChild)
 }
 
 /**

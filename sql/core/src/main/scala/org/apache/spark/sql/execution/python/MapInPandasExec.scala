@@ -93,4 +93,6 @@ case class MapInPandasExec(
       }.map(unsafeProj)
     }
   }
+
+  override protected def withNewChild(newChild: SparkPlan): SparkPlan = copy(child = newChild)
 }

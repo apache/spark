@@ -314,4 +314,5 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 case class CodegenFallbackExpression(child: Expression)
   extends UnaryExpression with CodegenFallback {
   override def dataType: DataType = child.dataType
+  override protected def withNewChild(newChild: Expression): Expression = copy(child = newChild)
 }

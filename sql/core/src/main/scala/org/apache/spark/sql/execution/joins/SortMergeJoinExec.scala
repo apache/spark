@@ -633,6 +633,9 @@ case class SortMergeJoinExec(
        |$eagerCleanup
      """.stripMargin
   }
+
+  override protected def withNewChildren(newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =
+    copy(left = newLeft, right = newRight)
 }
 
 /**

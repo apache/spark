@@ -180,6 +180,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
       })
     }
   }
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Like =
+    copy(left = newLeft, right = newRight)
 }
 
 sealed abstract class MultiLikeBase
@@ -268,10 +271,12 @@ sealed abstract class LikeAllBase extends MultiLikeBase {
 
 case class LikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotSpecified: Boolean = false
+  override protected def withNewChild(newChild: Expression): LikeAll = copy(child = newChild)
 }
 
 case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotSpecified: Boolean = true
+  override protected def withNewChild(newChild: Expression): NotLikeAll = copy(child = newChild)
 }
 
 /**
@@ -324,10 +329,12 @@ sealed abstract class LikeAnyBase extends MultiLikeBase {
 
 case class LikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
   override def isNotSpecified: Boolean = false
+  override protected def withNewChild(newChild: Expression): LikeAny = copy(child = newChild)
 }
 
 case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
   override def isNotSpecified: Boolean = true
+  override protected def withNewChild(newChild: Expression): NotLikeAny = copy(child = newChild)
 }
 
 // scalastyle:off line.contains.tab
@@ -409,6 +416,9 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       })
     }
   }
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): RLike =
+    copy(left = newLeft, right = newRight)
 }
 
 
@@ -467,6 +477,10 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   }
 
   override def prettyName: String = "split"
+
+  override protected def withNewChildren(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringSplit =
+    copy(str = newFirst, regex = newSecond, limit = newThird)
 }
 
 
@@ -622,6 +636,10 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def second: Expression = regexp
   override def third: Expression = rep
   override def fourth: Expression = pos
+
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression, fourth: Expression): RegExpReplace =
+    copy(subject = first, regexp = second, rep = third, pos = fourth)
 }
 
 object RegExpReplace {
@@ -765,6 +783,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       }"""
     })
   }
+
+  override protected def withNewChildren(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpExtract =
+    copy(subject = newFirst, regexp = newSecond, idx = newThird)
 }
 
 /**
@@ -868,4 +890,8 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
          """
     })
   }
+
+  override protected def withNewChildren(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpExtractAll =
+    copy(subject = newFirst, regexp = newSecond, idx = newThird)
 }

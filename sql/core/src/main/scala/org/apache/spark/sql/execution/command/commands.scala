@@ -132,6 +132,9 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
+
+  override protected def withNewChild(newChild: SparkPlan): DataWritingCommandExec =
+    copy(child = newChild)
 }
 
 /**

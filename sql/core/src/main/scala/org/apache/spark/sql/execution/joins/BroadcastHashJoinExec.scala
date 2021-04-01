@@ -254,4 +254,7 @@ case class BroadcastHashJoinExec(
       super.codegenAnti(ctx, input)
     }
   }
+
+  override protected def withNewChildren(newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =
+    copy(left = newLeft, right = newRight)
 }

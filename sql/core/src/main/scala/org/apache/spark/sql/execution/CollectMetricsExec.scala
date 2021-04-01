@@ -78,6 +78,8 @@ case class CollectMetricsExec(
       }
     }
   }
+
+  override protected def withNewChild(newChild: SparkPlan): SparkPlan = copy(child = newChild)
 }
 
 object CollectMetricsExec {

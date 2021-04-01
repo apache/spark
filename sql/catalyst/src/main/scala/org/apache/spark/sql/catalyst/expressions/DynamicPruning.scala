@@ -78,6 +78,9 @@ case class DynamicPruningSubquery(
       buildKeys = buildKeys.map(_.canonicalized),
       exprId = ExprId(0))
   }
+
+  override protected def withNewChild(newChild: Expression): Expression =
+    copy(pruningKey = newChild)
 }
 
 /**
@@ -94,4 +97,7 @@ case class DynamicPruningExpression(child: Expression)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.genCode(ctx)
   }
+
+  override protected def withNewChild(newChild: Expression): Expression =
+    copy(child = newChild)
 }

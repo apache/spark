@@ -270,4 +270,7 @@ case class InsertIntoHadoopFsRelationCommand(
       }
     }.toMap
   }
+
+  override protected def withNewChild(newChild: LogicalPlan): InsertIntoHadoopFsRelationCommand =
+    copy(query = newChild)
 }

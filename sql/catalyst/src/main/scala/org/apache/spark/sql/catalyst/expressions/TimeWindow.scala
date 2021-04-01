@@ -92,6 +92,9 @@ case class TimeWindow(
     }
     dataTypeCheck
   }
+
+  override protected def withNewChild(newChild: Expression): TimeWindow =
+    copy(timeColumn = newChild)
 }
 
 object TimeWindow {
@@ -155,4 +158,7 @@ case class PreciseTimestampConversion(
        """.stripMargin)
   }
   override def nullSafeEval(input: Any): Any = input
+
+  override protected def withNewChild(newChild: Expression): PreciseTimestampConversion =
+    copy(child = newChild)
 }

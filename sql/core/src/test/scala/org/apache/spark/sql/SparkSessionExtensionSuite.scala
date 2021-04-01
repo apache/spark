@@ -781,6 +781,8 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
   override def child: SparkPlan = delegate.child
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning
+  override protected def withNewChild(newChild: SparkPlan): SparkPlan =
+    super.legacyWithNewChildren(Seq(newChild))
 }
 
 /**
@@ -798,6 +800,9 @@ case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends Broa
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def doExecuteBroadcast[T](): Broadcast[T] = delegate.executeBroadcast()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning
+
+  override protected def withNewChild(newChild: SparkPlan): SparkPlan =
+    super.legacyWithNewChildren(Seq(newChild))
 }
 
 class ReplacedRowToColumnarExec(override val child: SparkPlan)

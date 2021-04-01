@@ -343,4 +343,6 @@ case class InsertIntoHiveTable(
         isSrcLocal = false)
     }
   }
+
+  override protected def withNewChild(newChild: LogicalPlan): LogicalPlan = copy(query = newChild)
 }

@@ -105,6 +105,8 @@ case class UnaryMinus(
       case funcName => s"$funcName(${child.sql})"
     }
   }
+
+  override protected def withNewChild(newChild: Expression): UnaryMinus = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -131,6 +133,8 @@ case class UnaryPositive(child: Expression)
   protected override def nullSafeEval(input: Any): Any = input
 
   override def sql: String = s"(+ ${child.sql})"
+
+  override protected def withNewChild(newChild: Expression): UnaryPositive = copy(child = newChild)
 }
 
 /**
@@ -183,6 +187,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
   }
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
+
+  override protected def withNewChild(newChild: Expression): Abs = copy(child = newChild)
 }
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
@@ -309,6 +315,9 @@ case class Add(
   }
 
   override def exactMathMethod: Option[String] = Some("addExact")
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Add =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -352,6 +361,9 @@ case class Subtract(
   }
 
   override def exactMathMethod: Option[String] = Some("subtractExact")
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Subtract =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -380,6 +392,9 @@ case class Multiply(
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Multiply =
+    copy(left = newLeft, right = newRight)
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
@@ -506,6 +521,9 @@ case class Divide(
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Divide =
+    copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -553,6 +571,10 @@ case class IntegralDivide(
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
+
+  override protected def withNewChildren(
+      newLeft: Expression, newRight: Expression): IntegralDivide =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -607,6 +629,9 @@ case class Remainder(
   }
 
   override def evalOperation(left: Any, right: Any): Any = mod(left, right)
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Remainder =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -791,6 +816,9 @@ case class Pmod(
   }
 
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Pmod =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -866,6 +894,9 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
          |$codes
       """.stripMargin)
   }
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Least =
+    copy(children = newChildren)
 }
 
 /**
@@ -941,4 +972,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
          |$codes
       """.stripMargin)
   }
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Greatest =
+    copy(children = newChildren)
 }

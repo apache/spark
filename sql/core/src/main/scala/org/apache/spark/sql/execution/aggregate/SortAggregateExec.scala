@@ -101,4 +101,7 @@ case class SortAggregateExec(
       s"SortAggregate(key=$keyString, functions=$functionString)"
     }
   }
+
+  override protected def withNewChild(newChild: SparkPlan): SortAggregateExec =
+    copy(child = newChild)
 }

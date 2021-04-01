@@ -554,6 +554,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
   }
 
   override def needCopyResult: Boolean = false
+
+  override protected def withNewChild(newChild: SparkPlan): InputAdapter = copy(child = newChild)
 }
 
 object WholeStageCodegenExec {
@@ -829,6 +831,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   override def limitNotReachedChecks: Seq[String] = Nil
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(codegenStageId.asInstanceOf[Integer])
+
+  override protected def withNewChild(newChild: SparkPlan): WholeStageCodegenExec =
+    copy(child = newChild)(codegenStageId)
 }
 
 

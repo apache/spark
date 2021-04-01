@@ -61,4 +61,7 @@ case class EventTimeWatermark(
       a
     }
   }
+
+  override protected def withNewChild(newChild: LogicalPlan): EventTimeWatermark =
+    copy(child = newChild)
 }

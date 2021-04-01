@@ -246,11 +246,37 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     arr
   }
 
+  protected def childrenTheSame(
+      originalChildren: Seq[BaseType], newChildren: Seq[BaseType]): Boolean = {
+    val size = originalChildren.size
+    var i = 0
+    var childrenTheSame = true
+    while (i < size && childrenTheSame) {
+      childrenTheSame &&= originalChildren(i) fastEquals newChildren(i)
+      i += 1
+    }
+    childrenTheSame
+  }
+
+  def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
+    if (children.isEmpty || childrenTheSame(children, newChildren)) {
+      this
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newChildren)
+        res.copyTagsFrom(this)
+        res
+      }
+    }
+  }
+
+  protected def withNewChildrenInternal(newChildren: Seq[BaseType]): BaseType
+
   /**
    * Returns a copy of this node with the children replaced.
    * TODO: Validate somewhere (in debug mode?) that children are ordered correctly.
    */
-  def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
+  def legacyWithNewChildren(newChildren: Seq[BaseType]): BaseType = {
     assert(newChildren.size == children.size, "Incorrect number of children")
     var changed = false
     val remainingNewChildren = newChildren.toBuffer
@@ -355,7 +381,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
     if (containsChild.nonEmpty) {
-      mapChildren(f, forceCopy = false)
+      withNewChildren(children.map(f))
     } else {
       this
     }
@@ -844,17 +870,60 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
 trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   override final def children: Seq[T] = Nil
+  override final def mapChildren(f: T => T): this.type = this
+  override final def withNewChildren(newChildren: Seq[T]): this.type = this
+  override final def withNewChildrenInternal(newChildren: Seq[T]): this.type = this
 }
 
 trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def child: T
   @transient override final lazy val children: Seq[T] = child :: Nil
+
+  override def mapChildren(f: T => T): T = {
+    val newChild = f(child)
+    if (newChild fastEquals child) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChild(newChild)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override final def withNewChildrenInternal(newChildren: Seq[T]): T =
+    withNewChild(newChildren.head)
+
+  protected def withNewChild(newChild: T): T
 }
 
 trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def left: T
   def right: T
   @transient override final lazy val children: Seq[T] = left :: right :: Nil
+
+  override def mapChildren(f: T => T): T = {
+    var newLeft = f(left)
+    newLeft = if (newLeft fastEquals left) left else newLeft
+    var newRight = f(right)
+    newRight = if (newRight fastEquals right) right else newRight
+
+    if (newLeft.eq(left) && newRight.eq(right)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildren(newLeft, newRight)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override def withNewChildrenInternal(newChildren: Seq[T]): T =
+    withNewChildren(newChildren(0), newChildren(1))
+
+  protected def withNewChildren(newLeft: T, newRight: T): T
 }
 
 trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
@@ -862,6 +931,30 @@ trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def second: T
   def third: T
   @transient override final lazy val children: Seq[T] = first :: second :: third :: Nil
+
+  override def mapChildren(f: T => T): T = {
+    var newFirst = f(first)
+    newFirst = if (newFirst fastEquals first) first else newFirst
+    var newSecond = f(second)
+    newSecond = if (newSecond fastEquals second) second else newSecond
+    var newThird = f(third)
+    newThird = if (newThird fastEquals third) third else newThird
+
+    if (newFirst.eq(first) && newSecond.eq(second) && newThird.eq(third)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildren(newFirst, newSecond, newThird)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override def withNewChildrenInternal(newChildren: Seq[T]): T =
+    withNewChildren(newChildren(0), newChildren(1), newChildren(2))
+
+  protected def withNewChildren(newFirst: T, newSecond: T, newThird: T): T
 }
 
 trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>

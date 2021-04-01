@@ -68,6 +68,8 @@ object FileFormatWriter extends Logging {
            |}""".stripMargin
       })
     }
+
+    override protected def withNewChild(newChild: Expression): Empty2Null = copy(child = newChild)
   }
 
   /**

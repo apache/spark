@@ -52,6 +52,9 @@ case class CreateTable(
   override def children: Seq[LogicalPlan] = query.toSeq
   override def output: Seq[Attribute] = Seq.empty
   override lazy val resolved: Boolean = false
+
+  override protected def withNewChildrenInternal(newChildren: Seq[LogicalPlan]): LogicalPlan =
+    copy(query = if (query.isDefined) Some(newChildren.head) else None)
 }
 
 /**

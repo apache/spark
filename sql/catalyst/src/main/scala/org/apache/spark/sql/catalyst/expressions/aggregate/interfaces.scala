@@ -164,6 +164,9 @@ case class AggregateExpression(
       case _ => aggFuncStr
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 }
 
 /**

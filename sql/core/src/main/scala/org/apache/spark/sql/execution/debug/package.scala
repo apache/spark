@@ -288,5 +288,7 @@ package object debug {
     }
 
     override def supportsColumnar: Boolean = child.supportsColumnar
+
+    override protected def withNewChild(newChild: SparkPlan): SparkPlan = copy(child = newChild)
   }
 }

@@ -349,8 +349,7 @@ private[spark] object SummaryBuilderImpl extends Logging {
       weightExpr: Expression,
       mutableAggBufferOffset: Int,
       inputAggBufferOffset: Int)
-    extends TypedImperativeAggregate[SummarizerBuffer]
-    with ImplicitCastInputTypes
+    extends TypedImperativeAggregate[SummarizerBuffer] with ImplicitCastInputTypes
     with BinaryLike[Expression] {
 
     override def eval(state: SummarizerBuffer): Any = {
@@ -373,6 +372,9 @@ private[spark] object SummaryBuilderImpl extends Logging {
 
     override def left: Expression = featuresExpr
     override def right: Expression = weightExpr
+
+    override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+      copy(featuresExpr = newLeft, weightExpr = newRight)
 
     override def update(state: SummarizerBuffer, row: InternalRow): SummarizerBuffer = {
       val features = vectorUDT.deserialize(featuresExpr.eval(row))

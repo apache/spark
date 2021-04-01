@@ -36,6 +36,11 @@ case class KnownNotNull(child: Expression) extends TaggingExpression {
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.genCode(ctx).copy(isNull = FalseLiteral)
   }
+
+  override protected def withNewChild(newChild: Expression): KnownNotNull = copy(child = newChild)
 }
 
-case class KnownFloatingPointNormalized(child: Expression) extends TaggingExpression
+case class KnownFloatingPointNormalized(child: Expression) extends TaggingExpression {
+  override protected def withNewChild(newChild: Expression): KnownFloatingPointNormalized =
+    copy(child = newChild)
+}

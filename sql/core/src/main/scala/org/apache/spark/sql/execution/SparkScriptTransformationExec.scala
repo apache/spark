@@ -72,6 +72,9 @@ case class SparkScriptTransformationExec(
 
     outputIterator
   }
+
+  override protected def withNewChild(newChild: SparkPlan): SparkScriptTransformationExec =
+    copy(child = newChild)
 }
 
 case class SparkScriptTransformationWriterThread(

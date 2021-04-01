@@ -103,6 +103,11 @@ case class LambdaFunction(
   lazy val bound: Boolean = arguments.forall(_.resolved)
 
   override def eval(input: InternalRow): Any = function.eval(input)
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): LambdaFunction =
+    copy(
+      function = newChildren.head,
+      arguments = newChildren.tail.asInstanceOf[Seq[NamedExpression]])
 }
 
 object LambdaFunction {
@@ -289,6 +294,9 @@ case class ArrayTransform(
   }
 
   override def prettyName: String = "transform"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+    copy(argument = newChildren(0), function = newChildren(1))
 }
 
 /**
@@ -378,6 +386,9 @@ case class ArraySort(
   }
 
   override def prettyName: String = "array_sort"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArraySort =
+    copy(argument = newChildren(0), function = newChildren(1))
 }
 
 object ArraySort {
@@ -448,6 +459,10 @@ case class MapFilter(
   override def functionType: AbstractDataType = BooleanType
 
   override def prettyName: String = "map_filter"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): MapFilter =
+    copy(argument = newChildren(0), function = newChildren(1))
+
 }
 
 /**
@@ -513,6 +528,9 @@ case class ArrayFilter(
   }
 
   override def prettyName: String = "filter"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArrayFilter =
+    copy(argument = newChildren(0), function = newChildren(1))
 }
 
 /**
@@ -594,6 +612,9 @@ case class ArrayExists(
   }
 
   override def prettyName: String = "exists"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArrayExists =
+    copy(argument = newChildren(0), function = newChildren(1))
 }
 
 object ArrayExists {
@@ -670,6 +691,9 @@ case class ArrayForAll(
   }
 
   override def prettyName: String = "forall"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArrayForAll =
+    copy(argument = newChildren(0), function = newChildren(1))
 }
 
 /**
@@ -767,6 +791,10 @@ case class ArrayAggregate(
   override def second: Expression = zero
   override def third: Expression = merge
   override def fourth: Expression = finish
+
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression, fourth: Expression): ArrayAggregate =
+    copy(argument = first, zero = second, merge = third, finish = fourth)
 }
 
 /**
@@ -821,6 +849,9 @@ case class TransformKeys(
   }
 
   override def prettyName: String = "transform_keys"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): TransformKeys =
+    copy(argument = newChildren(0), function = newChildren(1))
 }
 
 /**
@@ -869,6 +900,9 @@ case class TransformValues(
   }
 
   override def prettyName: String = "transform_values"
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): TransformValues =
+    copy(argument = newChildren(0), function = newChildren(1))
 }
 
 /**
@@ -1056,6 +1090,10 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   override def first: Expression = left
   override def second: Expression = right
   override def third: Expression = function
+
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression): MapZipWith =
+    copy(left = first, right = second, function = third)
 }
 
 // scalastyle:off line.size.limit
@@ -1133,7 +1171,7 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
 
   override def prettyName: String = "zip_with"
 
-  override def first: Expression = left
-  override def second: Expression = right
-  override def third: Expression = function
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression): ZipWith =
+    copy(left = first, right = second, function = third)
 }

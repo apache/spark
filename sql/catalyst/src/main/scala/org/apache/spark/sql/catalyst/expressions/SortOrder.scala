@@ -88,6 +88,9 @@ case class SortOrder(
     children.exists(required.child.semanticEquals) &&
       direction == required.direction && nullOrdering == required.nullOrdering
   }
+
+  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): SortOrder =
+    copy(child = newChildren.head, sameOrderExpressions = newChildren.tail)
 }
 
 object SortOrder {
@@ -226,4 +229,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   }
 
   override def dataType: DataType = LongType
+
+  override protected def withNewChild(newChild: Expression): SortPrefix =
+    copy(child = newChild.asInstanceOf[SortOrder])
 }

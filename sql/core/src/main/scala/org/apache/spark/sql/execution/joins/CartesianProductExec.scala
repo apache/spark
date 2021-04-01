@@ -101,4 +101,7 @@ case class CartesianProductExec(
       }
     }
   }
+
+  override protected def withNewChildren(newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =
+    copy(left = newLeft, right = newRight)
 }

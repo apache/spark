@@ -166,6 +166,8 @@ case class ShuffleExchangeExec(
     }
     cachedShuffleRDD
   }
+
+  override protected def withNewChild(newChild: SparkPlan): SparkPlan = copy(child = newChild)
 }
 
 object ShuffleExchangeExec {

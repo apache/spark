@@ -203,4 +203,6 @@ case class ExpandExec(
        |}
      """.stripMargin
   }
+
+  override protected def withNewChild(newChild: SparkPlan): ExpandExec = copy(child = newChild)
 }
