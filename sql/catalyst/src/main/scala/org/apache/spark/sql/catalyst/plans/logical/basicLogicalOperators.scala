@@ -109,8 +109,6 @@ case class Generate(
     child: LogicalPlan)
   extends UnaryNode {
 
-  val unrequiredSet: Set[Int] = unrequiredChildIndex.toSet
-
   lazy val requiredChildOutput: Seq[Attribute] = {
     val unrequiredSet = unrequiredChildIndex.toSet
     child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
