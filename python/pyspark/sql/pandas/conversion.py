@@ -454,15 +454,14 @@ class SparkConversionMixin(object):
                 struct.add(name, from_arrow_type(field.type), nullable=field.nullable)
             schema = struct
 
-        # Determine arrow types to coerce data when creating batches
+        # Determine data types to coerce data when creating batches
         if isinstance(schema, StructType):
-            # arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
-            arrow_types = [f.dataType for f in schema.fields]
+            data_types = [f.dataType for f in schema.fields]
         elif isinstance(schema, DataType):
             raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
         else:
             # Any timestamps must be coerced to be compatible with Spark
-            arrow_types = [to_arrow_type(TimestampType())
+            data_types = [to_arrow_type(TimestampType())
                            if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
                            for t in pdf.dtypes]
 
@@ -471,8 +470,11 @@ class SparkConversionMixin(object):
         pdf_slices = (pdf.iloc[start:start + step] for start in range(0, len(pdf), step))
 
         # Create list of Arrow (columns, type) for serializer dump_stream
-        arrow_data = [[(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)]
-                      for pdf_slice in pdf_slices]
+        # Type can be Spark SQL Data Type or Arrow Data Type
+        arrow_data_with_t = [
+            [(c, t) for (_, c), t in zip(pdf_slice.iteritems(), data_types)]
+            for pdf_slice in pdf_slices
+        ]
 
         jsqlContext = self._wrapped._jsqlContext
 
@@ -487,7 +489,7 @@ class SparkConversionMixin(object):
             return self._jvm.ArrowRDDServer(jsqlContext)
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jrdd = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_RDD_server)
+        jrdd = self._sc._serialize_to_jvm(arrow_data_with_t, ser, reader_func, create_RDD_server)
         jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
