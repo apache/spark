@@ -658,9 +658,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case h @ UnresolvedHaving(
-      _, agg @ Aggregate(Seq(gs: GroupingAnalytic), aggregateExpressions, _))
-        if agg.childrenResolved && (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(gs: GroupingAnalytic), aggExprs, _))
+        if agg.childrenResolved && (gs.groupByExprs ++ aggExprs).forall(_.resolved) =>
         tryResolveHavingCondition(h)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
@@ -1969,10 +1968,12 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def resolveGroupByExpressionOrdinal(
         expr: Expression,
         aggs: Seq[Expression]): Expression = expr match {
-      case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
-        aggs(index - 1)
       case ordinal @ UnresolvedOrdinal(index) =>
-        throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
+        if (index > 0 && index <= aggs.size) {
+          aggs(index - 1)
+        } else {
+          throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
+        }
       case cube @ Cube(_, groupByExprs) =>
         cube.copy(children = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
       case rollup @ Rollup(_, groupByExprs) =>
@@ -1980,8 +1981,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case groupingSets @ GroupingSets(_, flatGroupingSets, groupByExprs) =>
         groupingSets.copy(
           flatGroupingSets = flatGroupingSets.map(resolveGroupByExpressionOrdinal(_, aggs)),
-          groupByExprs = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs))
-        )
+          groupByExprs = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
       case others => others
     }
   }
