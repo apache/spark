@@ -77,16 +77,9 @@ object Benchmarks {
     val benchmarkClasses = ClassPath.from(
       Thread.currentThread.getContextClassLoader
     ).getTopLevelClassesRecursive("org.apache.spark").asScala.toArray
-
-    // TODO(SPARK-34929): In JDK 11, MapStatusesSerDeserBenchmark(being started failed) seems
-    //   affecting other benchmark cases with growing the size of task.
-    val reorderedBenchmarkClasses =
-      benchmarkClasses.filterNot(_.getName.endsWith("MapStatusesSerDeserBenchmark")) ++
-      benchmarkClasses.find(_.getName.endsWith("MapStatusesSerDeserBenchmark"))
-
     val matcher = FileSystems.getDefault.getPathMatcher(s"glob:${args.head}")
 
-    reorderedBenchmarkClasses.foreach { info =>
+    benchmarkClasses.foreach { info =>
       lazy val clazz = info.load
       lazy val runBenchmark = clazz.getMethod("main", classOf[Array[String]])
       // isAssignableFrom seems not working with the reflected class from Guava's
