@@ -2631,6 +2631,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         val partStats5 = spark.sessionState.catalog
             .getPartition(TableIdentifier("t2"), Map("b" -> "2020-01-02")).stats.get
         assert(partStats5.sizeInBytes == 194 && partStats5.rowCount.get == 1)
+
+        sql("CREATE TABLE t3(a INT) PARTITIONED BY (b string) STORED AS ORC")
+        sql("INSERT INTO TABLE t3 PARTITION(b = null) SELECT 100")
+        val partStats7 = spark.sessionState.catalog
+          .getPartition(TableIdentifier("t3"), Map("b" -> null)).stats.get
+        assert(partStats7.sizeInBytes == 203 && partStats7.rowCount.get ==1)
       }
     }
   }
