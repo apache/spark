@@ -223,16 +223,14 @@ object GroupingAnalytics {
     } else {
       val groupingSets = groupingSetExprs.map(_.asInstanceOf[GroupingSet])
       val groups = groupingSets.flatMap(_.groupByExprs) ++ others
-      val selectedGroupByExprs = groupingSets.map(_.selectedGroupByExprs)
-        .foldRight(Seq.empty[Seq[Expression]]) { (x, y) =>
-          if (y.isEmpty) {
-            x
-          } else {
-            for (a <- x; b <- y) yield b ++ a
-          }
-        }.map(others ++ _).map(_.distinct)
-      Some(selectedGroupByExprs,
-        groupingSetExprs.flatMap(_.asInstanceOf[GroupingSet].groupingSets), groups.distinct)
+      val unMergedSelectedGroupByExprs = groupingSets.map(_.selectedGroupByExprs)
+      val selectedGroupByExprs = unMergedSelectedGroupByExprs.tail
+        .foldRight(unMergedSelectedGroupByExprs.head) { (x, y) =>
+          for (a <- x; b <- y) yield b ++ a
+        }.map { groupByExprs =>
+        (others ++ groupByExprs).distinct
+      }
+      Some(selectedGroupByExprs, groupingSets.flatMap(_.groupingSets), groups.distinct)
     }
   }
 }
