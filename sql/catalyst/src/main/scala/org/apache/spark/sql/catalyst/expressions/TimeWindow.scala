@@ -27,6 +27,29 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+@ExpressionDescription(
+  usage = """
+    _FUNC_(time_column, window_duration) - Returns the TimeWindow which contains the given timestamp, based on the window_duration provided.
+    _FUNC_(time_column, window_duration, slide_duration) - Returns the TimeWindows which contain the given timestamp, based on the window_duration and slide_duration provided.
+    _FUNC_(time_column, window_duration, slide_duration, start_time) - Returns the TimeWindows which contain the given timestamp, based on the window_duration, slide_duration, and start_time provided.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(timestamp('2020-04-25 15:49:11.914'), '5 minutes');
+       2020-04-25 15:45:00, 2020-04-25 15:50:00
+       
+      > SELECT _FUNC_(timestamp('2020-04-25 15:49:11.914'), '5 minutes', '2 minutes');
+       2020-04-25 15:45:00, 2020-04-25 15:50:00
+       2020-04-25 15:47:00, 2020-04-25 15:52:00
+       2020-04-25 15:49:00, 2020-04-25 15:54:00
+       
+      > SELECT _FUNC_(timestamp('2020-04-25 15:49:11.914'), '5 minutes', '2 minutes', '30 seconds');
+       2020-04-25 15:44:30, 2020-04-25 15:49:30
+       2020-04-25 15:46:30, 2020-04-25 15:51:30
+       2020-04-25 15:48:30, 2020-04-25 15:53:30
+  """,
+  group = "datetime_funcs",
+  since = "2.0.0")
 case class TimeWindow(
     timeColumn: Expression,
     windowDuration: Long,
