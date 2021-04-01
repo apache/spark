@@ -30,7 +30,8 @@ trait GroupingSet extends Expression with CodegenFallback {
 
   def groupingSets: Seq[Seq[Expression]]
   def selectedGroupByExprs: Seq[Seq[Expression]]
-  def groupByExprs: Seq[Expression]
+
+  def groupByExprs: Seq[Expression] = children.distinct
 
   // this should be replaced first
   override lazy val resolved: Boolean = false
@@ -98,7 +99,6 @@ object GroupingSet {
 
 case class Cube(groupingSetIndexes: Seq[Seq[Int]], children: Seq[Expression]) extends GroupingSet {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def groupByExprs: Seq[Expression] = children.distinct
   override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.cubeExprs(groupingSets)
 }
 
@@ -112,7 +112,6 @@ case class Rollup(
     groupingSetIndexes: Seq[Seq[Int]],
     children: Seq[Expression]) extends GroupingSet {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def groupByExprs: Seq[Expression] = children.distinct
   override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.rollupExprs(groupingSets)
 }
 
@@ -124,17 +123,15 @@ object Rollup {
 
 case class GroupingSets(
     groupingSetIndexes: Seq[Seq[Int]],
-    flatGroupingSets: Seq[Expression],
-    groupByExprs: Seq[Expression]) extends GroupingSet {
-  override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(flatGroupingSets))
+    children: Seq[Expression]) extends GroupingSet {
+  override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
   override def selectedGroupByExprs: Seq[Seq[Expression]] = groupingSets
-  override def children: Seq[Expression] = groupingSets.flatten ++ groupByExprs
 }
 
 object GroupingSets {
-  def apply(groupingSets: Seq[Seq[Expression]], groupByExprs: Seq[Expression]): GroupingSets = {
+  def apply(groupingSets: Seq[Seq[Expression]]): GroupingSets = {
     val groupingSetIndexes = GroupingSet.computeGroupingSetIndexes(groupingSets)
-    GroupingSets(groupingSetIndexes, groupingSets.flatten, groupByExprs)
+    GroupingSets(groupingSetIndexes, groupingSets.flatten)
   }
 }
 

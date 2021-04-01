@@ -914,19 +914,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
-      val groupByExpressions = expressionList(ctx.groupingExpressions)
       if (ctx.GROUPING != null) {
-        // GROUP BY .... GROUPING SETS (...)
-        // `GROUP BY warehouse, product GROUPING SETS((warehouse, producets), (warehouse))` is
-        // semantically equivalent to `GROUP BY GROUPING SETS((warehouse, produce), (warehouse))`.
-        // Under this grammar, the fields appearing in `GROUPING SETS`'s groupingSets must be a
-        // subset of the columns appearing in group by expression.
+        // GROUP BY GROUPING SETS (...)
+        if (!ctx.groupingExpressions.isEmpty) {
+          logWarning("The groupBy expressions between 'GROUP BY' and 'GROUPING SETS' will " +
+            "be ignored. Please use 'GROUP BY GROUPING SETS (...)' directly.")
+        }
         val groupingSets =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-        Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
-          selectExpressions, query)
+        Aggregate(Seq(GroupingSets(groupingSets.toSeq)), selectExpressions, query)
       } else {
         // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
+        val groupByExpressions = expressionList(ctx.groupingExpressions)
         val mappedGroupByExpressions = if (ctx.CUBE != null) {
           Seq(Cube(groupByExpressions.map(Seq(_))))
         } else if (ctx.ROLLUP != null) {
@@ -960,8 +959,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 Rollup(groupingSets.toSeq)
               } else {
                 assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-                GroupingSets(groupingSets.toSeq,
-                  groupingSets.flatten.distinct.toSeq)
+                GroupingSets(groupingSets.toSeq)
               }
             } else {
               expression(groupByExpr.expression)

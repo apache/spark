@@ -29,8 +29,7 @@ When a FILTER clause is attached to an aggregate function, only the matching row
 ### Syntax
 
 ```sql
-GROUP BY group_expression [ , group_expression [ , ... ] ]
-    [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
+GROUP BY group_expression [ , group_expression [ , ... ] ] [ WITH { ROLLUP | CUBE } ]
 
 GROUP BY { group_expression | { ROLLUP | CUBE | GROUPING SETS } (grouping_set [ , ...]) } [ , ... ]
 ```
