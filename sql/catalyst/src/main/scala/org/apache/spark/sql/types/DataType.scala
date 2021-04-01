@@ -170,7 +170,8 @@ object DataType {
 
   private val otherTypes = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
-      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
+      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
+      DayTimeIntervalType, YearMonthIntervalType)
       .map(t => t.typeName -> t).toMap
   }
 
@@ -190,7 +191,7 @@ object DataType {
 
   private object JSortedObject {
     def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
-      case JObject(seq) => Some(seq.toList.sortBy(_._1))
+      case JObject(seq) => Some(seq.sortBy(_._1))
       case _ => None
     }
   }

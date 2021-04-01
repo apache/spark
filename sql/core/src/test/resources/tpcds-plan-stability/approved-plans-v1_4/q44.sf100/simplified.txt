@@ -28,7 +28,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                                                       Filter [ss_store_sk,ss_addr_sk]
                                                         ColumnarToRow
                                                           InputAdapter
-                                                            Scan parquet default.store_sales [ss_addr_sk,ss_store_sk,ss_net_profit]
+                                                            Scan parquet default.store_sales [ss_addr_sk,ss_store_sk,ss_net_profit,ss_sold_date_sk]
                                       HashAggregate [ss_item_sk,sum,count] [avg(UnscaledValue(ss_net_profit)),item_sk,rank_col,avg(ss_net_profit),sum,count]
                                         InputAdapter
                                           Exchange [ss_item_sk] #2
@@ -38,7 +38,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                                                   Filter [ss_store_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_net_profit]
+                                                        Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_net_profit,ss_sold_date_sk]
                 InputAdapter
                   BroadcastExchange #4
                     WholeStageCodegen (7)

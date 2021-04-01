@@ -380,7 +380,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
         // Calling `saveAsTable` to an existing table with append mode results in table insertion.
-        var msg = intercept[AnalysisException] {
+        val msg = intercept[AnalysisException] {
           Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
         assert(msg.contains("Cannot safely cast 'i': bigint to int"))

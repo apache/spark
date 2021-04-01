@@ -193,6 +193,9 @@ for any reason, these pods will remain in the cluster. The executor processes sh
 driver, so the executor pods should not consume compute resources (cpu and memory) in the cluster after your application
 exits.
 
+You may use `spark.kubernetes.executor.podNamePrefix` to fully control the executor pod names.
+When this property is set, it's highly recommended to make it unique across all jobs in the same namespace.
+
 ### Authentication Parameters
 
 Use the exact prefix `spark.kubernetes.authenticate` for Kubernetes authentication parameters in client mode.
@@ -209,7 +212,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6
+--packages org.apache.hadoop:hadoop-aws:3.2.2
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
@@ -253,7 +256,14 @@ To use a secret through an environment variable use the following options to the
 Kubernetes allows defining pods from [template files](https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/#pod-templates).
 Spark users can similarly use template files to define the driver or executor pod configurations that Spark configurations do not support.
 To do so, specify the spark properties `spark.kubernetes.driver.podTemplateFile` and `spark.kubernetes.executor.podTemplateFile`
-to point to local files accessible to the `spark-submit` process. To allow the driver pod access the executor pod template
+to point to files accessible to the `spark-submit` process.
+
+```
+--conf spark.kubernetes.driver.podTemplateFile=s3a://bucket/driver.yml
+--conf spark.kubernetes.executor.podTemplateFile=s3a://bucket/executor.yml
+```
+
+To allow the driver pod access the executor pod template
 file, the file will be automatically mounted onto a volume in the driver pod when it's created.
 Spark does not do any validation after unmarshalling these template files and relies on the Kubernetes API server for validation.
 
@@ -870,6 +880,14 @@ See the [configuration page](configuration.html) for information on Spark config
     inside a pod, it is highly recommended to set this to the name of the pod your driver is running in. Setting this
     value in client mode allows the driver to become the owner of its executor pods, which in turn allows the executor
     pods to be garbage collected by the cluster.
+  </td>
+  <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.podNamePrefix</code></td>
+  <td>(none)</td>
+  <td>
+    Prefix to use in front of the executor pod names.
   </td>
   <td>2.3.0</td>
 </tr>

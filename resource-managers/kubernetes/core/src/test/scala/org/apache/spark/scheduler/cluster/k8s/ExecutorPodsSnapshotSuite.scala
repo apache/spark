@@ -27,7 +27,7 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
     (pod, state(pod))
 
   def doTest(testCases: Seq[(Pod, ExecutorPodState)]): Unit = {
-    val snapshot = ExecutorPodsSnapshot(testCases.map(_._1))
+    val snapshot = ExecutorPodsSnapshot(testCases.map(_._1), 0)
     for (((_, state), i) <- testCases.zipWithIndex) {
       assertResult(state.getClass.getName, s"executor ID $i") {
         snapshot.executorPods(i).getClass.getName
@@ -70,7 +70,7 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
     val originalPods = Seq(
       pendingExecutor(0),
       runningExecutor(1))
-    val originalSnapshot = ExecutorPodsSnapshot(originalPods)
+    val originalSnapshot = ExecutorPodsSnapshot(originalPods, 0)
     val snapshotWithUpdatedPod = originalSnapshot.withUpdate(succeededExecutor(1))
     assert(snapshotWithUpdatedPod.executorPods ===
       Map(

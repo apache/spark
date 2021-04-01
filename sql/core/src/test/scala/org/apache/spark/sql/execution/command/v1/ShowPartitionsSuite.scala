@@ -69,6 +69,18 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
     }
   }
+
+  test("SPARK-33591: null as a partition value") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+      checkAnswer(sql(s"SHOW PARTITIONS $t"), Row("p1=__HIVE_DEFAULT_PARTITION__"))
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t PARTITION (p1 = null)"),
+        Row("p1=__HIVE_DEFAULT_PARTITION__"))
+    }
+  }
 }
 
 /**

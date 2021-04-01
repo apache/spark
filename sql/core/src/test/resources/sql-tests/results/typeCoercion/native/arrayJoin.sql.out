@@ -61,7 +61,7 @@ struct<array_join(array(2.0, 1.0), , ):string>
 -- !query
 SELECT array_join(array(float(2.0), float(1.0)), ', ')
 -- !query schema
-struct<array_join(array(CAST(2.0 AS FLOAT), CAST(1.0 AS FLOAT)), , ):string>
+struct<array_join(array(2.0, 1.0), , ):string>
 -- !query output
 2.0, 1.0
 

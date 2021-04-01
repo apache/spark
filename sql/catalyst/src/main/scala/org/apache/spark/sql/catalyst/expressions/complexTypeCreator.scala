@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -339,6 +340,14 @@ object CreateStruct {
    */
   def apply(children: Seq[Expression]): CreateNamedStruct = {
     CreateNamedStruct(children.zipWithIndex.flatMap {
+      // For multi-part column name like `struct(a.b.c)`, it may be resolved into:
+      //   1. Attribute if `a.b.c` is simply a qualified column name.
+      //   2. GetStructField if `a.b` refers to a struct-type column.
+      //   3. GetArrayStructFields if `a.b` refers to a array-of-struct-type column.
+      //   4. GetMapValue if `a.b` refers to a map-type column.
+      // We should always use the last part of the column name (`c` in the above example) as the
+      // alias name inside CreateNamedStruct.
+      case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
@@ -513,7 +522,9 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     this(child, Literal(","), Literal(":"))
   }
 
-  override def children: Seq[Expression] = Seq(text, pairDelim, keyValueDelim)
+  override def first: Expression = text
+  override def second: Expression = pairDelim
+  override def third: Expression = keyValueDelim
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
 
@@ -589,7 +600,7 @@ trait StructFieldsOperation {
  * children, and thereby enable the analyzer to resolve and transform valExpr as necessary.
  */
 case class WithField(name: String, valExpr: Expression)
-  extends Unevaluable with StructFieldsOperation {
+  extends Unevaluable with StructFieldsOperation with UnaryLike[Expression] {
 
   override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] = {
     val newFieldExpr = (StructField(name, valExpr.dataType, valExpr.nullable), valExpr)
@@ -607,7 +618,7 @@ case class WithField(name: String, valExpr: Expression)
     result.toSeq
   }
 
-  override def children: Seq[Expression] = valExpr :: Nil
+  override def child: Expression = valExpr
 
   override def dataType: DataType = throw new IllegalStateException(
     "WithField.dataType should not be called.")

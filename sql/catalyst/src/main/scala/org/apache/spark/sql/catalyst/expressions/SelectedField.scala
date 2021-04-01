@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -87,7 +87,7 @@ object SelectedField {
             dataType
           case Some(x) =>
             // This should not happen.
-            throw new AnalysisException(s"DataType '$x' is not supported by GetArrayStructFields.")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "GetArrayStructFields")
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
@@ -105,7 +105,7 @@ object SelectedField {
           case ArrayType(dataType, _) => MapType(keyType, dataType, valueContainsNull)
           case x =>
             // This should not happen.
-            throw new AnalysisException(s"DataType '$x' is not supported by MapValues.")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapValues")
         }
         selectField(child, opt)
       case MapKeys(child) =>
@@ -116,7 +116,7 @@ object SelectedField {
           case ArrayType(dataType, _) => MapType(dataType, valueType, valueContainsNull)
           case x =>
             // This should not happen.
-            throw new AnalysisException(s"DataType '$x' is not supported by MapKeys.")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapKeys")
         }
         selectField(child, opt)
       case GetArrayItem(child, _, _) =>

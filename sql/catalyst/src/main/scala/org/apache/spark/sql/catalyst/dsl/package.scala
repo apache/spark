@@ -130,7 +130,9 @@ package object dsl {
       if (expr.resolved && expr.dataType.sameType(to)) {
         expr
       } else {
-        Cast(expr, to)
+        val cast = Cast(expr, to)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast
       }
     }
 
@@ -294,6 +296,16 @@ package object dsl {
 
       /** Creates a new AttributeReference of type timestamp */
       def timestamp: AttributeReference = AttributeReference(s, TimestampType, nullable = true)()
+
+      /** Creates a new AttributeReference of the day-time interval type */
+      def dayTimeInterval: AttributeReference = {
+        AttributeReference(s, DayTimeIntervalType, nullable = true)()
+      }
+
+      /** Creates a new AttributeReference of the year-month interval type */
+      def yearMonthInterval: AttributeReference = {
+        AttributeReference(s, YearMonthIntervalType, nullable = true)()
+      }
 
       /** Creates a new AttributeReference of type binary */
       def binary: AttributeReference = AttributeReference(s, BinaryType, nullable = true)()

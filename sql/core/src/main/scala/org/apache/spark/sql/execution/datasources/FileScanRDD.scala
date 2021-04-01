@@ -26,6 +26,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.NextIterator
@@ -116,12 +117,7 @@ class FileScanRDD(
           readFunction(currentFile)
         } catch {
           case e: FileNotFoundException =>
-            throw new FileNotFoundException(
-              e.getMessage + "\n" +
-                "It is possible the underlying files have been updated. " +
-                "You can explicitly invalidate the cache in Spark by " +
-                "running 'REFRESH TABLE tableName' command in SQL or " +
-                "by recreating the Dataset/DataFrame involved.")
+            throw QueryExecutionErrors.readCurrentFileNotFoundError(e)
         }
       }
 
