@@ -47,9 +47,9 @@ These defaults can be overridden with `ROW FORMAT DELIMITED`.
 
 ```sql
 rowFormat
-    : ROW FORMAT SERDE serde_name [ WITH SERDEPROPERTIES serde_props ]
+    : ROW FORMAT SERDE serde_class [ WITH SERDEPROPERTIES serde_props ]
     | ROW FORMAT DELIMITED
-       [ FIELDS TERMINATED BY fieldsTerminatedBy [ ESCAPED BY escapedBy ] ]
+       [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
        [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
        [ MAP KEYS TERMINATED BY keysTerminatedBy ]
        [ LINES TERMINATED BY linesSeparatedBy ]
@@ -62,11 +62,11 @@ namedExpressionSeq = named_expression [ , ... ]
 transformClause:
   SELECT [ TRANSFORM ( namedExpressionSeq ) | MAP namedExpressionSeq | REDUCE namedExpressionSeq ]
     [ inRowFormat ]
-    [ RECORDWRITER recordWriter ]
+    [ RECORDWRITER recordWriter_class ]
     USING script
-    [ AS ( [ identifierSeq | colTypeList ] [ , ... ] ) ]
+    [ AS ( [ col_name [ col_type ]] [ , ... ] ) ]
     [ outRowFormat ]
-    [ RECORDREADER recordReader ]
+    [ RECORDREADER recordReader_class ]
   [ WHERE boolean_expression  ]
   [ GROUP BY expression [ , ... ] ]
   [ HAVING boolean_expression ]
@@ -76,59 +76,85 @@ transformClause:
 
 * **named_expression**
 
-    xxx.
+    An expression with an assigned name. In general, it denotes a column expression.
 
-* **serde_name**
+    **Syntax:** `expression [AS] [alias]`
 
-    xxx.
+* **row_format**    
 
-* **serde_props**
+    Use the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
 
-    xxx.
+* **SERDE**
 
-* **fieldsTerminatedBy**
+    Specifies a custom SerDe for one table.
 
-    xxx.
+* **serde_class**
 
-* **escapedBy**
+    Specifies a fully-qualified class name of a custom SerDe.
 
-    xxx.
+* **SERDEPROPERTIES**
 
-* **collectionItemsTerminatedBy**
+    A list of key-value pairs that is used to tag the SerDe definition.
 
-    xxx.
+* **DELIMITED**
 
-* **keysTerminatedBy**
-
-    xxx.
-
-* **linesSeparatedBy**
-
-    xxx.
-
-* **nullDefinedAs**
-
-    xxx.
-
-* **rowFormat**
-
-    xxx.
-
-* **recordWriter**
-
-    xxx.
-
-* **recordReader**
-
-    xxx.
+    The `DELIMITED` clause can be used to specify the native SerDe and state the delimiter, escape character, null character and so on.
     
-* **identifierSeq**
+* **FIELDS TERMINATED BY**
+
+    Used to define a column separator.
     
-    xxx.
+* **COLLECTION ITEMS TERMINATED BY**
+
+    Used to define a collection item separator.
+   
+* **MAP KEYS TERMINATED BY**
+
+    Used to define a map key separator.
     
-* **recordReader**
- 
-    xxx.
+* **LINES TERMINATED BY**
+
+    Used to define a row separator.
+    
+* **NULL DEFINED AS**
+
+    Used to define the specific value for NULL.
+    
+* **ESCAPED BY**
+
+    Used for escape mechanism.
+
+* **RECORDREADER**
+
+    Specifies a custom RecordReader for one table.
+
+* **RECORDWRITER**
+
+    Specifies a custom RecordWriter for one table.
+
+* **recordReader_class**
+
+    Specifies a fully-qualified class name of a custom RecordReader. 
+    Default value is `org.apache.hadoop.hive.ql.exec.TextRecordReader`
+
+* **recordWriter_class**
+
+    Specifies a fully-qualified class name of a custom RecordWriter. 
+    Default value is `org.apache.hadoop.hive.ql.exec.TextRecordWriter`.
+
+* **script**
+
+    Specify a command to process data.
+
+* **boolean_expression**
+
+    Specifies any expression that evaluates to a result type `boolean`. Two or
+    more expressions may be combined together using the logical
+    operators ( `AND`, `OR` ).
+
+* **expression**
+
+    Specifies combination of one or more values, operators and SQL functions that results in a value.
 
 ### Without Hive support Mode
 
@@ -136,7 +162,7 @@ transformClause:
 
 ### Schema-less Script Transforms
 
-If there is no AS clause after USING my_script, Spark assumes that the output of the script contains 2 parts:
+If there don't have AS clause after USING my_script, Spark assumes that the output of the script contains 2 parts:
 
    1. key: which is before the first tab, 
    2. value: which is the rest after the first tab.
