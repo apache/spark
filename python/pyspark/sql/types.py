@@ -764,6 +764,21 @@ class UserDefinedType(DataType):
         return type(self) == type(other)
 
 
+def _is_datatype_with_udt(dt):
+    if dt is None:
+        return False
+    elif isinstance(dt, UserDefinedType):
+        return True
+    elif isinstance(dt, ArrayType):
+        # SPARK-34771: TODO elementType is ArrayType/StructType
+        return isinstance(dt.elementType, UserDefinedType)
+    elif isinstance(dt, StructType):
+        # SPARK-34771: TODO field.dataType is ArrayType/StructType
+        return any(isinstance(field.dataType, UserDefinedType) for field in dt.fields)
+    else:
+        return False
+
+
 _atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
                  ByteType, ShortType, IntegerType, LongType, DateType, TimestampType, NullType]
 _all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)

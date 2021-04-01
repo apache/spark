@@ -20,9 +20,11 @@ from collections import Counter
 
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
-from pyspark.sql.types import IntegralType
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
-    DoubleType, BooleanType, MapType, TimestampType, StructType, DataType, UserDefinedType
+    DoubleType, BooleanType, MapType, TimestampType, StructType, DataType, \
+    IntegralType, UserDefinedType, _is_datatype_with_udt
+from pyspark.sql.pandas.types import _serialize_pandas_with_udt, \
+    _deserialize_pandas_with_udt
 from pyspark.traceback_utils import SCCallSiteSync
 
 
@@ -131,14 +133,16 @@ class PandasConversionMixin(object):
                         # Rename back to the original column names.
                         pdf.columns = self.columns
                         for field in self.schema:
-                            if isinstance(field.dataType, TimestampType):
-                                pdf[field.name] = \
-                                    _check_series_localize_timestamps(pdf[field.name], timezone)
-                            elif isinstance(field.dataType, MapType):
-                                pdf[field.name] = \
-                                    _convert_map_items_to_dict(pdf[field.name])
-                            elif isinstance(field.dataType, UserDefinedType):
-                                pdf[field.name] = pdf[field.name].apply(field.dataType.deserialize)
+                            dt = field.dataType
+                            name = field.name
+                            if isinstance(dt, TimestampType):
+                                pdf[name] = \
+                                    _check_series_localize_timestamps(pdf[name], timezone)
+                            elif isinstance(dt, MapType):
+                                pdf[name] = \
+                                    _convert_map_items_to_dict(pdf[name])
+                            elif _is_datatype_with_udt(dt):
+                                pdf[name] = _deserialize_pandas_with_udt(pdf[name], dt)
                         return pdf
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
