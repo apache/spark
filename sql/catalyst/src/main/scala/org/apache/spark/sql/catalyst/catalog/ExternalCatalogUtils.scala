@@ -65,17 +65,21 @@ object ExternalCatalogUtils {
   }
 
   def escapePathName(path: String): String = {
-    val builder = new StringBuilder()
-    path.foreach { c =>
-      if (needsEscaping(c)) {
-        builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02X")
-      } else {
-        builder.append(c)
+    if (path == null) {
+      "null"
+    } else {
+      val builder = new StringBuilder()
+      path.foreach { c =>
+        if (needsEscaping(c)) {
+          builder.append('%')
+          builder.append(f"${c.asInstanceOf[Int]}%02X")
+        } else {
+          builder.append(c)
+        }
       }
-    }
 
-    builder.toString()
+      builder.toString()
+    }
   }
 
 
