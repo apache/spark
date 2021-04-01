@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.getPartitionValueString
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -350,12 +351,7 @@ object PartitioningUtils {
    */
   def getPathFragment(spec: TablePartitionSpec, partitionSchema: StructType): String = {
     partitionSchema.map { field =>
-      val value = if (spec(field.name) == null || spec(field.name).isEmpty) {
-        DEFAULT_PARTITION_NAME
-      } else {
-        escapePathName(spec(field.name))
-      }
-      escapePathName(field.name) + "=" + value
+      escapePathName(field.name) + "=" + getPartitionValueString(spec(field.name))
     }.mkString("/")
   }
 
