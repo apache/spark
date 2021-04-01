@@ -2530,16 +2530,15 @@ case class SubtractTimestamps(
       defineCodeGen(ctx, ev, (end, start) =>
         s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
   }
+
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    copy(left = newLeft, right = newRight)
 }
 
 object SubtractTimestamps {
   def apply(left: Expression, right: Expression): SubtractTimestamps = {
     new SubtractTimestamps(left, right)
   }
-
-  override protected def withNewChildren(
-      newLeft: Expression, newRight: Expression): SubtractTimestamps =
-    copy(endTimestamp = newLeft, startTimestamp = newRight)
 }
 
 /**
