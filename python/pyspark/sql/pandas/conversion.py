@@ -22,7 +22,7 @@ from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
-    DoubleType, BooleanType, MapType, TimestampType, StructType, DataType
+    DoubleType, BooleanType, MapType, TimestampType, StructType, DataType, UserDefinedType
 from pyspark.traceback_utils import SCCallSiteSync
 
 
@@ -137,6 +137,8 @@ class PandasConversionMixin(object):
                             elif isinstance(field.dataType, MapType):
                                 pdf[field.name] = \
                                     _convert_map_items_to_dict(pdf[field.name])
+                            elif isinstance(field.dataType, UserDefinedType):
+                                pdf[field.name] = pdf[field.name].apply(field.dataType.deserialize)
                         return pdf
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
@@ -454,7 +456,8 @@ class SparkConversionMixin(object):
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
-            arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+            # arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+            arrow_types = [f.dataType for f in schema.fields]
         elif isinstance(schema, DataType):
             raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
         else:

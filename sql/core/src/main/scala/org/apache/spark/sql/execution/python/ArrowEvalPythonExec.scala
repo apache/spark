@@ -24,7 +24,7 @@ import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.util.ArrowUtils
 
 /**
@@ -89,12 +89,60 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
-        s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+      assert(plainSchemaSeq(outputTypes) == actualDataTypes,
+        "Incompatible schema from pandas_udf: " +
+          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
       batch.rowIterator.asScala
     }
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+
+  private def plainSchemaSeq(schema: Seq[DataType]): Seq[DataType] = {
+    schema.map(v => ArrowEvalPythonExec.plainSchema(v)).toList
+  }
+
+}
+
+private[sql] object ArrowEvalPythonExec {
+  /**
+   * Erase User-Defined Types and returns the plain Spark StructType instead.
+   *
+   * UserDefinedType:
+   * - will be erased as dt.sqlType
+   * - recursively rewrite internal ArrayType with `containsNull=true`
+   * ArrayType: containsNull will always be true when returned by PyArrow
+   * - useArrowContainsNull(true): always mark containsNull as true
+   * - useArrowContainsNull(false): reserve the original nullability
+   * Non-primitive DataType: recursively rewrite the internal ArrayType
+   * Primitive DataType: reserve the original nullability
+   */
+  def plainSchema(schema: DataType, useArrowContainsNull: Boolean = false): DataType = {
+    schema match {
+      case dt: UserDefinedType[_] =>
+        plainSchema(dt.sqlType, useArrowContainsNull = true)
+      case ArrayType(elementType, containsNull) =>
+        ArrayType(
+          plainSchema(elementType, useArrowContainsNull),
+          containsNull = (useArrowContainsNull || containsNull)
+        )
+      case StructType(fields) =>
+        StructType(fields.map(field =>
+          StructField(
+            field.name,
+            plainSchema(field.dataType, useArrowContainsNull),
+            field.nullable,
+            field.metadata
+          ))
+        )
+      case MapType(keyType, valueType, valueContainsNull) =>
+        MapType(
+          plainSchema(keyType, useArrowContainsNull),
+          plainSchema(valueType, useArrowContainsNull),
+          valueContainsNull
+        )
+      case _ => schema
+    }
+  }
 }
