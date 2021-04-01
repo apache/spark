@@ -30,10 +30,12 @@ import org.apache.spark.sql.types.DataType
  * session local timezone by an analyzer [[ResolveTimeZone]].
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`. " +
-    "This expression is identical to CAST with configuration `spark.sql.ansi.enabled` as " +
-    "true, except it returns NULL instead of raising an error. Note that the behavior of this " +
-    "expression doesn't depend on configuration `spark.sql.ansi.enabled`.",
+  usage = """
+    _FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.
+      This expression is identical to CAST with configuration `spark.sql.ansi.enabled` as
+      true, except it returns NULL instead of raising an error. Note that the behavior of this
+      expression doesn't depend on configuration `spark.sql.ansi.enabled`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
