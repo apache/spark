@@ -549,25 +549,16 @@ class Analyzer(override val catalogManager: CatalogManager)
       }.asInstanceOf[NamedExpression]
     }
 
-    private def getFinalGroupByExpressions(
-        selectedGroupByExprs: Seq[Seq[Expression]],
-        groupByExprs: Seq[Expression]): Seq[Expression] = {
-      // In case of ANSI-SQL compliant syntax for GROUPING SETS, groupByExprs is optional and
-      // can be null. In such case, we derive the groupByExprs from the user supplied values for
-      // grouping sets.
-      if (groupByExprs == Nil) {
-        selectedGroupByExprs.flatten.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
-          // Only unique expressions are included in the group by expressions and is determined
-          // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
-          // in grouping expression (a * b)
-          if (result.exists(_.semanticEquals(currentExpr))) {
-            result
-          } else {
-            result :+ currentExpr
-          }
+    private def getFinalGroupByExpressions(groupByExprs: Seq[Expression]): Seq[Expression] = {
+      groupByExprs.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
+        // Only unique expressions are included in the group by expressions and is determined
+        // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
+        // in grouping expression (a * b)
+        if (result.exists(_.semanticEquals(currentExpr))) {
+          result
+        } else {
+          result :+ currentExpr
         }
-      } else {
-        groupByExprs
       }
     }
 
@@ -579,7 +570,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
-      val finalGroupByExpressions = getFinalGroupByExpressions(selectedGroupByExprs, groupByExprs)
+      val finalGroupByExpressions = getFinalGroupByExpressions(groupByExprs)
 
       if (finalGroupByExpressions.size > GroupingID.dataType.defaultSize * 8) {
         throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
@@ -621,8 +612,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
         case a @ Aggregate(Seq(gs: GroupingSet), _, _) =>
-          a.copy(groupingExpressions =
-            getFinalGroupByExpressions(gs.groupingSets, gs.groupByExprs))
+          a.copy(groupingExpressions = getFinalGroupByExpressions(gs.groupByExprs))
       }
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val resolvedInfo =

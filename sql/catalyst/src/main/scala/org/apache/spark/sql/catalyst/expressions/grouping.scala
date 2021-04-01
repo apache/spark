@@ -44,11 +44,9 @@ trait GroupingSet extends Expression with CodegenFallback {
 
 object GroupingSet {
   /**
-   * GROUP BY a, b, c WITH ROLLUP
+   * 'GROUP BY a, b, c WITH ROLLUP'
    * is equivalent to
-   * GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
-   * or
-   * GROUP BY GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
+   * 'GROUP BY GROUPING SETS ( (a, b, c), (a, b), (a), ( ) )'.
    * Group Count: N + 1 (N is the number of group expressions)
    *
    * We need to get all of its subsets for the rule described above, the subset is
@@ -58,11 +56,9 @@ object GroupingSet {
     exprs.inits.map(_.flatten).toIndexedSeq
 
   /**
-   * GROUP BY a, b, c WITH CUBE
+   * 'GROUP BY a, b, c WITH CUBE'
    * is equivalent to
-   * GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
-   * or
-   * GROUP BY GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
+   * 'GROUP BY GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) )'.
    * Group Count: 2 ^ N (N is the number of group expressions)
    *
    * We need to get all of its subsets for a given GROUPBY expression, the subsets are
