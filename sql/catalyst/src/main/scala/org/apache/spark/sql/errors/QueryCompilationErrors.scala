@@ -1268,10 +1268,6 @@ private[spark] object QueryCompilationErrors {
       s"createTableColumnTypes option column $col not found in schema ${schema.catalogString}")
   }
 
-  def parquetTypeUnsupportedError(parquetType: String): Throwable = {
-    new AnalysisException(s"Parquet type not supported: $parquetType")
-  }
-
   def parquetTypeUnsupportedYetError(parquetType: String): Throwable = {
     new AnalysisException(s"Parquet type not yet supported: $parquetType")
   }
@@ -1296,5 +1292,10 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"The SQL query of view $viewName has an incompatible schema change " +
       s"and column $colName cannot be resolved. Expected $expectedNum columns named $colName but " +
       s"got ${actualCols.map(_.name).mkString("[", ",", "]")}")
+  }
+
+  def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
+    throw new AnalysisException("The number of partitions can't be specified with unspecified" +
+      " distribution. Invalid writer requirements detected.")
   }
 }

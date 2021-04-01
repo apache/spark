@@ -380,6 +380,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
         case d @ Divide(l, r, f) if d.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, _) => DivideInterval(l, r, f)
+          case (YearMonthIntervalType, _) => DivideYMInterval(l, r)
+          case (DayTimeIntervalType, _) => DivideDTInterval(l, r)
           case _ => d
         }
       }
@@ -429,9 +431,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       case Aggregate(groups, aggs, child) if child.resolved && hasUnresolvedAlias(aggs) =>
         Aggregate(groups, assignAliases(aggs), child)
 
-      case g: GroupingSets if g.child.resolved && hasUnresolvedAlias(g.aggregations) =>
-        g.copy(aggregations = assignAliases(g.aggregations))
-
       case Pivot(groupByOpt, pivotColumn, pivotValues, aggregates, child)
         if child.resolved && groupByOpt.isDefined && hasUnresolvedAlias(groupByOpt.get) =>
         Pivot(Some(assignAliases(groupByOpt.get)), pivotColumn, pivotValues, aggregates, child)
@@ -442,40 +441,6 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
-    /*
-     *  GROUP BY a, b, c WITH ROLLUP
-     *  is equivalent to
-     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
-     *  Group Count: N + 1 (N is the number of group expressions)
-     *
-     *  We need to get all of its subsets for the rule described above, the subset is
-     *  represented as sequence of expressions.
-     */
-    def rollupExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.inits.toIndexedSeq
-
-    /*
-     *  GROUP BY a, b, c WITH CUBE
-     *  is equivalent to
-     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
-     *  Group Count: 2 ^ N (N is the number of group expressions)
-     *
-     *  We need to get all of its subsets for a given GROUPBY expression, the subsets are
-     *  represented as sequence of expressions.
-     */
-    def cubeExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = {
-      // `cubeExprs0` is recursive and returns a lazy Stream. Here we call `toIndexedSeq` to
-      // materialize it and avoid serialization problems later on.
-      cubeExprs0(exprs).toIndexedSeq
-    }
-
-    def cubeExprs0(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.toList match {
-      case x :: xs =>
-        val initial = cubeExprs0(xs)
-        initial.map(x +: _) ++ initial
-      case Nil =>
-        Seq(Seq.empty)
-    }
-
     private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
       e.collectFirst {
         case g: Grouping => g
@@ -655,14 +620,9 @@ class Analyzer(override val catalogManager: CatalogManager)
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
-        case a @ Aggregate(Seq(c @ Cube(groupByExprs)), _, _) =>
-          a.copy(groupingExpressions = groupByExprs)
-        case a @ Aggregate(Seq(r @ Rollup(groupByExprs)), _, _) =>
-          a.copy(groupingExpressions = groupByExprs)
-        case g: GroupingSets =>
-          Aggregate(
-            getFinalGroupByExpressions(g.selectedGroupByExprs, g.groupByExprs),
-            g.aggregations, g.child)
+        case a @ Aggregate(Seq(gs: GroupingSet), _, _) =>
+          a.copy(groupingExpressions =
+            getFinalGroupByExpressions(gs.groupingSets, gs.groupByExprs))
       }
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val resolvedInfo =
@@ -672,15 +632,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
         val newChild = h.child match {
-          case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
+          case Aggregate(Seq(gs: GroupingSet), aggregateExpressions, child) =>
             constructAggregate(
-              cubeExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
-          case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
-            constructAggregate(
-              rollupExprs(groupByExprs), groupByExprs, aggregateExpressions ++ extraAggExprs, child)
-          case x: GroupingSets =>
-            constructAggregate(
-              x.selectedGroupByExprs, x.groupByExprs, x.aggregations ++ extraAggExprs, x.child)
+              gs.selectedGroupByExprs, gs.groupByExprs,
+              aggregateExpressions ++ extraAggExprs, child)
         }
 
         // Since the exprId of extraAggExprs will be changed in the constructed aggregate, and the
@@ -703,30 +658,16 @@ class Analyzer(override val catalogManager: CatalogManager)
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case h @ UnresolvedHaving(
-          _, agg @ Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, _))
-          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        tryResolveHavingCondition(h)
-      case h @ UnresolvedHaving(
-          _, agg @ Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, _))
-          if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        tryResolveHavingCondition(h)
-      case h @ UnresolvedHaving(_, g: GroupingSets)
-          if g.childrenResolved && g.expressions.forall(_.resolved) =>
+      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(gs: GroupingSet), aggregateExpressions, _))
+        if agg.childrenResolved && (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child)
-        if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(cubeExprs(groupByExprs), groupByExprs, aggregateExpressions, child)
-      case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child)
-        if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(rollupExprs(groupByExprs), groupByExprs, aggregateExpressions, child)
-      // Ensure all the expressions have been resolved.
-      case x: GroupingSets if x.expressions.forall(_.resolved) =>
-        constructAggregate(x.selectedGroupByExprs, x.groupByExprs, x.aggregations, x.child)
+      case Aggregate(Seq(gs: GroupingSet), aggregateExpressions, child)
+        if (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+        constructAggregate(gs.selectedGroupByExprs, gs.groupByExprs, aggregateExpressions, child)
 
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
@@ -1650,26 +1591,6 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
 
-      // SPARK-31670: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
-      // will be wrapped with alias like Alias(GetStructField, name) with different ExprId.
-      // This cause aggregateExpressions can't be replaced by expanded groupByExpressions in
-      // `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim unnecessary alias
-      // of GetStructField here.
-      case g: GroupingSets =>
-        val resolvedSelectedExprs = g.selectedGroupByExprs
-          .map(_.map(resolveExpressionByPlanChildren(_, g))
-            .map(trimTopLevelGetStructFieldAlias))
-
-        val resolvedGroupingExprs = g.groupByExprs
-          .map(resolveExpressionByPlanChildren(_, g))
-          .map(trimTopLevelGetStructFieldAlias)
-
-        val resolvedAggExprs = g.aggregations
-          .map(resolveExpressionByPlanChildren(_, g))
-            .map(_.asInstanceOf[NamedExpression])
-
-        g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
-
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
         // implementation and should be resolved based on the table schema.
@@ -2066,13 +1987,6 @@ class Analyzer(override val catalogManager: CatalogManager)
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
-
-      case gs @ GroupingSets(selectedGroups, groups, child, aggs)
-          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
-            groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
-        gs.copy(
-          selectedGroupByExprs = selectedGroups.map(mayResolveAttrByAggregateExprs(_, aggs, child)),
-          groupByExprs = mayResolveAttrByAggregateExprs(groups, aggs, child))
     }
   }
 
@@ -4008,6 +3922,14 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
  */
 object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
+  object AttrOrOuterRef {
+    def unapply(e: Expression): Option[Attribute] = e match {
+      case a: Attribute => Some(a)
+      case OuterReference(a: Attribute) => Some(a)
+      case _ => None
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUp {
       case operator => operator.transformExpressionsUp {
@@ -4015,27 +3937,17 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
         // String literal is treated as char type when it's compared to a char type column.
         // We should pad the shorter one to the longer length.
-        case b @ BinaryComparison(attr: Attribute, lit) if lit.foldable =>
-          padAttrLitCmp(attr, attr.metadata, lit).map { newChildren =>
+        case b @ BinaryComparison(e @ AttrOrOuterRef(attr), lit) if lit.foldable =>
+          padAttrLitCmp(e, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren)
           }.getOrElse(b)
 
-        case b @ BinaryComparison(lit, attr: Attribute) if lit.foldable =>
-          padAttrLitCmp(attr, attr.metadata, lit).map { newChildren =>
+        case b @ BinaryComparison(lit, e @ AttrOrOuterRef(attr)) if lit.foldable =>
+          padAttrLitCmp(e, attr.metadata, lit).map { newChildren =>
             b.withNewChildren(newChildren.reverse)
           }.getOrElse(b)
 
-        case b @ BinaryComparison(or @ OuterReference(attr: Attribute), lit) if lit.foldable =>
-          padAttrLitCmp(or, attr.metadata, lit).map { newChildren =>
-            b.withNewChildren(newChildren)
-          }.getOrElse(b)
-
-        case b @ BinaryComparison(lit, or @ OuterReference(attr: Attribute)) if lit.foldable =>
-          padAttrLitCmp(or, attr.metadata, lit).map { newChildren =>
-            b.withNewChildren(newChildren.reverse)
-          }.getOrElse(b)
-
-        case i @ In(attr: Attribute, list)
+        case i @ In(e @ AttrOrOuterRef(attr), list)
           if attr.dataType == StringType && list.forall(_.foldable) =>
           CharVarcharUtils.getRawType(attr.metadata).flatMap {
             case CharType(length) =>
@@ -4044,7 +3956,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
               val literalCharLengths = literalChars.map(_.numChars())
               val targetLen = (length +: literalCharLengths).max
               Some(i.copy(
-                value = addPadding(attr, length, targetLen),
+                value = addPadding(e, length, targetLen),
                 list = list.zip(literalCharLengths).map {
                   case (lit, charLength) => addPadding(lit, charLength, targetLen)
                 } ++ nulls.map(Literal.create(_, StringType))))
@@ -4052,19 +3964,36 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           }.getOrElse(i)
 
         // For char type column or inner field comparison, pad the shorter one to the longer length.
-        case b @ BinaryComparison(left: Attribute, right: Attribute) =>
-          b.withNewChildren(CharVarcharUtils.addPaddingInStringComparison(Seq(left, right)))
+        case b @ BinaryComparison(e1 @ AttrOrOuterRef(left), e2 @ AttrOrOuterRef(right))
+            // For the same attribute, they must be the same length and no padding is needed.
+            if !left.semanticEquals(right) =>
+          val outerRefs = (e1, e2) match {
+            case (_: OuterReference, _: OuterReference) => Seq(left, right)
+            case (_: OuterReference, _) => Seq(left)
+            case (_, _: OuterReference) => Seq(right)
+            case _ => Nil
+          }
+          val newChildren = CharVarcharUtils.addPaddingInStringComparison(Seq(left, right))
+          if (outerRefs.nonEmpty) {
+            b.withNewChildren(newChildren.map(_.transform {
+              case a: Attribute if outerRefs.exists(_.semanticEquals(a)) => OuterReference(a)
+            }))
+          } else {
+            b.withNewChildren(newChildren)
+          }
 
-        case b @ BinaryComparison(OuterReference(left: Attribute), right: Attribute) =>
-          b.withNewChildren(padOuterRefAttrCmp(left, right))
-
-        case b @ BinaryComparison(left: Attribute, OuterReference(right: Attribute)) =>
-          b.withNewChildren(padOuterRefAttrCmp(right, left).reverse)
-
-        case i @ In(attr: Attribute, list) if list.forall(_.isInstanceOf[Attribute]) =>
+        case i @ In(e @ AttrOrOuterRef(attr), list) if list.forall(_.isInstanceOf[Attribute]) =>
           val newChildren = CharVarcharUtils.addPaddingInStringComparison(
             attr +: list.map(_.asInstanceOf[Attribute]))
-          i.copy(value = newChildren.head, list = newChildren.tail)
+          if (e.isInstanceOf[OuterReference]) {
+            i.copy(
+              value = newChildren.head.transform {
+                case a: Attribute if a.semanticEquals(attr) => OuterReference(a)
+              },
+              list = newChildren.tail)
+          } else {
+            i.copy(value = newChildren.head, list = newChildren.tail)
+          }
       }
     }
   }

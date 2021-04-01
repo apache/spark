@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import org.apache.spark.sql.execution.vectorized.Dictionary;
 
+import java.math.BigInteger;
+
 public final class ParquetDictionary implements Dictionary {
   private org.apache.parquet.column.Dictionary dictionary;
   private boolean needTransform = false;
@@ -61,6 +63,14 @@ public final class ParquetDictionary implements Dictionary {
 
   @Override
   public byte[] decodeToBinary(int id) {
-    return dictionary.decodeToBinary(id).getBytes();
+    if (needTransform) {
+      // For unsigned int64, it stores as dictionary encoded signed int64 in Parquet
+      // whenever dictionary is available.
+      // Here we lazily decode it to the original signed long value then convert to decimal(20, 0).
+      long signed = dictionary.decodeToLong(id);
+      return new BigInteger(Long.toUnsignedString(signed)).toByteArray();
+    } else {
+      return dictionary.decodeToBinary(id).getBytes();
+    }
   }
 }
