@@ -156,7 +156,9 @@ private[spark] class MetricsSystem private (
     sources.filter(_.sourceName == sourceName).toSeq
 
   def registerSource(source: Source): Unit = {
-    sources += source
+    sources.synchronized {
+      sources += source
+    }
     try {
       val regName = buildRegistryName(source)
       registry.register(regName, source.metricRegistry)
@@ -166,7 +168,9 @@ private[spark] class MetricsSystem private (
   }
 
   def removeSource(source: Source): Unit = {
-    sources -= source
+    sources.synchronized {
+      sources -= source
+    }
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
   }
