@@ -197,18 +197,29 @@ class ArrowTests(ReusedSQLTestCase):
         pdf_arrow = df.toPandas()
         assert_frame_equal(pdf_arrow, pdf)
 
-    def test_udt_roundtrip_fallback_enabled(self):
+    def test_udt_roundtrip(self):
+        pdf = pd.DataFrame({'point': pd.Series([ExamplePoint(1.0, 1.0), ExamplePoint(2.0, 2.0)])})
+        schema = StructType([StructField('point', ExamplePointUDT(), False)])
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
-            pdf = pd.DataFrame({'point': pd.Series([ExamplePoint(1.0, 1.0), ExamplePoint(2.0, 2.0)])})
-            schema = StructType([StructField('point', ExamplePointUDT(), False)])
+            df = self.spark.createDataFrame(pdf, schema)
+            pdf_arrow = df.toPandas()
+            assert_frame_equal(pdf_arrow, pdf)
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": False}):
             df = self.spark.createDataFrame(pdf, schema)
             pdf_arrow = df.toPandas()
             assert_frame_equal(pdf_arrow, pdf)
 
-    def test_udt_roundtrip_fallback_disabled(self):
+    def test_array_udt_roundtrip(self):
+        pdf = pd.DataFrame({'points': pd.Series([
+            [ExamplePoint(1.0, 1.0), ExamplePoint(1.0, 2.0), ExamplePoint(1.0, 3.0)],
+            [ExamplePoint(2.0, 1.0), ExamplePoint(2.0, 2.0), ExamplePoint(2.0, 3.0)]
+        ])})
+        schema = StructType([StructField('points', ArrayType(ExamplePointUDT()), False)])
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
+            df = self.spark.createDataFrame(pdf, schema)
+            pdf_arrow = df.toPandas()
+            assert_frame_equal(pdf_arrow, pdf)
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": False}):
-            pdf = pd.DataFrame({'point': pd.Series([ExamplePoint(1.0, 1.0), ExamplePoint(2.0, 2.0)])})
-            schema = StructType([StructField('point', ExamplePointUDT(), False)])
             df = self.spark.createDataFrame(pdf, schema)
             pdf_arrow = df.toPandas()
             assert_frame_equal(pdf_arrow, pdf)

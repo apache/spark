@@ -348,3 +348,28 @@ def _convert_dict_to_map_items(s):
     :return: pandas.Series of lists of (key, value) pairs
     """
     return s.apply(lambda d: list(d.items()) if d is not None else None)
+
+
+def _serialize_pandas_with_udt(s, dt):
+    if isinstance(dt, UserDefinedType):
+        return s.apply(dt.serialize)
+    elif isinstance(dt, ArrayType) and isinstance(dt.elementType, UserDefinedType):
+        udt = dt.elementType
+        return s.apply(lambda x: [udt.serialize(f) for f in x])
+    elif isinstance(dt, StructType):
+        raise ValueError("Nested UDT in StructType has not been supported yet")
+    else:
+        # For DataType without UDT, serialization can be skipped
+        return s
+
+def _deserialize_pandas_with_udt(s, dt):
+    if isinstance(dt, UserDefinedType):
+        return s.apply(dt.deserialize)
+    elif isinstance(dt, ArrayType) and isinstance(dt.elementType, UserDefinedType):
+        udt = dt.elementType
+        return s.apply(lambda x: [udt.deserialize(f) for f in x])
+    elif isinstance(dt, StructType):
+        raise ValueError("Nested UDT in StructType has not been supported yet")
+    else:
+        # For DataType without UDT, serialization can be skipped
+        return s

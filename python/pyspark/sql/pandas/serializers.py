@@ -22,8 +22,9 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 from typing import Optional
 
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
-from pyspark.sql.types import ArrayType, DataType, UserDefinedType, StructType
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.types import ArrayType, DataType, UserDefinedType, StructType, \
+    _is_datatype_with_udt
+from pyspark.sql.pandas.types import to_arrow_type, _serialize_pandas_with_udt
 
 
 class SpecialLengths(object):
@@ -159,16 +160,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         from pandas.api.types import is_categorical_dtype
 
         def create_array(s, pdt, dt = None):
-            if dt is not None:
-                if isinstance(dt, UserDefinedType):
-                    s = s.apply(dt.serialize)
-                elif isinstance(dt, ArrayType) and isinstance(dt.elementType, UserDefinedType):
-                    udt = dt.elementType
-                    s = s.apply(lambda x: [udt.serialize(f) for f in x])
-                else:
-                    # For DataType without UDT, serialization can be skipped
-                    pass
-
             # Ensure timestamp series are in expected form for Spark internal representation
             if pdt is not None and pa.types.is_timestamp(pdt):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
@@ -229,11 +220,20 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                         for i, (field, struct_field) in enumerate(zip(pdt, dt.fields))
                     ]
 
+        def preprocess_series(s):
+            if not isinstance(s, (list, tuple)):
+                return (s, None)
+            elif _is_datatype_with_udt(s[1]):
+                return (_serialize_pandas_with_udt(s[0], s[1]), s[1])
+            else:
+                return s
+
         # Make input conform to [(series1, type1), (series2, type2), ...]
         if not isinstance(series, (list, tuple)) or \
                 (len(series) == 2 and isinstance(series[1], (pa.DataType, DataType))):
             series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
+
+        series = (preprocess_series(s) for s in series)
 
         arrs = []
         for s, t in series:
