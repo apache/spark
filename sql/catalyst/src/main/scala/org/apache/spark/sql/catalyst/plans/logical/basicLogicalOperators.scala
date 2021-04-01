@@ -1014,7 +1014,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
-  def partitioning: Partitioning = {
+  override def partitioning: Partitioning = {
     require(shuffle, "Partitioning can only be used in shuffle.")
     numPartitions match {
       case 1 => SinglePartition
@@ -1038,7 +1038,7 @@ case class RepartitionByExpression(
   val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
-  val partitioning: Partitioning = {
+  override val partitioning: Partitioning = {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
 
     require(sortOrder.isEmpty || nonSortOrder.isEmpty,
