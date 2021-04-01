@@ -1192,24 +1192,50 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
   }
 
-  test("subtract dates") {
+  test("SPARK-34896: subtract dates") {
     val end = LocalDate.of(2019, 10, 5)
-    checkEvaluation(SubtractDates(Literal(end), Literal(end)),
-      new CalendarInterval(0, 0, 0))
-    checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 days")))
-    checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval -1 days")))
     val epochDate = Literal(LocalDate.ofEpochDay(0))
-    checkEvaluation(SubtractDates(Literal(end), epochDate),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval 49 years 9 months 4 days")))
-    checkEvaluation(SubtractDates(epochDate, Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval -49 years -9 months -4 days")))
-    checkEvaluation(
-      SubtractDates(
-        Literal(LocalDate.of(10000, 1, 1)),
-        Literal(LocalDate.of(1, 1, 1))),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      checkEvaluation(SubtractDates(Literal(end), Literal(end)),
+        new CalendarInterval(0, 0, 0))
+      checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 days")))
+      checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval -1 days")))
+      checkEvaluation(SubtractDates(Literal(end), epochDate),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 49 years 9 months 4 days")))
+      checkEvaluation(SubtractDates(epochDate, Literal(end)),
+        IntervalUtils.stringToInterval(
+          UTF8String.fromString("interval -49 years -9 months -4 days")))
+      checkEvaluation(
+        SubtractDates(
+          Literal(LocalDate.of(10000, 1, 1)),
+          Literal(LocalDate.of(1, 1, 1))),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
+    }
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
+      checkEvaluation(SubtractDates(Literal(end), Literal(end)), Duration.ZERO)
+      checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)), Duration.ofDays(1))
+      checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)), Duration.ofDays(-1))
+      checkEvaluation(SubtractDates(Literal(end), epochDate), Duration.ofDays(end.toEpochDay))
+      checkEvaluation(SubtractDates(epochDate, Literal(end)),
+        Duration.ofDays(end.toEpochDay).negated())
+      checkEvaluation(
+        SubtractDates(
+          Literal(LocalDate.of(10000, 1, 1)),
+          Literal(LocalDate.of(1, 1, 1))),
+        Duration.ofDays(ChronoUnit.DAYS.between( LocalDate.of(1, 1, 1), LocalDate.of(10000, 1, 1))))
+      checkExceptionInExpression[ArithmeticException](
+        SubtractDates(Literal(LocalDate.MAX), Literal(LocalDate.MIN)),
+        "overflow")
+    }
+    Seq(false, true).foreach { ansiIntervals =>
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (end: Expression, start: Expression) => SubtractDates(end, start, ansiIntervals),
+        DateType, DateType)
+    }
   }
 
   test("to_timestamp exception mode") {

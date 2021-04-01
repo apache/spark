@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -513,8 +513,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 }
 
-trait LeafExecNode extends SparkPlan {
-  override final def children: Seq[SparkPlan] = Nil
+trait LeafExecNode extends SparkPlan with LeafLike[SparkPlan] {
+
   override def producedAttributes: AttributeSet = outputSet
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(conf.maxToStringFields)
@@ -542,10 +542,8 @@ object UnaryExecNode {
   }
 }
 
-trait UnaryExecNode extends SparkPlan {
-  def child: SparkPlan
+trait UnaryExecNode extends SparkPlan with UnaryLike[SparkPlan] {
 
-  override final def children: Seq[SparkPlan] = child :: Nil
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(conf.maxToStringFields)
     val inputStr = s"${ExplainUtils.generateFieldString("Input", child.output)}"
@@ -565,11 +563,8 @@ trait UnaryExecNode extends SparkPlan {
   }
 }
 
-trait BinaryExecNode extends SparkPlan {
-  def left: SparkPlan
-  def right: SparkPlan
+trait BinaryExecNode extends SparkPlan with BinaryLike[SparkPlan] {
 
-  override final def children: Seq[SparkPlan] = Seq(left, right)
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(conf.maxToStringFields)
     val leftOutputStr = s"${ExplainUtils.generateFieldString("Left output", left.output)}"

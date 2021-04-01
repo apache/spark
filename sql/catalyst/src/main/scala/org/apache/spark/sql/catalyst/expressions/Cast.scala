@@ -1957,20 +1957,14 @@ object AnsiCast {
         suggestionOnConversionFunctions(from, to, "function UNIX_DATE")
 
       // scalastyle:off line.size.limit
-      case (_: ArrayType, StringType) =>
-        s"""
-           | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
-           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can use the function ARRAY_JOIN or set $fallbackConfKey as $fallbackConfValue.
-           |""".stripMargin
-
       case _ if Cast.canCast(from, to) =>
         s"""
            | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
            | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set $fallbackConfKey as $fallbackConfValue.
            |""".stripMargin
+      // scalastyle:on line.size.limit
 
       case _ => s"cannot cast ${from.catalogString} to ${to.catalogString}"
-      // scalastyle:on line.size.limit
     }
 }
 
