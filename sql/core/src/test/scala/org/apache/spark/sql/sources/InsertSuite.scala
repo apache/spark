@@ -945,7 +945,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           |""".stripMargin)
       sql(
         """
-          |INSERT INTO TABLE t2 PARTITION (part = '2018-07-25')
+          |INSERT INTO TABLE t2 PARTITION (part = null)
           |SELECT * FROM t1 where 1=0""".stripMargin)
       checkAnswer(spark.table("t2"), Nil)
     }
