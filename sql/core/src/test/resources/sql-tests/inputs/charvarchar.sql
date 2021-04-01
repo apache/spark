@@ -61,8 +61,7 @@ desc formatted char_part;
 MSCK REPAIR TABLE char_part;
 desc formatted char_part;
 
-create table str_tbl(c string, v string) using parquet;
-insert into str_tbl values
+create temporary view str_view as select c, v from values
     (null, null),
     (null, 'S'),
     ('N', 'N '),
@@ -71,10 +70,10 @@ insert into str_tbl values
     ('NetE', 'Spar'),
     ('NetEa ', 'Spark '),
     ('NetEas ', 'Spark'),
-    ('NetEase', 'Spark-');
+    ('NetEase', 'Spark-') t(c, v);
 
 create table char_tbl4(c7 char(7), c8 char(8), v varchar(6), s string) using parquet;
-insert into char_tbl4 select c, c, v, c from str_tbl;
+insert into char_tbl4 select c, c, v, c from str_view;
 
 select c7, c8, v, s from char_tbl4;
 select c7, c8, v, s from char_tbl4 where c7 = c8;
@@ -114,4 +113,3 @@ drop table char_tbl1;
 drop table char_tbl2;
 drop table char_tbl3;
 drop table char_tbl4;
-drop table str_tbl;
