@@ -620,7 +620,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
-        case a @ Aggregate(Seq(gs: GroupingSet), _, _) =>
+        case a @ Aggregate(Seq(gs: GroupingAnalytic), _, _) =>
           a.copy(groupingExpressions =
             getFinalGroupByExpressions(gs.groupingSets, gs.groupByExprs))
       }
@@ -632,7 +632,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
         val newChild = h.child match {
-          case Aggregate(Seq(gs: GroupingSet), aggregateExpressions, child) =>
+          case Aggregate(Seq(gs: GroupingAnalytic), aggregateExpressions, child) =>
             constructAggregate(
               gs.selectedGroupByExprs, gs.groupByExprs,
               aggregateExpressions ++ extraAggExprs, child)
@@ -658,14 +658,15 @@ class Analyzer(override val catalogManager: CatalogManager)
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(gs: GroupingSet), aggregateExpressions, _))
+      case h @ UnresolvedHaving(
+      _, agg @ Aggregate(Seq(gs: GroupingAnalytic), aggregateExpressions, _))
         if agg.childrenResolved && (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(Seq(gs: GroupingSet), aggregateExpressions, child)
+      case Aggregate(Seq(gs: GroupingAnalytic), aggregateExpressions, child)
         if (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         constructAggregate(gs.selectedGroupByExprs, gs.groupByExprs, aggregateExpressions, child)
 
