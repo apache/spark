@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: remote-shuffle-service
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rss
+  namespace: remote-shuffle-service
+  labels:
+    app: rss
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rss
+  serviceName: rss
+  template:
+    metadata:
+      labels:
+        app: rss
+    spec:
+      containers:
+        - name: rss
+          image: [remote-shuffle-service-server-image]
+          resources:
+            requests:
+              memory: "10G"
+              cpu: "1000m"
+            limits:
+              memory: "12G"
+              cpu: "1200m"
+          env:
+            - name: RSS_SERVER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          command: ["java", "-Xmx8G", "-Dlog4j.configuration=log4j-remote-shuffle-service.properties", "-cp", "remote-shuffle-service-server.jar", "org.apache.spark.remoteshuffle.StreamServer", "-port", "9338", "-httpPort", "8080"]
+          args: []
+          ports:
+            - containerPort: 9338
+            - containerPort: 8080
+              name: healthcheck
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: healthcheck
+            failureThreshold: 3
+            periodSeconds: 15
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: rss
+  namespace: remote-shuffle-service
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: healthcheck
+  clusterIP: None
+  selector:
+    app: rss

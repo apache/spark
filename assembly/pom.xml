@@ -268,5 +268,16 @@
         </dependency>
       </dependencies>
     </profile>
+
+    <profile>
+      <id>remote-shuffle-service</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>remote-shuffle-service_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 </project>

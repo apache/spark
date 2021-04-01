@@ -3295,6 +3295,13 @@
     </profile>
 
     <profile>
+      <id>remote-shuffle-service</id>
+      <modules>
+        <module>remote-shuffle-service</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>

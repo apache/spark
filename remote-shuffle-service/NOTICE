@@ -1,0 +1,10 @@
+Apache Spark Remote Shuffle Service
+Copyright 2021 and onwards The Apache Software Foundation.
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+This product includes code derived from Uber Remote Shuffle Service project
+(https://github.com/uber/RemoteShuffleService), which was released under
+the Apache License, Version 2.0. The source code is copied from there and
+modified in this product.
