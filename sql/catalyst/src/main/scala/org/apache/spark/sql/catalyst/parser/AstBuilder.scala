@@ -918,7 +918,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         // GROUP BY GROUPING SETS (...)
         if (!ctx.groupingExpressions.isEmpty) {
           logWarning("The groupBy expressions between 'GROUP BY' and 'GROUPING SETS' will " +
-            "be ignored. Please use 'GROUP BY GROUPING SETS (...)' directly.")
+            "be ignored and this syntax is deprecated. Please use 'GROUP BY GROUPING SETS (...)' " +
+            "directly.")
         }
         val groupingSets =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
