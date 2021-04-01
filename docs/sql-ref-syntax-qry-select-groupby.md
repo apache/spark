@@ -106,18 +106,16 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     with concatenated groupings yield the cross-product of groupings from each grouping set. The cross-product 
     operation enables even a small number of concatenated groupings to generate a large number of final groups. 
     The concatenated groupings are specified simply by listing multiple `GROUPING SETS`, `CUBES`, and `ROLLUP`, 
-    and separating them with commas. For example:
+    and separating them with commas. `CUBE` and `ROLLUP` are just syntax sugar for GROUPING SETS, for how to use
+    `CUBE` and `ROLLUP` can refer to the section above about `CUBE` and `ROLLUP`. For example:
     `GROUP BY GROUPING SETS((warehouse), (producet)), GROUPING SETS((location), (size))` is equivalent to 
-    `GROUP BY GROUPING SETS((warehouse, location), (warehouse, size), (product, location), (product, size))`.
-    `GROUP BY CUBE((warehouse), (producet)), ROLLUP((location), (size))` is equivalent to 
-    `GROUP BY GROUPING SETS((warehouse, product), (warehouse), (producet), ()), GROUPING SETS((location, size), (location), ())`
     `GROUP BY GROUPING SETS(
-        (warehouse, product, location, size), (warehouse, product, location), (warehouse, product),
-        (warehouse, location, size), (warehouse, location), (warehouse),
-        (product, location, size), (product, location), (product),
-        (location, size), (location), ())`.
-    `GROUP BY order, CUBE((warehouse), (producet)), ROLLUP((location), (size))` is equivalent to 
-    `GROUP BY order, GROUPING SETS((warehouse, product), (warehouse), (producet), ()), GROUPING SETS((location, size), (location), ())`
+        (warehouse, location), 
+        (warehouse, size), 
+        (product, location), 
+        (product, size))`.
+    `GROUP BY order, GROUPING SETS((warehouse, product), (warehouse), (producet), ()),
+     GROUPING SETS((location, size), (location), ())`  is equivalent to 
     `GROUP BY GROUPING SETS(
         (order, warehouse, product, location, size), (order, warehouse, product, location), (order, warehouse, product),
         (order, warehouse, location, size), (order, warehouse, location), (order, warehouse),
