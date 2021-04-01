@@ -1317,6 +1317,7 @@ tablefmt
 tagKey
 tagValue
 tao
+task_group
 taskflow
 taskinstance
 tblproperties
