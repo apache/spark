@@ -1,3 +1,4 @@
+#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -14,26 +15,18 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-def test_incorrect_endpoint_should_return_json(minimal_app_for_api):
-    client = minimal_app_for_api.test_client()
+#
+import pytest
 
-    # Given we have application with Connexion added
-    # When we hitting incorrect endpoint in API path
+from airflow import models
+from airflow.cli import cli_parser
 
-    resp_json = client.get("/api/v1/incorrect_endpoint").json
 
-    # Then we have parsable JSON as output
+@pytest.fixture(scope="session")
+def dagbag():
+    return models.DagBag(include_examples=True)
 
-    assert 404 == resp_json["status"]
 
-    # When we are hitting non-api incorrect endpoint
-
-    resp_json = client.get("/incorrect_endpoint").json
-
-    # Then we do not have JSON as response, rather standard HTML
-
-    assert resp_json is None
-
-    resp_json = client.put("/api/v1/variables").json
-
-    assert 'Method Not Allowed' == resp_json["title"]
+@pytest.fixture(scope="session")
+def parser():
+    return cli_parser.get_parser()
