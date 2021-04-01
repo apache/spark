@@ -43,6 +43,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, read_bo
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer
 from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
+from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
@@ -86,6 +87,8 @@ def wrap_udf(f, return_type):
 
 
 def wrap_scalar_pandas_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
             pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
@@ -100,10 +103,12 @@ def wrap_scalar_pandas_udf(f, return_type):
         return result
 
     return lambda *a: (verify_result_length(
-        verify_result_type(f(*a)), len(a[0])), return_type)
+        verify_result_type(f(*a)), len(a[0])), arrow_return_type)
 
 
 def wrap_pandas_iter_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
             pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
@@ -111,7 +116,7 @@ def wrap_pandas_iter_udf(f, return_type):
                             "{}, but is {}".format(pd_type, type(result)))
         return result
 
-    return lambda *iterator: map(lambda res: (res, return_type),
+    return lambda *iterator: map(lambda res: (res, arrow_return_type),
                                  map(verify_result_type, f(*iterator)))
 
 
@@ -139,7 +144,7 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
         return result
 
-    return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), return_type)]
+    return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec):
@@ -163,16 +168,18 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
         return result
 
-    return lambda k, v: [(wrapped(k, v), return_type)]
+    return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
 
 
 def wrap_grouped_agg_pandas_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
     def wrapped(*series):
         import pandas as pd
         result = f(*series)
         return pd.Series([result])
 
-    return lambda *a: (wrapped(*a), return_type)
+    return lambda *a: (wrapped(*a), arrow_return_type)
 
 
 def wrap_window_agg_pandas_udf(f, return_type, runner_conf, udf_index):
@@ -191,15 +198,19 @@ def wrap_unbounded_window_agg_pandas_udf(f, return_type):
     # is that window_agg_pandas_udf needs to repeat the return value
     # to match window length, where grouped_agg_pandas_udf just returns
     # the scalar value.
+    arrow_return_type = to_arrow_type(return_type)
+
     def wrapped(*series):
         import pandas as pd
         result = f(*series)
         return pd.Series([result]).repeat(len(series[0]))
 
-    return lambda *a: (wrapped(*a), return_type)
+    return lambda *a: (wrapped(*a), arrow_return_type)
 
 
 def wrap_bounded_window_agg_pandas_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
     def wrapped(begin_index, end_index, *series):
         import pandas as pd
         result = []
@@ -228,7 +239,7 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
             result.append(f(*series_slices))
         return pd.Series(result)
 
-    return lambda *a: (wrapped(*a), return_type)
+    return lambda *a: (wrapped(*a), arrow_return_type)
 
 
 def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
