@@ -232,31 +232,31 @@ Input [8]: [ss_ticket_number#5, bought_city#35, extended_price#36, list_price#37
 Arguments: HashedRelationBroadcastMode(List(cast(input[5, int, true] as bigint)),false), [id=#44]
 
 (41) Scan parquet default.customer_address
-Output [2]: [ca_address_sk#45, ca_city#46]
+Output [2]: [ca_address_sk#23, ca_city#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_city)]
 ReadSchema: struct<ca_address_sk:int,ca_city:string>
 
 (42) ColumnarToRow
-Input [2]: [ca_address_sk#45, ca_city#46]
+Input [2]: [ca_address_sk#23, ca_city#24]
 
 (43) Filter
-Input [2]: [ca_address_sk#45, ca_city#46]
-Condition : (isnotnull(ca_address_sk#45) AND isnotnull(ca_city#46))
+Input [2]: [ca_address_sk#23, ca_city#24]
+Condition : (isnotnull(ca_address_sk#23) AND isnotnull(ca_city#24))
 
 (44) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [c_current_addr_sk#41]
-Right keys [1]: [ca_address_sk#45]
-Join condition: NOT (ca_city#46 = bought_city#35)
+Right keys [1]: [ca_address_sk#23]
+Join condition: NOT (ca_city#24 = bought_city#35)
 
 (45) Project [codegen id : 8]
-Output [8]: [c_last_name#43, c_first_name#42, ca_city#46, bought_city#35, ss_ticket_number#5, extended_price#36, extended_tax#38, list_price#37]
-Input [10]: [ss_ticket_number#5, bought_city#35, extended_price#36, list_price#37, extended_tax#38, c_current_addr_sk#41, c_first_name#42, c_last_name#43, ca_address_sk#45, ca_city#46]
+Output [8]: [c_last_name#43, c_first_name#42, ca_city#24, bought_city#35, ss_ticket_number#5, extended_price#36, extended_tax#38, list_price#37]
+Input [10]: [ss_ticket_number#5, bought_city#35, extended_price#36, list_price#37, extended_tax#38, c_current_addr_sk#41, c_first_name#42, c_last_name#43, ca_address_sk#23, ca_city#24]
 
 (46) TakeOrderedAndProject
-Input [8]: [c_last_name#43, c_first_name#42, ca_city#46, bought_city#35, ss_ticket_number#5, extended_price#36, extended_tax#38, list_price#37]
-Arguments: 100, [c_last_name#43 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#43, c_first_name#42, ca_city#46, bought_city#35, ss_ticket_number#5, extended_price#36, extended_tax#38, list_price#37]
+Input [8]: [c_last_name#43, c_first_name#42, ca_city#24, bought_city#35, ss_ticket_number#5, extended_price#36, extended_tax#38, list_price#37]
+Arguments: 100, [c_last_name#43 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#43, c_first_name#42, ca_city#24, bought_city#35, ss_ticket_number#5, extended_price#36, extended_tax#38, list_price#37]
 
 ===== Subqueries =====
 

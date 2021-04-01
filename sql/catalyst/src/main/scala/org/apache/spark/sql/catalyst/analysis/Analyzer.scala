@@ -253,7 +253,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveTables ::
       ResolvePartitionSpec ::
       AddMetadataColumns ::
-      DeduplicateRelations ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -1374,29 +1373,123 @@ class Analyzer(override val catalogManager: CatalogManager)
    * a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
+    /**
+     * Generate a new logical plan for the right child with different expression IDs
+     * for all conflicting attributes.
+     */
+    private def dedupRight (left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
+      val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+      logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
+        s"between $left and $right")
 
-    /** Return true if there're conflicting attributes among children's outputs of a plan */
-    def hasConflictingAttrs(p: LogicalPlan): Boolean = {
-      p.children.length > 1 && {
-        // Note that duplicated attributes are allowed within a single node,
-        // e.g., df.select($"a", $"a"), so we should only check conflicting
-        // attributes between nodes.
-        val uniqueAttrs = mutable.HashSet[ExprId]()
-        p.children.head.outputSet.foreach(a => uniqueAttrs.add(a.exprId))
-        p.children.tail.exists { child =>
-          val uniqueSize = uniqueAttrs.size
-          val childSize = child.outputSet.size
-          child.outputSet.foreach(a => uniqueAttrs.add(a.exprId))
-          uniqueSize + childSize > uniqueAttrs.size
+      /**
+       * For LogicalPlan likes MultiInstanceRelation, Project, Aggregate, etc, whose output doesn't
+       * inherit directly from its children, we could just stop collect on it. Because we could
+       * always replace all the lower conflict attributes with the new attributes from the new
+       * plan. Theoretically, we should do recursively collect for Generate and Window but we leave
+       * it to the next batch to reduce possible overhead because this should be a corner case.
+       */
+      def collectConflictPlans(plan: LogicalPlan): Seq[(LogicalPlan, LogicalPlan)] = plan match {
+        // Handle base relations that might appear more than once.
+        case oldVersion: MultiInstanceRelation
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          val newVersion = oldVersion.newInstance()
+          newVersion.copyTagsFrom(oldVersion)
+          Seq((oldVersion, newVersion))
+
+        case oldVersion: SerializeFromObject
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(
+            serializer = oldVersion.serializer.map(_.newInstance()))))
+
+        // Handle projects that create conflicting aliases.
+        case oldVersion @ Project(projectList, _)
+            if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(projectList = newAliases(projectList))))
+
+        // We don't need to search child plan recursively if the projectList of a Project
+        // is only composed of Alias and doesn't contain any conflicting attributes.
+        // Because, even if the child plan has some conflicting attributes, the attributes
+        // will be aliased to non-conflicting attributes by the Project at the end.
+        case _ @ Project(projectList, _)
+          if findAliases(projectList).size == projectList.size =>
+          Nil
+
+        case oldVersion @ Aggregate(_, aggregateExpressions, _)
+            if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(
+            aggregateExpressions = newAliases(aggregateExpressions))))
+
+        // We don't search the child plan recursively for the same reason as the above Project.
+        case _ @ Aggregate(_, aggregateExpressions, _)
+          if findAliases(aggregateExpressions).size == aggregateExpressions.size =>
+          Nil
+
+        case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
+        case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
+        case oldVersion @ MapInPandas(_, output, _)
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
+        case oldVersion: Generate
+            if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
+          val newOutput = oldVersion.generatorOutput.map(_.newInstance())
+          Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput)))
+
+        case oldVersion: Expand
+            if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
+          val producedAttributes = oldVersion.producedAttributes
+          val newOutput = oldVersion.output.map { attr =>
+            if (producedAttributes.contains(attr)) {
+              attr.newInstance()
+            } else {
+              attr
+            }
+          }
+          Seq((oldVersion, oldVersion.copy(output = newOutput)))
+
+        case oldVersion @ Window(windowExpressions, _, _, child)
+            if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
+            .nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
+
+        case oldVersion @ ScriptTransformation(_, _, output, _, _)
+            if AttributeSet(output).intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
+        case _ => plan.children.flatMap(collectConflictPlans)
+      }
+
+      val conflictPlans = collectConflictPlans(right)
+
+      /*
+       * Note that it's possible `conflictPlans` can be empty which implies that there
+       * is a logical plan node that produces new references that this rule cannot handle.
+       * When that is the case, there must be another rule that resolves these conflicts.
+       * Otherwise, the analysis will fail.
+       */
+      if (conflictPlans.isEmpty) {
+        right
+      } else {
+        val planMapping = conflictPlans.toMap
+        right.transformUpWithNewOutput {
+          case oldPlan =>
+            val newPlanOpt = planMapping.get(oldPlan)
+            newPlanOpt.map { newPlan =>
+              newPlan -> oldPlan.output.zip(newPlan.output)
+            }.getOrElse(oldPlan -> Nil)
         }
       }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan if !p.childrenResolved => p
-
-      // Wait for the rule `DeduplicateRelations` to resolve conflicting attrs first.
-      case p: LogicalPlan if hasConflictingAttrs(p) => p
 
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
@@ -1419,12 +1512,37 @@ class Analyzer(override val catalogManager: CatalogManager)
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
 
+      // To resolve duplicate expression IDs for Join and Intersect
+      case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
+        j.copy(right = dedupRight(left, right))
       case f @ FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, _, _, left, right) =>
         val leftRes = leftAttributes
           .map(x => resolveExpressionByPlanOutput(x, left).asInstanceOf[Attribute])
         val rightRes = rightAttributes
           .map(x => resolveExpressionByPlanOutput(x, right).asInstanceOf[Attribute])
         f.copy(leftAttributes = leftRes, rightAttributes = rightRes)
+      // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
+      // deduplicate the right side plan, so that we won't produce an invalid self-join later.
+      case i @ Intersect(left, right, _) if !i.duplicateResolved =>
+        i.copy(right = dedupRight(left, right))
+      case e @ Except(left, right, _) if !e.duplicateResolved =>
+        e.copy(right = dedupRight(left, right))
+      // Only after we finish by-name resolution for Union
+      case u: Union if !u.byName && !u.duplicateResolved =>
+        // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
+        // feature in streaming.
+        val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
+          head +: tail.map {
+            case child if head.outputSet.intersect(child.outputSet).isEmpty =>
+              child
+            case child =>
+              val projectList = child.output.map { attr =>
+                Alias(attr, attr.name)()
+              }
+              Project(projectList, child)
+          }
+        }
+        u.copy(children = newChildren)
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
@@ -1477,6 +1595,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         // The delete condition of `OverwriteByExpression` will be passed to the table
         // implementation and should be resolved based on the table schema.
         o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
+
+      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _) if !m.duplicateResolved =>
+        m.copy(sourceTable = dedupRight(targetTable, sourceTable))
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
@@ -1556,6 +1677,17 @@ class Analyzer(override val catalogManager: CatalogManager)
           Assignment(resolvedKey, resolvedValue)
         }
       }
+    }
+
+    def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+      expressions.map {
+        case a: Alias => Alias(a.child, a.name)()
+        case other => other
+      }
+    }
+
+    def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
+      AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
     }
 
     // This method is used to trim groupByExpressions/selectedGroupByExpressions's top-level

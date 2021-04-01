@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, RepartitionOperation, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -728,6 +728,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       case r: Range => r
     }
     assert(ranges.length == 2)
+    // Ensure the two Range instances are equal according to their equal method
+    assert(ranges.head == ranges.last)
     val execRanges = df.queryExecution.sparkPlan.collect {
       case r: RangeExec => r
     }
@@ -1236,6 +1238,21 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         })
       }
     }
+  }
+
+  test("SPARK-34919: Change partitioning to SinglePartition if partition number is 1") {
+    def checkSinglePartitioning(df: DataFrame): Unit = {
+      assert(
+        df.queryExecution.analyzed.collect {
+          case r: RepartitionOperation => r
+        }.size == 1)
+      assert(
+        collect(df.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => s
+        }.size == 1)
+    }
+    checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1) */ * FROM VALUES(1),(2),(3) AS t(c)"))
+    checkSinglePartitioning(sql("SELECT /*+ REPARTITION(1, c) */ * FROM VALUES(1),(2),(3) AS t(c)"))
   }
 }
 

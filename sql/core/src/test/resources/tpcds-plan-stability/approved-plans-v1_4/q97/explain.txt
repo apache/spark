@@ -102,16 +102,16 @@ ReadSchema: struct<cs_bill_customer_sk:int,cs_item_sk:int>
 Input [3]: [cs_bill_customer_sk#11, cs_item_sk#12, cs_sold_date_sk#13]
 
 (16) ReusedExchange [Reuses operator id: 7]
-Output [1]: [d_date_sk#14]
+Output [1]: [d_date_sk#5]
 
 (17) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [cs_sold_date_sk#13]
-Right keys [1]: [d_date_sk#14]
+Right keys [1]: [d_date_sk#5]
 Join condition: None
 
 (18) Project [codegen id : 5]
 Output [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
-Input [4]: [cs_bill_customer_sk#11, cs_item_sk#12, cs_sold_date_sk#13, d_date_sk#14]
+Input [4]: [cs_bill_customer_sk#11, cs_item_sk#12, cs_sold_date_sk#13, d_date_sk#5]
 
 (19) HashAggregate [codegen id : 5]
 Input [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
@@ -122,45 +122,45 @@ Results [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
 
 (20) Exchange
 Input [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
-Arguments: hashpartitioning(cs_bill_customer_sk#11, cs_item_sk#12, 5), ENSURE_REQUIREMENTS, [id=#15]
+Arguments: hashpartitioning(cs_bill_customer_sk#11, cs_item_sk#12, 5), ENSURE_REQUIREMENTS, [id=#14]
 
 (21) HashAggregate [codegen id : 6]
 Input [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
 Keys [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
 Functions: []
 Aggregate Attributes: []
-Results [2]: [cs_bill_customer_sk#11 AS customer_sk#16, cs_item_sk#12 AS item_sk#17]
+Results [2]: [cs_bill_customer_sk#11 AS customer_sk#15, cs_item_sk#12 AS item_sk#16]
 
 (22) Sort [codegen id : 6]
-Input [2]: [customer_sk#16, item_sk#17]
-Arguments: [customer_sk#16 ASC NULLS FIRST, item_sk#17 ASC NULLS FIRST], false, 0
+Input [2]: [customer_sk#15, item_sk#16]
+Arguments: [customer_sk#15 ASC NULLS FIRST, item_sk#16 ASC NULLS FIRST], false, 0
 
 (23) SortMergeJoin
 Left keys [2]: [customer_sk#9, item_sk#10]
-Right keys [2]: [customer_sk#16, item_sk#17]
+Right keys [2]: [customer_sk#15, item_sk#16]
 Join condition: None
 
 (24) Project [codegen id : 7]
-Output [2]: [customer_sk#9, customer_sk#16]
-Input [4]: [customer_sk#9, item_sk#10, customer_sk#16, item_sk#17]
+Output [2]: [customer_sk#9, customer_sk#15]
+Input [4]: [customer_sk#9, item_sk#10, customer_sk#15, item_sk#16]
 
 (25) HashAggregate [codegen id : 7]
-Input [2]: [customer_sk#9, customer_sk#16]
+Input [2]: [customer_sk#9, customer_sk#15]
 Keys: []
-Functions [3]: [partial_sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#16)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#16)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#16)) THEN 1 ELSE 0 END)]
-Aggregate Attributes [3]: [sum#18, sum#19, sum#20]
-Results [3]: [sum#21, sum#22, sum#23]
+Functions [3]: [partial_sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#15)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)]
+Aggregate Attributes [3]: [sum#17, sum#18, sum#19]
+Results [3]: [sum#20, sum#21, sum#22]
 
 (26) Exchange
-Input [3]: [sum#21, sum#22, sum#23]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#24]
+Input [3]: [sum#20, sum#21, sum#22]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#23]
 
 (27) HashAggregate [codegen id : 8]
-Input [3]: [sum#21, sum#22, sum#23]
+Input [3]: [sum#20, sum#21, sum#22]
 Keys: []
-Functions [3]: [sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#16)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#16)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#16)) THEN 1 ELSE 0 END)]
-Aggregate Attributes [3]: [sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#16)) THEN 1 ELSE 0 END)#25, sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#16)) THEN 1 ELSE 0 END)#26, sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#16)) THEN 1 ELSE 0 END)#27]
-Results [3]: [sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#16)) THEN 1 ELSE 0 END)#25 AS store_only#28, sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#16)) THEN 1 ELSE 0 END)#26 AS catalog_only#29, sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#16)) THEN 1 ELSE 0 END)#27 AS store_and_catalog#30]
+Functions [3]: [sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#15)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)]
+Aggregate Attributes [3]: [sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#15)) THEN 1 ELSE 0 END)#24, sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)#25, sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)#26]
+Results [3]: [sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#15)) THEN 1 ELSE 0 END)#24 AS store_only#27, sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)#25 AS catalog_only#28, sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)#26 AS store_and_catalog#29]
 
 ===== Subqueries =====
 

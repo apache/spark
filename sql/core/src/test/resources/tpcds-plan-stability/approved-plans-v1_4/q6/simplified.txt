@@ -68,7 +68,7 @@ TakeOrderedAndProject [cnt,state]
                                   InputAdapter
                                     BroadcastExchange #7
                                       WholeStageCodegen (5)
-                                        HashAggregate [i_category,sum,count] [avg(UnscaledValue(i_current_price)),avg(i_current_price),sum,count]
+                                        HashAggregate [i_category,sum,count] [avg(UnscaledValue(i_current_price)),avg(i_current_price),i_category,sum,count]
                                           InputAdapter
                                             Exchange [i_category] #8
                                               WholeStageCodegen (4)
