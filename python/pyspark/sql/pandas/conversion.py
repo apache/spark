@@ -22,9 +22,8 @@ from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
     DoubleType, BooleanType, MapType, TimestampType, StructType, DataType, \
-    IntegralType, UserDefinedType, _is_datatype_with_udt
-from pyspark.sql.pandas.types import _serialize_pandas_with_udt, \
-    _deserialize_pandas_with_udt
+    IntegralType, _is_datatype_with_udt
+from pyspark.sql.pandas.types import _deserialize_pandas_with_udt
 from pyspark.traceback_utils import SCCallSiteSync
 
 
@@ -466,8 +465,8 @@ class SparkConversionMixin(object):
         else:
             # Any timestamps must be coerced to be compatible with Spark
             data_types = [to_arrow_type(TimestampType())
-                           if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
-                           for t in pdf.dtypes]
+                          if is_datetime64_dtype(t) or is_datetime64tz_dtype(t) else None
+                          for t in pdf.dtypes]
 
         # Slice the DataFrame to be batched
         step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up

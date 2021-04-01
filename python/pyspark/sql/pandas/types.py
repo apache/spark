@@ -362,6 +362,7 @@ def _serialize_pandas_with_udt(s, dt):
         # For DataType without UDT, serialization can be skipped
         return s
 
+
 def _deserialize_pandas_with_udt(s, dt):
     if isinstance(dt, UserDefinedType):
         return s.apply(dt.deserialize)

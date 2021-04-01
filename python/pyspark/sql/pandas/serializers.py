@@ -19,10 +19,8 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
-from typing import Optional
-
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
-from pyspark.sql.types import ArrayType, DataType, UserDefinedType, StructType, \
+from pyspark.sql.types import DataType, UserDefinedType, StructType, \
     _is_datatype_with_udt
 from pyspark.sql.pandas.types import to_arrow_type, _serialize_pandas_with_udt
 
@@ -159,7 +157,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             _convert_dict_to_map_items
         from pandas.api.types import is_categorical_dtype
 
-        def create_array(s, pdt, dt = None):
+        def create_array(s, pdt, dt=None):
             # Ensure timestamp series are in expected form for Spark internal representation
             if pdt is not None and pa.types.is_timestamp(pdt):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
@@ -187,7 +185,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                     raise e
             return array
 
-        def create_arrs_names(s, pdt, dt = None):
+        def create_arrs_names(s, pdt, dt=None):
             # If input s is empty with zero columns, return empty Arrays with struct
             if len(s) == 0 and len(s.columns) == 0:
                 return [(pa.array([], type=field.type), field.name) for field in pdt]
