@@ -165,6 +165,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 elif isinstance(dt, ArrayType) and isinstance(dt.elementType, UserDefinedType):
                     udt = dt.elementType
                     s = s.apply(lambda x: [udt.serialize(f) for f in x])
+                else:
+                    # For DataType without UDT, serialization can be skipped
+                    pass
 
             # Ensure timestamp series are in expected form for Spark internal representation
             if pdt is not None and pa.types.is_timestamp(pdt):
