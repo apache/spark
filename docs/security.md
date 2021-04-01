@@ -785,9 +785,8 @@ In most cases, Spark relies on the credentials of the current logged in user whe
 to Kerberos-aware services. Such credentials can be obtained by logging in to the configured KDC
 with tools like `kinit`.
 
-When talking to Hadoop-based services, Spark needs to obtain delegation tokens so that non-local
-processes can authenticate. Spark ships with support for HDFS and other Hadoop file systems, Hive
-and HBase.
+When talking to Hadoop-based services, Spark needs to obtain delegation tokens so that processes
+can authenticate. Spark ships with support for HDFS and other Hadoop file systems, Hive and HBase.
 
 When using a Hadoop filesystem (such HDFS or WebHDFS), Spark will acquire the relevant tokens
 for the service hosting the user's home directory.
@@ -878,7 +877,7 @@ variable.
 ## Secure Interaction with Kubernetes
 
 When talking to Hadoop-based services behind Kerberos, it was noted that Spark needs to obtain delegation tokens
-so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are
+so that processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are
 shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job:
 
 In all cases you must define the environment variable: `HADOOP_CONF_DIR` or
