@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -51,6 +51,21 @@ class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serial
 
 object CommandUtils extends Logging {
 
+  def partitionsWithNewStats(
+      partitions: Seq[CatalogTablePartition],
+      statsTracker: BasicWriteJobStatsTracker): Seq[CatalogTablePartition] = {
+    partitions.flatten { part =>
+      val newStates = if (part.stats.isDefined && part.stats.get.rowCount.isDefined) {
+        mergeNewStats(
+          part.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
+      } else {
+        compareAndGetNewStats(
+          part.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
+      }
+      newStates.map(_ => part.copy(stats = newStates))
+    }
+  }
+
   def updateTableAndPartitionStats(
       sparkSession: SparkSession,
       table: CatalogTable,
@@ -61,27 +76,14 @@ object CommandUtils extends Logging {
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
       val isSinglePartition = partitionSpec.nonEmpty && partitionSpec.values.forall(_.nonEmpty)
-      val isPartialPartitions = partitionSpec.nonEmpty &&
-          partitionSpec.values.exists(_.isEmpty) && partitionSpec.values.exists(_.nonEmpty)
       if (overwrite) {
         // Only update one partition, statsTracker.partitionsStats is empty
         if (isSinglePartition) {
-          val spec = partitionSpec.map { case (key, value) =>
-            key -> value.get
-          }
-          val partition = catalog.listPartitions(table.identifier, Some(spec))
-          val newTableStats = CommandUtils.mergeNewStats(
+          val spec = partitionSpec.mapValues(_.get)
+          val partitions = catalog.listPartitions(table.identifier, Some(spec))
+          val newTableStats = mergeNewStats(
             newTable.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
-          val newPartitions = partition.flatten { part =>
-            val newStates = if (part.stats.isDefined && part.stats.get.rowCount.isDefined) {
-              CommandUtils.mergeNewStats(
-                part.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
-            } else {
-              CommandUtils.compareAndGetNewStats(
-                part.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
-            }
-            newStates.map(_ => part.copy(stats = newStates))
-          }
+          val newPartitions = partitionsWithNewStats(partitions, statsTracker)
           if (newTableStats.isDefined) {
             catalog.alterTableStats(table.identifier, newTableStats)
           }
@@ -99,15 +101,16 @@ object CommandUtils extends Logging {
           if (partitions.nonEmpty) {
             catalog.alterPartitions(table.identifier, partitions)
           }
-
+          val isPartialPartitions = partitionSpec.nonEmpty &&
+            partitionSpec.values.exists(_.isEmpty) && partitionSpec.values.exists(_.nonEmpty)
           if (isPartialPartitions) {
-            val newStats = CommandUtils.mergeNewStats(
+            val newStats = mergeNewStats(
               newTable.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
             if (newStats.isDefined) {
               catalog.alterTableStats(table.identifier, newStats)
             }
           } else {
-            val newStats = CommandUtils.compareAndGetNewStats(
+            val newStats = compareAndGetNewStats(
               newTable.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
             if (newStats.isDefined) {
               catalog.alterTableStats(table.identifier, newStats)
@@ -116,22 +119,11 @@ object CommandUtils extends Logging {
         }
       } else {
         if (isSinglePartition) {
-          val spec = partitionSpec.map { case (key, value) =>
-            key -> value.get
-          }
-          val partition = catalog.listPartitions(table.identifier, Some(spec))
-          val newTableStats = CommandUtils.mergeNewStats(
+          val spec = partitionSpec.mapValues(_.get)
+          val partitions = catalog.listPartitions(table.identifier, Some(spec))
+          val newTableStats = mergeNewStats(
             newTable.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
-          val newPartitions = partition.flatten { part =>
-            val newStates = if (part.stats.isDefined && part.stats.get.rowCount.isDefined) {
-              CommandUtils.mergeNewStats(
-                part.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
-            } else {
-              CommandUtils.compareAndGetNewStats(
-                part.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
-            }
-            newStates.map(_ => part.copy(stats = newStates))
-          }
+          val newPartitions = partitionsWithNewStats(partitions, statsTracker)
           if (newTableStats.isDefined) {
             catalog.alterTableStats(table.identifier, newTableStats)
           }
@@ -141,7 +133,7 @@ object CommandUtils extends Logging {
         } else {
           val partitions = statsTracker.partitionsStats.flatMap { case (part, stats) =>
             val partition = catalog.getPartition(table.identifier, part)
-            val newStats = CommandUtils.mergeNewStats(
+            val newStats = mergeNewStats(
               partition.stats, stats.numBytes, Some(stats.numRows))
             newStats.map(_ => partition.copy(stats = newStats))
           }.toSeq
@@ -149,7 +141,7 @@ object CommandUtils extends Logging {
             catalog.alterPartitions(table.identifier, partitions)
           }
 
-          val newStats = CommandUtils.mergeNewStats(
+          val newStats = mergeNewStats(
             newTable.stats, statsTracker.totalNumBytes, Some(statsTracker.totalNumOutput))
           if (newStats.isDefined) {
             catalog.alterTableStats(table.identifier, newStats)
@@ -169,7 +161,7 @@ object CommandUtils extends Logging {
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
-      val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
+      val newSize = calculateTotalSize(sparkSession, newTable)
       val isNewStats = newTable.stats.map(newSize != _.sizeInBytes).getOrElse(true)
       if (isNewStats) {
         val newStats = CatalogStatistics(sizeInBytes = newSize)
@@ -312,7 +304,7 @@ object CommandUtils extends Logging {
     newStats
   }
 
-  def mergeNewStats(
+  private def mergeNewStats(
     oldStats: Option[CatalogStatistics],
     newTotalSize: BigInt,
     newRowCount: Option[BigInt]): Option[CatalogStatistics] = {
@@ -345,13 +337,13 @@ object CommandUtils extends Logging {
       }
     } else {
       // Compute stats for the whole table
-      val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val newTotalSize = calculateTotalSize(sparkSession, tableMeta)
       val newRowCount =
         if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
       // Update the metastore if the above statistics of the table are different from those
       // recorded in the metastore.
-      val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      val newStats = compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
       if (newStats.isDefined) {
         sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
       }

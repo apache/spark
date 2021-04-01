@@ -39,7 +39,7 @@ import org.apache.spark.util.SerializableConfiguration
  * These were first introduced in https://github.com/apache/spark/pull/18159 (SPARK-20703).
  */
 case class BasicWriteTaskStats(
-    partitionsStats: mutable.Map[TablePartitionSpec, PartitionStats],
+    partitionSpecWithStats: mutable.Map[TablePartitionSpec, PartitionStats],
     totalNumFiles: Int,
     totalNumBytes: Long,
     totalNumRows: Long)
@@ -231,7 +231,7 @@ class BasicWriteJobStatsTracker(
     val basicStats = stats.map(_.asInstanceOf[BasicWriteTaskStats])
 
     basicStats.foreach { summary =>
-      summary.partitionsStats.foreach { case (partitionValue, stats) =>
+      summary.partitionSpecWithStats.foreach { case (partitionValue, stats) =>
         val currentStats = partitionsStats.getOrElse(partitionValue, PartitionStats())
         currentStats.merge(stats)
         partitionsStats.put(partitionValue, currentStats)
