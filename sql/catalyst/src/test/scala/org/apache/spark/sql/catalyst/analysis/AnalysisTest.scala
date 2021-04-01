@@ -80,7 +80,7 @@ trait AnalysisTest extends PlanTest {
     createGlobalTempView(catalog, "TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
     createGlobalTempView(catalog, "TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
     new Analyzer(catalog) {
-      override val extendedResolutionRules = extendedAnalysisRules
+      override val extendedResolutionRules = EliminateSubqueryAliases +: extendedAnalysisRules
     }
   }
 
@@ -91,7 +91,7 @@ trait AnalysisTest extends PlanTest {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
       val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
-      comparePlans(EliminateSubqueryAliases(actualPlan), expectedPlan)
+      comparePlans(actualPlan, expectedPlan)
     }
   }
 
@@ -101,7 +101,7 @@ trait AnalysisTest extends PlanTest {
       caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val actualPlan = getAnalyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
-      val transformed = EliminateSubqueryAliases(actualPlan) transformUp {
+      val transformed = actualPlan transformUp {
         case v: View if v.isTempViewStoringAnalyzedPlan => v.child
       }
       comparePlans(transformed, expectedPlan)

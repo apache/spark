@@ -160,57 +160,57 @@ Input [3]: [i_item_sk#16, i_current_price#17, i_category#18]
 Condition : (isnotnull(i_current_price#17) AND isnotnull(i_item_sk#16))
 
 (26) Scan parquet default.item
-Output [2]: [i_current_price#19, i_category#20]
+Output [2]: [i_current_price#17, i_category#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_category)]
 ReadSchema: struct<i_current_price:decimal(7,2),i_category:string>
 
 (27) ColumnarToRow [codegen id : 4]
-Input [2]: [i_current_price#19, i_category#20]
+Input [2]: [i_current_price#17, i_category#18]
 
 (28) Filter [codegen id : 4]
-Input [2]: [i_current_price#19, i_category#20]
-Condition : isnotnull(i_category#20)
+Input [2]: [i_current_price#17, i_category#18]
+Condition : isnotnull(i_category#18)
 
 (29) HashAggregate [codegen id : 4]
-Input [2]: [i_current_price#19, i_category#20]
-Keys [1]: [i_category#20]
-Functions [1]: [partial_avg(UnscaledValue(i_current_price#19))]
-Aggregate Attributes [2]: [sum#21, count#22]
-Results [3]: [i_category#20, sum#23, count#24]
+Input [2]: [i_current_price#17, i_category#18]
+Keys [1]: [i_category#18]
+Functions [1]: [partial_avg(UnscaledValue(i_current_price#17))]
+Aggregate Attributes [2]: [sum#19, count#20]
+Results [3]: [i_category#18, sum#21, count#22]
 
 (30) Exchange
-Input [3]: [i_category#20, sum#23, count#24]
-Arguments: hashpartitioning(i_category#20, 5), ENSURE_REQUIREMENTS, [id=#25]
+Input [3]: [i_category#18, sum#21, count#22]
+Arguments: hashpartitioning(i_category#18, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (31) HashAggregate [codegen id : 5]
-Input [3]: [i_category#20, sum#23, count#24]
-Keys [1]: [i_category#20]
-Functions [1]: [avg(UnscaledValue(i_current_price#19))]
-Aggregate Attributes [1]: [avg(UnscaledValue(i_current_price#19))#26]
-Results [2]: [cast((avg(UnscaledValue(i_current_price#19))#26 / 100.0) as decimal(11,6)) AS avg(i_current_price)#27, i_category#20]
+Input [3]: [i_category#18, sum#21, count#22]
+Keys [1]: [i_category#18]
+Functions [1]: [avg(UnscaledValue(i_current_price#17))]
+Aggregate Attributes [1]: [avg(UnscaledValue(i_current_price#17))#24]
+Results [2]: [cast((avg(UnscaledValue(i_current_price#17))#24 / 100.0) as decimal(11,6)) AS avg(i_current_price)#25, i_category#18 AS i_category#18#26]
 
 (32) BroadcastExchange
-Input [2]: [avg(i_current_price)#27, i_category#20]
-Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#28]
+Input [2]: [avg(i_current_price)#25, i_category#18#26]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#27]
 
 (33) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [i_category#18]
-Right keys [1]: [i_category#20]
+Right keys [1]: [i_category#18#26]
 Join condition: None
 
 (34) Filter [codegen id : 6]
-Input [5]: [i_item_sk#16, i_current_price#17, i_category#18, avg(i_current_price)#27, i_category#20]
-Condition : (cast(i_current_price#17 as decimal(14,7)) > CheckOverflow((1.200000 * promote_precision(avg(i_current_price)#27)), DecimalType(14,7), true))
+Input [5]: [i_item_sk#16, i_current_price#17, i_category#18, avg(i_current_price)#25, i_category#18#26]
+Condition : (cast(i_current_price#17 as decimal(14,7)) > CheckOverflow((1.200000 * promote_precision(avg(i_current_price)#25)), DecimalType(14,7), true))
 
 (35) Project [codegen id : 6]
 Output [1]: [i_item_sk#16]
-Input [5]: [i_item_sk#16, i_current_price#17, i_category#18, avg(i_current_price)#27, i_category#20]
+Input [5]: [i_item_sk#16, i_current_price#17, i_category#18, avg(i_current_price)#25, i_category#18#26]
 
 (36) BroadcastExchange
 Input [1]: [i_item_sk#16]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#29]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#28]
 
 (37) BroadcastHashJoin [codegen id : 7]
 Left keys [1]: [ss_item_sk#6]
@@ -225,31 +225,31 @@ Input [3]: [ca_state#2, ss_item_sk#6, i_item_sk#16]
 Input [1]: [ca_state#2]
 Keys [1]: [ca_state#2]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#30]
-Results [2]: [ca_state#2, count#31]
+Aggregate Attributes [1]: [count#29]
+Results [2]: [ca_state#2, count#30]
 
 (40) Exchange
-Input [2]: [ca_state#2, count#31]
-Arguments: hashpartitioning(ca_state#2, 5), ENSURE_REQUIREMENTS, [id=#32]
+Input [2]: [ca_state#2, count#30]
+Arguments: hashpartitioning(ca_state#2, 5), ENSURE_REQUIREMENTS, [id=#31]
 
 (41) HashAggregate [codegen id : 8]
-Input [2]: [ca_state#2, count#31]
+Input [2]: [ca_state#2, count#30]
 Keys [1]: [ca_state#2]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#33]
-Results [3]: [ca_state#2 AS state#34, count(1)#33 AS cnt#35, count(1)#33 AS count(1)#36]
+Aggregate Attributes [1]: [count(1)#32]
+Results [3]: [ca_state#2 AS state#33, count(1)#32 AS cnt#34, count(1)#32 AS count(1)#35]
 
 (42) Filter [codegen id : 8]
-Input [3]: [state#34, cnt#35, count(1)#36]
-Condition : (count(1)#36 >= 10)
+Input [3]: [state#33, cnt#34, count(1)#35]
+Condition : (count(1)#35 >= 10)
 
 (43) Project [codegen id : 8]
-Output [2]: [state#34, cnt#35]
-Input [3]: [state#34, cnt#35, count(1)#36]
+Output [2]: [state#33, cnt#34]
+Input [3]: [state#33, cnt#34, count(1)#35]
 
 (44) TakeOrderedAndProject
-Input [2]: [state#34, cnt#35]
-Arguments: 100, [cnt#35 ASC NULLS FIRST], [state#34, cnt#35]
+Input [2]: [state#33, cnt#34]
+Arguments: 100, [cnt#34 ASC NULLS FIRST], [state#33, cnt#34]
 
 ===== Subqueries =====
 
@@ -271,39 +271,39 @@ Subquery:2 Hosting operator id = 18 Hosting Expression = Subquery scalar-subquer
 
 
 (46) Scan parquet default.date_dim
-Output [3]: [d_month_seq#37, d_year#38, d_moy#39]
+Output [3]: [d_month_seq#12, d_year#36, d_moy#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2000), EqualTo(d_moy,1)]
 ReadSchema: struct<d_month_seq:int,d_year:int,d_moy:int>
 
 (47) ColumnarToRow [codegen id : 1]
-Input [3]: [d_month_seq#37, d_year#38, d_moy#39]
+Input [3]: [d_month_seq#12, d_year#36, d_moy#37]
 
 (48) Filter [codegen id : 1]
-Input [3]: [d_month_seq#37, d_year#38, d_moy#39]
-Condition : (((isnotnull(d_year#38) AND isnotnull(d_moy#39)) AND (d_year#38 = 2000)) AND (d_moy#39 = 1))
+Input [3]: [d_month_seq#12, d_year#36, d_moy#37]
+Condition : (((isnotnull(d_year#36) AND isnotnull(d_moy#37)) AND (d_year#36 = 2000)) AND (d_moy#37 = 1))
 
 (49) Project [codegen id : 1]
-Output [1]: [d_month_seq#37]
-Input [3]: [d_month_seq#37, d_year#38, d_moy#39]
+Output [1]: [d_month_seq#12]
+Input [3]: [d_month_seq#12, d_year#36, d_moy#37]
 
 (50) HashAggregate [codegen id : 1]
-Input [1]: [d_month_seq#37]
-Keys [1]: [d_month_seq#37]
+Input [1]: [d_month_seq#12]
+Keys [1]: [d_month_seq#12]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [d_month_seq#37]
+Results [1]: [d_month_seq#12]
 
 (51) Exchange
-Input [1]: [d_month_seq#37]
-Arguments: hashpartitioning(d_month_seq#37, 5), ENSURE_REQUIREMENTS, [id=#40]
+Input [1]: [d_month_seq#12]
+Arguments: hashpartitioning(d_month_seq#12, 5), ENSURE_REQUIREMENTS, [id=#38]
 
 (52) HashAggregate [codegen id : 2]
-Input [1]: [d_month_seq#37]
-Keys [1]: [d_month_seq#37]
+Input [1]: [d_month_seq#12]
+Keys [1]: [d_month_seq#12]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [d_month_seq#37]
+Results [1]: [d_month_seq#12]
 
 

@@ -149,157 +149,157 @@ Input [1]: [ca_zip#14]
 Condition : (substr(ca_zip#14, 1, 5) INSET (56910,69952,63792,39371,74351,11101,25003,97189,57834,73134,62377,51200,32754,22752,86379,14171,91110,40162,98569,28709,13394,66162,25733,25782,26065,18383,51949,87343,50298,83849,33786,64528,23470,67030,46136,25280,46820,77721,99076,18426,31880,17871,98235,45748,49156,18652,72013,51622,43848,78567,41248,13695,44165,67853,54917,53179,64034,10567,71791,68908,55565,59402,64147,85816,57855,61547,27700,68100,28810,58263,15723,83933,51103,58058,90578,82276,81096,81426,96451,77556,38607,76638,18906,62971,57047,48425,35576,11928,30625,83444,73520,51650,57647,60099,30122,94983,24128,10445,41368,26233,26859,21756,24676,19849,36420,38193,58470,39127,13595,87501,24317,15455,69399,98025,81019,48033,11376,39516,67875,92712,14867,38122,29741,42961,30469,51211,56458,15559,16021,33123,33282,33515,72823,54601,76698,56240,72175,60279,20004,68806,72325,28488,43933,50412,45200,22246,78668,79777,96765,67301,73273,49448,82636,23932,47305,29839,39192,18799,61265,37125,58943,64457,88424,24610,84935,89360,68893,30431,28898,10336,90257,59166,46081,26105,96888,36634,86284,35258,39972,22927,73241,53268,24206,27385,99543,31671,14663,30903,39861,24996,63089,88086,83921,21076,67897,66708,45721,60576,25103,52867,30450,36233,30010,96576,73171,56571,56575,64544,13955,78451,43285,18119,16725,83041,76107,79994,54364,35942,56691,19769,63435,34102,18845,22744,13354,75691,45549,23968,31387,83144,13375,15765,28577,88190,19736,73650,37930,25989,83926,94898,51798,39736,22437,55253,38415,71256,18376,42029,25858,44438,19515,38935,51649,71954,15882,18767,63193,25486,49130,37126,40604,34425,17043,12305,11634,26653,94167,36446,10516,67473,66864,72425,63981,18842,22461,42666,47770,69035,70372,28587,45266,15371,15798,45375,90225,16807,31016,68014,21337,19505,50016,10144,84093,21286,19430,34322,91068,94945,72305,24671,58048,65084,28545,21195,20548,22245,77191,96976,48583,76231,15734,61810,11356,68621,68786,98359,41367,26689,69913,76614,68101,88885,50308,79077,18270,28915,29178,53672,62878,10390,14922,68341,56529,41766,68309,56616,15126,61860,97789,11489,45692,41918,72151,72550,27156,36495,70738,17879,53535,17920,68880,78890,35850,14089,58078,65164,27068,26231,13376,57665,32213,77610,87816,21309,15146,86198,91137,55307,67467,40558,94627,82136,22351,89091,20260,23006,91393,47537,62496,98294,18840,71286,81312,31029,70466,35458,14060,22685,28286,25631,19512,40081,63837,14328,35474,22152,76232,51061,86057,17183) AND isnotnull(substr(ca_zip#14, 1, 5)))
 
 (22) Scan parquet default.customer_address
-Output [2]: [ca_address_sk#15, ca_zip#16]
+Output [2]: [ca_address_sk#15, ca_zip#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_zip:string>
 
 (23) ColumnarToRow [codegen id : 5]
-Input [2]: [ca_address_sk#15, ca_zip#16]
+Input [2]: [ca_address_sk#15, ca_zip#14]
 
 (24) Filter [codegen id : 5]
-Input [2]: [ca_address_sk#15, ca_zip#16]
+Input [2]: [ca_address_sk#15, ca_zip#14]
 Condition : isnotnull(ca_address_sk#15)
 
 (25) Exchange
-Input [2]: [ca_address_sk#15, ca_zip#16]
-Arguments: hashpartitioning(ca_address_sk#15, 5), ENSURE_REQUIREMENTS, [id=#17]
+Input [2]: [ca_address_sk#15, ca_zip#14]
+Arguments: hashpartitioning(ca_address_sk#15, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (26) Sort [codegen id : 6]
-Input [2]: [ca_address_sk#15, ca_zip#16]
+Input [2]: [ca_address_sk#15, ca_zip#14]
 Arguments: [ca_address_sk#15 ASC NULLS FIRST], false, 0
 
 (27) Scan parquet default.customer
-Output [2]: [c_current_addr_sk#18, c_preferred_cust_flag#19]
+Output [2]: [c_current_addr_sk#17, c_preferred_cust_flag#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_preferred_cust_flag), EqualTo(c_preferred_cust_flag,Y), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_current_addr_sk:int,c_preferred_cust_flag:string>
 
 (28) ColumnarToRow [codegen id : 7]
-Input [2]: [c_current_addr_sk#18, c_preferred_cust_flag#19]
+Input [2]: [c_current_addr_sk#17, c_preferred_cust_flag#18]
 
 (29) Filter [codegen id : 7]
-Input [2]: [c_current_addr_sk#18, c_preferred_cust_flag#19]
-Condition : ((isnotnull(c_preferred_cust_flag#19) AND (c_preferred_cust_flag#19 = Y)) AND isnotnull(c_current_addr_sk#18))
+Input [2]: [c_current_addr_sk#17, c_preferred_cust_flag#18]
+Condition : ((isnotnull(c_preferred_cust_flag#18) AND (c_preferred_cust_flag#18 = Y)) AND isnotnull(c_current_addr_sk#17))
 
 (30) Project [codegen id : 7]
-Output [1]: [c_current_addr_sk#18]
-Input [2]: [c_current_addr_sk#18, c_preferred_cust_flag#19]
+Output [1]: [c_current_addr_sk#17]
+Input [2]: [c_current_addr_sk#17, c_preferred_cust_flag#18]
 
 (31) Exchange
-Input [1]: [c_current_addr_sk#18]
-Arguments: hashpartitioning(c_current_addr_sk#18, 5), ENSURE_REQUIREMENTS, [id=#20]
+Input [1]: [c_current_addr_sk#17]
+Arguments: hashpartitioning(c_current_addr_sk#17, 5), ENSURE_REQUIREMENTS, [id=#19]
 
 (32) Sort [codegen id : 8]
-Input [1]: [c_current_addr_sk#18]
-Arguments: [c_current_addr_sk#18 ASC NULLS FIRST], false, 0
+Input [1]: [c_current_addr_sk#17]
+Arguments: [c_current_addr_sk#17 ASC NULLS FIRST], false, 0
 
 (33) SortMergeJoin [codegen id : 9]
 Left keys [1]: [ca_address_sk#15]
-Right keys [1]: [c_current_addr_sk#18]
+Right keys [1]: [c_current_addr_sk#17]
 Join condition: None
 
 (34) Project [codegen id : 9]
-Output [1]: [ca_zip#16]
-Input [3]: [ca_address_sk#15, ca_zip#16, c_current_addr_sk#18]
+Output [1]: [ca_zip#14]
+Input [3]: [ca_address_sk#15, ca_zip#14, c_current_addr_sk#17]
 
 (35) HashAggregate [codegen id : 9]
-Input [1]: [ca_zip#16]
-Keys [1]: [ca_zip#16]
+Input [1]: [ca_zip#14]
+Keys [1]: [ca_zip#14]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#21]
-Results [2]: [ca_zip#16, count#22]
+Aggregate Attributes [1]: [count#20]
+Results [2]: [ca_zip#14, count#21]
 
 (36) Exchange
-Input [2]: [ca_zip#16, count#22]
-Arguments: hashpartitioning(ca_zip#16, 5), ENSURE_REQUIREMENTS, [id=#23]
+Input [2]: [ca_zip#14, count#21]
+Arguments: hashpartitioning(ca_zip#14, 5), ENSURE_REQUIREMENTS, [id=#22]
 
 (37) HashAggregate [codegen id : 10]
-Input [2]: [ca_zip#16, count#22]
-Keys [1]: [ca_zip#16]
+Input [2]: [ca_zip#14, count#21]
+Keys [1]: [ca_zip#14]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#24]
-Results [2]: [substr(ca_zip#16, 1, 5) AS ca_zip#25, count(1)#24 AS count(1)#26]
+Aggregate Attributes [1]: [count(1)#23]
+Results [2]: [substr(ca_zip#14, 1, 5) AS ca_zip#24, count(1)#23 AS count(1)#25]
 
 (38) Filter [codegen id : 10]
-Input [2]: [ca_zip#25, count(1)#26]
-Condition : (count(1)#26 > 10)
+Input [2]: [ca_zip#24, count(1)#25]
+Condition : (count(1)#25 > 10)
 
 (39) Project [codegen id : 10]
-Output [1]: [ca_zip#25]
-Input [2]: [ca_zip#25, count(1)#26]
+Output [1]: [ca_zip#24]
+Input [2]: [ca_zip#24, count(1)#25]
 
 (40) BroadcastExchange
-Input [1]: [ca_zip#25]
-Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true])),false), [id=#27]
+Input [1]: [ca_zip#24]
+Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true])),false), [id=#26]
 
 (41) BroadcastHashJoin [codegen id : 11]
 Left keys [2]: [coalesce(substr(ca_zip#14, 1, 5), ), isnull(substr(ca_zip#14, 1, 5))]
-Right keys [2]: [coalesce(ca_zip#25, ), isnull(ca_zip#25)]
+Right keys [2]: [coalesce(ca_zip#24, ), isnull(ca_zip#24)]
 Join condition: None
 
 (42) Project [codegen id : 11]
-Output [1]: [substr(ca_zip#14, 1, 5) AS ca_zip#28]
+Output [1]: [substr(ca_zip#14, 1, 5) AS ca_zip#27]
 Input [1]: [ca_zip#14]
 
 (43) HashAggregate [codegen id : 11]
-Input [1]: [ca_zip#28]
-Keys [1]: [ca_zip#28]
+Input [1]: [ca_zip#27]
+Keys [1]: [ca_zip#27]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [ca_zip#28]
+Results [1]: [ca_zip#27]
 
 (44) Exchange
-Input [1]: [ca_zip#28]
-Arguments: hashpartitioning(ca_zip#28, 5), ENSURE_REQUIREMENTS, [id=#29]
+Input [1]: [ca_zip#27]
+Arguments: hashpartitioning(ca_zip#27, 5), ENSURE_REQUIREMENTS, [id=#28]
 
 (45) HashAggregate [codegen id : 12]
-Input [1]: [ca_zip#28]
-Keys [1]: [ca_zip#28]
+Input [1]: [ca_zip#27]
+Keys [1]: [ca_zip#27]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [ca_zip#28]
+Results [1]: [ca_zip#27]
 
 (46) Exchange
-Input [1]: [ca_zip#28]
-Arguments: hashpartitioning(substr(ca_zip#28, 1, 2), 5), ENSURE_REQUIREMENTS, [id=#30]
+Input [1]: [ca_zip#27]
+Arguments: hashpartitioning(substr(ca_zip#27, 1, 2), 5), ENSURE_REQUIREMENTS, [id=#29]
 
 (47) Sort [codegen id : 13]
-Input [1]: [ca_zip#28]
-Arguments: [substr(ca_zip#28, 1, 2) ASC NULLS FIRST], false, 0
+Input [1]: [ca_zip#27]
+Arguments: [substr(ca_zip#27, 1, 2) ASC NULLS FIRST], false, 0
 
 (48) SortMergeJoin [codegen id : 14]
 Left keys [1]: [substr(s_zip#11, 1, 2)]
-Right keys [1]: [substr(ca_zip#28, 1, 2)]
+Right keys [1]: [substr(ca_zip#27, 1, 2)]
 Join condition: None
 
 (49) Project [codegen id : 14]
 Output [2]: [ss_net_profit#2, s_store_name#10]
-Input [4]: [ss_net_profit#2, s_store_name#10, s_zip#11, ca_zip#28]
+Input [4]: [ss_net_profit#2, s_store_name#10, s_zip#11, ca_zip#27]
 
 (50) HashAggregate [codegen id : 14]
 Input [2]: [ss_net_profit#2, s_store_name#10]
 Keys [1]: [s_store_name#10]
 Functions [1]: [partial_sum(UnscaledValue(ss_net_profit#2))]
-Aggregate Attributes [1]: [sum#31]
-Results [2]: [s_store_name#10, sum#32]
+Aggregate Attributes [1]: [sum#30]
+Results [2]: [s_store_name#10, sum#31]
 
 (51) Exchange
-Input [2]: [s_store_name#10, sum#32]
-Arguments: hashpartitioning(s_store_name#10, 5), ENSURE_REQUIREMENTS, [id=#33]
+Input [2]: [s_store_name#10, sum#31]
+Arguments: hashpartitioning(s_store_name#10, 5), ENSURE_REQUIREMENTS, [id=#32]
 
 (52) HashAggregate [codegen id : 15]
-Input [2]: [s_store_name#10, sum#32]
+Input [2]: [s_store_name#10, sum#31]
 Keys [1]: [s_store_name#10]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#2))#34]
-Results [2]: [s_store_name#10, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#34,17,2) AS sum(ss_net_profit)#35]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#2))#33]
+Results [2]: [s_store_name#10, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#33,17,2) AS sum(ss_net_profit)#34]
 
 (53) TakeOrderedAndProject
-Input [2]: [s_store_name#10, sum(ss_net_profit)#35]
-Arguments: 100, [s_store_name#10 ASC NULLS FIRST], [s_store_name#10, sum(ss_net_profit)#35]
+Input [2]: [s_store_name#10, sum(ss_net_profit)#34]
+Arguments: 100, [s_store_name#10 ASC NULLS FIRST], [s_store_name#10, sum(ss_net_profit)#34]
 
 ===== Subqueries =====
 
