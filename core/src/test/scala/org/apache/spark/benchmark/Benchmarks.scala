@@ -31,12 +31,13 @@ import com.google.common.reflect.ClassPath
  *
  * {{{
  *   1. with spark-submit
- *      bin/spark-submit --class <this class> --jars <all spark test jars>
- *        <spark external package jar> <spark core test jar> <glob pattern for class>
+ *      bin/spark-submit --class <this class>
+ *        --jars <all spark test jars>,<spark external package jars>
+ *        <spark core test jar> <glob pattern for class> <extra arguments>
  *   2. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 bin/spark-submit --class <this class> --jars
- *        <all spark test jars> <spark external package jar>
- *        <spark core test jar> <glob pattern for class>
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 bin/spark-submit --class <this class>
+ *        --jars <all spark test jars>,<spark external package jars>
+ *        <spark core test jar> <glob pattern for class> <extra arguments>
  *      Results will be written to all corresponding files under "benchmarks/".
  *      Notice that it detects the sub-project's directories from jar's paths so the provided jars
  *      should be properly placed under target (Maven build) or target/scala-* (SBT) when you
@@ -69,22 +70,33 @@ import com.google.common.reflect.ClassPath
  */
 
 object Benchmarks {
+  var currentProjectRoot: Option[String] = None
+
   def main(args: Array[String]): Unit = {
     var isBenchmarkFound = false
-    ClassPath.from(
+    val benchmarkClasses = ClassPath.from(
       Thread.currentThread.getContextClassLoader
-    ).getTopLevelClassesRecursive("org.apache.spark").asScala.foreach { info =>
+    ).getTopLevelClassesRecursive("org.apache.spark").asScala.toArray
+
+    // TODO(SPARK-34929): In JDK 11, MapStatusesSerDeserBenchmark(being started failed) seems
+    //   affecting other benchmark cases with growing the size of task.
+    val reorderedBenchmarkClasses =
+      benchmarkClasses.filterNot(_.getName.endsWith("MapStatusesSerDeserBenchmark")) ++
+      benchmarkClasses.find(_.getName.endsWith("MapStatusesSerDeserBenchmark"))
+
+    val matcher = FileSystems.getDefault.getPathMatcher(s"glob:${args.head}")
+
+    reorderedBenchmarkClasses.foreach { info =>
       lazy val clazz = info.load
       lazy val runBenchmark = clazz.getMethod("main", classOf[Array[String]])
       // isAssignableFrom seems not working with the reflected class from Guava's
       // getTopLevelClassesRecursive.
-      val matcher = args.headOption.map(pattern =>
-        FileSystems.getDefault.getPathMatcher(s"glob:$pattern"))
+      require(args.length > 0, "Benchmark class to run should be specified.")
       if (
           info.getName.endsWith("Benchmark") &&
-          // TPCDSQueryBenchmark requires setup and arguments. Exclude it for now.
+          // TODO(SPARK-34927): Support TPCDSQueryBenchmark in Benchmarks
           !info.getName.endsWith("TPCDSQueryBenchmark") &&
-          matcher.forall(_.matches(Paths.get(info.getName))) &&
+          matcher.matches(Paths.get(info.getName)) &&
           Try(runBenchmark).isSuccess && // Does this has a main method?
           !Modifier.isAbstract(clazz.getModifiers) // Is this a regular class?
       ) {
@@ -92,16 +104,21 @@ object Benchmarks {
         val targetDirOrProjDir =
           new File(clazz.getProtectionDomain.getCodeSource.getLocation.toURI)
           .getParentFile.getParentFile
-        val projDir = if (targetDirOrProjDir.getName == "target") {
-          // SBT build
-          targetDirOrProjDir.getParentFile.getCanonicalPath
-        } else {
-          // Maven build
-          targetDirOrProjDir.getCanonicalPath
+
+        // The root path to be referred in each benchmark.
+        currentProjectRoot = Some {
+          if (targetDirOrProjDir.getName == "target") {
+            // SBT build
+            targetDirOrProjDir.getParentFile.getCanonicalPath
+          } else {
+            // Maven build
+            targetDirOrProjDir.getCanonicalPath
+          }
         }
+
         // Force GC to minimize the side effect.
         System.gc()
-        runBenchmark.invoke(null, Array(projDir))
+        runBenchmark.invoke(null, args.tail.toArray)
       }
     }
 
