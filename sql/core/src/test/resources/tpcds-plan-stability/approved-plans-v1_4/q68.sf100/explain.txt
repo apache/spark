@@ -230,55 +230,55 @@ Input [6]: [ss_customer_sk#10, ss_addr_sk#12, ss_ticket_number#14, ss_ext_sales_
 Arguments: [ss_addr_sk#12 ASC NULLS FIRST], false, 0
 
 (41) ReusedExchange [Reuses operator id: 9]
-Output [2]: [ca_address_sk#32, ca_city#33]
+Output [2]: [ca_address_sk#6, ca_city#7]
 
 (42) Sort [codegen id : 13]
-Input [2]: [ca_address_sk#32, ca_city#33]
-Arguments: [ca_address_sk#32 ASC NULLS FIRST], false, 0
+Input [2]: [ca_address_sk#6, ca_city#7]
+Arguments: [ca_address_sk#6 ASC NULLS FIRST], false, 0
 
 (43) SortMergeJoin [codegen id : 14]
 Left keys [1]: [ss_addr_sk#12]
-Right keys [1]: [ca_address_sk#32]
+Right keys [1]: [ca_address_sk#6]
 Join condition: None
 
 (44) Project [codegen id : 14]
-Output [7]: [ss_customer_sk#10, ss_addr_sk#12, ss_ticket_number#14, ss_ext_sales_price#15, ss_ext_list_price#16, ss_ext_tax#17, ca_city#33]
-Input [8]: [ss_customer_sk#10, ss_addr_sk#12, ss_ticket_number#14, ss_ext_sales_price#15, ss_ext_list_price#16, ss_ext_tax#17, ca_address_sk#32, ca_city#33]
+Output [7]: [ss_customer_sk#10, ss_addr_sk#12, ss_ticket_number#14, ss_ext_sales_price#15, ss_ext_list_price#16, ss_ext_tax#17, ca_city#7]
+Input [8]: [ss_customer_sk#10, ss_addr_sk#12, ss_ticket_number#14, ss_ext_sales_price#15, ss_ext_list_price#16, ss_ext_tax#17, ca_address_sk#6, ca_city#7]
 
 (45) HashAggregate [codegen id : 14]
-Input [7]: [ss_customer_sk#10, ss_addr_sk#12, ss_ticket_number#14, ss_ext_sales_price#15, ss_ext_list_price#16, ss_ext_tax#17, ca_city#33]
-Keys [4]: [ss_ticket_number#14, ss_customer_sk#10, ss_addr_sk#12, ca_city#33]
+Input [7]: [ss_customer_sk#10, ss_addr_sk#12, ss_ticket_number#14, ss_ext_sales_price#15, ss_ext_list_price#16, ss_ext_tax#17, ca_city#7]
+Keys [4]: [ss_ticket_number#14, ss_customer_sk#10, ss_addr_sk#12, ca_city#7]
 Functions [3]: [partial_sum(UnscaledValue(ss_ext_sales_price#15)), partial_sum(UnscaledValue(ss_ext_list_price#16)), partial_sum(UnscaledValue(ss_ext_tax#17))]
-Aggregate Attributes [3]: [sum#34, sum#35, sum#36]
-Results [7]: [ss_ticket_number#14, ss_customer_sk#10, ss_addr_sk#12, ca_city#33, sum#37, sum#38, sum#39]
+Aggregate Attributes [3]: [sum#32, sum#33, sum#34]
+Results [7]: [ss_ticket_number#14, ss_customer_sk#10, ss_addr_sk#12, ca_city#7, sum#35, sum#36, sum#37]
 
 (46) HashAggregate [codegen id : 14]
-Input [7]: [ss_ticket_number#14, ss_customer_sk#10, ss_addr_sk#12, ca_city#33, sum#37, sum#38, sum#39]
-Keys [4]: [ss_ticket_number#14, ss_customer_sk#10, ss_addr_sk#12, ca_city#33]
+Input [7]: [ss_ticket_number#14, ss_customer_sk#10, ss_addr_sk#12, ca_city#7, sum#35, sum#36, sum#37]
+Keys [4]: [ss_ticket_number#14, ss_customer_sk#10, ss_addr_sk#12, ca_city#7]
 Functions [3]: [sum(UnscaledValue(ss_ext_sales_price#15)), sum(UnscaledValue(ss_ext_list_price#16)), sum(UnscaledValue(ss_ext_tax#17))]
-Aggregate Attributes [3]: [sum(UnscaledValue(ss_ext_sales_price#15))#40, sum(UnscaledValue(ss_ext_list_price#16))#41, sum(UnscaledValue(ss_ext_tax#17))#42]
-Results [6]: [ss_ticket_number#14, ss_customer_sk#10, ca_city#33 AS bought_city#43, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#15))#40,17,2) AS extended_price#44, MakeDecimal(sum(UnscaledValue(ss_ext_list_price#16))#41,17,2) AS list_price#45, MakeDecimal(sum(UnscaledValue(ss_ext_tax#17))#42,17,2) AS extended_tax#46]
+Aggregate Attributes [3]: [sum(UnscaledValue(ss_ext_sales_price#15))#38, sum(UnscaledValue(ss_ext_list_price#16))#39, sum(UnscaledValue(ss_ext_tax#17))#40]
+Results [6]: [ss_ticket_number#14, ss_customer_sk#10, ca_city#7 AS bought_city#41, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#15))#38,17,2) AS extended_price#42, MakeDecimal(sum(UnscaledValue(ss_ext_list_price#16))#39,17,2) AS list_price#43, MakeDecimal(sum(UnscaledValue(ss_ext_tax#17))#40,17,2) AS extended_tax#44]
 
 (47) Exchange
-Input [6]: [ss_ticket_number#14, ss_customer_sk#10, bought_city#43, extended_price#44, list_price#45, extended_tax#46]
-Arguments: hashpartitioning(ss_customer_sk#10, 5), ENSURE_REQUIREMENTS, [id=#47]
+Input [6]: [ss_ticket_number#14, ss_customer_sk#10, bought_city#41, extended_price#42, list_price#43, extended_tax#44]
+Arguments: hashpartitioning(ss_customer_sk#10, 5), ENSURE_REQUIREMENTS, [id=#45]
 
 (48) Sort [codegen id : 15]
-Input [6]: [ss_ticket_number#14, ss_customer_sk#10, bought_city#43, extended_price#44, list_price#45, extended_tax#46]
+Input [6]: [ss_ticket_number#14, ss_customer_sk#10, bought_city#41, extended_price#42, list_price#43, extended_tax#44]
 Arguments: [ss_customer_sk#10 ASC NULLS FIRST], false, 0
 
 (49) SortMergeJoin [codegen id : 16]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [ss_customer_sk#10]
-Join condition: NOT (ca_city#7 = bought_city#43)
+Join condition: NOT (ca_city#7 = bought_city#41)
 
 (50) Project [codegen id : 16]
-Output [8]: [c_last_name#4, c_first_name#3, ca_city#7, bought_city#43, ss_ticket_number#14, extended_price#44, extended_tax#46, list_price#45]
-Input [10]: [c_customer_sk#1, c_first_name#3, c_last_name#4, ca_city#7, ss_ticket_number#14, ss_customer_sk#10, bought_city#43, extended_price#44, list_price#45, extended_tax#46]
+Output [8]: [c_last_name#4, c_first_name#3, ca_city#7, bought_city#41, ss_ticket_number#14, extended_price#42, extended_tax#44, list_price#43]
+Input [10]: [c_customer_sk#1, c_first_name#3, c_last_name#4, ca_city#7, ss_ticket_number#14, ss_customer_sk#10, bought_city#41, extended_price#42, list_price#43, extended_tax#44]
 
 (51) TakeOrderedAndProject
-Input [8]: [c_last_name#4, c_first_name#3, ca_city#7, bought_city#43, ss_ticket_number#14, extended_price#44, extended_tax#46, list_price#45]
-Arguments: 100, [c_last_name#4 ASC NULLS FIRST, ss_ticket_number#14 ASC NULLS FIRST], [c_last_name#4, c_first_name#3, ca_city#7, bought_city#43, ss_ticket_number#14, extended_price#44, extended_tax#46, list_price#45]
+Input [8]: [c_last_name#4, c_first_name#3, ca_city#7, bought_city#41, ss_ticket_number#14, extended_price#42, extended_tax#44, list_price#43]
+Arguments: 100, [c_last_name#4 ASC NULLS FIRST, ss_ticket_number#14 ASC NULLS FIRST], [c_last_name#4, c_first_name#3, ca_city#7, bought_city#41, ss_ticket_number#14, extended_price#42, extended_tax#44, list_price#43]
 
 ===== Subqueries =====
 

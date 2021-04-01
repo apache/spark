@@ -710,7 +710,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("CTE with non-existing column alias") {
     assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      Seq("cannot resolve 'y' given input columns: [t.x]"))
+      Seq("cannot resolve 'y' given input columns: [x]"))
   }
 
   test("CTE with non-matching column alias") {
@@ -1087,7 +1087,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(parsePlan(
       """
         |SELECT * FROM (
-        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |  SELECT a, b, count(1) FROM TaBlE2
         |    GROUP BY a, b GROUPING SETS ((a, b), ())
         |) WHERE grouping__id > 0
       """.stripMargin), false)
@@ -1095,7 +1095,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(parsePlan(
       """
         |SELECT * FROM (
-        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |  SELECT a, b, count(1) FROM TaBlE2
         |    GROUP BY a, b GROUPING SETS ((a, b), ())
         |) ORDER BY grouping__id > 0
       """.stripMargin), false)

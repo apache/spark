@@ -52,6 +52,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
   }
 
+  protected def isAlwaysNullable: Boolean = false
+
   test("null cast") {
     import DataTypeTestUtils._
 
@@ -252,8 +254,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from string") {
-    assert(cast("abcdef", StringType).nullable === false)
-    assert(cast("abcdef", BinaryType).nullable === false)
+    assert(cast("abcdef", StringType).nullable === isAlwaysNullable)
+    assert(cast("abcdef", BinaryType).nullable === isAlwaysNullable)
     assert(cast("abcdef", BooleanType).nullable)
     assert(cast("abcdef", TimestampType).nullable)
     assert(cast("abcdef", LongType).nullable)
@@ -910,9 +912,11 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     if (optionalExpectedMsg.isDefined) {
       assert(message.contains(optionalExpectedMsg.get))
-    } else {
+    } else if (setConfigurationHint.nonEmpty) {
       assert(message.contains("with ANSI mode on"))
       assert(message.contains(setConfigurationHint))
+    } else {
+      assert("cannot cast [a-zA-Z]+ to [a-zA-Z]+".r.findFirstIn(message).isDefined)
     }
   }
 
@@ -965,11 +969,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("cast from invalid string to numeric should throw NumberFormatException") {
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
-      val array = Literal.create(Seq("123", "true", "f", null),
-        ArrayType(StringType, containsNull = true))
-      checkExceptionInExpression[NumberFormatException](
-        cast(array, ArrayType(dataType, containsNull = true)),
-        "invalid input syntax for type numeric: true")
       checkExceptionInExpression[NumberFormatException](
         cast("string", dataType), "invalid input syntax for type numeric: string")
       checkExceptionInExpression[NumberFormatException](
@@ -988,6 +987,25 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       checkExceptionInExpression[NumberFormatException](
         cast("abc.com", dataType), "invalid input syntax for type numeric: abc.com")
     }
+  }
+
+  protected def checkCastToNumericError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
+    checkExceptionInExpression[NumberFormatException](
+      cast(l, to), "invalid input syntax for type numeric: true")
+  }
+
+  test("cast from invalid string array to numeric array should throw NumberFormatException") {
+    val array = Literal.create(Seq("123", "true", "f", null),
+      ArrayType(StringType, containsNull = true))
+
+    checkCastToNumericError(array, ArrayType(ByteType, containsNull = true),
+      Seq(123.toByte, null, null, null))
+    checkCastToNumericError(array, ArrayType(ShortType, containsNull = true),
+      Seq(123.toShort, null, null, null))
+    checkCastToNumericError(array, ArrayType(IntegerType, containsNull = true),
+      Seq(123, null, null, null))
+    checkCastToNumericError(array, ArrayType(LongType, containsNull = true),
+      Seq(123L, null, null, null))
   }
 
   test("Fast fail for cast string type to decimal type in ansi mode") {
@@ -1023,14 +1041,14 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       "invalid input syntax for type numeric")
   }
 
-  protected def checkCastToBooleanError(l: Literal, to: DataType): Unit = {
+  protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[UnsupportedOperationException](
       cast(l, to), s"invalid input syntax for type boolean")
   }
 
   test("ANSI mode: cast string to boolean with parse error") {
-    checkCastToBooleanError(Literal("abc"), BooleanType)
-    checkCastToBooleanError(Literal(""), BooleanType)
+    checkCastToBooleanError(Literal("abc"), BooleanType, null)
+    checkCastToBooleanError(Literal(""), BooleanType, null)
   }
 
   test("cast from array II") {
@@ -1043,14 +1061,14 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val to: DataType = ArrayType(BooleanType, containsNull = true)
       val ret = cast(array, to)
       assert(ret.resolved)
-      checkCastToBooleanError(array, to)
+      checkCastToBooleanError(array, to, Seq(null, true, false, null))
     }
 
     {
       val to: DataType = ArrayType(BooleanType, containsNull = true)
       val ret = cast(array_notNull, to)
       assert(ret.resolved)
-      checkCastToBooleanError(array_notNull, to)
+      checkCastToBooleanError(array_notNull, to, Seq(null, true, false))
     }
   }
 
@@ -1068,14 +1086,14 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val to: DataType = MapType(StringType, BooleanType, valueContainsNull = true)
       val ret = cast(map, to)
       assert(ret.resolved)
-      checkCastToBooleanError(map, to)
+      checkCastToBooleanError(map, to, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
     }
 
     {
       val to: DataType = MapType(StringType, BooleanType, valueContainsNull = true)
       val ret = cast(map_notNull, to)
       assert(ret.resolved)
-      checkCastToBooleanError(map_notNull, to)
+      checkCastToBooleanError(map_notNull, to, Map("a" -> null, "b" -> true, "c" -> false))
     }
   }
 
@@ -1117,7 +1135,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         StructField("d", BooleanType, nullable = true)))
       val ret = cast(struct, to)
       assert(ret.resolved)
-      checkCastToBooleanError(struct, to)
+      checkCastToBooleanError(struct, to, InternalRow(null, true, false, null))
     }
 
     {
@@ -1127,7 +1145,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         StructField("c", BooleanType, nullable = true)))
       val ret = cast(struct_notNull, to)
       assert(ret.resolved)
-      checkCastToBooleanError(struct_notNull, to)
+      checkCastToBooleanError(struct_notNull, to, InternalRow(null, true, false))
     }
   }
 
