@@ -183,108 +183,108 @@ Aggregate Attributes [1]: [count(1)#17]
 Results [1]: [count(1)#17 AS amc#18]
 
 (29) Scan parquet default.web_sales
-Output [4]: [ws_sold_time_sk#19, ws_ship_hdemo_sk#20, ws_web_page_sk#21, ws_sold_date_sk#22]
+Output [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
 
 (30) ColumnarToRow [codegen id : 8]
-Input [4]: [ws_sold_time_sk#19, ws_ship_hdemo_sk#20, ws_web_page_sk#21, ws_sold_date_sk#22]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 
 (31) Filter [codegen id : 8]
-Input [4]: [ws_sold_time_sk#19, ws_ship_hdemo_sk#20, ws_web_page_sk#21, ws_sold_date_sk#22]
-Condition : ((isnotnull(ws_ship_hdemo_sk#20) AND isnotnull(ws_sold_time_sk#19)) AND isnotnull(ws_web_page_sk#21))
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
+Condition : ((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AND isnotnull(ws_web_page_sk#3))
 
 (32) Project [codegen id : 8]
-Output [3]: [ws_sold_time_sk#19, ws_ship_hdemo_sk#20, ws_web_page_sk#21]
-Input [4]: [ws_sold_time_sk#19, ws_ship_hdemo_sk#20, ws_web_page_sk#21, ws_sold_date_sk#22]
+Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 
 (33) ReusedExchange [Reuses operator id: 9]
-Output [1]: [hd_demo_sk#23]
+Output [1]: [hd_demo_sk#5]
 
 (34) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [ws_ship_hdemo_sk#20]
-Right keys [1]: [hd_demo_sk#23]
+Left keys [1]: [ws_ship_hdemo_sk#2]
+Right keys [1]: [hd_demo_sk#5]
 Join condition: None
 
 (35) Project [codegen id : 8]
-Output [2]: [ws_sold_time_sk#19, ws_web_page_sk#21]
-Input [4]: [ws_sold_time_sk#19, ws_ship_hdemo_sk#20, ws_web_page_sk#21, hd_demo_sk#23]
+Output [2]: [ws_sold_time_sk#1, ws_web_page_sk#3]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, hd_demo_sk#5]
 
 (36) Scan parquet default.time_dim
-Output [2]: [t_time_sk#24, t_hour#25]
+Output [2]: [t_time_sk#8, t_hour#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
 (37) ColumnarToRow [codegen id : 6]
-Input [2]: [t_time_sk#24, t_hour#25]
+Input [2]: [t_time_sk#8, t_hour#9]
 
 (38) Filter [codegen id : 6]
-Input [2]: [t_time_sk#24, t_hour#25]
-Condition : (((isnotnull(t_hour#25) AND (t_hour#25 >= 19)) AND (t_hour#25 <= 20)) AND isnotnull(t_time_sk#24))
+Input [2]: [t_time_sk#8, t_hour#9]
+Condition : (((isnotnull(t_hour#9) AND (t_hour#9 >= 19)) AND (t_hour#9 <= 20)) AND isnotnull(t_time_sk#8))
 
 (39) Project [codegen id : 6]
-Output [1]: [t_time_sk#24]
-Input [2]: [t_time_sk#24, t_hour#25]
+Output [1]: [t_time_sk#8]
+Input [2]: [t_time_sk#8, t_hour#9]
 
 (40) BroadcastExchange
-Input [1]: [t_time_sk#24]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#26]
+Input [1]: [t_time_sk#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#19]
 
 (41) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [ws_sold_time_sk#19]
-Right keys [1]: [t_time_sk#24]
+Left keys [1]: [ws_sold_time_sk#1]
+Right keys [1]: [t_time_sk#8]
 Join condition: None
 
 (42) Project [codegen id : 8]
-Output [1]: [ws_web_page_sk#21]
-Input [3]: [ws_sold_time_sk#19, ws_web_page_sk#21, t_time_sk#24]
+Output [1]: [ws_web_page_sk#3]
+Input [3]: [ws_sold_time_sk#1, ws_web_page_sk#3, t_time_sk#8]
 
 (43) ReusedExchange [Reuses operator id: 23]
-Output [1]: [wp_web_page_sk#27]
+Output [1]: [wp_web_page_sk#11]
 
 (44) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [ws_web_page_sk#21]
-Right keys [1]: [wp_web_page_sk#27]
+Left keys [1]: [ws_web_page_sk#3]
+Right keys [1]: [wp_web_page_sk#11]
 Join condition: None
 
 (45) Project [codegen id : 8]
 Output: []
-Input [2]: [ws_web_page_sk#21, wp_web_page_sk#27]
+Input [2]: [ws_web_page_sk#3, wp_web_page_sk#11]
 
 (46) HashAggregate [codegen id : 8]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#28]
-Results [1]: [count#29]
+Aggregate Attributes [1]: [count#20]
+Results [1]: [count#21]
 
 (47) Exchange
-Input [1]: [count#29]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#30]
+Input [1]: [count#21]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#22]
 
 (48) HashAggregate [codegen id : 9]
-Input [1]: [count#29]
+Input [1]: [count#21]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#31]
-Results [1]: [count(1)#31 AS pmc#32]
+Aggregate Attributes [1]: [count(1)#23]
+Results [1]: [count(1)#23 AS pmc#24]
 
 (49) BroadcastExchange
-Input [1]: [pmc#32]
-Arguments: IdentityBroadcastMode, [id=#33]
+Input [1]: [pmc#24]
+Arguments: IdentityBroadcastMode, [id=#25]
 
 (50) BroadcastNestedLoopJoin [codegen id : 10]
 Join condition: None
 
 (51) Project [codegen id : 10]
-Output [1]: [CheckOverflow((promote_precision(cast(amc#18 as decimal(15,4))) / promote_precision(cast(pmc#32 as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#34]
-Input [2]: [amc#18, pmc#32]
+Output [1]: [CheckOverflow((promote_precision(cast(amc#18 as decimal(15,4))) / promote_precision(cast(pmc#24 as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#26]
+Input [2]: [amc#18, pmc#24]
 
 (52) Sort [codegen id : 10]
-Input [1]: [am_pm_ratio#34]
-Arguments: [am_pm_ratio#34 ASC NULLS FIRST], true, 0
+Input [1]: [am_pm_ratio#26]
+Arguments: [am_pm_ratio#26 ASC NULLS FIRST], true, 0
 
