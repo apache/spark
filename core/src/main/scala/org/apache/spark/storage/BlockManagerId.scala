@@ -46,23 +46,23 @@ class BlockManagerId private (
 
   private def this() = this(null, null, 0, None)  // For deserialization only
 
-  override def executorId: String = executorId_
+  def executorId: String = executorId_
 
   if (null != host_) {
     Utils.checkHost(host_)
     assert (port_ > 0)
   }
 
-  override def hostPort: String = {
+  def hostPort: String = {
     // DEBUG code
     Utils.checkHost(host)
     assert (port > 0)
     host + ":" + port
   }
 
-  override def host: String = host_
+  def host: String = host_
 
-  override def port: Int = port_
+  def port: Int = port_
 
   def topologyInfo: Option[String] = topologyInfo_
 

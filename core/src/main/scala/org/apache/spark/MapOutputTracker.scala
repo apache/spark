@@ -161,7 +161,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    */
   def removeOutputsOnHost(host: String): Unit = withWriteLock {
     logDebug(s"Removing outputs for host ${host}")
-    removeOutputsByFilter(x => x.host == host)
+    removeOutputsByFilter(x => x.asInstanceOf[BlockManagerId].host == host)
   }
 
   /**
@@ -171,7 +171,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    */
   def removeOutputsOnExecutor(execId: String): Unit = withWriteLock {
     logDebug(s"Removing outputs for execId ${execId}")
-    removeOutputsByFilter(x => x.executorId == execId)
+    removeOutputsByFilter(x => x.asInstanceOf[BlockManagerId].executorId == execId)
   }
 
   /**
@@ -488,10 +488,10 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  def updateMapOutput(shuffleId: Int, mapId: Long, bmAddress: BlockManagerId): Unit = {
+  def updateMapOutput(shuffleId: Int, mapId: Long, loc: Location): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
-        shuffleStatus.updateMapOutput(mapId, bmAddress)
+        shuffleStatus.updateMapOutput(mapId, loc)
       case None =>
         logError(s"Asked to update map output for unknown shuffle ${shuffleId}")
     }
@@ -502,10 +502,10 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** Unregister map output information of the given shuffle, mapper and block manager */
-  def unregisterMapOutput(shuffleId: Int, mapIndex: Int, bmAddress: Location): Unit = {
+  def unregisterMapOutput(shuffleId: Int, mapIndex: Int, loc: Location): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
-        shuffleStatus.removeMapOutput(mapIndex, bmAddress)
+        shuffleStatus.removeMapOutput(mapIndex, loc)
         incrementEpoch()
       case None =>
         throw new SparkException("unregisterMapOutput called for nonexistent shuffle ID")
@@ -646,7 +646,7 @@ private[spark] class MapOutputTrackerMaster(
       val locations = getLocationsWithLargestOutputs(dep.shuffleId, partitionId,
         dep.partitioner.numPartitions, REDUCER_PREF_LOCS_FRACTION)
       if (locations.nonEmpty) {
-        locations.get.map(_.host)
+        locations.get.map(_.asInstanceOf[BlockManagerId].host)
       } else {
         Nil
       }
@@ -728,7 +728,7 @@ private[spark] class MapOutputTrackerMaster(
         if (startMapIndex < endMapIndex &&
           (startMapIndex >= 0 && endMapIndex <= statuses.length)) {
           val statusesPicked = statuses.slice(startMapIndex, endMapIndex).filter(_ != null)
-          statusesPicked.map(_.location.host).toSeq
+          statusesPicked.map(_.location.asInstanceOf[BlockManagerId].host).toSeq
         } else {
           Nil
         }

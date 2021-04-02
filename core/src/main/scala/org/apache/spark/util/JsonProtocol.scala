@@ -189,7 +189,8 @@ private[spark] object JsonProtocol {
   }
 
   def blockManagerAddedToJson(blockManagerAdded: SparkListenerBlockManagerAdded): JValue = {
-    val blockManagerId = blockManagerIdToJson(blockManagerAdded.blockManagerId)
+    val blockManagerId = blockManagerIdToJson(
+      blockManagerAdded.blockManagerId)
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockManagerAdded) ~
     ("Block Manager ID" -> blockManagerId) ~
     ("Maximum Memory" -> blockManagerAdded.maxMem) ~
@@ -439,7 +440,7 @@ private[spark] object JsonProtocol {
     val reason = Utils.getFormattedClassName(taskEndReason)
     val json: JObject = taskEndReason match {
       case fetchFailed: FetchFailed =>
-        val blockManagerAddress = Option(fetchFailed.bmAddress).
+        val blockManagerAddress = Option(fetchFailed.bmAddress.asInstanceOf[BlockManagerId]).
           map(blockManagerIdToJson).getOrElse(JNothing)
         ("Block Manager Address" -> blockManagerAddress) ~
         ("Shuffle ID" -> fetchFailed.shuffleId) ~
@@ -472,7 +473,7 @@ private[spark] object JsonProtocol {
     ("Reason" -> reason) ~ json
   }
 
-  def blockManagerIdToJson(blockManagerId: Location): JValue = {
+  def blockManagerIdToJson(blockManagerId: BlockManagerId): JValue = {
     ("Executor ID" -> blockManagerId.executorId) ~
     ("Host" -> blockManagerId.host) ~
     ("Port" -> blockManagerId.port)

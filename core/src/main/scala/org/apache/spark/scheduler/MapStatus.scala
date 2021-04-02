@@ -28,12 +28,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
-trait Location extends Externalizable {
-  def host: String
-  def port: Int
-  def hostPort: String
-  def executorId: String = "unknown"
-}
+trait Location extends Externalizable
 
 /**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the

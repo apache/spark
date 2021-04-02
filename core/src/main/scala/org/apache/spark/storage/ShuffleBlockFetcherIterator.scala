@@ -109,7 +109,7 @@ final class ShuffleBlockFetcherIterator(
 
   /** Host local blockIds to fetch by executors, excluding zero-sized blocks. */
   private[this] val hostLocalBlocksByExecutor =
-    LinkedHashMap[Location, Seq[(BlockId, Long, Int)]]()
+    LinkedHashMap[BlockManagerId, Seq[(BlockId, Long, Int)]]()
 
   /** Host local blocks to fetch, excluding zero-sized blocks. */
   private[this] val hostLocalBlocks = scala.collection.mutable.LinkedHashSet[(BlockId, Int)]()
@@ -236,8 +236,9 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def sendRequest(req: FetchRequest): Unit = {
+    val address = req.address.asInstanceOf[BlockManagerId]
     logDebug("Sending request for %d blocks (%s) from %s".format(
-      req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort))
+      req.blocks.size, Utils.bytesToString(req.size), address.hostPort))
     bytesInFlight += req.size
     reqsInFlight += 1
 
@@ -247,7 +248,6 @@ final class ShuffleBlockFetcherIterator(
     }.toMap
     val remainingBlocks = new HashSet[String]() ++= infoMap.keys
     val blockIds = req.blocks.map(_.blockId.toString)
-    val address = req.address
 
     val blockFetchingListener = new BlockFetchingListener {
       override def onBlockFetchSuccess(blockId: String, buf: ManagedBuffer): Unit = {
@@ -268,7 +268,7 @@ final class ShuffleBlockFetcherIterator(
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
-        logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
+        logError(s"Failed to get block(s) from ${address.host}:${address.port}", e)
         results.put(new FailureFetchResult(BlockId(blockId), infoMap(blockId)._2, address, e))
       }
     }
@@ -300,7 +300,8 @@ final class ShuffleBlockFetcherIterator(
     for ((address, blockInfos) <- blocksByAddress) {
       // TODO (wuyi): For HDFS-like filesytem, shuffle fetch should be always considered as
       // local fetch. We could add a flag to `Location` to identify this.
-      if (Seq(blockManager.blockManagerId.executorId, fallback).contains(address.executorId)) {
+      if (Seq(blockManager.blockManagerId.executorId, fallback)
+        .contains(address.asInstanceOf[BlockManagerId].executorId)) {
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
@@ -308,14 +309,14 @@ final class ShuffleBlockFetcherIterator(
         localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
         localBlockBytes += mergedBlockInfos.map(_.size).sum
       } else if (blockManager.hostLocalDirManager.isDefined &&
-        address.host == blockManager.blockManagerId.host) {
+        address.asInstanceOf[BlockManagerId].host == blockManager.blockManagerId.host) {
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
         numBlocksToFetch += mergedBlockInfos.size
         val blocksForAddress =
           mergedBlockInfos.map(info => (info.blockId, info.size, info.mapIndex))
-        hostLocalBlocksByExecutor += address -> blocksForAddress
+        hostLocalBlocksByExecutor += address.asInstanceOf[BlockManagerId] -> blocksForAddress
         hostLocalBlocks ++= blocksForAddress.map(info => (info._1, info._3))
         hostLocalBlockBytes += mergedBlockInfos.map(_.size).sum
       } else {
@@ -473,7 +474,7 @@ final class ShuffleBlockFetcherIterator(
     val cachedDirsByExec = hostLocalDirManager.getCachedHostLocalDirs
     val (hostLocalBlocksWithCachedDirs, hostLocalBlocksWithMissingDirs) = {
       val (hasCache, noCache) = hostLocalBlocksByExecutor.partition { case (hostLocalBmId, _) =>
-        cachedDirsByExec.contains(hostLocalBmId.executorId)
+        cachedDirsByExec.contains(hostLocalBmId.asInstanceOf[BlockManagerId].executorId)
       }
       (hasCache.toMap, noCache.toMap)
     }
@@ -521,7 +522,7 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private def fetchMultipleHostLocalBlocks(
-      bmIdToBlocks: Map[Location, Seq[(BlockId, Long, Int)]],
+      bmIdToBlocks: Map[BlockManagerId, Seq[(BlockId, Long, Int)]],
       localDirsByExecId: Map[String, Array[String]],
       cached: Boolean): Unit = {
     // We use `forall` because once there's a failed block fetch, `fetchHostLocalBlock` will put
