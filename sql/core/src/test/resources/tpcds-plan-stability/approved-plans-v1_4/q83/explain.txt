@@ -68,7 +68,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(sr_returned_date_sk#3), dynamicpruningexpression(true)]
 PushedFilters: [IsNotNull(sr_item_sk)]
-ReadSchema: struct<sr_item_sk:bigint,sr_return_quantity:int>
+ReadSchema: struct<sr_item_sk:int,sr_return_quantity:int>
 
 (2) ColumnarToRow [codegen id : 5]
 Input [3]: [sr_item_sk#1, sr_return_quantity#2, sr_returned_date_sk#3]
@@ -97,7 +97,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 
 (8) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [sr_item_sk#1]
-Right keys [1]: [cast(i_item_sk#4 as bigint)]
+Right keys [1]: [i_item_sk#4]
 Join condition: None
 
 (9) Project [codegen id : 5]
@@ -176,7 +176,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 
 (26) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [sr_returned_date_sk#3]
-Right keys [1]: [cast(d_date_sk#7 as bigint)]
+Right keys [1]: [d_date_sk#7]
 Join condition: None
 
 (27) Project [codegen id : 5]
@@ -277,7 +277,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(wr_returned_date_sk#37), dynamicpruningexpression(true)]
 PushedFilters: [IsNotNull(wr_item_sk)]
-ReadSchema: struct<wr_item_sk:bigint,wr_return_quantity:int>
+ReadSchema: struct<wr_item_sk:int,wr_return_quantity:int>
 
 (47) ColumnarToRow [codegen id : 16]
 Input [3]: [wr_item_sk#35, wr_return_quantity#36, wr_returned_date_sk#37]
@@ -291,7 +291,7 @@ Output [2]: [i_item_sk#38, i_item_id#39]
 
 (50) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [wr_item_sk#35]
-Right keys [1]: [cast(i_item_sk#38 as bigint)]
+Right keys [1]: [i_item_sk#38]
 Join condition: None
 
 (51) Project [codegen id : 16]
@@ -303,7 +303,7 @@ Output [1]: [d_date_sk#40]
 
 (53) BroadcastHashJoin [codegen id : 16]
 Left keys [1]: [wr_returned_date_sk#37]
-Right keys [1]: [cast(d_date_sk#40 as bigint)]
+Right keys [1]: [d_date_sk#40]
 Join condition: None
 
 (54) Project [codegen id : 16]

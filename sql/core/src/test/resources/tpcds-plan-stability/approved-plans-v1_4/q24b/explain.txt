@@ -68,18 +68,18 @@ Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, s
 
 (5) Exchange
 Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
-Arguments: hashpartitioning(cast(ss_ticket_number#4 as bigint), cast(ss_item_sk#1 as bigint), 5), ENSURE_REQUIREMENTS, [id=#7]
+Arguments: hashpartitioning(ss_ticket_number#4, ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [id=#7]
 
 (6) Sort [codegen id : 2]
 Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_net_paid#5]
-Arguments: [cast(ss_ticket_number#4 as bigint) ASC NULLS FIRST, cast(ss_item_sk#1 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [ss_ticket_number#4 ASC NULLS FIRST, ss_item_sk#1 ASC NULLS FIRST], false, 0
 
 (7) Scan parquet default.store_returns
 Output [3]: [sr_item_sk#8, sr_ticket_number#9, sr_returned_date_sk#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
-ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
+ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
 
 (8) ColumnarToRow [codegen id : 3]
 Input [3]: [sr_item_sk#8, sr_ticket_number#9, sr_returned_date_sk#10]
@@ -101,7 +101,7 @@ Input [2]: [sr_item_sk#8, sr_ticket_number#9]
 Arguments: [sr_ticket_number#9 ASC NULLS FIRST, sr_item_sk#8 ASC NULLS FIRST], false, 0
 
 (13) SortMergeJoin [codegen id : 9]
-Left keys [2]: [cast(ss_ticket_number#4 as bigint), cast(ss_item_sk#1 as bigint)]
+Left keys [2]: [ss_ticket_number#4, ss_item_sk#1]
 Right keys [2]: [sr_ticket_number#9, sr_item_sk#8]
 Join condition: None
 
@@ -335,18 +335,18 @@ Input [6]: [ss_item_sk#49, ss_customer_sk#50, ss_store_sk#51, ss_ticket_number#5
 
 (52) Exchange
 Input [5]: [ss_item_sk#49, ss_customer_sk#50, ss_store_sk#51, ss_ticket_number#52, ss_net_paid#53]
-Arguments: hashpartitioning(cast(ss_ticket_number#52 as bigint), cast(ss_item_sk#49 as bigint), 5), ENSURE_REQUIREMENTS, [id=#55]
+Arguments: hashpartitioning(ss_ticket_number#52, ss_item_sk#49, 5), ENSURE_REQUIREMENTS, [id=#55]
 
 (53) Sort [codegen id : 2]
 Input [5]: [ss_item_sk#49, ss_customer_sk#50, ss_store_sk#51, ss_ticket_number#52, ss_net_paid#53]
-Arguments: [cast(ss_ticket_number#52 as bigint) ASC NULLS FIRST, cast(ss_item_sk#49 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [ss_ticket_number#52 ASC NULLS FIRST, ss_item_sk#49 ASC NULLS FIRST], false, 0
 
 (54) Scan parquet default.store_returns
 Output [3]: [sr_item_sk#56, sr_ticket_number#57, sr_returned_date_sk#58]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
-ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
+ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
 
 (55) ColumnarToRow [codegen id : 3]
 Input [3]: [sr_item_sk#56, sr_ticket_number#57, sr_returned_date_sk#58]
@@ -368,7 +368,7 @@ Input [2]: [sr_item_sk#56, sr_ticket_number#57]
 Arguments: [sr_ticket_number#57 ASC NULLS FIRST, sr_item_sk#56 ASC NULLS FIRST], false, 0
 
 (60) SortMergeJoin [codegen id : 9]
-Left keys [2]: [cast(ss_ticket_number#52 as bigint), cast(ss_item_sk#49 as bigint)]
+Left keys [2]: [ss_ticket_number#52, ss_item_sk#49]
 Right keys [2]: [sr_ticket_number#57, sr_item_sk#56]
 Join condition: None
 

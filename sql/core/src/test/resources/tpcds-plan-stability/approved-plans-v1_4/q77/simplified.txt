@@ -57,8 +57,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.store_returns [sr_store_sk,sr_return_amt,sr_net_loss,sr_returned_date_sk]
-                                                          SubqueryBroadcast [d_date_sk] #2
-                                                            ReusedExchange [d_date_sk] #3
+                                                          ReusedSubquery [d_date_sk] #1
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk] #3
                                               InputAdapter
@@ -137,7 +136,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.web_returns [wr_web_page_sk,wr_return_amt,wr_net_loss,wr_returned_date_sk]
-                                                          ReusedSubquery [d_date_sk] #2
+                                                          ReusedSubquery [d_date_sk] #1
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk] #3
                                               InputAdapter
