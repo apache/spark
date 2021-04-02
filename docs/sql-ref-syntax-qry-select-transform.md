@@ -21,24 +21,24 @@ license: |
 
 ### Description
 
-The `TRANSFORM` clause is used to specifies a hive-style transform (SELECT TRANSFORM/MAP/REDUCE)
+The `TRANSFORM` clause is used to specifies a Hive-style transform (SELECT TRANSFORM/MAP/REDUCE)
 query specification to transform the input by forking and running the specified script. Users can
 plug in their own custom mappers and reducers in the data stream by using features natively supported
-in the Spark/Hive language. e.g. in order to run a custom mapper script - map_script - and a custom
-reducer script - reduce_script - the user can issue the following command which uses the TRANSFORM
+in the Spark/Hive language. e.g. in order to run a custom mapper script `map_script` and a custom
+reducer script `reduce_script` the user can issue the following command which uses the TRANSFORM
 clause to embed the mapper and the reducer scripts.
 
 Currently, Spark's script transform support two mode:
 
-    1. Without Hive: It means we run Spark SQL without hive support, in this mode, we can use default format 
-       by treating data as STRING and use Spark's own SerDe.
-    2. WIth Hive: It means we run Spark SQL with Hive support, in this mode, when we use default format, 
-       it will be treated as Hive default fomat. And we can use Hive supported SerDe to process data.
+    1. Without Hive: It means spark run Spark SQL without Hive support, in this mode, spark can use default 
+       `ROW FORMAT DELIMITED` by treating data as STRING.
+    2. WIth Hive: It means spark run Spark SQL with Hive support, in this mode, when spark use default format, 
+       it will be treated as Hive default fomat. And spark can use Hive supported SerDe to process data.
 
-In both mode with default format, columns will be transformed to STRING and delimited by TAB before feeding
-to the user script, Similarly, all NULL values will be converted to the literal string \N in order to
-differentiate NULL values from empty strings. The standard output of the user script will be treated as
-TAB-separated STRING columns, any cell containing only \N will be re-interpreted as a NULL, and then the
+In both modes with default format, columns will be transformed to STRING and delimited by tabs before feeding
+to the user script, Similarly, all `NULL` values will be converted to the literal string `\N` in order to
+differentiate `NULL` values from empty strings. The standard output of the user script will be treated as
+TAB-separated STRING columns, any cell containing only `\N` will be re-interpreted as a `NULL`, and then the
 resulting STRING column will be cast to the data type specified in the table declaration in the usual way.
 User scripts can output debug information to standard error which will be shown on the task detail page on hadoop.
 These defaults can be overridden with `ROW FORMAT DELIMITED`.
@@ -158,23 +158,23 @@ transformClause:
 
 ### Without Hive support Mode
 
-Now Spark Script transform can run without `-Phive` or `SparkSession.builder.enableHiveSupport()`.
-In this case, now we only use script transform with `ROW FORMAT DELIMIT` and treat all value passed
-to script as string. 
+Spark scripts transform can run without `-Phive` or `SparkSession.builder.enableHiveSupport()`.
+In this case, now spark only use script transform with `ROW FORMAT DELIMITED` and treat all value passed
+to script as a string. 
 
 ### With Hive Support Mode
 
-When build Spark with `-Phive` and start Spark SQL with `enableHiveSupport()`, we can use script 
-transform with Hive SerDe and both `ROW FORMAT DELIMIT`.
+When built Spark with `-Phive` and started Spark SQL with `enableHiveSupport()`, spark can use script 
+transform with Hive SerDe and both `ROW FORMAT DELIMITED`.
 
 ### Schema-less Script Transforms
 
-If there don't have AS clause after USING my_script, Spark assumes that the output of the script contains 2 parts:
+If there is no AS clause after USING my_script, Spark assumes that the output of the script contains 2 parts:
 
    1. key: which is before the first tab, 
    2. value: which is the rest after the first tab.
 
-Note that this is different from specifying AS key, value because in that case, value will only contain the portion
+Note that this is different from specifying an AS `key, value` because in that case, the value will only contain the portion
 between the first tab and the second tab if there are multiple tabs. 
 
 ### Examples
@@ -218,7 +218,7 @@ WHERE zip_code > 94511;
 |  94588|   Dan Li|   18|
 +-------+---------+-----+
 
--- ROW FORMAT DELIMIT 
+-- ROW FORMAT DELIMITED
 SELECT TRANSFORM(name, age)
   ROW FORMAT DELIMITED
   FIELDS TERMINATED BY ','
