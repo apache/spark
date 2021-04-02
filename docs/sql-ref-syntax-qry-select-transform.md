@@ -22,20 +22,13 @@ license: |
 ### Description
 
 The `TRANSFORM` clause is used to specifies a Hive-style transform (SELECT TRANSFORM/MAP/REDUCE)
-query specification to transform the input by forking and running the specified script. Users can
+query specification to transform the input by running a specified script. Users can
 plug in their own custom mappers and reducers in the data stream by using features natively supported
-in the Spark/Hive language. e.g. in order to run a custom mapper script `map_script` and a custom
+in the Spark SQL. e.g. in order to run a custom mapper script `map_script` and a custom
 reducer script `reduce_script` the user can issue the following command which uses the TRANSFORM
 clause to embed the mapper and the reducer scripts.
 
-Currently, Spark's script transform support two mode:
-
-    1. Without Hive: It means spark run Spark SQL without Hive support, in this mode, spark can use default 
-       `ROW FORMAT DELIMITED` by treating data as STRING.
-    2. WIth Hive: It means spark run Spark SQL with Hive support, in this mode, when spark use default format, 
-       it will be treated as Hive default fomat. And spark can use Hive supported SerDe to process data.
-
-In both modes with default format, columns will be transformed to STRING and delimited by tabs before feeding
+In default format, columns will be transformed to STRING and delimited by tabs before feeding
 to the user script, Similarly, all `NULL` values will be converted to the literal string `\N` in order to
 differentiate `NULL` values from empty strings. The standard output of the user script will be treated as
 TAB-separated STRING columns, any cell containing only `\N` will be re-interpreted as a `NULL`, and then the
@@ -46,30 +39,26 @@ These defaults can be overridden with `ROW FORMAT DELIMITED`.
 ### Syntax
 
 ```sql
+SELECT [ TRANSFORM ( namedExpressionSeq ) | MAP namedExpressionSeq | REDUCE namedExpressionSeq ]
+    [ inRowFormat ]
+    [ RECORDWRITER recordWriter_class ]
+    USING script [ AS ( [ col_name [ col_type ]] [ , ... ] ) ]
+    [ outRowFormat ]
+    [ RECORDREADER recordReader_class ]
+    FROM { from_item [ , ... ] }
+
 rowFormat
     : ROW FORMAT SERDE serde_class [ WITH SERDEPROPERTIES serde_props ]
     | ROW FORMAT DELIMITED
-       [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
-       [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
-       [ MAP KEYS TERMINATED BY keysTerminatedBy ]
-       [ LINES TERMINATED BY linesSeparatedBy ]
-       [ NULL DEFINED AS nullDefinedAs ]  
+         [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
+         [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
+         [ MAP KEYS TERMINATED BY keysTerminatedBy ]
+         [ LINES TERMINATED BY linesSeparatedBy ]
+         [ NULL DEFINED AS nullDefinedAs ]  
 
 inRowFormat=rowFormat
 outRowFormat=rowFormat
 namedExpressionSeq = named_expression [ , ... ]
-
-transformClause:
-  SELECT [ TRANSFORM ( namedExpressionSeq ) | MAP namedExpressionSeq | REDUCE namedExpressionSeq ]
-    [ inRowFormat ]
-    [ RECORDWRITER recordWriter_class ]
-    USING script
-    [ AS ( [ col_name [ col_type ]] [ , ... ] ) ]
-    [ outRowFormat ]
-    [ RECORDREADER recordReader_class ]
-  [ WHERE boolean_expression  ]
-  [ GROUP BY expression [ , ... ] ]
-  [ HAVING boolean_expression ]
 ```
 
 ### Parameters
@@ -135,37 +124,16 @@ transformClause:
 * **recordReader_class**
 
     Specifies a fully-qualified class name of a custom RecordReader. 
-    Default value is `org.apache.hadoop.hive.ql.exec.TextRecordReader`
+    A default value is `org.apache.hadoop.hive.ql.exec.TextRecordReader`
 
 * **recordWriter_class**
 
     Specifies a fully-qualified class name of a custom RecordWriter. 
-    Default value is `org.apache.hadoop.hive.ql.exec.TextRecordWriter`.
+    A default value is `org.apache.hadoop.hive.ql.exec.TextRecordWriter`.
 
 * **script**
 
-    Specify a command to process data.
-
-* **boolean_expression**
-
-    Specifies any expression that evaluates to a result type `boolean`. Two or
-    more expressions may be combined together using the logical
-    operators ( `AND`, `OR` ).
-
-* **expression**
-
-    Specifies combination of one or more values, operators and SQL functions that results in a value.
-
-### Without Hive support Mode
-
-Spark scripts transform can run without `-Phive` or `SparkSession.builder.enableHiveSupport()`.
-In this case, now spark only use script transform with `ROW FORMAT DELIMITED` and treat all value passed
-to script as a string. 
-
-### With Hive Support Mode
-
-When built Spark with `-Phive` and started Spark SQL with `enableHiveSupport()`, spark can use script 
-transform with Hive SerDe and both `ROW FORMAT DELIMITED`.
+    Specifies a command to process data.
 
 ### Schema-less Script Transforms
 
@@ -192,7 +160,7 @@ INSERT INTO person VALUES
 
 -- With specified out put without data type
 SELECT TRANSFORM(zip_code, name, age)
- USING 'cat' AS (a, b, c)
+   USING 'cat' AS (a, b, c)
 FROM person
 WHERE zip_code > 94511;
 +-------+---------+-----+
@@ -206,7 +174,7 @@ WHERE zip_code > 94511;
 
 -- With specified out put without data type
 SELECT TRANSFORM(zip_code, name, age)
- USING 'cat' AS (a STRING, b STRING, c STRING)
+   USING 'cat' AS (a STRING, b STRING, c STRING)
 FROM person
 WHERE zip_code > 94511;
 +-------+---------+-----+
@@ -220,15 +188,15 @@ WHERE zip_code > 94511;
 
 -- ROW FORMAT DELIMITED
 SELECT TRANSFORM(name, age)
-  ROW FORMAT DELIMITED
-  FIELDS TERMINATED BY ','
-  LINES TERMINATED BY '\n'
-  NULL DEFINED AS 'NULL'
-  USING 'cat' AS (name_age string)
-  ROW FORMAT DELIMITED
-  FIELDS TERMINATED BY '@'
-  LINES TERMINATED BY '\n'
-  NULL DEFINED AS 'NULL'
+    ROW FORMAT DELIMITED
+    FIELDS TERMINATED BY ','
+    LINES TERMINATED BY '\n'
+    NULL DEFINED AS 'NULL'
+    USING 'cat' AS (name_age string)
+    ROW FORMAT DELIMITED
+    FIELDS TERMINATED BY '@'
+    LINES TERMINATED BY '\n'
+    NULL DEFINED AS 'NULL'
 FROM person;
 +---------------+
 |       name_age|
@@ -244,15 +212,15 @@ FROM person;
 
 -- Hive Serde
 SELECT TRANSFORM(zip_code, name, age)
-  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-  WITH SERDEPROPERTIES (
-    'field.delim' = '\t'
-  )
-  USING 'cat' AS (a STRING, b STRING, c STRING)
-  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-  WITH SERDEPROPERTIES (
-    'field.delim' = '\t'
-  )
+    ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+    WITH SERDEPROPERTIES (
+      'field.delim' = '\t'
+    )
+    USING 'cat' AS (a STRING, b STRING, c STRING)
+    ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+    WITH SERDEPROPERTIES (
+      'field.delim' = '\t'
+    )
 FROM person
 WHERE zip_code > 94511;
 +-------+---------+-----+
@@ -266,7 +234,7 @@ WHERE zip_code > 94511;
 
 -- Schema-less mode
 SELECT TRANSFORM(zip_code, name, age)
-  USING 'cat'
+    USING 'cat'
 FROM person
 WHERE zip_code > 94500;
 +-------+-----------------+
