@@ -44,7 +44,7 @@ import org.apache.ivy.core.report.ResolveReport
 import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
-import org.apache.ivy.plugins.matcher.{GlobPatternMatcher, PatternMatcher}
+import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
@@ -366,7 +366,6 @@ private[spark] class SparkSubmit extends Logging {
     args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
     args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
 
-    lazy val secMgr = new SecurityManager(sparkConf)
 
     // In client mode, download remote files.
     var localPrimaryResource: String = null
@@ -1153,8 +1152,6 @@ private[spark] object SparkSubmitUtils extends Logging {
     // We need a chain resolver if we want to check multiple repositories
     val cr = new ChainResolver
     cr.setName("spark-list")
-    cr.setChangingMatcher(PatternMatcher.REGEXP)
-    cr.setChangingPattern(".*-SNAPSHOT")
 
     val localM2 = new IBiblioResolver
     localM2.setM2compatible(true)
@@ -1314,8 +1311,6 @@ private[spark] object SparkSubmitUtils extends Logging {
     remoteRepos.filterNot(_.trim.isEmpty).map(_.split(",")).foreach { repositoryList =>
       val cr = new ChainResolver
       cr.setName("user-list")
-      cr.setChangingMatcher(PatternMatcher.REGEXP)
-      cr.setChangingPattern(".*-SNAPSHOT")
 
       // add current default resolver, if any
       Option(ivySettings.getDefaultResolver).foreach(cr.add)
