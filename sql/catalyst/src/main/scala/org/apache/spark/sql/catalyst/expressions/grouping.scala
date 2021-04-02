@@ -213,7 +213,6 @@ object GroupingID {
   }
 }
 
-
 object GroupingAnalytics {
   def unapply(exprs: Seq[Expression])
   : Option[(Seq[Seq[Expression]], Seq[Seq[Expression]], Seq[Expression])] = {
@@ -223,13 +222,13 @@ object GroupingAnalytics {
     } else {
       val groupingSets = groupingSetExprs.map(_.asInstanceOf[GroupingSet])
       val groups = groupingSets.flatMap(_.groupByExprs) ++ others
-      val unMergedSelectedGroupByExprs = groupingSets.map(_.selectedGroupByExprs)
-      val selectedGroupByExprs = unMergedSelectedGroupByExprs.tail
-        .foldRight(unMergedSelectedGroupByExprs.head) { (x, y) =>
-          for (a <- x; b <- y) yield b ++ a
+      val unmergedSelectedGroupByExprs = groupingSets.map(_.selectedGroupByExprs)
+      val selectedGroupByExprs = unmergedSelectedGroupByExprs.init
+        .foldLeft(unmergedSelectedGroupByExprs.last) { (x, y) =>
+          for (a <- x; b <- y) yield a ++ b
         }.map { groupByExprs =>
-        (others ++ groupByExprs).distinct
-      }
+          (others ++ groupByExprs).distinct
+        }
       Some(selectedGroupByExprs, groupingSets.flatMap(_.groupingSets), groups.distinct)
     }
   }

@@ -632,8 +632,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
         val newChild = h.child match {
-          case Aggregate(
-          GroupingAnalytics(selectedGroupByExprs, _, groupByExprs), aggregateExpressions, child) =>
+          case Aggregate(GroupingAnalytics(selectedGroupByExprs, _, groupByExprs),
+              aggregateExpressions, child) =>
             constructAggregate(
               selectedGroupByExprs, groupByExprs,
               aggregateExpressions ++ extraAggExprs, child)
@@ -660,17 +660,16 @@ class Analyzer(override val catalogManager: CatalogManager)
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case h @ UnresolvedHaving(_, agg @ Aggregate(
-      GroupingAnalytics(_, _, groupByExprs), aggregateExpressions, _))
+        GroupingAnalytics(_, _, groupByExprs), aggregateExpressions, _))
         if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(
-      GroupingAnalytics(selectedGroupByExprs, _, groupByExprs), aggregateExpressions, child)
-        if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(selectedGroupByExprs, groupByExprs, aggregateExpressions, child)
+      case Aggregate(GroupingAnalytics(selectedGroupByExprs, _, groupByExprs), aggExprs, child)
+        if (groupByExprs ++ aggExprs).forall(_.resolved) =>
+        constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, child)
 
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>

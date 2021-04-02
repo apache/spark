@@ -79,5 +79,4 @@ SELECT a, b, count(1) FROM testData GROUP BY a, CUBE(a, b), ROLLUP(b);
 SELECT a, b, count(1) FROM testData GROUP BY a, GROUPING SETS((a, b), (a), ());
 SELECT a, b, count(1) FROM testData GROUP BY a, CUBE(a, b), GROUPING SETS((a, b), (a), ());
 SELECT a, b, count(1) FROM testData GROUP BY a, CUBE(a, b), ROLLUP(a, b), GROUPING SETS((a, b), (a), ());
-SELECT a, b, count(1) FROM testData GROUP BY CUBE(a, b), ROLLUP(a, b) GROUPING SETS(a, b);
 
