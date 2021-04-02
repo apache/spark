@@ -1293,4 +1293,9 @@ private[spark] object QueryCompilationErrors {
       s"and column $colName cannot be resolved. Expected $expectedNum columns named $colName but " +
       s"got ${actualCols.map(_.name).mkString("[", ",", "]")}")
   }
+
+  def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
+    throw new AnalysisException("The number of partitions can't be specified with unspecified" +
+      " distribution. Invalid writer requirements detected.")
+  }
 }

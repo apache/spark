@@ -97,6 +97,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
         case _ =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
       }
+      // TODO(SPARK-34905): Enable ANSI intervals in ThriftServerQueryTestSuite
+      statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
 
       // Run the SQL queries preparing them for comparison.
       val outputs: Seq[QueryOutput] = queries.map { sql =>

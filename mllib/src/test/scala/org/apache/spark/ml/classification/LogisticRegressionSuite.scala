@@ -46,6 +46,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   @transient var binaryDataset: DataFrame = _
   @transient var binaryDatasetWithSmallVar: DataFrame = _
   @transient var multinomialDataset: DataFrame = _
+  @transient var multinomialDatasetWithSmallVar: DataFrame = _
   @transient var multinomialDatasetWithZeroVar: DataFrame = _
   private val eps: Double = 1e-5
 
@@ -118,6 +119,23 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       df
     }
 
+    multinomialDatasetWithSmallVar = {
+      val nPoints = 50000
+      val coefficients = Array(
+        -0.57997, 0.912083, -0.371077, -0.819866, 2.688191,
+        -0.16624, -0.84355, -0.048509, -0.301789, 4.170682)
+
+      val xMean = Array(5.843, 3.057, 3.758, 10.199)
+      val xVariance = Array(0.6856, 0.1899, 3.116, 0.001)
+
+      val testData = generateMultinomialLogisticInput(
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
+
+      val df = sc.parallelize(testData, 4).toDF().withColumn("weight", rand(seed))
+      df.cache()
+      df
+    }
+
     multinomialDatasetWithZeroVar = {
       val nPoints = 100
       val coefficients = Array(
@@ -141,18 +159,21 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
    * so we can validate the training accuracy compared with R's glmnet package.
    */
   ignore("export test data into CSV format") {
-    binaryDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
-      label + "," + weight + "," + features.toArray.mkString(",")
+    binaryDataset.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
+      l + "," + w + "," + f.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
-    binaryDatasetWithSmallVar.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
-      label + "," + weight + "," + features.toArray.mkString(",")
+    binaryDatasetWithSmallVar.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
+      l + "," + w + "," + f.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDatasetWithSmallVar")
-    multinomialDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
-      label + "," + weight + "," + features.toArray.mkString(",")
+    multinomialDataset.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
+      l + "," + w + "," + f.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
-    multinomialDatasetWithZeroVar.rdd.map {
-      case Row(label: Double, features: Vector, weight: Double) =>
-        label + "," + weight + "," + features.toArray.mkString(",")
+    multinomialDatasetWithSmallVar.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
+      l + "," + w + "," + f.toArray.mkString(",")
+    }.repartition(1)
+     .saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDatasetWithSmallVar")
+    multinomialDatasetWithZeroVar.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
+        l + "," + w + "," + f.toArray.mkString(",")
     }.repartition(1)
      .saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDatasetWithZeroVar")
   }
@@ -1863,19 +1884,123 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       0.0, 0.0, 0.0, 0.09064661,
       -0.1144333, 0.3204703, -0.1621061, -0.2308192,
       0.0, -0.4832131, 0.0, 0.0), isTransposed = true)
-    val interceptsRStd = Vectors.dense(-0.72638218, -0.01737265, 0.74375484)
+    val interceptsRStd = Vectors.dense(-0.69265374, -0.2260274, 0.9186811)
     val coefficientsR = new DenseMatrix(3, 4, Array(
       0.0, 0.0, 0.01641412, 0.03570376,
       -0.05110822, 0.0, -0.21595670, -0.16162836,
       0.0, 0.0, 0.0, 0.0), isTransposed = true)
     val interceptsR = Vectors.dense(-0.44707756, 0.75180900, -0.3047314)
 
-    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.05)
-    assert(model1.interceptVector ~== interceptsRStd relTol 0.1)
+    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 1e-3)
+    assert(model1.interceptVector ~== interceptsRStd relTol 1e-3)
     assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
-    assert(model2.coefficientMatrix ~== coefficientsR absTol 0.02)
-    assert(model2.interceptVector ~== interceptsR relTol 0.1)
+    assert(model2.coefficientMatrix ~== coefficientsR absTol 1e-3)
+    assert(model2.interceptVector ~== interceptsR relTol 1e-3)
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
+  }
+
+  test("SPARK-34860: multinomial logistic regression with intercept, with small var") {
+    val trainer1 = new LogisticRegression().setFitIntercept(true).setStandardization(true)
+      .setWeightCol("weight")
+    val trainer2 = new LogisticRegression().setFitIntercept(true).setStandardization(false)
+      .setWeightCol("weight")
+    val trainer3 = new LogisticRegression().setFitIntercept(true).setStandardization(true)
+      .setElasticNetParam(0.0001).setRegParam(0.5).setWeightCol("weight")
+
+    val model1 = trainer1.fit(multinomialDatasetWithSmallVar)
+    val model2 = trainer2.fit(multinomialDatasetWithSmallVar)
+    val model3 = trainer3.fit(multinomialDatasetWithSmallVar)
+
+    /*
+      Use the following R code to load the data and train the model using glmnet package.
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficients = coef(glmnet(features, label, weights=w, family="multinomial", alpha = 0,
+      lambda = 0))
+      coefficients
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+               2.91748298
+      data.V3  0.21755977
+      data.V4  0.01647541
+      data.V5  0.16507778
+      data.V6 -0.14016680
+
+      $`1`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+              -17.5107460
+      data.V3  -0.2443600
+      data.V4   0.7564655
+      data.V5  -0.2955698
+      data.V6   1.3262009
+
+      $`2`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+              14.59326301
+      data.V3  0.02680026
+      data.V4 -0.77294095
+      data.V5  0.13049206
+      data.V6 -1.18603411
+
+
+
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="multinomial",
+      alpha = 0.0001, lambda = 0.5, standardize=T))
+      coefficientsStd
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+              1.751626027
+      data.V3 0.019970169
+      data.V4 0.079611293
+      data.V5 0.003959452
+      data.V6 0.110024399
+
+      $`1`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                         s0
+              -3.9297124987
+      data.V3 -0.0004788494
+      data.V4  0.0010097453
+      data.V5 -0.0005832701
+      data.V6  .
+
+      $`2`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                        s0
+               2.178086472
+      data.V3 -0.019369990
+      data.V4 -0.080851149
+      data.V5 -0.003319687
+      data.V6 -0.112435972
+     */
+    val interceptsR = Vectors.dense(2.91748298, -17.5107460, 14.59326301)
+    val coefficientsR = new DenseMatrix(3, 4, Array(
+      0.21755977, 0.01647541, 0.16507778, -0.14016680,
+      -0.2443600, 0.7564655, -0.2955698, 1.3262009,
+      0.02680026, -0.77294095, 0.13049206, -1.18603411), isTransposed = true)
+
+    assert(model1.interceptVector ~== interceptsR relTol 1e-2)
+    assert(model1.coefficientMatrix ~= coefficientsR relTol 1e-1)
+
+    // Without regularization, with or without standardization will converge to the same solution.
+    assert(model2.interceptVector ~== interceptsR relTol 1e-2)
+    assert(model2.coefficientMatrix ~= coefficientsR relTol 1e-1)
+
+    val interceptsR2 = Vectors.dense(1.751626027, -3.9297124987, 2.178086472)
+    val coefficientsR2 = new DenseMatrix(3, 4, Array(
+      0.019970169, 0.079611293, 0.003959452, 0.110024399,
+      -0.0004788494, 0.0010097453, -0.0005832701, 0.0,
+      -0.019369990, -0.080851149, -0.003319687, -0.112435972), isTransposed = true)
+
+    assert(model3.interceptVector ~== interceptsR2 relTol 1e-3)
+    assert(model3.coefficientMatrix ~= coefficientsR2 relTol 1e-2)
   }
 
   test("multinomial logistic regression without intercept with L1 regularization") {
