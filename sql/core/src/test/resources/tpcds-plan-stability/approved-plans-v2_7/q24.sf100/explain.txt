@@ -182,18 +182,18 @@ Input [14]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name
 
 (30) Exchange
 Input [13]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29]
-Arguments: hashpartitioning(cast(ss_ticket_number#21 as bigint), cast(ss_item_sk#18 as bigint), 5), ENSURE_REQUIREMENTS, [id=#31]
+Arguments: hashpartitioning(ss_ticket_number#21, ss_item_sk#18, 5), ENSURE_REQUIREMENTS, [id=#31]
 
 (31) Sort [codegen id : 6]
 Input [13]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#25, i_size#26, i_color#27, i_units#28, i_manager_id#29]
-Arguments: [cast(ss_ticket_number#21 as bigint) ASC NULLS FIRST, cast(ss_item_sk#18 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [ss_ticket_number#21 ASC NULLS FIRST, ss_item_sk#18 ASC NULLS FIRST], false, 0
 
 (32) Scan parquet default.store_returns
 Output [3]: [sr_item_sk#32, sr_ticket_number#33, sr_returned_date_sk#34]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
-ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
+ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
 
 (33) ColumnarToRow [codegen id : 7]
 Input [3]: [sr_item_sk#32, sr_ticket_number#33, sr_returned_date_sk#34]
@@ -215,7 +215,7 @@ Input [2]: [sr_item_sk#32, sr_ticket_number#33]
 Arguments: [sr_ticket_number#33 ASC NULLS FIRST, sr_item_sk#32 ASC NULLS FIRST], false, 0
 
 (38) SortMergeJoin [codegen id : 9]
-Left keys [2]: [cast(ss_ticket_number#21 as bigint), cast(ss_item_sk#18 as bigint)]
+Left keys [2]: [ss_ticket_number#21, ss_item_sk#18]
 Right keys [2]: [sr_ticket_number#33, sr_item_sk#32]
 Join condition: None
 
@@ -472,18 +472,18 @@ Input [14]: [s_store_name#53, s_state#55, ca_state#59, c_first_name#65, c_last_n
 
 (82) Exchange
 Input [13]: [s_store_name#53, s_state#55, ca_state#59, c_first_name#65, c_last_name#66, ss_item_sk#69, ss_ticket_number#72, ss_net_paid#73, i_current_price#77, i_size#78, i_color#79, i_units#80, i_manager_id#81]
-Arguments: hashpartitioning(cast(ss_ticket_number#72 as bigint), cast(ss_item_sk#69 as bigint), 5), ENSURE_REQUIREMENTS, [id=#83]
+Arguments: hashpartitioning(ss_ticket_number#72, ss_item_sk#69, 5), ENSURE_REQUIREMENTS, [id=#83]
 
 (83) Sort [codegen id : 9]
 Input [13]: [s_store_name#53, s_state#55, ca_state#59, c_first_name#65, c_last_name#66, ss_item_sk#69, ss_ticket_number#72, ss_net_paid#73, i_current_price#77, i_size#78, i_color#79, i_units#80, i_manager_id#81]
-Arguments: [cast(ss_ticket_number#72 as bigint) ASC NULLS FIRST, cast(ss_item_sk#69 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [ss_ticket_number#72 ASC NULLS FIRST, ss_item_sk#69 ASC NULLS FIRST], false, 0
 
 (84) Scan parquet default.store_returns
 Output [3]: [sr_item_sk#84, sr_ticket_number#85, sr_returned_date_sk#86]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
-ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
+ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
 
 (85) ColumnarToRow [codegen id : 10]
 Input [3]: [sr_item_sk#84, sr_ticket_number#85, sr_returned_date_sk#86]
@@ -505,7 +505,7 @@ Input [2]: [sr_item_sk#84, sr_ticket_number#85]
 Arguments: [sr_ticket_number#85 ASC NULLS FIRST, sr_item_sk#84 ASC NULLS FIRST], false, 0
 
 (90) SortMergeJoin [codegen id : 12]
-Left keys [2]: [cast(ss_ticket_number#72 as bigint), cast(ss_item_sk#69 as bigint)]
+Left keys [2]: [ss_ticket_number#72, ss_item_sk#69]
 Right keys [2]: [sr_ticket_number#85, sr_item_sk#84]
 Join condition: None
 
