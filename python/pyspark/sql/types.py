@@ -764,26 +764,6 @@ class UserDefinedType(DataType):
         return type(self) == type(other)
 
 
-def _has_udt(dt):
-    '''
-    Test if dt has UDT
-    '''
-    if dt is None and (not isinstance(dt, DataType)):
-        # This is the most hitted cases
-        return False
-
-    if isinstance(dt, UserDefinedType):
-        return True
-    elif isinstance(dt, ArrayType):
-        return _has_udt(dt.elementType)
-    elif isinstance(dt, StructType):
-        return any(_has_udt(field.dataType) for field in dt.fields)
-    elif isinstance(dt, MapType):
-        return _has_udt(dt.keyType) or _has_udt(dt.valueType)
-    else:
-        return False
-
-
 _atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
                  ByteType, ShortType, IntegerType, LongType, DateType, TimestampType, NullType]
 _all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
@@ -1103,6 +1083,24 @@ def _has_nulltype(dt):
         return _has_nulltype(dt.keyType) or _has_nulltype(dt.valueType)
     else:
         return isinstance(dt, NullType)
+
+
+def _has_udt(dt):
+    """ Return whether there is a UserDefinedType in `dt` or not """
+    if dt is None and (not isinstance(dt, DataType)):
+        # This is the most hitted cases
+        return False
+
+    if isinstance(dt, UserDefinedType):
+        return True
+    elif isinstance(dt, ArrayType):
+        return _has_udt(dt.elementType)
+    elif isinstance(dt, StructType):
+        return any(_has_udt(field.dataType) for field in dt.fields)
+    elif isinstance(dt, MapType):
+        return _has_udt(dt.keyType) or _has_udt(dt.valueType)
+    else:
+        return False
 
 
 def _merge_type(a, b, name=None):
