@@ -22,7 +22,7 @@ from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
     DoubleType, BooleanType, MapType, TimestampType, StructType, DataType, \
-    IntegralType, _is_datatype_with_udt
+    IntegralType, _has_udt
 from pyspark.sql.pandas.types import _deserialize_pandas_with_udt
 from pyspark.traceback_utils import SCCallSiteSync
 
@@ -140,7 +140,7 @@ class PandasConversionMixin(object):
                             elif isinstance(dt, MapType):
                                 pdf[name] = \
                                     _convert_map_items_to_dict(pdf[name])
-                            elif _is_datatype_with_udt(dt):
+                            elif _has_udt(dt):
                                 pdf[name] = _deserialize_pandas_with_udt(pdf[name], dt)
                         return pdf
                     else:

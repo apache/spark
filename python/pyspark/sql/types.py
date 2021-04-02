@@ -764,17 +764,22 @@ class UserDefinedType(DataType):
         return type(self) == type(other)
 
 
-def _is_datatype_with_udt(dt):
-    if dt is None:
+def _has_udt(dt):
+    '''
+    Test if dt has UDT
+    '''
+    if dt is None and (not isinstance(dt, DataType)):
+        # This is the most hitted cases
         return False
-    elif isinstance(dt, UserDefinedType):
+
+    if isinstance(dt, UserDefinedType):
         return True
     elif isinstance(dt, ArrayType):
-        # SPARK-34771: TODO elementType is ArrayType/StructType
-        return isinstance(dt.elementType, UserDefinedType)
+        return _has_udt(dt.elementType)
     elif isinstance(dt, StructType):
-        # SPARK-34771: TODO field.dataType is ArrayType/StructType
-        return any(isinstance(field.dataType, UserDefinedType) for field in dt.fields)
+        return any(_has_udt(field.dataType) for field in dt.fields)
+    elif isinstance(dt, MapType):
+        return _has_udt(dt.keyType) or _has_udt(dt.valueType)
     else:
         return False
 
