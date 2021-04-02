@@ -110,7 +110,7 @@ private[sql] object ArrowEvalPythonExec {
    * Erase User-Defined Types and returns the plain Spark StructType instead.
    *
    * UserDefinedType:
-   * - will be erased as dt.sqlType
+   * - will be erased as UserDefinedType.sqlType
    * - recursively rewrite internal ArrayType with `containsNull=true`
    * ArrayType: containsNull will always be true when returned by PyArrow
    * - useArrowContainsNull(true): always mark containsNull as true
