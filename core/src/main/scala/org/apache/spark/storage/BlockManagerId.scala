@@ -85,7 +85,6 @@ class BlockManagerId private (
     port_ = in.readInt()
     val isTopologyInfoAvailable = in.readBoolean()
     topologyInfo_ = if (isTopologyInfoAvailable) Option(in.readUTF()) else None
-    getCachedBlockManagerId(this)
   }
 
   @throws(classOf[IOException])
@@ -132,7 +131,7 @@ private[spark] object BlockManagerId {
   def apply(in: ObjectInput): BlockManagerId = {
     val obj = new BlockManagerId()
     obj.readExternal(in)
-    obj
+    getCachedBlockManagerId(obj)
   }
 
   /**

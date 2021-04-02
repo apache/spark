@@ -53,8 +53,20 @@ private[spark] sealed trait MapStatus {
    * partitionId of the task or taskContext.taskAttemptId is used.
    */
   def mapId: Long
-}
 
+  protected def loadLocation(in: ObjectInput): Location = {
+    val conf = SparkEnv.get.conf
+    conf.get(config.SHUFFLE_LOCATION_PLUGIN_CLASS).map { locClass =>
+      val loc = Utils.loadExtensions(
+        classOf[Location],
+        Seq(locClass),
+        conf
+      ).head
+      loc.readExternal(in)
+      loc
+    }.getOrElse(BlockManagerId(in))
+  }
+}
 
 private[spark] object MapStatus {
 
@@ -148,7 +160,7 @@ private[spark] class CompressedMapStatus(
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    loc = BlockManagerId(in)
+    loc = loadLocation(in)
     val len = in.readInt()
     compressedSizes = new Array[Byte](len)
     in.readFully(compressedSizes)
@@ -217,10 +229,7 @@ private[spark] class HighlyCompressedMapStatus private (
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    // TODO(wuyi): config
-    val location = "org.apache.spark.storage.BlockManagerId"
-    loc = Utils.classForName(location).newInstance().asInstanceOf[Location]
-    loc.readExternal(in)
+    loc = loadLocation(in)
     numNonEmptyBlocks = -1 // SPARK-32436 Scala 2.13 doesn't initialize this during deserialization
     emptyBlocks = new RoaringBitmap()
     emptyBlocks.deserialize(in)

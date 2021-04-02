@@ -1217,6 +1217,14 @@ package object config {
       .stringConf
       .createWithDefault(classOf[LocalDiskShuffleDataIO].getName)
 
+  private[spark] val SHUFFLE_LOCATION_PLUGIN_CLASS =
+    ConfigBuilder("spark.shuffle.sort.location.plugin.class")
+      .doc("Qualified name of the class that used to initiate plugin location instance. " +
+        "If not specified, Spark will use its native location (a.k.a BlockManagerId) by default.")
+      .version("3.2.0")
+      .stringConf
+      .createOptional
+
   private[spark] val SHUFFLE_FILE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.file.buffer")
       .doc("Size of the in-memory buffer for each shuffle file output stream, in KiB unless " +
