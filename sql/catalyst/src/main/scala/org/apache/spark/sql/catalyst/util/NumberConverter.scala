@@ -22,26 +22,6 @@ import org.apache.spark.unsafe.types.UTF8String
 object NumberConverter {
 
   /**
-   * Divide x by m as if x is an unsigned 64-bit integer. Examples:
-   * unsignedLongDiv(-1, 2) == Long.MAX_VALUE unsignedLongDiv(6, 3) == 2
-   * unsignedLongDiv(0, 5) == 0
-   *
-   * @param x is treated as unsigned
-   * @param m is treated as signed
-   */
-  private def unsignedLongDiv(x: Long, m: Int): Long = {
-    if (x >= 0) {
-      x / m
-    } else {
-      // Let uval be the value of the unsigned long with the same bits as x
-      // Two's complement => x = uval - 2*MAX - 2
-      // => uval = x + 2*MAX + 2
-      // Now, use the fact: (a+b)/c = a/c + b/c + (a%c+b%c)/c
-      x / m + 2 * (Long.MaxValue / m) + 2 / m + (x % m + 2 * (Long.MaxValue % m) + 2 % m) / m
-    }
-  }
-
-  /**
    * Decode v into value[].
    *
    * @param v is treated as an unsigned 64-bit integer
@@ -52,7 +32,7 @@ object NumberConverter {
     java.util.Arrays.fill(value, 0.asInstanceOf[Byte])
     var i = value.length - 1
     while (tmpV != 0) {
-      val q = unsignedLongDiv(tmpV, radix)
+      val q = java.lang.Long.divideUnsigned(tmpV, radix)
       value(i) = (tmpV - q * radix).asInstanceOf[Byte]
       tmpV = q
       i -= 1
@@ -69,12 +49,12 @@ object NumberConverter {
    */
   private def encode(radix: Int, fromPos: Int, value: Array[Byte]): Long = {
     var v: Long = 0L
-    val bound = unsignedLongDiv(-1 - radix, radix) // Possible overflow once
+    val bound = java.lang.Long.divideUnsigned(-1 - radix, radix) // Possible overflow once
     var i = fromPos
     while (i < value.length && value(i) >= 0) {
       if (v >= bound) {
         // Check for overflow
-        if (unsignedLongDiv(-1 - value(i), radix) < v) {
+        if (java.lang.Long.divideUnsigned(-1 - value(i), radix) < v) {
           return -1
         }
       }

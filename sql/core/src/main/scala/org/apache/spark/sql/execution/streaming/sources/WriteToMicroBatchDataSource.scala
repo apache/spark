@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
 
@@ -29,8 +29,8 @@ import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
  * to [[WriteToDataSourceV2]] with [[MicroBatchWrite]] before execution.
  */
 case class WriteToMicroBatchDataSource(write: StreamingWrite, query: LogicalPlan)
-  extends LogicalPlan {
-  override def children: Seq[LogicalPlan] = Seq(query)
+  extends UnaryNode {
+  override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
 
   def createPlan(batchId: Long): WriteToDataSourceV2 = {

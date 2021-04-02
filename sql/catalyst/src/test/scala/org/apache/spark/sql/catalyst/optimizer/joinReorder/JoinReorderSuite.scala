@@ -35,15 +35,15 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     val batches =
       Batch("Resolve Hints", Once,
         EliminateResolvedHint) ::
-      Batch("Operator Optimizations", FixedPoint(100),
-        CombineFilters,
-        PushPredicateThroughNonJoin,
-        ReorderJoin,
-        PushPredicateThroughJoin,
-        ColumnPruning,
-        CollapseProject) ::
-      Batch("Join Reorder", Once,
-        CostBasedJoinReorder) :: Nil
+        Batch("Operator Optimizations", FixedPoint(100),
+          CombineFilters,
+          PushPredicateThroughNonJoin,
+          ReorderJoin,
+          PushPredicateThroughJoin,
+          ColumnPruning,
+          CollapseProject) ::
+        Batch("Join Reorder", Once,
+          CostBasedJoinReorder) :: Nil
   }
 
   var originalConfCBOEnabled = false
@@ -127,9 +127,9 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     // so (t1 J t3) J t2 is better (has lower cost, i.e. intermediate result size) than
     // the original order (t1 J t2) J t3.
     val bestPlan =
-      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
-        .select(outputsOf(t1, t2, t3): _*)
+    t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+      .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+      .select(outputsOf(t1, t2, t3): _*)
 
     assertEqualJoinPlans(Optimize, originalPlan, bestPlan)
   }
@@ -138,8 +138,8 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     // The ReorderJoin rule puts the unjoinable item at the end, and then CostBasedJoinReorder
     // reorders other joinable items.
     val originalPlan =
-      t1.join(t2).join(t4).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
-        (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+    t1.join(t2).join(t4).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+      (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
 
     val bestPlan =
       t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
@@ -206,10 +206,10 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     // cost(t1 J t2) = 1000 * 20 / 5 = 4000, cost(t4 J t3) = 2000 * 100 / 100 = 2000,
     // cost = cost(t1 J t2) + cost(t4 J t3) = 6000 << 5000000.
     val bestPlan =
-      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
-        .join(t4.join(t3, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100"))),
-          Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
-        .select(outputsOf(t1, t4, t2, t3): _*)
+    t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+      .join(t4.join(t3, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100"))),
+        Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
+      .select(outputsOf(t1, t4, t2, t3): _*)
 
     assertEqualJoinPlans(Optimize, originalPlan, bestPlan)
   }
@@ -235,11 +235,11 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     val tab3 = LocalRelation('a.int, 'b.int)
     val original =
       tab1.join(tab2, Cross)
-          .join(tab3, Inner, Some('a === 'x && 'b === 'i))
+        .join(tab3, Inner, Some('a === 'x && 'b === 'i))
     val expected =
       tab1.join(tab3, Inner, Some('a === 'x))
-          .join(tab2, Cross, Some('b === 'i))
-          .select(outputsOf(tab1, tab2, tab3): _*)
+        .join(tab2, Cross, Some('b === 'i))
+        .select(outputsOf(tab1, tab2, tab3): _*)
 
     assertEqualJoinPlans(Optimize, original, expected)
   }
@@ -256,9 +256,9 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     //   / \
     //  t1  t2
     val bottomJoins =
-      t1.join(t2).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
-        (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-        .select(nameToAttr("t1.v-1-10"))
+    t1.join(t2).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+      (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+      .select(nameToAttr("t1.v-1-10"))
 
     val originalPlan = bottomJoins
       .union(t4.select(nameToAttr("t4.v-1-10")))
@@ -276,10 +276,10 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     //   / \
     //  t1  t3
     val bestBottomPlan =
-      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-        .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
-        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
-        .select(nameToAttr("t1.v-1-10"))
+    t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+      .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
+      .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+      .select(nameToAttr("t1.v-1-10"))
 
     val bestPlan = bestBottomPlan
       .union(t4.select(nameToAttr("t4.v-1-10")))
@@ -326,10 +326,10 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
         .hint("broadcast").join(t4)
 
     val bestPlan =
-    t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-      .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
-      .select(outputsOf(t1, t2, t3): _*)
-      .hint("broadcast").join(t4)
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(outputsOf(t1, t2, t3): _*)
+        .hint("broadcast").join(t4)
 
     assertEqualJoinPlans(Optimize, originalPlan, bestPlan)
 
@@ -377,6 +377,15 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
 
     assert(plan1.betterThan(plan2, conf))
     assert(!plan2.betterThan(plan1, conf))
+  }
+
+  test("SPARK-34354: join reorder with self-join") {
+    val plan = t2.join(t1, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+      .select(nameToAttr("t1.v-1-10"))
+      .join(t2, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t2.k-1-5")))
+
+    // this can fail before the fix
+    Optimize.execute(plan.analyze)
   }
 
   test("SPARK-32995: Optimized plan should not get reordered to one with the same cost") {

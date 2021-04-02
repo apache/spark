@@ -48,7 +48,8 @@ abstract class BenchmarkBase {
       val jdkString = if (version > 8) s"-jdk$version" else ""
       val resultFileName =
         s"${this.getClass.getSimpleName.replace("$", "")}$jdkString$suffix-results.txt"
-      val file = new File(s"benchmarks/$resultFileName")
+      val prefix = args.headOption.map(_ + "/").getOrElse("")
+      val file = new File(s"${prefix}benchmarks/$resultFileName")
       if (!file.exists()) {
         file.createNewFile()
       }
