@@ -848,7 +848,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           } catch {
             case e: SparkException =>
               throw new MetadataFetchFailedException(shuffleId, -1,
-                "Unable to deserialize broadcasted map statuses: " + shuffleId, e.getCause)
+                s"Unable to deserialize broadcasted map statuses for shuffle $shuffleId: " +
+                  e.getCause)
           }
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
