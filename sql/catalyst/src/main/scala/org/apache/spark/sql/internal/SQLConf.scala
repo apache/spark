@@ -839,6 +839,13 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
+  val ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED =
+    buildConf("spark.sql.orc.enableNestedColumnVectorizedReader")
+      .doc("Enables vectorized orc decoding for nested column.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .version("1.4.0")
@@ -3338,6 +3345,9 @@ class SQLConf extends Serializable with Logging {
   def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
 
   def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+
+  def orcVectorizedReaderNestedColumnEnabled: Boolean =
+    getConf(ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
