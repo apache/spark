@@ -3639,6 +3639,18 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
     }
   }
+
+  /**
+   * A rule that calls `TransformationAfterAnalysis.transform` for a plan that needs to be
+   * transformed after all the analysis rules are run.
+   */
+  object TransformAfterAnalysis extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case t: TransformationAfterAnalysis if t.resolved =>
+        checkAnalysis(t)
+        t.transform
+    }
+  }
 }
 
 /**
@@ -3700,18 +3712,6 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       other transformExpressionsDown {
         case Alias(child, _) => child
       }
-  }
-}
-
-/**
- * A rule that calls `TransformationAfterAnalysis.transform` for a plan that needs to be transformed
- * after all the analysis rules are run.
- */
-object TransformAfterAnalysis extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    // Transform only if the plan is resolved so that unresolved plan will
-    // fail in checkAnalysis.
-    case t: TransformationAfterAnalysis if t.resolved => t.transform
   }
 }
 
