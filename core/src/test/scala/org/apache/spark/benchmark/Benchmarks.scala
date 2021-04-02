@@ -76,6 +76,12 @@ object Benchmarks {
   def main(args: Array[String]): Unit = {
     val isFailFast = sys.env.get(
       "SPARK_BENCHMARK_FAILFAST").map(_.toLowerCase(Locale.ROOT).trim.toBoolean).getOrElse(true)
+    val numOfSplits = sys.env.get(
+      "SPARK_BENCHMARK_NUM_SPLITS").map(_.toLowerCase(Locale.ROOT).trim.toInt).getOrElse(1)
+    val currentSplit = sys.env.get(
+      "SPARK_BENCHMARK_CUR_SPLIT").map(_.toLowerCase(Locale.ROOT).trim.toInt - 1).getOrElse(0)
+    var numBenchmark = 0
+
     var isBenchmarkFound = false
     val benchmarkClasses = ClassPath.from(
       Thread.currentThread.getContextClassLoader
@@ -96,32 +102,36 @@ object Benchmarks {
           Try(runBenchmark).isSuccess && // Does this has a main method?
           !Modifier.isAbstract(clazz.getModifiers) // Is this a regular class?
       ) {
-        isBenchmarkFound = true
-        val targetDirOrProjDir =
-          new File(clazz.getProtectionDomain.getCodeSource.getLocation.toURI)
-          .getParentFile.getParentFile
+        numBenchmark += 1
+        if (numBenchmark % numOfSplits == currentSplit) {
+          isBenchmarkFound = true
 
-        // The root path to be referred in each benchmark.
-        currentProjectRoot = Some {
-          if (targetDirOrProjDir.getName == "target") {
-            // SBT build
-            targetDirOrProjDir.getParentFile.getCanonicalPath
-          } else {
-            // Maven build
-            targetDirOrProjDir.getCanonicalPath
+          val targetDirOrProjDir =
+            new File(clazz.getProtectionDomain.getCodeSource.getLocation.toURI)
+              .getParentFile.getParentFile
+
+          // The root path to be referred in each benchmark.
+          currentProjectRoot = Some {
+            if (targetDirOrProjDir.getName == "target") {
+              // SBT build
+              targetDirOrProjDir.getParentFile.getCanonicalPath
+            } else {
+              // Maven build
+              targetDirOrProjDir.getCanonicalPath
+            }
           }
-        }
 
-        // Force GC to minimize the side effect.
-        System.gc()
-        try {
-          runBenchmark.invoke(null, args.tail.toArray)
-        } catch {
-          case e: Throwable if !isFailFast =>
-            // scalastyle:off println
-            println(s"${clazz.getName} failed with the exception below:")
-            // scalastyle:on println
-            e.printStackTrace()
+          // Force GC to minimize the side effect.
+          System.gc()
+          try {
+            runBenchmark.invoke(null, args.tail.toArray)
+          } catch {
+            case e: Throwable if !isFailFast =>
+              // scalastyle:off println
+              println(s"${clazz.getName} failed with the exception below:")
+              // scalastyle:on println
+              e.printStackTrace()
+          }
         }
       }
     }

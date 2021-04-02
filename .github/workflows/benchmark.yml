@@ -15,14 +15,38 @@ on:
         description: 'Failfast: true or false'
         required: true
         default: 'true'
+      num-splits:
+        description: 'Number of job splits'
+        required: true
+        default: '1'
 
 jobs:
+  matrix-gen:
+    name: Generate matrix for job splits
+    runs-on: ubuntu-20.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    env:
+      SPARK_BENCHMARK_NUM_SPLITS: ${{ github.event.inputs.num-splits }}
+    steps:
+    - name: Generate matrix
+      id: set-matrix
+      run: echo "::set-output name=matrix::["`seq -s, 1 $SPARK_BENCHMARK_NUM_SPLITS`"]"
+
   benchmark:
-    name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }})"
+    name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
+    needs: matrix-gen
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        split: ${{fromJSON(needs.matrix-gen.outputs.matrix)}}
     env:
       SPARK_BENCHMARK_FAILFAST: ${{ github.event.inputs.failfast }}
+      SPARK_BENCHMARK_NUM_SPLITS: ${{ github.event.inputs.num-splits }}
+      SPARK_BENCHMARK_CUR_SPLIT: ${{ matrix.split }}
+      SPARK_GENERATE_BENCHMARK_FILES: 1
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -58,7 +82,7 @@ jobs:
         cp conf/log4j.properties.template conf/log4j.properties
         sed -i 's/log4j.rootCategory=INFO, console/log4j.rootCategory=WARN, console/g' conf/log4j.properties
         # In benchmark, we use local as master so set driver memory only. Note that GitHub Actions has 7 GB memory limit.
-        SPARK_GENERATE_BENCHMARK_FILES=1 bin/spark-submit \
+        bin/spark-submit \
           --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \
           --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`" \
           "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
