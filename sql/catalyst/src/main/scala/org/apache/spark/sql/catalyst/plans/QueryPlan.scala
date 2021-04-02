@@ -209,12 +209,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           val attributeRewrites = AttributeMap(attrMappingForCurrentPlan.toSeq)
           // Using attrMapping from the children plans to rewrite their parent node.
           // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
-          newPlan = newPlan.transformExpressions {
-            case a: AttributeReference =>
-              updateAttr(a, attributeRewrites)
-            case pe: PlanExpression[PlanType] =>
-              pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, attributeRewrites))
-          }
+          newPlan = newPlan.rewriteAttrs(attributeRewrites)
         }
 
         val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {
@@ -252,6 +247,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     rewrite(this)._1
   }
 
+  def rewriteAttrs(attrMap: AttributeMap[Attribute]): PlanType = {
+    transformExpressions {
+      case a: AttributeReference =>
+        updateAttr(a, attrMap)
+      case pe: PlanExpression[PlanType] =>
+        pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, attrMap))
+    }.asInstanceOf[PlanType]
+  }
+
   private def updateAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
     val exprId = attrMap.getOrElse(attr, attr).exprId
     attr.withExprId(exprId)
@@ -261,7 +265,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * The outer plan may have old references and the function below updates the
    * outer references to refer to the new attributes.
    */
-  private def updateOuterReferencesInSubquery(
+  protected def updateOuterReferencesInSubquery(
       plan: PlanType,
       attrMap: AttributeMap[Attribute]): PlanType = {
     plan.transformDown { case currentFragment =>
