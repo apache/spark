@@ -28,7 +28,7 @@ in the Spark SQL. e.g. in order to run a custom mapper script `map_script` and a
 reducer script `reduce_script` the user can issue the following command which uses the TRANSFORM
 clause to embed the mapper and the reducer scripts.
 
-In default format, columns will be transformed to STRING and delimited by tabs before feeding
+In default format, columns will be transformed to `STRING` and delimited by tabs before feeding
 to the user script, Similarly, all `NULL` values will be converted to the literal string `\N` in order to
 differentiate `NULL` values from empty strings. The standard output of the user script will be treated as
 TAB-separated STRING columns, any cell containing only `\N` will be re-interpreted as a `NULL`, and then the
@@ -50,11 +50,11 @@ SELECT [ TRANSFORM ( namedExpressionSeq ) | MAP namedExpressionSeq | REDUCE name
 rowFormat
     : ROW FORMAT SERDE serde_class [ WITH SERDEPROPERTIES serde_props ]
     | ROW FORMAT DELIMITED
-         [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
-         [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
-         [ MAP KEYS TERMINATED BY keysTerminatedBy ]
-         [ LINES TERMINATED BY linesSeparatedBy ]
-         [ NULL DEFINED AS nullDefinedAs ]  
+          [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
+          [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
+          [ MAP KEYS TERMINATED BY keysTerminatedBy ]
+          [ LINES TERMINATED BY linesSeparatedBy ]
+          [ NULL DEFINED AS nullDefinedAs ]  
 
 inRowFormat=rowFormat
 outRowFormat=rowFormat
@@ -123,13 +123,11 @@ namedExpressionSeq = named_expression [ , ... ]
 
 * **recordReader_class**
 
-    Specifies a fully-qualified class name of a custom RecordReader. 
-    A default value is `org.apache.hadoop.hive.ql.exec.TextRecordReader`
+    Specifies a fully-qualified class name of a custom RecordReader. A default value is `org.apache.hadoop.hive.ql.exec.TextRecordReader`.
 
 * **recordWriter_class**
 
-    Specifies a fully-qualified class name of a custom RecordWriter. 
-    A default value is `org.apache.hadoop.hive.ql.exec.TextRecordWriter`.
+    Specifies a fully-qualified class name of a custom RecordWriter. A default value is `org.apache.hadoop.hive.ql.exec.TextRecordWriter`.
 
 * **script**
 
@@ -158,7 +156,7 @@ INSERT INTO person VALUES
     (94511, 'Aryan B.', 18),
     (94511, 'Lalit B.', NULL);
 
--- With specified out put without data type
+-- With specified output without data type
 SELECT TRANSFORM(zip_code, name, age)
    USING 'cat' AS (a, b, c)
 FROM person
@@ -166,13 +164,13 @@ WHERE zip_code > 94511;
 +-------+---------+-----+
 |    a  |        b|    c|
 +-------+---------+-----+
-|  94588|   Anil K|	  27|
-|  94588|   John V|	NULL|
-|  94588|  Zen Hui|	  50|
+|  94588|   Anil K|   27|
+|  94588|   John V| NULL|
+|  94588|  Zen Hui|   50|
 |  94588|   Dan Li|   18|
 +-------+---------+-----+
 
--- With specified out put without data type
+-- With specified output with data type
 SELECT TRANSFORM(zip_code, name, age)
    USING 'cat' AS (a STRING, b STRING, c STRING)
 FROM person
@@ -180,13 +178,13 @@ WHERE zip_code > 94511;
 +-------+---------+-----+
 |    a  |        b|    c|
 +-------+---------+-----+
-|  94588|   Anil K|	  27|
-|  94588|   John V|	NULL|
-|  94588|  Zen Hui|	  50|
+|  94588|   Anil K|   27|
+|  94588|   John V| NULL|
+|  94588|  Zen Hui|   50|
 |  94588|   Dan Li|   18|
 +-------+---------+-----+
 
--- ROW FORMAT DELIMITED
+-- Using ROW FORMAT DELIMITED
 SELECT TRANSFORM(name, age)
     ROW FORMAT DELIMITED
     FIELDS TERMINATED BY ','
@@ -210,7 +208,7 @@ FROM person;
 |  Lalit B.,null|
 +---------------+
 
--- Hive Serde
+-- Using Hive Serde
 SELECT TRANSFORM(zip_code, name, age)
     ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
     WITH SERDEPROPERTIES (
@@ -226,9 +224,9 @@ WHERE zip_code > 94511;
 +-------+---------+-----+
 |    a  |        b|    c|
 +-------+---------+-----+
-|  94588|   Anil K|	  27|
-|  94588|   John V|	NULL|
-|  94588|  Zen Hui|	  50|
+|  94588|   Anil K|   27|
+|  94588|   John V| NULL|
+|  94588|  Zen Hui|   50|
 |  94588|   Dan Li|   18|
 +-------+---------+-----+
 
@@ -237,17 +235,17 @@ SELECT TRANSFORM(zip_code, name, age)
     USING 'cat'
 FROM person
 WHERE zip_code > 94500;
-+-------+-----------------+
-|    key|            value|
-+-------+-----------------+
-|  94588|	  Anil K	27|
-|  94588|	  John V	\N|
-|  94511|	Aryan B.	18|
-|  94511|	 David K	42|
-|  94588|	 Zen Hui	50|
-|  94588|	  Dan Li	18|
-|  94511|	Lalit B.	\N|
-+-------+-----------------+
++-------+---------------------+
+|    key|                value|
++-------+---------------------+
+|  94588|	  Anil K    27|
+|  94588|	  John V    \N|
+|  94511|	Aryan B.    18|
+|  94511|	 David K    42|
+|  94588|	 Zen Hui    50|
+|  94588|	  Dan Li    18|
+|  94511|	Lalit B.    \N|
++-------+---------------------+
 ```
 
 ### Related Statements
