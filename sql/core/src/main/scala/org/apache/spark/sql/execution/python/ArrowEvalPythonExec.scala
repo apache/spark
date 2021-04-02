@@ -112,6 +112,7 @@ private[sql] object ArrowEvalPythonExec {
    * UserDefinedType:
    * - will be erased as UserDefinedType.sqlType
    * - recursively rewrite internal ArrayType with `containsNull=true`
+   *   why: see pyspark.sql.pandas.types.to_arrow_type
    * ArrayType: containsNull will always be true when returned by PyArrow
    * - useArrowContainsNull(true): always mark containsNull as true
    * - useArrowContainsNull(false): reserve the original nullability
