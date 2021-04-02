@@ -21,7 +21,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
 from pyspark.sql.types import DataType, UserDefinedType, StructType, \
-    _is_datatype_with_udt
+    _has_udt
 from pyspark.sql.pandas.types import to_arrow_type, _serialize_pandas_with_udt
 
 
@@ -221,7 +221,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         def preprocess_series(s):
             if not isinstance(s, (list, tuple)):
                 return (s, None)
-            elif _is_datatype_with_udt(s[1]):
+            elif _has_udt(s[1]):
                 return (_serialize_pandas_with_udt(s[0], s[1]), s[1])
             else:
                 return s
