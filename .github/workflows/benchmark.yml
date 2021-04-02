@@ -94,6 +94,6 @@ jobs:
     - name: Upload benchmark results
       uses: actions/upload-artifact@v2
       with:
-        name: benchmark-results-${{ github.event.inputs.jdk }}
+        name: benchmark-results-${{ github.event.inputs.jdk }}-${{ matrix.split }}
         path: benchmark-results-${{ github.event.inputs.jdk }}.tar
 

@@ -121,6 +121,9 @@ object Benchmarks {
             }
           }
 
+          // scalastyle:off println
+          println(s"Running ${clazz.getName}:")
+          // scalastyle:on println
           // Force GC to minimize the side effect.
           System.gc()
           try {
