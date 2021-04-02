@@ -94,9 +94,8 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     val intervalFields = Seq("YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND")
     val settings = Map(
       "timestamp" -> datetimeFields,
-      "date" -> datetimeFields)
-      // TODO(SPARK-34938): Recover the benchmark of interval case
-      // "interval" -> intervalFields)
+      "date" -> datetimeFields,
+      "interval" -> intervalFields)
 
     for {(dataType, fields) <- settings; func <- Seq("extract", "date_part")} {
 
