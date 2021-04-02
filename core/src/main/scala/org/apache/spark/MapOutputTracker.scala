@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -843,7 +843,14 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         if (fetchedStatuses == null) {
           logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
           val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
-          fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes, conf)
+          try {
+            fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes, conf)
+          } catch {
+            case e: IOException =>
+              logError("Exception encountered during deserializing map statuses: ", e)
+              throw new MetadataFetchFailedException(
+                shuffleId, -1, "Unable to deserialize map statuses: " + shuffleId, e)
+          }
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
         }

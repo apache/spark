@@ -68,5 +68,6 @@ private[spark] class FetchFailedException(
 private[spark] class MetadataFetchFailedException(
     shuffleId: Int,
     reduceId: Int,
-    message: String)
-  extends FetchFailedException(null, shuffleId, -1L, -1, reduceId, message)
+    message: String,
+    cause: Throwable = null)
+  extends FetchFailedException(null, shuffleId, -1L, -1, reduceId, message, cause)
