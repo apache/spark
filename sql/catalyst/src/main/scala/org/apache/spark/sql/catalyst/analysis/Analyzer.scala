@@ -3709,7 +3709,9 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
  */
 object TransformAfterAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case t: TransformationAfterAnalysis => t.transform
+    // Transform only if the plan is resolved so that unresolved plan will
+    // fail in checkAnalysis.
+    case t: TransformationAfterAnalysis if t.resolved => t.transform
   }
 }
 
