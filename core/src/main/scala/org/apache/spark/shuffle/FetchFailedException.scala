@@ -18,7 +18,7 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark.{FetchFailed, TaskContext, TaskFailedReason}
-import org.apache.spark.scheduler.Location
+import org.apache.spark.shuffle.api.Location
 import org.apache.spark.util.Utils
 
 /**

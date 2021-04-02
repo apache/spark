@@ -33,8 +33,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
-import org.apache.spark.scheduler.Location
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
+import org.apache.spark.shuffle.api.Location
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
 /**

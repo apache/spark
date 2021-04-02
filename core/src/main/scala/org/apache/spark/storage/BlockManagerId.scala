@@ -23,7 +23,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.scheduler.Location
+import org.apache.spark.shuffle.api.Location
 import org.apache.spark.storage.BlockManagerId.getCachedBlockManagerId
 import org.apache.spark.util.Utils
 

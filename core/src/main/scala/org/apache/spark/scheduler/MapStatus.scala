@@ -25,10 +25,9 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
+import org.apache.spark.shuffle.api.Location
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
-
-trait Location extends Externalizable
 
 /**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
