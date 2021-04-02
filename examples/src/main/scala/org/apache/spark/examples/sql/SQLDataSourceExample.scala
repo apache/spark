@@ -249,11 +249,6 @@ object SQLDataSourceExample {
   }
 
   private def runCsvDatasetExample(spark: SparkSession): Unit = {
-    // $example on:csv_dataset$
-    // Primitive types (Int, String, etc) and Product types (case classes) encoders are
-    // supported by importing this when creating a Dataset.
-    import spark.implicits._
-
     // A CSV dataset is pointed to by path.
     // The path can be either a single CSV file or a directory of CSV files
     val path = "examples/src/main/resources/people.csv"
