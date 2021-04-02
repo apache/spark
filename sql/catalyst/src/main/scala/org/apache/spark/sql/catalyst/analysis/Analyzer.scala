@@ -304,7 +304,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases)
+      CleanupAliases),
+    Batch("TransformAfterAnalysis", Once,
+      TransformAfterAnalysis)
   )
 
   /**
@@ -3786,6 +3788,16 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       other transformExpressionsDown {
         case Alias(child, _) => child
       }
+  }
+}
+
+/**
+ * A rule that calls `TransformationAfterAnalysis.transform` for a plan that needs to be transformed
+ * after all the analysis rules are run.
+ */
+object TransformAfterAnalysis extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case t: TransformationAfterAnalysis => t.transform
   }
 }
 

@@ -906,7 +906,14 @@ case class CacheTableAsSelect(
     plan: LogicalPlan,
     originalText: String,
     isLazy: Boolean,
-    options: Map[String, String]) extends Command
+    options: Map[String, String],
+    isPlanAnalyzed: Boolean = false) extends Command with TransformationAfterAnalysis {
+  // `plan` needs to be analyzed, but shouldn't be optimized. Thus, remove `plan` from
+  // children once the analysis phase is finished.
+  override def children: Seq[LogicalPlan] = if (!isPlanAnalyzed) plan :: Nil else Nil
+
+  override def transform: LogicalPlan = copy(isPlanAnalyzed = true)
+}
 
 /**
  * The logical plan of the UNCACHE TABLE command.

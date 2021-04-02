@@ -482,7 +482,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateViewStatement(
       tbl, userSpecifiedColumns, comment, properties,
-      originalText, child, allowExisting, replace, viewType) if child.resolved =>
+      originalText, child, allowExisting, replace, viewType) =>
 
       val v1TableName = if (viewType != PersistedView) {
         // temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
@@ -491,15 +491,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         parseV1Table(tbl, "CREATE VIEW")
       }
       CreateViewCommand(
-        v1TableName.asTableIdentifier,
-        userSpecifiedColumns,
-        comment,
-        properties,
-        originalText,
-        child,
-        allowExisting,
-        replace,
-        viewType)
+        name = v1TableName.asTableIdentifier,
+        userSpecifiedColumns = userSpecifiedColumns,
+        comment = comment,
+        properties = properties,
+        originalText = originalText,
+        plan = child,
+        allowExisting = allowExisting,
+        replace = replace,
+        viewType = viewType,
+        isPlanAnalyzed = false)
 
     case ShowViews(resolved: ResolvedNamespace, pattern, output) =>
       resolved match {

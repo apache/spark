@@ -101,10 +101,11 @@ case class CacheTableAsSelectExec(
         comment = None,
         properties = Map.empty,
         originalText = Some(originalText),
-        child = query,
+        plan = query,
         allowExisting = false,
         replace = false,
-        viewType = LocalTempView
+        viewType = LocalTempView,
+        isPlanAnalyzed = true
       )
     )
     dataFrameForCachedPlan.logicalPlan

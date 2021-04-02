@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Pe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, TransformationAfterAnalysis, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -62,15 +62,22 @@ case class CreateViewCommand(
     comment: Option[String],
     properties: Map[String, String],
     originalText: Option[String],
-    child: LogicalPlan,
+    plan: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewType: ViewType)
-  extends RunnableCommand {
+    viewType: ViewType,
+    isPlanAnalyzed: Boolean)
+  extends RunnableCommand with TransformationAfterAnalysis {
 
   import ViewHelper._
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(child)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(plan)
+
+  // `plan` needs to be analyzed, but shouldn't be optimized. Thus, remove `plan` from
+  // children once the analysis phase is finished.
+  override def children: Seq[LogicalPlan] = if (!isPlanAnalyzed) plan :: Nil else Nil
+
+  override def transform: LogicalPlan = copy(isPlanAnalyzed = true)
 
   if (viewType == PersistedView) {
     require(originalText.isDefined, "'originalText' must be provided to create permanent view")
@@ -96,10 +103,8 @@ case class CreateViewCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // If the plan cannot be analyzed, throw an exception and don't proceed.
-    val qe = sparkSession.sessionState.executePlan(child)
-    qe.assertAnalyzed()
-    val analyzedPlan = qe.analyzed
+    assert(isPlanAnalyzed)
+    val analyzedPlan = plan
 
     if (userSpecifiedColumns.nonEmpty &&
         userSpecifiedColumns.length != analyzedPlan.output.length) {
