@@ -11,12 +11,18 @@ on:
         description: 'JDK version: 8 or 11'
         required: true
         default: '8'
+      failfast:
+        description: 'Failfast: true or false'
+        required: true
+        default: 'true'
 
 jobs:
   benchmark:
     name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }})"
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
+    env:
+      SPARK_BENCHMARK_FAILFAST: ${{ github.event.inputs.failfast }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -59,6 +65,7 @@ jobs:
           "${{ github.event.inputs.class }}"
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
+        echo "Preparing the benchmark results:"
         tar -cvf benchmark-results-${{ github.event.inputs.jdk }}.tar `git diff --name-only`
     - name: Upload benchmark results
       uses: actions/upload-artifact@v2

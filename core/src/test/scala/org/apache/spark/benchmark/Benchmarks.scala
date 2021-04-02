@@ -19,6 +19,7 @@ package org.apache.spark.benchmark
 import java.io.File
 import java.lang.reflect.Modifier
 import java.nio.file.{FileSystems, Paths}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -44,7 +45,7 @@ import com.google.common.reflect.ClassPath
  *      generate the files.
  * }}}
  *
- * In Mac, you can use a command as below to find all the test jars.
+ * You can use a command as below to find all the test jars.
  * Make sure to do not select duplicated jars created by different versions of builds or tools.
  * {{{
  *   find . -name '*-SNAPSHOT-tests.jar' | paste -sd ',' -
@@ -73,6 +74,8 @@ object Benchmarks {
   var currentProjectRoot: Option[String] = None
 
   def main(args: Array[String]): Unit = {
+    val isFailFast = sys.env.get(
+      "SPARK_BENCHMARK_FAILFAST").map(_.toLowerCase(Locale.ROOT).trim.toBoolean).getOrElse(true)
     var isBenchmarkFound = false
     val benchmarkClasses = ClassPath.from(
       Thread.currentThread.getContextClassLoader
@@ -111,7 +114,15 @@ object Benchmarks {
 
         // Force GC to minimize the side effect.
         System.gc()
-        runBenchmark.invoke(null, args.tail.toArray)
+        try {
+          runBenchmark.invoke(null, args.tail.toArray)
+        } catch {
+          case e: Throwable if !isFailFast =>
+            // scalastyle:off println
+            println(s"${clazz.getName} failed with the exception below:")
+            // scalastyle:on println
+            e.printStackTrace()
+        }
       }
     }
 
