@@ -21,7 +21,7 @@ mvn clean package -DskipTests -Premote-shuffle-service-server
 
 This command creates `remote-shuffle-service-server.jar` file under `target` directory.
 
-### Build Client Side Jar File
+### Build Spark Distribution with Client Side Jar File
 
 Follow [Building Spark](https://spark.apache.org/docs/latest/building-spark.html) instructions,
 with extra `-Premote-shuffle-service` to generate remote shuffle service client side jar file.
@@ -33,7 +33,8 @@ Following is one command example to use `dev/make-distribution.sh` under Spark r
 ```
 
 This command creates `remote-shuffle-service_xxx.jar` file for remote shuffle service client 
-under `jars` directory in the generated Spark distribution.
+under `jars` directory in the generated Spark distribution. Now you could use this Spark 
+distribution to run your Spark application with remote shuffle service.
 
 ## How to Run Spark Application With Remote Shuffle Service in Kubernetes
 
