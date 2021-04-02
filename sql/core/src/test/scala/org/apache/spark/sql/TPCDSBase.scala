@@ -48,7 +48,7 @@ trait TPCDSBase extends SharedSparkSession {
     "q3", "q7", "q10", "q19", "q27", "q34", "q42", "q43", "q46", "q52", "q53", "q55", "q59",
     "q63", "q65", "q68", "q73", "q79", "q89", "q98", "ss_max")
 
-  private val tableColumns = Map(
+  protected val tableColumns: Map[String, String] = Map(
     "store_sales" ->
       """
         |`ss_sold_date_sk` INT,
@@ -558,7 +558,7 @@ trait TPCDSBase extends SharedSparkSession {
     "web_returns" -> Seq("`wr_returned_date_sk`")
   )
 
-  private def partitionedByClause(tableName: String) = {
+  protected def partitionedByClause(tableName: String): String = {
     tablePartitionColumns.get(tableName) match {
       case Some(cols) if cols.nonEmpty => s"PARTITIONED BY (${cols.mkString(", ")})"
       case _ => ""

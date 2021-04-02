@@ -28,7 +28,8 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  * {{{
  *   To run this benchmark:
  *   1. without sbt:
- *      bin/spark-submit --class <this class> <spark sql test jar>
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
  *   2. with sbt:
  *      build/sbt "sql/test:runMain <this class>"
  *   3. generate result:

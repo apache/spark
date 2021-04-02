@@ -104,24 +104,35 @@ private[spark] class AppStatusStore(
     listener.map(_.activeStages()).getOrElse(Nil)
   }
 
-  def stageList(statuses: JList[v1.StageStatus]): Seq[v1.StageData] = {
+  def stageList(
+    statuses: JList[v1.StageStatus],
+    details: Boolean = false,
+    withSummaries: Boolean = false,
+    unsortedQuantiles: Array[Double] = Array.empty,
+    taskStatus: JList[v1.TaskStatus] = List().asJava): Seq[v1.StageData] = {
+    val quantiles = unsortedQuantiles.sorted
     val it = store.view(classOf[StageDataWrapper]).reverse().asScala.map(_.info)
-    if (statuses != null && !statuses.isEmpty()) {
+    val ret = if (statuses != null && !statuses.isEmpty()) {
       it.filter { s => statuses.contains(s.status) }.toSeq
     } else {
       it.toSeq
+    }
+    ret.map { s =>
+      newStageData(s, withDetail = details, taskStatus = taskStatus,
+        withSummaries = withSummaries, unsortedQuantiles = quantiles)
     }
   }
 
   def stageData(
     stageId: Int,
     details: Boolean = false,
+    taskStatus: JList[v1.TaskStatus] = List().asJava,
     withSummaries: Boolean = false,
     unsortedQuantiles: Array[Double] = Array.empty[Double]): Seq[v1.StageData] = {
     store.view(classOf[StageDataWrapper]).index("stageId").first(stageId).last(stageId)
       .asScala.map { s =>
-        newStageData(s.info, withDetail = details, withSummaries = withSummaries,
-          unsortedQuantiles = unsortedQuantiles)
+        newStageData(s.info, withDetail = details, taskStatus = taskStatus,
+          withSummaries = withSummaries, unsortedQuantiles = unsortedQuantiles)
       }.toSeq
   }
 
@@ -146,11 +157,12 @@ private[spark] class AppStatusStore(
   def stageAttempt(
       stageId: Int, stageAttemptId: Int,
       details: Boolean = false,
+      taskStatus: JList[v1.TaskStatus] = List().asJava,
       withSummaries: Boolean = false,
       unsortedQuantiles: Array[Double] = Array.empty[Double]): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
     val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
-    val stage = newStageData(stageDataWrapper.info, withDetail = details,
+    val stage = newStageData(stageDataWrapper.info, withDetail = details, taskStatus = taskStatus,
       withSummaries = withSummaries, unsortedQuantiles = unsortedQuantiles)
     (stage, stageDataWrapper.jobIds.toSeq)
   }
@@ -470,6 +482,7 @@ private[spark] class AppStatusStore(
   def newStageData(
     stage: v1.StageData,
     withDetail: Boolean = false,
+    taskStatus: JList[v1.TaskStatus] = List().asJava,
     withSummaries: Boolean = false,
     unsortedQuantiles: Array[Double] = Array.empty[Double]): v1.StageData = {
     if (!withDetail && !withSummaries) {
@@ -477,9 +490,10 @@ private[spark] class AppStatusStore(
     } else {
       val quantiles = unsortedQuantiles.sorted
       val tasks: Option[Map[Long, v1.TaskData]] = if (withDetail) {
-        val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
-          .map { t => (t.taskId, t) }
-          .toMap
+        val tasks =
+          taskList(stage.stageId, stage.attemptId, 0, Int.MaxValue, None, false, taskStatus)
+            .map { t => (t.taskId, t) }
+            .toMap
         Some(tasks)
       } else {
         None

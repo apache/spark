@@ -108,11 +108,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   /**
-   * Given an estimated filtering ratio we assume the partition pruning has benefit if
+   * Given an estimated filtering ratio(and extra filter ratio if filtering side can't
+   * build broadcast by join type) we assume the partition pruning has benefit if
    * the size in bytes of the partitioned plan after filtering is greater than the size
    * in bytes of the plan on the other side of the join. We estimate the filtering ratio
    * using column statistics if they are available, otherwise we use the config value of
-   * `spark.sql.optimizer.joinFilterRatio`.
+   * `spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio`.
    */
   private def pruningHasBenefit(
       partExpr: Expression,
@@ -159,8 +160,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       // We can't reuse the broadcast because the join type doesn't support broadcast,
       // and doing DPP means running an extra query that may have significant overhead.
       // We need to make sure the pruning side is very big so that DPP is still worthy.
-      canBroadcastBySize(otherPlan, conf) &&
-        estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
+      estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
     }
   }
 
@@ -246,13 +246,15 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var partScan = getPartitionTableScan(l, left)
             if (partScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right)) {
+                hasPartitionPruningFilter(right) &&
+                (canBroadcastBySize(right, conf) || hintToBroadcastRight(hint))) {
               newLeft = insertPredicate(l, newLeft, r, right, rightKeys, partScan.get,
                 canBuildBroadcastRight(joinType))
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) ) {
+                  hasPartitionPruningFilter(left) &&
+                  (canBroadcastBySize(left, conf) || hintToBroadcastLeft(hint))) {
                 newRight = insertPredicate(r, newRight, l, left, leftKeys, partScan.get,
                   canBuildBroadcastLeft(joinType))
               }
