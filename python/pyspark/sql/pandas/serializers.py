@@ -170,7 +170,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             try:
                 mask = s.isnull()
                 if padt is not None and pa.types.is_list(padt):
-                    array = pa.StructArray.from_pandas(s, mask=mask, type=padt, safe=self._safecheck)
+                    array = pa.StructArray.from_pandas(s, mask=mask, type=padt,
+                                                       safe=self._safecheck)
                 else:
                     array = pa.Array.from_pandas(s, mask=mask, type=padt, safe=self._safecheck)
             except ValueError as e:
@@ -237,7 +238,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         for s, t in series:
             dt = t if isinstance(t, DataType) else None
             padt = to_arrow_type(t) if isinstance(t, DataType) else t
-            if padt is not None and pa.types.is_struct(padt) and not isinstance(dt, UserDefinedType):
+            if padt is not None and pa.types.is_struct(padt) and \
+                    not isinstance(dt, UserDefinedType):
                 if not isinstance(s, pd.DataFrame):
                     raise ValueError("A field of type StructType expects a pandas.DataFrame, "
                                      "but got: %s" % str(type(s)))
