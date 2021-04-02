@@ -83,7 +83,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(e.getMessage.contains("" +
         "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
       assert(e.getSQLState.equals("22023"))
-      assert(e.getErrorCode === 1001)
+      assert(e.getErrorCode === 200001)
     }
   }
 

@@ -21,18 +21,23 @@ import java.sql.SQLException
 
 import org.apache.hive.service.cli.HiveSQLException
 
-import org.apache.spark.{SparkException, SparkUpgradeException}
+import org.apache.spark.{SparkException, SparkIllegalStateException, SparkUpgradeException}
+import org.apache.spark.sql.AnalysisException
 
 private[hive] object SQLExceptionUtils {
 
-  def toHiveSQLException(reason: String, cause: Throwable): HiveSQLException = {
+  def toHiveSQLException(reason: String, cause: Throwable): SQLException = {
     cause match {
       case e: HiveSQLException =>
         e
       case e: SparkException =>
-        new HiveSQLException(reason, "undefined", 0, e)
+        new HiveSQLException(reason, e.errorCode.sqlState, e.errorCode.id, e)
       case e: SparkUpgradeException =>
-        new HiveSQLException(reason, "undefined", 1, e)
+        new HiveSQLException(reason, e.errorCode.sqlState, e.errorCode.id, e)
+      case e: SparkIllegalStateException =>
+        new HiveSQLException(reason, e.errorCode.sqlState, e.errorCode.id, e)
+      case e: AnalysisException =>
+        new HiveSQLException(reason, e.errorCode.sqlState, e.errorCode.id, e)
       case e: SQLException =>
         new HiveSQLException(reason, e.getSQLState, e.getErrorCode, e)
       case e =>

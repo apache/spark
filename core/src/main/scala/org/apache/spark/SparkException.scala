@@ -17,10 +17,20 @@
 
 package org.apache.spark
 
-class SparkException(message: String, cause: Throwable)
+import java.io.{FileNotFoundException, IOException}
+import java.nio.file.FileAlreadyExistsException
+import java.sql.SQLFeatureNotSupportedException
+import java.time.DateTimeException
+import java.util.ConcurrentModificationException
+
+import org.apache.spark.errors.{DEFAULT, ErrorCode, INTERNAL_ERROR}
+
+class SparkException(message: String, cause: Throwable, val errorCode: ErrorCode = DEFAULT)
   extends Exception(message, cause) {
 
   def this(message: String) = this(message, null)
+
+  def this(cause: Throwable) = this(cause.toString, cause)
 }
 
 /**
@@ -48,5 +58,128 @@ private[spark] case class ExecutorDeadException(message: String)
  * Exception thrown when Spark returns different result after upgrading to a new version.
  */
 private[spark] class SparkUpgradeException(version: String, message: String, cause: Throwable)
-  extends RuntimeException("You may get a different result due to the upgrading of Spark" +
-    s" $version: $message", cause)
+  extends SparkRuntimeException("You may get a different result due to the upgrading of Spark" +
+    s" $version: $message", cause, INTERNAL_ERROR)
+
+
+private[spark] class SparkRuntimeException(
+    val reason: String,
+    val cause: Throwable,
+    val errorCode: ErrorCode = DEFAULT) extends RuntimeException(reason, cause) {
+  def this() = this("unknown reason", null)
+  def this(reason: String) = this(reason, null)
+  def this(cause: Throwable) = this(cause.toString, cause)
+}
+
+private[spark] class SparkIllegalArgumentException(
+    message: String,
+    cause: Throwable,
+    val errorCode: ErrorCode = DEFAULT) extends IllegalArgumentException(message, cause) {
+
+  def this(message: String) = this(message, null)
+
+  def this(cause: Throwable) = this(cause.toString, cause)
+}
+
+private[spark] class SparkIllegalStateException(
+    message: String,
+    val errorCode: ErrorCode = DEFAULT) extends IllegalStateException(message) {
+}
+
+private[spark] class SparkUnsupportedOperationException(
+    message: String, cause: Throwable, val errorCode: ErrorCode = DEFAULT)
+  extends UnsupportedOperationException(message, cause) {
+
+  def this(message: String) = this(message, null)
+
+  def this(cause: Throwable) = this(cause.toString, cause)
+}
+
+private[spark] class SparkNullPointerException(message: String, val errorCode: ErrorCode = DEFAULT)
+  extends NullPointerException(message) {
+}
+
+private[spark] class SparkArrayIndexOutOfBoundsException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends ArrayIndexOutOfBoundsException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkIndexOutOfBoundsException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends IndexOutOfBoundsException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkDateTimeException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends DateTimeException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkConcurrentModificationException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends ConcurrentModificationException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkSecurityException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends SecurityException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkFileNotFoundException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends FileNotFoundException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkSQLFeatureNotSupportedException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends SQLFeatureNotSupportedException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkIOException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends IOException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkFileAlreadyExistsException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends FileAlreadyExistsException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkArithmeticException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends ArithmeticException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkCloneNotSupportedException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends CloneNotSupportedException(message) {
+
+  def this(message: String) = this(message, null)
+}
+
+private[spark] class SparkNumberFormatException(
+    message: String, val errorCode: ErrorCode = DEFAULT)
+  extends NumberFormatException(message) {
+
+  def this(message: String) = this(message, null)
+}
+

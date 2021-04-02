@@ -14,16 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.errors
 
-package org.apache.spark
+import org.apache.spark.errors.ErrorCode
 
-import org.apache.spark.annotation.DeveloperApi
-
-/**
- * :: DeveloperApi ::
- * Exception thrown when a task is explicitly killed (i.e., task failure is expected).
- */
-@DeveloperApi
-class TaskKilledException(override val reason: String) extends SparkRuntimeException {
-  def this() = this("unknown reason")
+object catalystErrors {
+  case object INVALID_PARAMETER_VALUE extends ErrorCode(200001, "22023")
+  case object DIVISION_BY_ZERO extends ErrorCode(200002, "22012")
+  case object INVALID_DATETIME_FORMAT extends ErrorCode(200003, "22007")
+  case object INVALID_INTERVAL_FORMAT extends ErrorCode(200004, "22006")
+  case object NULL_VALUE_NOT_ALLOWED extends ErrorCode(200005, "22004")
+  case object NUMERIC_VALUE_OUT_OF_RANGE extends ErrorCode(200006, "22003")
+  case object SUBSTRING_ERROR extends ErrorCode(200007, "22011")
+  case object TRIM_ERROR extends ErrorCode(200008, "22027")
 }

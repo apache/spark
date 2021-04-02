@@ -14,16 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.errors
 
-package org.apache.spark
+import org.apache.spark.errors.ErrorCode
 
-import org.apache.spark.annotation.DeveloperApi
-
-/**
- * :: DeveloperApi ::
- * Exception thrown when a task is explicitly killed (i.e., task failure is expected).
- */
-@DeveloperApi
-class TaskKilledException(override val reason: String) extends SparkRuntimeException {
-  def this() = this("unknown reason")
+object sqlCoreErrors {
+  case object OUT_OF_MEMORY extends ErrorCode(300001, "HY001")
+  case object UNKNOWN_ERROR extends ErrorCode(300002, "HY000")
+  case object NO_SUCH_TABLE extends ErrorCode(300003, "42S02")
 }

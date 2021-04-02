@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.errors.{DEFAULT, ErrorCode}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
@@ -40,9 +41,9 @@ package object analysis {
     /** Fails the analysis at the point where a specific tree node was parsed. */
     def failAnalysis(
         msg: String, cause: Throwable = null,
-        sqlState: String = null, errorCode: Int = 0): Nothing = {
+        errorCode: ErrorCode = DEFAULT): Nothing = {
       throw new AnalysisException(
-        msg, t.origin.line, t.origin.startPosition, sqlState = sqlState, errorCode = errorCode,
+        msg, t.origin.line, t.origin.startPosition, errorCode = errorCode,
         cause = Option(cause))
     }
   }

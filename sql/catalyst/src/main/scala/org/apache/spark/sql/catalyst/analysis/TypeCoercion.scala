@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.catalystErrors.INVALID_PARAMETER_VALUE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -774,7 +775,8 @@ abstract class TypeCoercionBase {
           AnsiCast(r, IntegerType).eval().asInstanceOf[Int]
         } catch {
           case e: NumberFormatException => throw new AnalysisException(
-            "The second argument of 'date_add' function needs to be an integer.", cause = Some(e))
+            "The second argument of 'date_add' function needs to be an integer.",
+            errorCode = INVALID_PARAMETER_VALUE, cause = Some(e))
         }
         DateAdd(l, Literal(days))
       case DateSub(l, r) if r.dataType == StringType && r.foldable =>
@@ -783,7 +785,7 @@ abstract class TypeCoercionBase {
         } catch {
           case e: NumberFormatException => throw new AnalysisException(
             "The second argument of 'date_sub' function needs to be an integer.",
-            sqlState = "22023", errorCode = 1001, cause = Some(e))
+            errorCode = INVALID_PARAMETER_VALUE, cause = Some(e))
         }
         DateSub(l, Literal(days))
     }
