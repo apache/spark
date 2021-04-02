@@ -830,7 +830,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 }
 
 trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
-  override final def children: Seq[T] = Nil
+  override def children: Seq[T] = Nil
 }
 
 trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
