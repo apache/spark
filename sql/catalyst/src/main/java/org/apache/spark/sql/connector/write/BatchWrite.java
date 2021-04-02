@@ -24,24 +24,16 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * The writing procedure is:
  * <ol>
- *   <li>
- *     Create a writer factory by {@link #createBatchWriterFactory(PhysicalWriteInfo)}, serialize
- *     and send it to all the partitions of the input data(RDD).
- *   </li>
- *   <li>
- *     For each partition, create the data writer, and write the data of the partition with this
+ *   <li>Create a writer factory by {@link #createBatchWriterFactory(PhysicalWriteInfo)}, serialize
+ *     and send it to all the partitions of the input data(RDD).</li>
+ *   <li>For each partition, create the data writer, and write the data of the partition with this
  *     writer. If all the data are written successfully, call {@link DataWriter#commit()}. If
- *     exception happens during the writing, call {@link DataWriter#abort()}.
- *   </li>
- *   <li>
- *     If all writers are successfully committed, call {@link #commit(WriterCommitMessage[])}. If
+ *     exception happens during the writing, call {@link DataWriter#abort()}.</li>
+ *   <li>If all writers are successfully committed, call {@link #commit(WriterCommitMessage[])}. If
  *     some writers are aborted, or the job failed with an unknown reason, call
- *     {@link #abort(WriterCommitMessage[])}.
- *   </li>
+ *     {@link #abort(WriterCommitMessage[])}.</li>
  * </ol>
  * <p>
- *
- *   </ol>
  * While Spark will retry failed writing tasks, Spark won't retry failed writing jobs. Users should
  * do it manually in their Spark applications if they want to retry.
  * <p>
