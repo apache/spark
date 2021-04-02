@@ -67,7 +67,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       context.sparkContext.setJobDescription(substitutorCommand)
       val logicalPlan = context.sql(command).logicalPlan
       val execution = context.sessionState.executePlan(logicalPlan)
-      logicalPlan match {
+      hiveResponse = logicalPlan match {
         case r: LocalRelation if r.fromCommand =>
           hiveResultString(execution.executedPlan)
         case _ =>
