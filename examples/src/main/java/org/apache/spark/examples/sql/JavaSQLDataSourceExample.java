@@ -327,6 +327,8 @@ public class JavaSQLDataSourceExample {
 
   private static void runCsvDatasetExample(SparkSession spark) {
     // $example on:csv_dataset$
+    // A CSV dataset is pointed to by path.
+    // The path can be either a single CSV file or a directory of CSV files
     String path = "examples/src/main/resources/people.csv";
 
     Dataset<Row> df = spark.read().csv(path);

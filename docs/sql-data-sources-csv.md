@@ -19,36 +19,22 @@ license: |
   limitations under the License.
 ---
 
+Spark SQL provides `spark.read().csv("file_name")` to read a file or directory of files in CSV format into Spark DataFrame, and `dataframe.write().csv("path")` to write to a CSV file. Function `option()` can be used to customize the behavior of reading or writing, such as controlling behavior of the header, delimiter character, character set, and so on. 
+
+<!--TODO: add `option()` document reference--> 
+
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
-
-Spark SQL provides `spark.read.csv("file_name")` to read a CSV file into Spark DataFrame and `dataframe.write.csv("path")` to save or write to the CSV file. Function `option()` provides customized behavior during reading csv files. The customized behavior includes but not limit to configuring header, delimiter, charset. The detailed usage about `option()` can be found in [spark-csv](https://github.com/databricks/spark-csv), notice that some contents might be outdated in spark-csv.
-
-`spark.read.csv()` also can be used to read all files in a directory by passing a directory path. Please notice that Spark will not check the file name extension and all files will be read into dataframe.
-
 {% include_example csv_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-
 </div>
 
 <div data-lang="java"  markdown="1">
-
-Spark SQL provides `spark.read().csv("file_name")` to read a CSV file into Spark DataFrame and `dataframe.write().csv("path")` to save or write to the CSV file. Function `option()` provides customized behavior during reading csv files. The customized behavior includes but not limit to configuring header, delimiter, charset. The detailed usage about `option()` can be found in [spark-csv](https://github.com/databricks/spark-csv), notice that some contents might be outdated in spark-csv.
-
-`spark.read().csv()` also can be used to read all files in a directory by passing a directory path. Please notice that Spark will not check the file name extension and all files will be read into dataframe.
-
 {% include_example csv_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-
 </div>
 
 <div data-lang="python"  markdown="1">
-
-PySpark provides `spark.read.csv("file_name")` to read a CSV file into Spark DataFrame and `dataframe.write.csv("path")` to save or write to the CSV file. Function `option()` provides customized behavior during reading csv files. The customized behavior includes but not limit to configuring header, delimiter, charset. The detailed usage about `option()` can be found in [spark-csv](https://github.com/databricks/spark-csv), notice that some contents might be outdated in spark-csv.
-
-`spark.read.csv()` also can be used to read all files in a directory by passing a directory path. Please notice that Spark will not check the file name extension and all files will be read into dataframe.
-
 {% include_example csv_dataset python/sql/datasource.py %}
-
 </div>
 
 </div>
