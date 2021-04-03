@@ -382,11 +382,36 @@ public class VectorizedColumnReader {
                   resultColumn.putBoolean(rowId + i, column.getBoolean(offset + i));
                 }
                 break;
-              case INT32:// TODO handle column types
+              case INT32:
                 resultColumn.putInts(rowId, validValueNum, column.getInts(offset, validValueNum), 0);
+                if (column.dataType() == DataTypes.IntegerType || canReadAsIntDecimal(column.dataType())) {
+                  resultColumn.putInts(rowId, validValueNum, column.getInts(offset, validValueNum), 0);
+                } else if (column.dataType() == DataTypes.LongType) {
+                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
+                } else if (column.dataType() == DataTypes.ByteType) {
+                  resultColumn.putBytes(rowId, num - offset, column.getBytes(offset, validValueNum), 0);
+                } else if (column.dataType() == DataTypes.ShortType) {
+                  resultColumn.putShorts(rowId, num - offset, column.getShorts(offset, validValueNum), 0);
+                } else if (column.dataType() == DataTypes.DateType ) {
+                  resultColumn.putInts(rowId, validValueNum, column.getInts(offset, validValueNum), 0);
+                } else {
+                  throw constructConvertNotSupportedException(descriptor, column);
+                }
                 break;
-              case INT64:// TODO handle column types
-                resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
+              case INT64:
+                if (column.dataType() == DataTypes.LongType || canReadAsLongDecimal(column.dataType())) {
+                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
+                } else if (originalType == OriginalType.UINT_64) {
+                  for (int i = 0; i < num - offset; i++) {
+                    resultColumn.putByteArray(rowId + i, column.getBinary(offset + i));
+                  }
+                } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
+                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
+                } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
+                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
+                } else {
+                  throw constructConvertNotSupportedException(descriptor, column);
+                }
                 break;
               case FLOAT:
                 resultColumn.putFloats(rowId, validValueNum, column.getFloats(offset, validValueNum), 0);
