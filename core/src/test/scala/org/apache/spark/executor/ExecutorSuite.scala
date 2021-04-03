@@ -271,7 +271,7 @@ class ExecutorSuite extends SparkFunSuite
   }
 
   private def withMockHeartbeatReceiverRef(executor: Executor)
-                                          (func: RpcEndpointRef => Unit): Unit = {
+      (func: RpcEndpointRef => Unit): Unit = {
     val executorClass = classOf[Executor]
     val mockReceiverRef = mock[RpcEndpointRef]
     val receiverRef = executorClass.getDeclaredField("heartbeatReceiverRef")
@@ -282,7 +282,7 @@ class ExecutorSuite extends SparkFunSuite
   }
 
   private def withHeartbeatExecutor(confs: (String, String)*)
-                                   (f: (Executor, ArrayBuffer[Heartbeat]) => Unit): Unit = {
+      (f: (Executor, ArrayBuffer[Heartbeat]) => Unit): Unit = {
     val conf = new SparkConf
     confs.foreach { case (k, v) => conf.set(k, v) }
     val serializer = new JavaSerializer(conf)
