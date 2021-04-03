@@ -152,8 +152,9 @@ private[spark] class MetricsSystem private (
     } else { defaultName }
   }
 
-  def getSourcesByName(sourceName: String): Seq[Source] =
+  def getSourcesByName(sourceName: String): Seq[Source] = sources.synchronized {
     sources.filter(_.sourceName == sourceName).toSeq
+  }
 
   def registerSource(source: Source): Unit = {
     sources.synchronized {
