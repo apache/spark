@@ -970,7 +970,7 @@ private[spark] object MapOutputTracker extends Logging {
           deserializeObject(bcast.value, 1, bcast.value.length - 1).asInstanceOf[Array[MapStatus]]
         } catch {
           case e: IOException =>
-            logError("Exception encountered during deserializing broadcasted map statuses: ", e)
+            logWarning("Exception encountered during deserializing broadcasted map statuses: ", e)
             throw new SparkException("Unable to deserialize broadcasted map statuses", e)
         }
       case _ => throw new IllegalArgumentException("Unexpected byte tag = " + bytes(0))
