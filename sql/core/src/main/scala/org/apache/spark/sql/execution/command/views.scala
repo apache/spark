@@ -72,6 +72,8 @@ case class CreateViewCommand(
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
+  override def childrenToAnalyze: Seq[LogicalPlan] = child :: Nil
+
   if (viewType == PersistedView) {
     require(originalText.isDefined, "'originalText' must be provided to create permanent view")
   }
@@ -96,10 +98,7 @@ case class CreateViewCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // If the plan cannot be analyzed, throw an exception and don't proceed.
-    val qe = sparkSession.sessionState.executePlan(child)
-    qe.assertAnalyzed()
-    val analyzedPlan = qe.analyzed
+    val analyzedPlan = child
 
     if (userSpecifiedColumns.nonEmpty &&
         userSpecifiedColumns.length != analyzedPlan.output.length) {

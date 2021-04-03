@@ -866,7 +866,9 @@ case class CacheTableAsSelect(
     plan: LogicalPlan,
     originalText: String,
     isLazy: Boolean,
-    options: Map[String, String]) extends LeafCommand
+    options: Map[String, String]) extends CommandWithAnalyzedChildren {
+  override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
+}
 
 /**
  * The logical plan of the UNCACHE TABLE command.

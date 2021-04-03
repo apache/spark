@@ -37,3 +37,9 @@ trait Command extends LogicalPlan {
 trait LeafCommand extends Command with LeafLike[LogicalPlan]
 trait UnaryCommand extends Command with UnaryLike[LogicalPlan]
 trait BinaryCommand extends Command with BinaryLike[LogicalPlan]
+
+trait CommandWithAnalyzedChildren extends Command {
+  def childrenToAnalyze: Seq[LogicalPlan] = Nil
+
+  override final def children: Seq[LogicalPlan] = childrenToAnalyze.filter(!_.analyzed)
+}
