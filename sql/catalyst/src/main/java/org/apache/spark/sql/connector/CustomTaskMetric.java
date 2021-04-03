@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.read.PartitionReader;
  * at the executor side. During query execution, Spark will collect the task metrics per partition
  * by {@link PartitionReader} and update internal metrics based on collected metric values.
  * For streaming query, Spark will collect and combine metrics for a final result per micro batch.
- *
+ * <p>
  * The metrics will be gathered during query execution back to the driver and then combined. How
  * the task metrics are combined is defined by corresponding {@link CustomMetric} with same metric
  * name. The final result will be shown up in the data source scan operator in Spark UI.
