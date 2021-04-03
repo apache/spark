@@ -111,14 +111,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     tags -= tag
   }
 
-  @transient private var cachedChildren: Seq[BaseType] = null
+  private var cachedChildren: Seq[BaseType] = null
 
   /**
    * Returns a Seq of the children of this node.
    */
   def children: Seq[BaseType]
 
-  @transient private var cachedChildrenSet: Set[TreeNode[_]] = null
+  private var cachedChildrenSet: Set[TreeNode[_]] = null
 
   private def containsChild: Set[TreeNode[_]] = {
     if (updateChildrenIfChanged() || cachedChildrenSet == null) {
