@@ -125,7 +125,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
           case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, isStreaming) =>
             val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
             val partitionData = fsRelation.location.listFiles(normalizedFilters, Nil)
-            LocalRelation(partAttrs, partitionData.map(_.values), isStreaming)
+            LocalRelation(partAttrs, partitionData.map(_.values), isStreaming = isStreaming)
 
           case relation: HiveTableRelation =>
             val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
