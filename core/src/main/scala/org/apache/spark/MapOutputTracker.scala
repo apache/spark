@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -118,7 +118,7 @@ private class ShuffleStatus(
    * to allow for it to be explicitly destroyed later on when the ShuffleMapStage is
    * garbage-collected.
    */
-  private[this] var cachedSerializedBroadcast: Broadcast[Array[Byte]] = _
+  private[spark] var cachedSerializedBroadcast: Broadcast[Array[Byte]] = _
 
   /**
    * Similar to cachedSerializedMapStatus and cachedSerializedBroadcast, but for MergeStatus.
@@ -1146,7 +1146,14 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         if (fetchedMapStatuses == null) {
           logInfo("Doing the map fetch; tracker endpoint = " + trackerEndpoint)
           val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
-          fetchedMapStatuses = MapOutputTracker.deserializeOutputStatuses(fetchedBytes, conf)
+          try {
+            fetchedMapStatuses = MapOutputTracker.deserializeOutputStatuses(fetchedBytes, conf)
+          } catch {
+            case e: SparkException =>
+              throw new MetadataFetchFailedException(shuffleId, -1,
+                s"Unable to deserialize broadcasted map statuses for shuffle $shuffleId: " +
+                  e.getCause)
+          }
           logInfo("Got the map output locations")
           mapStatuses.put(shuffleId, fetchedMapStatuses)
         }
@@ -1154,7 +1161,14 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         if (fetchMergeResult && fetchedMergeStatues == null) {
           logInfo("Doing the merge fetch; tracker endpoint = " + trackerEndpoint)
           val fetchedBytes = askTracker[Array[Byte]](GetMergeResultStatuses(shuffleId))
-          fetchedMergeStatues = MapOutputTracker.deserializeOutputStatuses(fetchedBytes, conf)
+          try {
+            fetchedMergeStatues = MapOutputTracker.deserializeOutputStatuses(fetchedBytes, conf)
+          } catch {
+            case e: SparkException =>
+              throw new MetadataFetchFailedException(shuffleId, -1,
+                s"Unable to deserialize broadcasted merge statuses for shuffle $shuffleId: " +
+                  e.getCause)
+          }
           logInfo("Got the merge output locations")
           mergeStatuses.put(shuffleId, fetchedMergeStatues)
         }
@@ -1269,13 +1283,21 @@ private[spark] object MapOutputTracker extends Logging {
       case DIRECT =>
         deserializeObject(bytes, 1, bytes.length - 1).asInstanceOf[Array[T]]
       case BROADCAST =>
-        // deserialize the Broadcast, pull .value array out of it, and then deserialize that
-        val bcast = deserializeObject(bytes, 1, bytes.length - 1).
-          asInstanceOf[Broadcast[Array[Byte]]]
-        logInfo("Broadcast outputstatuses size = " + bytes.length +
-          ", actual size = " + bcast.value.length)
-        // Important - ignore the DIRECT tag ! Start from offset 1
-        deserializeObject(bcast.value, 1, bcast.value.length - 1).asInstanceOf[Array[T]]
+        try {
+          // deserialize the Broadcast, pull .value array out of it, and then deserialize that
+          val bcast = deserializeObject(bytes, 1, bytes.length - 1).
+            asInstanceOf[Broadcast[Array[Byte]]]
+          logInfo("Broadcast outputstatuses size = " + bytes.length +
+            ", actual size = " + bcast.value.length)
+          // Important - ignore the DIRECT tag ! Start from offset 1
+          deserializeObject(bcast.value, 1, bcast.value.length - 1).asInstanceOf[Array[T]]
+        } catch {
+          case e: IOException =>
+            logWarning("Exception encountered during deserializing broadcasted" +
+              " output statuses: ", e)
+            throw new SparkException("Unable to deserialize broadcasted" +
+              " output statuses", e)
+        }
       case _ => throw new IllegalArgumentException("Unexpected byte tag = " + bytes(0))
     }
   }
