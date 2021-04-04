@@ -775,7 +775,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // Assumption is the aggregate function ignores nulls. This is true for all current
                 // AggregateFunction's with the exception of First and Last in their default mode
                 // (which we handle) and possibly some Hive UDAF's.
-                case First(expr, _) =>
+                case First(expr, _, _, _) =>
                   First(ifExpr(expr), true)
                 case Last(expr, _) =>
                   Last(ifExpr(expr), true)

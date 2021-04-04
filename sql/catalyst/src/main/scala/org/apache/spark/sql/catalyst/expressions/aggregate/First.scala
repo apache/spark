@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckSuccess
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types._
@@ -51,8 +53,13 @@ import org.apache.spark.sql.types._
   """,
   group = "agg_funcs",
   since = "2.0.0")
-case class First(child: Expression, ignoreNulls: Boolean)
-  extends DeclarativeAggregate with ExpectsInputTypes with UnaryLike[Expression] {
+case class First(
+    child: Expression,
+    ignoreNulls: Boolean,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[FirstLast.State] with ExpectsInputTypes
+    with UnaryLike[Expression]{
 
   def this(child: Expression) = this(child, false)
 
@@ -80,47 +87,62 @@ case class First(child: Expression, ignoreNulls: Boolean)
     }
   }
 
-  private lazy val first = AttributeReference("first", child.dataType)()
+  override def createAggregationBuffer(): FirstLast.State = {
+    FirstLast.State(element = null, valueSet = false)
+  }
 
-  private lazy val valueSet = AttributeReference("valueSet", BooleanType)()
-
-  override lazy val aggBufferAttributes: Seq[AttributeReference] = first :: valueSet :: Nil
-
-  override lazy val initialValues: Seq[Literal] = Seq(
-    /* first = */ Literal.create(null, child.dataType),
-    /* valueSet = */ Literal.create(false, BooleanType)
-  )
-
-  override lazy val updateExpressions: Seq[Expression] = {
+  override def update(buffer: FirstLast.State, input: InternalRow): FirstLast.State = {
+    lazy val value = child.eval(input.copy())
     if (ignoreNulls) {
-      Seq(
-        /* first = */ If(valueSet || child.isNull, first, child),
-        /* valueSet = */ valueSet || child.isNotNull
-      )
+      if (!buffer.valueSet && value != null) {
+        buffer.element = value
+        buffer.valueSet = true
+      }
     } else {
-      Seq(
-        /* first = */ If(valueSet, first, child),
-        /* valueSet = */ Literal.create(true, BooleanType)
-      )
+      if (!buffer.valueSet) {
+        buffer.element = value
+        buffer.valueSet = true
+      }
+    }
+    buffer
+  }
+
+  override def merge(buffer: FirstLast.State, input: FirstLast.State): FirstLast.State = {
+    if (!buffer.valueSet) {
+      input
+    } else {
+      buffer
     }
   }
 
-  override lazy val mergeExpressions: Seq[Expression] = {
-    // For first, we can just check if valueSet.left is set to true. If it is set
-    // to true, we use first.right. If not, we use first.right (even if valueSet.right is
-    // false, we are safe to do so because first.right will be null in this case).
-    Seq(
-      /* first = */ If(valueSet.left, first.left, first.right),
-      /* valueSet = */ valueSet.left || valueSet.right
-    )
-  }
-
-  override lazy val evaluateExpression: AttributeReference = first
+  override def eval(buffer: FirstLast.State): Any = buffer.element
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
+
+  override def serialize(buffer: FirstLast.State): Array[Byte] = {
+    val byteStream = new ByteArrayOutputStream()
+    val dataStream = new ObjectOutputStream(byteStream)
+    dataStream.writeObject(buffer)
+    byteStream.toByteArray
+  }
+
+  override def deserialize(storageFormat: Array[Byte]): FirstLast.State = {
+    val byteStream = new ByteArrayInputStream(storageFormat)
+    val dataStream = new ObjectInputStream(byteStream)
+    dataStream.readObject().asInstanceOf[FirstLast.State]
+  }
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 }
 
 object FirstLast {
+
+  case class State(var element: Any, var valueSet: Boolean)
+
   def validateIgnoreNullExpr(exp: Expression, funcName: String): Boolean = exp match {
     case Literal(b: Boolean, BooleanType) => b
     case _ => throw new AnalysisException(
