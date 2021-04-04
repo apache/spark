@@ -585,7 +585,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       val err = intercept[SparkException] {
         MapOutputTracker.deserializeOutputStatuses(fetchedBytes, conf)
       }
-      assert(err.getMessage.contains("Unable to deserialize broadcasted map statuses"))
+      assert(err.getMessage.contains("Unable to deserialize broadcasted output statuses"))
     }
   }
 }
