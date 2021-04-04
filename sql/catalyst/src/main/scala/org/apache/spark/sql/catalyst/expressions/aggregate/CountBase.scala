@@ -71,5 +71,3 @@ abstract class CountBase(children: Seq[Expression]) extends DeclarativeAggregate
     }
   }
 }
-
-
