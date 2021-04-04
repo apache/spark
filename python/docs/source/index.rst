@@ -42,7 +42,7 @@ SQL query engine.
 
 Running on top of Spark, the streaming feature in Apache Spark enables powerful
 interactive and analytical applications across both streaming and historical data,
-while inheriting Spark’s ease of use and fault tolerance characteristics.
+while inheriting Spark's ease of use and fault tolerance characteristics.
 
 **MLlib**
 
