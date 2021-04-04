@@ -285,6 +285,9 @@ jobs:
   lint:
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
     container:
       image: dongjoon/apache-spark-github-action-image:20201025
     steps:
@@ -359,8 +362,6 @@ jobs:
     - name: Run documentation build
       run: |
         cd docs
-        export LC_ALL=C.UTF-8
-        export LANG=C.UTF-8
         jekyll build
 
   java-11:
