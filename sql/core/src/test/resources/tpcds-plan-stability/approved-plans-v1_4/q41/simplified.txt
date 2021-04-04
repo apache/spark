@@ -23,7 +23,7 @@ TakeOrderedAndProject [i_product_name]
                                   WholeStageCodegen (1)
                                     HashAggregate [i_manufact] [count,count]
                                       Project [i_manufact]
-                                        Filter [i_category,i_color,i_units,i_size,i_manufact]
+                                        Filter [i_manufact,i_category,i_color,i_units,i_size]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.item [i_category,i_manufact,i_size,i_color,i_units]

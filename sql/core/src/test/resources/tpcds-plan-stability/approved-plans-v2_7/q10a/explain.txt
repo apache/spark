@@ -74,7 +74,7 @@ Input [2]: [ss_customer_sk#4, ss_sold_date_sk#5]
 Output [3]: [d_date_sk#7, d_year#8, d_moy#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2002), GreaterThanOrEqual(d_moy,4), LessThanOrEqual(d_moy,7), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk), EqualTo(d_year,2002), GreaterThanOrEqual(d_moy,4), LessThanOrEqual(d_moy,7)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (7) ColumnarToRow [codegen id : 1]
@@ -82,7 +82,7 @@ Input [3]: [d_date_sk#7, d_year#8, d_moy#9]
 
 (8) Filter [codegen id : 1]
 Input [3]: [d_date_sk#7, d_year#8, d_moy#9]
-Condition : (((((isnotnull(d_year#8) AND isnotnull(d_moy#9)) AND (d_year#8 = 2002)) AND (d_moy#9 >= 4)) AND (d_moy#9 <= 7)) AND isnotnull(d_date_sk#7))
+Condition : (((((isnotnull(d_year#8) AND isnotnull(d_moy#9)) AND isnotnull(d_date_sk#7)) AND (d_year#8 = 2002)) AND (d_moy#9 >= 4)) AND (d_moy#9 <= 7))
 
 (9) Project [codegen id : 1]
 Output [1]: [d_date_sk#7]

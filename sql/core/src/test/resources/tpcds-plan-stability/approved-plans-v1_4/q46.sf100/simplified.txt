@@ -62,7 +62,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,ca_city,bought_city,ss_ticket_nu
                                                       BroadcastExchange #6
                                                         WholeStageCodegen (7)
                                                           Project [d_date_sk]
-                                                            Filter [d_dow,d_year,d_date_sk]
+                                                            Filter [d_year,d_dow,d_date_sk]
                                                               ColumnarToRow
                                                                 InputAdapter
                                                                   Scan parquet default.date_dim [d_date_sk,d_year,d_dow]

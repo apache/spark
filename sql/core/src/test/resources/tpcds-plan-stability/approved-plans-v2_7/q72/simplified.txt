@@ -62,7 +62,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                         BroadcastExchange #7
                                                           WholeStageCodegen (4)
                                                             Project [cd_demo_sk]
-                                                              Filter [cd_marital_status,cd_demo_sk]
+                                                              Filter [cd_demo_sk,cd_marital_status]
                                                                 ColumnarToRow
                                                                   InputAdapter
                                                                     Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status]
@@ -70,7 +70,7 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                     BroadcastExchange #8
                                                       WholeStageCodegen (5)
                                                         Project [hd_demo_sk]
-                                                          Filter [hd_buy_potential,hd_demo_sk]
+                                                          Filter [hd_demo_sk,hd_buy_potential]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.household_demographics [hd_demo_sk,hd_buy_potential]

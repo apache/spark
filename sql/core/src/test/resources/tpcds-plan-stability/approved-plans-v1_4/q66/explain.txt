@@ -102,7 +102,7 @@ Input [14]: [ws_sold_time_sk#1, ws_ship_mode_sk#2, ws_warehouse_sk#3, ws_quantit
 Output [3]: [d_date_sk#17, d_year#18, d_moy#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_date_sk), EqualTo(d_year,2001)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (11) ColumnarToRow [codegen id : 2]
@@ -110,7 +110,7 @@ Input [3]: [d_date_sk#17, d_year#18, d_moy#19]
 
 (12) Filter [codegen id : 2]
 Input [3]: [d_date_sk#17, d_year#18, d_moy#19]
-Condition : ((isnotnull(d_year#18) AND (d_year#18 = 2001)) AND isnotnull(d_date_sk#17))
+Condition : ((isnotnull(d_year#18) AND isnotnull(d_date_sk#17)) AND (d_year#18 = 2001))
 
 (13) BroadcastExchange
 Input [3]: [d_date_sk#17, d_year#18, d_moy#19]
@@ -129,7 +129,7 @@ Input [15]: [ws_sold_time_sk#1, ws_ship_mode_sk#2, ws_quantity#4, ws_ext_sales_p
 Output [2]: [t_time_sk#21, t_time#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
-PushedFilters: [IsNotNull(t_time), GreaterThanOrEqual(t_time,30838), LessThanOrEqual(t_time,59638), IsNotNull(t_time_sk)]
+PushedFilters: [IsNotNull(t_time), IsNotNull(t_time_sk), GreaterThanOrEqual(t_time,30838), LessThanOrEqual(t_time,59638)]
 ReadSchema: struct<t_time_sk:int,t_time:int>
 
 (17) ColumnarToRow [codegen id : 3]
@@ -137,7 +137,7 @@ Input [2]: [t_time_sk#21, t_time#22]
 
 (18) Filter [codegen id : 3]
 Input [2]: [t_time_sk#21, t_time#22]
-Condition : (((isnotnull(t_time#22) AND (t_time#22 >= 30838)) AND (t_time#22 <= 59638)) AND isnotnull(t_time_sk#21))
+Condition : (((isnotnull(t_time#22) AND isnotnull(t_time_sk#21)) AND (t_time#22 >= 30838)) AND (t_time#22 <= 59638))
 
 (19) Project [codegen id : 3]
 Output [1]: [t_time_sk#21]

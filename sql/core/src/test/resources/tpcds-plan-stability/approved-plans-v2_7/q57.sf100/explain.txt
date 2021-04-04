@@ -213,7 +213,7 @@ Arguments: [rank(d_year#7, d_moy#8) windowspecdefinition(i_category#16, i_brand#
 
 (35) Filter [codegen id : 12]
 Input [8]: [i_category#16, i_brand#15, cc_name#11, d_year#7, d_moy#8, sum_sales#22, avg_monthly_sales#25, rn#27]
-Condition : ((((isnotnull(d_year#7) AND isnotnull(avg_monthly_sales#25)) AND (d_year#7 = 1999)) AND (avg_monthly_sales#25 > 0.000000)) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#22 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(22,6), true), false)) / promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000))
+Condition : ((((isnotnull(d_year#7) AND (d_year#7 = 1999)) AND isnotnull(avg_monthly_sales#25)) AND (avg_monthly_sales#25 > 0.000000)) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#22 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(22,6), true), false)) / promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000))
 
 (36) Exchange
 Input [8]: [i_category#16, i_brand#15, cc_name#11, d_year#7, d_moy#8, sum_sales#22, avg_monthly_sales#25, rn#27]

@@ -9,7 +9,7 @@
 Output [1]: [r_reason_sk#1]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/reason]
-PushedFilters: [IsNotNull(r_reason_sk), EqualTo(r_reason_sk,1)]
+PushedFilters: [EqualTo(r_reason_sk,1), IsNotNull(r_reason_sk)]
 ReadSchema: struct<r_reason_sk:int>
 
 (2) ColumnarToRow [codegen id : 1]
@@ -17,7 +17,7 @@ Input [1]: [r_reason_sk#1]
 
 (3) Filter [codegen id : 1]
 Input [1]: [r_reason_sk#1]
-Condition : (isnotnull(r_reason_sk#1) AND (r_reason_sk#1 = 1))
+Condition : ((r_reason_sk#1 = 1) AND isnotnull(r_reason_sk#1))
 
 (4) Project [codegen id : 1]
 Output [5]: [CASE WHEN (Subquery scalar-subquery#2, [id=#3] > 62316685) THEN Subquery scalar-subquery#4, [id=#5] ELSE Subquery scalar-subquery#6, [id=#7] END AS bucket1#8, CASE WHEN (Subquery scalar-subquery#9, [id=#10] > 19045798) THEN Subquery scalar-subquery#11, [id=#12] ELSE Subquery scalar-subquery#13, [id=#14] END AS bucket2#15, CASE WHEN (Subquery scalar-subquery#16, [id=#17] > 365541424) THEN Subquery scalar-subquery#18, [id=#19] ELSE Subquery scalar-subquery#20, [id=#21] END AS bucket3#22, CASE WHEN (Subquery scalar-subquery#23, [id=#24] > 216357808) THEN Subquery scalar-subquery#25, [id=#26] ELSE Subquery scalar-subquery#27, [id=#28] END AS bucket4#29, CASE WHEN (Subquery scalar-subquery#30, [id=#31] > 184483884) THEN Subquery scalar-subquery#32, [id=#33] ELSE Subquery scalar-subquery#34, [id=#35] END AS bucket5#36]
@@ -39,7 +39,7 @@ Subquery:1 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 Output [2]: [ss_quantity#37, ss_sold_date_sk#38]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1), LessThanOrEqual(ss_quantity,20)]
+PushedFilters: [LessThanOrEqual(ss_quantity,20), IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1)]
 ReadSchema: struct<ss_quantity:int>
 
 (6) ColumnarToRow [codegen id : 1]
@@ -47,7 +47,7 @@ Input [2]: [ss_quantity#37, ss_sold_date_sk#38]
 
 (7) Filter [codegen id : 1]
 Input [2]: [ss_quantity#37, ss_sold_date_sk#38]
-Condition : ((isnotnull(ss_quantity#37) AND (ss_quantity#37 >= 1)) AND (ss_quantity#37 <= 20))
+Condition : (((ss_quantity#37 <= 20) AND isnotnull(ss_quantity#37)) AND (ss_quantity#37 >= 1))
 
 (8) Project [codegen id : 1]
 Output: []
@@ -85,7 +85,7 @@ Subquery:2 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 Output [3]: [ss_quantity#44, ss_ext_discount_amt#45, ss_sold_date_sk#46]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1), LessThanOrEqual(ss_quantity,20)]
+PushedFilters: [LessThanOrEqual(ss_quantity,20), IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (13) ColumnarToRow [codegen id : 1]
@@ -93,7 +93,7 @@ Input [3]: [ss_quantity#44, ss_ext_discount_amt#45, ss_sold_date_sk#46]
 
 (14) Filter [codegen id : 1]
 Input [3]: [ss_quantity#44, ss_ext_discount_amt#45, ss_sold_date_sk#46]
-Condition : ((isnotnull(ss_quantity#44) AND (ss_quantity#44 >= 1)) AND (ss_quantity#44 <= 20))
+Condition : (((ss_quantity#44 <= 20) AND isnotnull(ss_quantity#44)) AND (ss_quantity#44 >= 1))
 
 (15) Project [codegen id : 1]
 Output [1]: [ss_ext_discount_amt#45]
@@ -131,7 +131,7 @@ Subquery:3 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 Output [3]: [ss_quantity#54, ss_net_paid#55, ss_sold_date_sk#56]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1), LessThanOrEqual(ss_quantity,20)]
+PushedFilters: [LessThanOrEqual(ss_quantity,20), IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,1)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (20) ColumnarToRow [codegen id : 1]
@@ -139,7 +139,7 @@ Input [3]: [ss_quantity#54, ss_net_paid#55, ss_sold_date_sk#56]
 
 (21) Filter [codegen id : 1]
 Input [3]: [ss_quantity#54, ss_net_paid#55, ss_sold_date_sk#56]
-Condition : ((isnotnull(ss_quantity#54) AND (ss_quantity#54 >= 1)) AND (ss_quantity#54 <= 20))
+Condition : (((ss_quantity#54 <= 20) AND isnotnull(ss_quantity#54)) AND (ss_quantity#54 >= 1))
 
 (22) Project [codegen id : 1]
 Output [1]: [ss_net_paid#55]
@@ -177,7 +177,7 @@ Subquery:4 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 Output [2]: [ss_quantity#64, ss_sold_date_sk#65]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)]
+PushedFilters: [LessThanOrEqual(ss_quantity,40), GreaterThanOrEqual(ss_quantity,21), IsNotNull(ss_quantity)]
 ReadSchema: struct<ss_quantity:int>
 
 (27) ColumnarToRow [codegen id : 1]
@@ -185,7 +185,7 @@ Input [2]: [ss_quantity#64, ss_sold_date_sk#65]
 
 (28) Filter [codegen id : 1]
 Input [2]: [ss_quantity#64, ss_sold_date_sk#65]
-Condition : ((isnotnull(ss_quantity#64) AND (ss_quantity#64 >= 21)) AND (ss_quantity#64 <= 40))
+Condition : (((ss_quantity#64 <= 40) AND (ss_quantity#64 >= 21)) AND isnotnull(ss_quantity#64))
 
 (29) Project [codegen id : 1]
 Output: []
@@ -223,7 +223,7 @@ Subquery:5 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 Output [3]: [ss_quantity#71, ss_ext_discount_amt#72, ss_sold_date_sk#73]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)]
+PushedFilters: [LessThanOrEqual(ss_quantity,40), GreaterThanOrEqual(ss_quantity,21), IsNotNull(ss_quantity)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (34) ColumnarToRow [codegen id : 1]
@@ -231,7 +231,7 @@ Input [3]: [ss_quantity#71, ss_ext_discount_amt#72, ss_sold_date_sk#73]
 
 (35) Filter [codegen id : 1]
 Input [3]: [ss_quantity#71, ss_ext_discount_amt#72, ss_sold_date_sk#73]
-Condition : ((isnotnull(ss_quantity#71) AND (ss_quantity#71 >= 21)) AND (ss_quantity#71 <= 40))
+Condition : (((ss_quantity#71 <= 40) AND (ss_quantity#71 >= 21)) AND isnotnull(ss_quantity#71))
 
 (36) Project [codegen id : 1]
 Output [1]: [ss_ext_discount_amt#72]
@@ -269,7 +269,7 @@ Subquery:6 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 Output [3]: [ss_quantity#81, ss_net_paid#82, ss_sold_date_sk#83]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,21), LessThanOrEqual(ss_quantity,40)]
+PushedFilters: [LessThanOrEqual(ss_quantity,40), GreaterThanOrEqual(ss_quantity,21), IsNotNull(ss_quantity)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (41) ColumnarToRow [codegen id : 1]
@@ -277,7 +277,7 @@ Input [3]: [ss_quantity#81, ss_net_paid#82, ss_sold_date_sk#83]
 
 (42) Filter [codegen id : 1]
 Input [3]: [ss_quantity#81, ss_net_paid#82, ss_sold_date_sk#83]
-Condition : ((isnotnull(ss_quantity#81) AND (ss_quantity#81 >= 21)) AND (ss_quantity#81 <= 40))
+Condition : (((ss_quantity#81 <= 40) AND (ss_quantity#81 >= 21)) AND isnotnull(ss_quantity#81))
 
 (43) Project [codegen id : 1]
 Output [1]: [ss_net_paid#82]
@@ -315,7 +315,7 @@ Subquery:7 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 Output [2]: [ss_quantity#91, ss_sold_date_sk#92]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)]
+PushedFilters: [GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60), IsNotNull(ss_quantity)]
 ReadSchema: struct<ss_quantity:int>
 
 (48) ColumnarToRow [codegen id : 1]
@@ -323,7 +323,7 @@ Input [2]: [ss_quantity#91, ss_sold_date_sk#92]
 
 (49) Filter [codegen id : 1]
 Input [2]: [ss_quantity#91, ss_sold_date_sk#92]
-Condition : ((isnotnull(ss_quantity#91) AND (ss_quantity#91 >= 41)) AND (ss_quantity#91 <= 60))
+Condition : (((ss_quantity#91 >= 41) AND (ss_quantity#91 <= 60)) AND isnotnull(ss_quantity#91))
 
 (50) Project [codegen id : 1]
 Output: []
@@ -361,7 +361,7 @@ Subquery:8 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 Output [3]: [ss_quantity#98, ss_ext_discount_amt#99, ss_sold_date_sk#100]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)]
+PushedFilters: [GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60), IsNotNull(ss_quantity)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (55) ColumnarToRow [codegen id : 1]
@@ -369,7 +369,7 @@ Input [3]: [ss_quantity#98, ss_ext_discount_amt#99, ss_sold_date_sk#100]
 
 (56) Filter [codegen id : 1]
 Input [3]: [ss_quantity#98, ss_ext_discount_amt#99, ss_sold_date_sk#100]
-Condition : ((isnotnull(ss_quantity#98) AND (ss_quantity#98 >= 41)) AND (ss_quantity#98 <= 60))
+Condition : (((ss_quantity#98 >= 41) AND (ss_quantity#98 <= 60)) AND isnotnull(ss_quantity#98))
 
 (57) Project [codegen id : 1]
 Output [1]: [ss_ext_discount_amt#99]
@@ -407,7 +407,7 @@ Subquery:9 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery
 Output [3]: [ss_quantity#108, ss_net_paid#109, ss_sold_date_sk#110]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60)]
+PushedFilters: [GreaterThanOrEqual(ss_quantity,41), LessThanOrEqual(ss_quantity,60), IsNotNull(ss_quantity)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (62) ColumnarToRow [codegen id : 1]
@@ -415,7 +415,7 @@ Input [3]: [ss_quantity#108, ss_net_paid#109, ss_sold_date_sk#110]
 
 (63) Filter [codegen id : 1]
 Input [3]: [ss_quantity#108, ss_net_paid#109, ss_sold_date_sk#110]
-Condition : ((isnotnull(ss_quantity#108) AND (ss_quantity#108 >= 41)) AND (ss_quantity#108 <= 60))
+Condition : (((ss_quantity#108 >= 41) AND (ss_quantity#108 <= 60)) AND isnotnull(ss_quantity#108))
 
 (64) Project [codegen id : 1]
 Output [1]: [ss_net_paid#109]
@@ -453,7 +453,7 @@ Subquery:10 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 Output [2]: [ss_quantity#118, ss_sold_date_sk#119]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)]
+PushedFilters: [GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80), IsNotNull(ss_quantity)]
 ReadSchema: struct<ss_quantity:int>
 
 (69) ColumnarToRow [codegen id : 1]
@@ -461,7 +461,7 @@ Input [2]: [ss_quantity#118, ss_sold_date_sk#119]
 
 (70) Filter [codegen id : 1]
 Input [2]: [ss_quantity#118, ss_sold_date_sk#119]
-Condition : ((isnotnull(ss_quantity#118) AND (ss_quantity#118 >= 61)) AND (ss_quantity#118 <= 80))
+Condition : (((ss_quantity#118 >= 61) AND (ss_quantity#118 <= 80)) AND isnotnull(ss_quantity#118))
 
 (71) Project [codegen id : 1]
 Output: []
@@ -499,7 +499,7 @@ Subquery:11 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 Output [3]: [ss_quantity#125, ss_ext_discount_amt#126, ss_sold_date_sk#127]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)]
+PushedFilters: [GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80), IsNotNull(ss_quantity)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (76) ColumnarToRow [codegen id : 1]
@@ -507,7 +507,7 @@ Input [3]: [ss_quantity#125, ss_ext_discount_amt#126, ss_sold_date_sk#127]
 
 (77) Filter [codegen id : 1]
 Input [3]: [ss_quantity#125, ss_ext_discount_amt#126, ss_sold_date_sk#127]
-Condition : ((isnotnull(ss_quantity#125) AND (ss_quantity#125 >= 61)) AND (ss_quantity#125 <= 80))
+Condition : (((ss_quantity#125 >= 61) AND (ss_quantity#125 <= 80)) AND isnotnull(ss_quantity#125))
 
 (78) Project [codegen id : 1]
 Output [1]: [ss_ext_discount_amt#126]
@@ -545,7 +545,7 @@ Subquery:12 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 Output [3]: [ss_quantity#135, ss_net_paid#136, ss_sold_date_sk#137]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80)]
+PushedFilters: [GreaterThanOrEqual(ss_quantity,61), LessThanOrEqual(ss_quantity,80), IsNotNull(ss_quantity)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (83) ColumnarToRow [codegen id : 1]
@@ -553,7 +553,7 @@ Input [3]: [ss_quantity#135, ss_net_paid#136, ss_sold_date_sk#137]
 
 (84) Filter [codegen id : 1]
 Input [3]: [ss_quantity#135, ss_net_paid#136, ss_sold_date_sk#137]
-Condition : ((isnotnull(ss_quantity#135) AND (ss_quantity#135 >= 61)) AND (ss_quantity#135 <= 80))
+Condition : (((ss_quantity#135 >= 61) AND (ss_quantity#135 <= 80)) AND isnotnull(ss_quantity#135))
 
 (85) Project [codegen id : 1]
 Output [1]: [ss_net_paid#136]
@@ -591,7 +591,7 @@ Subquery:13 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 Output [2]: [ss_quantity#145, ss_sold_date_sk#146]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)]
+PushedFilters: [GreaterThanOrEqual(ss_quantity,81), IsNotNull(ss_quantity), LessThanOrEqual(ss_quantity,100)]
 ReadSchema: struct<ss_quantity:int>
 
 (90) ColumnarToRow [codegen id : 1]
@@ -599,7 +599,7 @@ Input [2]: [ss_quantity#145, ss_sold_date_sk#146]
 
 (91) Filter [codegen id : 1]
 Input [2]: [ss_quantity#145, ss_sold_date_sk#146]
-Condition : ((isnotnull(ss_quantity#145) AND (ss_quantity#145 >= 81)) AND (ss_quantity#145 <= 100))
+Condition : (((ss_quantity#145 >= 81) AND isnotnull(ss_quantity#145)) AND (ss_quantity#145 <= 100))
 
 (92) Project [codegen id : 1]
 Output: []
@@ -637,7 +637,7 @@ Subquery:14 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 Output [3]: [ss_quantity#152, ss_ext_discount_amt#153, ss_sold_date_sk#154]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)]
+PushedFilters: [GreaterThanOrEqual(ss_quantity,81), IsNotNull(ss_quantity), LessThanOrEqual(ss_quantity,100)]
 ReadSchema: struct<ss_quantity:int,ss_ext_discount_amt:decimal(7,2)>
 
 (97) ColumnarToRow [codegen id : 1]
@@ -645,7 +645,7 @@ Input [3]: [ss_quantity#152, ss_ext_discount_amt#153, ss_sold_date_sk#154]
 
 (98) Filter [codegen id : 1]
 Input [3]: [ss_quantity#152, ss_ext_discount_amt#153, ss_sold_date_sk#154]
-Condition : ((isnotnull(ss_quantity#152) AND (ss_quantity#152 >= 81)) AND (ss_quantity#152 <= 100))
+Condition : (((ss_quantity#152 >= 81) AND isnotnull(ss_quantity#152)) AND (ss_quantity#152 <= 100))
 
 (99) Project [codegen id : 1]
 Output [1]: [ss_ext_discount_amt#153]
@@ -683,7 +683,7 @@ Subquery:15 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquer
 Output [3]: [ss_quantity#162, ss_net_paid#163, ss_sold_date_sk#164]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), GreaterThanOrEqual(ss_quantity,81), LessThanOrEqual(ss_quantity,100)]
+PushedFilters: [GreaterThanOrEqual(ss_quantity,81), IsNotNull(ss_quantity), LessThanOrEqual(ss_quantity,100)]
 ReadSchema: struct<ss_quantity:int,ss_net_paid:decimal(7,2)>
 
 (104) ColumnarToRow [codegen id : 1]
@@ -691,7 +691,7 @@ Input [3]: [ss_quantity#162, ss_net_paid#163, ss_sold_date_sk#164]
 
 (105) Filter [codegen id : 1]
 Input [3]: [ss_quantity#162, ss_net_paid#163, ss_sold_date_sk#164]
-Condition : ((isnotnull(ss_quantity#162) AND (ss_quantity#162 >= 81)) AND (ss_quantity#162 <= 100))
+Condition : (((ss_quantity#162 >= 81) AND isnotnull(ss_quantity#162)) AND (ss_quantity#162 <= 100))
 
 (106) Project [codegen id : 1]
 Output [1]: [ss_net_paid#163]

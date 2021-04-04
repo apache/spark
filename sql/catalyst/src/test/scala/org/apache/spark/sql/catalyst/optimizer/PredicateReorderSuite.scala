@@ -40,7 +40,7 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
-      Batch("Predicate Reorder", FixedPoint(1),
+      Batch("Predicate Reorder", Once,
         PredicateReorder) :: Nil
   }
 
@@ -118,7 +118,9 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
             nameToAttr("t1.k-1-2") === 1 && nameToAttr("t1.v-1-10") > 5 &&
               nameToAttr("t1.k-1-2").isNotNull && nameToAttr("t1.v-1-10").isNotNull)
         } else {
-          assertPredicatesOrder(originalCondition, originalCondition)
+          assertPredicatesOrder(originalCondition,
+            nameToAttr("t1.k-1-2").isNotNull && nameToAttr("t1.v-1-10").isNotNull &&
+              nameToAttr("t1.k-1-2") === 1 && nameToAttr("t1.v-1-10") > 5)
         }
       }
     }
@@ -145,7 +147,10 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
             (nameToAttr("t1.v-1-10") > 1 || nameToAttr("t1.v-1-10") > 2) ||
               nameToAttr("t1.v-1-10") > 4 || nameToAttr("t1.v-1-10") > 8)
         } else {
-          assertPredicatesOrder(originalCondition, originalCondition)
+          assertPredicatesOrder(
+            originalCondition,
+            (nameToAttr("t1.v-1-10") > 1 || nameToAttr("t1.v-1-10") > 2) ||
+              nameToAttr("t1.v-1-10") > 8 || nameToAttr("t1.v-1-10") > 4)
         }
       }
     }
@@ -161,10 +166,13 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
           assertPredicatesOrder(
             originalCondition,
             nameToAttr("t1.v-1-10") > 6 &&
-              nameToAttr("t1.v-1-10") > 2 &&
-              nameToAttr("t1.v-1-10").cast(DoubleType).cast(IntegerType) === 4)
+              nameToAttr("t1.v-1-10").cast(DoubleType).cast(IntegerType) === 4 &&
+              nameToAttr("t1.v-1-10") > 2)
         } else {
-          assertPredicatesOrder(originalCondition, originalCondition)
+          assertPredicatesOrder(originalCondition,
+            nameToAttr("t1.v-1-10") > 2 &&
+              nameToAttr("t1.v-1-10") > 6 &&
+              nameToAttr("t1.v-1-10").cast(DoubleType).cast(IntegerType) === 4)
         }
       }
     }
@@ -183,7 +191,10 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
               nameToAttr("t1.v-1-10") > 6 ||
               nameToAttr("t1.v-1-10").cast(DoubleType).cast(IntegerType) === 4)
         } else {
-          assertPredicatesOrder(originalCondition, originalCondition)
+          assertPredicatesOrder(originalCondition,
+            nameToAttr("t1.v-1-10") > 6 ||
+              nameToAttr("t1.v-1-10") > 2 ||
+              nameToAttr("t1.v-1-10").cast(DoubleType).cast(IntegerType) === 4)
         }
       }
     }

@@ -75,7 +75,7 @@ Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_dat
 Output [2]: [hd_demo_sk#5, hd_dep_count#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
+PushedFilters: [IsNotNull(hd_dep_count), IsNotNull(hd_demo_sk), EqualTo(hd_dep_count,6)]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
 (6) ColumnarToRow [codegen id : 1]
@@ -83,7 +83,7 @@ Input [2]: [hd_demo_sk#5, hd_dep_count#6]
 
 (7) Filter [codegen id : 1]
 Input [2]: [hd_demo_sk#5, hd_dep_count#6]
-Condition : ((isnotnull(hd_dep_count#6) AND (hd_dep_count#6 = 6)) AND isnotnull(hd_demo_sk#5))
+Condition : ((isnotnull(hd_dep_count#6) AND isnotnull(hd_demo_sk#5)) AND (hd_dep_count#6 = 6))
 
 (8) Project [codegen id : 1]
 Output [1]: [hd_demo_sk#5]
@@ -106,7 +106,7 @@ Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, hd_demo_sk#
 Output [2]: [t_time_sk#8, t_hour#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
-PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)]
+PushedFilters: [IsNotNull(t_hour), IsNotNull(t_time_sk), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
 (13) ColumnarToRow [codegen id : 2]
@@ -114,7 +114,7 @@ Input [2]: [t_time_sk#8, t_hour#9]
 
 (14) Filter [codegen id : 2]
 Input [2]: [t_time_sk#8, t_hour#9]
-Condition : (((isnotnull(t_hour#9) AND (t_hour#9 >= 8)) AND (t_hour#9 <= 9)) AND isnotnull(t_time_sk#8))
+Condition : (((isnotnull(t_hour#9) AND isnotnull(t_time_sk#8)) AND (t_hour#9 >= 8)) AND (t_hour#9 <= 9))
 
 (15) Project [codegen id : 2]
 Output [1]: [t_time_sk#8]
@@ -137,7 +137,7 @@ Input [3]: [ws_sold_time_sk#1, ws_web_page_sk#3, t_time_sk#8]
 Output [2]: [wp_web_page_sk#11, wp_char_count#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_page]
-PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
+PushedFilters: [IsNotNull(wp_char_count), IsNotNull(wp_web_page_sk), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200)]
 ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
 
 (20) ColumnarToRow [codegen id : 3]
@@ -145,7 +145,7 @@ Input [2]: [wp_web_page_sk#11, wp_char_count#12]
 
 (21) Filter [codegen id : 3]
 Input [2]: [wp_web_page_sk#11, wp_char_count#12]
-Condition : (((isnotnull(wp_char_count#12) AND (wp_char_count#12 >= 5000)) AND (wp_char_count#12 <= 5200)) AND isnotnull(wp_web_page_sk#11))
+Condition : (((isnotnull(wp_char_count#12) AND isnotnull(wp_web_page_sk#11)) AND (wp_char_count#12 >= 5000)) AND (wp_char_count#12 <= 5200))
 
 (22) Project [codegen id : 3]
 Output [1]: [wp_web_page_sk#11]
@@ -216,7 +216,7 @@ Input [4]: [ws_sold_time_sk#19, ws_ship_hdemo_sk#20, ws_web_page_sk#21, hd_demo_
 Output [2]: [t_time_sk#24, t_hour#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
-PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
+PushedFilters: [IsNotNull(t_hour), IsNotNull(t_time_sk), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
 (37) ColumnarToRow [codegen id : 6]
@@ -224,7 +224,7 @@ Input [2]: [t_time_sk#24, t_hour#25]
 
 (38) Filter [codegen id : 6]
 Input [2]: [t_time_sk#24, t_hour#25]
-Condition : (((isnotnull(t_hour#25) AND (t_hour#25 >= 19)) AND (t_hour#25 <= 20)) AND isnotnull(t_time_sk#24))
+Condition : (((isnotnull(t_hour#25) AND isnotnull(t_time_sk#24)) AND (t_hour#25 >= 19)) AND (t_hour#25 <= 20))
 
 (39) Project [codegen id : 6]
 Output [1]: [t_time_sk#24]

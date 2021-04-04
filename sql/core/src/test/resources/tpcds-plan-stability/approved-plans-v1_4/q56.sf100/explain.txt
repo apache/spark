@@ -87,7 +87,7 @@ Condition : (isnotnull(ss_addr_sk#2) AND isnotnull(ss_item_sk#1))
 Output [3]: [d_date_sk#6, d_year#7, d_moy#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -95,7 +95,7 @@ Input [3]: [d_date_sk#6, d_year#7, d_moy#8]
 
 (6) Filter [codegen id : 1]
 Input [3]: [d_date_sk#6, d_year#7, d_moy#8]
-Condition : ((((isnotnull(d_year#7) AND isnotnull(d_moy#8)) AND (d_year#7 = 2001)) AND (d_moy#8 = 2)) AND isnotnull(d_date_sk#6))
+Condition : (((((d_year#7 = 2001) AND (d_moy#8 = 2)) AND isnotnull(d_year#7)) AND isnotnull(d_moy#8)) AND isnotnull(d_date_sk#6))
 
 (7) Project [codegen id : 1]
 Output [1]: [d_date_sk#6]
@@ -118,7 +118,7 @@ Input [5]: [ss_item_sk#1, ss_addr_sk#2, ss_ext_sales_price#3, ss_sold_date_sk#4,
 Output [2]: [ca_address_sk#10, ca_gmt_offset#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_gmt_offset), EqualTo(ca_gmt_offset,-5.00), IsNotNull(ca_address_sk)]
+PushedFilters: [EqualTo(ca_gmt_offset,-5.00), IsNotNull(ca_gmt_offset), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_gmt_offset:decimal(5,2)>
 
 (12) ColumnarToRow [codegen id : 2]
@@ -126,7 +126,7 @@ Input [2]: [ca_address_sk#10, ca_gmt_offset#11]
 
 (13) Filter [codegen id : 2]
 Input [2]: [ca_address_sk#10, ca_gmt_offset#11]
-Condition : ((isnotnull(ca_gmt_offset#11) AND (ca_gmt_offset#11 = -5.00)) AND isnotnull(ca_address_sk#10))
+Condition : (((ca_gmt_offset#11 = -5.00) AND isnotnull(ca_gmt_offset#11)) AND isnotnull(ca_address_sk#10))
 
 (14) Project [codegen id : 2]
 Output [1]: [ca_address_sk#10]

@@ -52,7 +52,7 @@ Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
 Output [3]: [t_time_sk#5, t_hour#6, t_minute#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
-PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,20), GreaterThanOrEqual(t_minute,30), IsNotNull(t_time_sk)]
+PushedFilters: [EqualTo(t_hour,20), GreaterThanOrEqual(t_minute,30), IsNotNull(t_hour), IsNotNull(t_minute), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
 
 (6) ColumnarToRow [codegen id : 1]
@@ -60,7 +60,7 @@ Input [3]: [t_time_sk#5, t_hour#6, t_minute#7]
 
 (7) Filter [codegen id : 1]
 Input [3]: [t_time_sk#5, t_hour#6, t_minute#7]
-Condition : ((((isnotnull(t_hour#6) AND isnotnull(t_minute#7)) AND (t_hour#6 = 20)) AND (t_minute#7 >= 30)) AND isnotnull(t_time_sk#5))
+Condition : (((((t_hour#6 = 20) AND (t_minute#7 >= 30)) AND isnotnull(t_hour#6)) AND isnotnull(t_minute#7)) AND isnotnull(t_time_sk#5))
 
 (8) Project [codegen id : 1]
 Output [1]: [t_time_sk#5]
@@ -83,7 +83,7 @@ Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, t_time_sk#5]
 Output [2]: [s_store_sk#9, s_store_name#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_store_name), EqualTo(s_store_name,ese), IsNotNull(s_store_sk)]
+PushedFilters: [EqualTo(s_store_name,ese), IsNotNull(s_store_name), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string>
 
 (13) ColumnarToRow [codegen id : 2]
@@ -91,7 +91,7 @@ Input [2]: [s_store_sk#9, s_store_name#10]
 
 (14) Filter [codegen id : 2]
 Input [2]: [s_store_sk#9, s_store_name#10]
-Condition : ((isnotnull(s_store_name#10) AND (s_store_name#10 = ese)) AND isnotnull(s_store_sk#9))
+Condition : (((s_store_name#10 = ese) AND isnotnull(s_store_name#10)) AND isnotnull(s_store_sk#9))
 
 (15) Project [codegen id : 2]
 Output [1]: [s_store_sk#9]
@@ -114,7 +114,7 @@ Input [3]: [ss_hdemo_sk#2, ss_store_sk#3, s_store_sk#9]
 Output [2]: [hd_demo_sk#12, hd_dep_count#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,7), IsNotNull(hd_demo_sk)]
+PushedFilters: [EqualTo(hd_dep_count,7), IsNotNull(hd_dep_count), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
 (20) ColumnarToRow [codegen id : 3]
@@ -122,7 +122,7 @@ Input [2]: [hd_demo_sk#12, hd_dep_count#13]
 
 (21) Filter [codegen id : 3]
 Input [2]: [hd_demo_sk#12, hd_dep_count#13]
-Condition : ((isnotnull(hd_dep_count#13) AND (hd_dep_count#13 = 7)) AND isnotnull(hd_demo_sk#12))
+Condition : (((hd_dep_count#13 = 7) AND isnotnull(hd_dep_count#13)) AND isnotnull(hd_demo_sk#12))
 
 (22) Project [codegen id : 3]
 Output [1]: [hd_demo_sk#12]

@@ -34,7 +34,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                   BroadcastExchange #4
                                                                     WholeStageCodegen (1)
                                                                       Project [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_sold_date_sk]
-                                                                        Filter [ws_net_profit,ws_net_paid,ws_quantity,ws_order_number,ws_item_sk]
+                                                                        Filter [ws_quantity,ws_order_number,ws_item_sk,ws_net_profit,ws_net_paid]
                                                                           ColumnarToRow
                                                                             InputAdapter
                                                                               Scan parquet default.web_sales [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_net_profit,ws_sold_date_sk]
@@ -80,13 +80,13 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                   BroadcastExchange #8
                                                                     WholeStageCodegen (8)
                                                                       Project [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_sold_date_sk]
-                                                                        Filter [cs_net_profit,cs_net_paid,cs_quantity,cs_order_number,cs_item_sk]
+                                                                        Filter [cs_quantity,cs_order_number,cs_item_sk,cs_net_profit,cs_net_paid]
                                                                           ColumnarToRow
                                                                             InputAdapter
                                                                               Scan parquet default.catalog_sales [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_net_profit,cs_sold_date_sk]
                                                                                 ReusedSubquery [d_date_sk] #1
                                                                 Project [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount]
-                                                                  Filter [cr_return_amount,cr_order_number,cr_item_sk]
+                                                                  Filter [cr_order_number,cr_item_sk,cr_return_amount]
                                                                     ColumnarToRow
                                                                       InputAdapter
                                                                         Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount,cr_returned_date_sk]
@@ -119,7 +119,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                   BroadcastExchange #11
                                                                     WholeStageCodegen (15)
                                                                       Project [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_sold_date_sk]
-                                                                        Filter [ss_net_profit,ss_net_paid,ss_quantity,ss_ticket_number,ss_item_sk]
+                                                                        Filter [ss_quantity,ss_ticket_number,ss_item_sk,ss_net_profit,ss_net_paid]
                                                                           ColumnarToRow
                                                                             InputAdapter
                                                                               Scan parquet default.store_sales [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_net_profit,ss_sold_date_sk]

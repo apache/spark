@@ -47,7 +47,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_year,i_category,i_brand,d_m
                                                               InputAdapter
                                                                 BroadcastExchange #5
                                                                   WholeStageCodegen (2)
-                                                                    Filter [d_year,d_moy,d_date_sk]
+                                                                    Filter [d_date_sk,d_year,d_moy]
                                                                       ColumnarToRow
                                                                         InputAdapter
                                                                           Scan parquet default.date_dim [d_date_sk,d_year,d_moy]

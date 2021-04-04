@@ -7,7 +7,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
             Project [item_sk,rnk,item_sk]
               BroadcastHashJoin [rnk,rnk]
                 Project [item_sk,rnk]
-                  Filter [rnk,item_sk]
+                  Filter [item_sk,rnk]
                     InputAdapter
                       Window [rank_col]
                         WholeStageCodegen (3)
@@ -43,7 +43,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                   BroadcastExchange #4
                     WholeStageCodegen (7)
                       Project [item_sk,rnk]
-                        Filter [rnk,item_sk]
+                        Filter [item_sk,rnk]
                           InputAdapter
                             Window [rank_col]
                               WholeStageCodegen (6)

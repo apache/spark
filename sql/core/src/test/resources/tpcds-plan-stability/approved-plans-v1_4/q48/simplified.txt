@@ -36,7 +36,7 @@ WholeStageCodegen (6)
                       BroadcastExchange #5
                         WholeStageCodegen (3)
                           Project [ca_address_sk,ca_state]
-                            Filter [ca_country,ca_address_sk,ca_state]
+                            Filter [ca_address_sk,ca_state,ca_country]
                               ColumnarToRow
                                 InputAdapter
                                   Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]

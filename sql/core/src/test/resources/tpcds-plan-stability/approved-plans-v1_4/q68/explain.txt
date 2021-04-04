@@ -63,7 +63,7 @@ Condition : (((isnotnull(ss_store_sk#4) AND isnotnull(ss_hdemo_sk#2)) AND isnotn
 Output [3]: [d_date_sk#11, d_year#12, d_dom#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_dom), GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
+PushedFilters: [In(d_year, [1999,2000,2001]), IsNotNull(d_dom), IsNotNull(d_date_sk), GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -71,7 +71,7 @@ Input [3]: [d_date_sk#11, d_year#12, d_dom#13]
 
 (6) Filter [codegen id : 1]
 Input [3]: [d_date_sk#11, d_year#12, d_dom#13]
-Condition : ((((isnotnull(d_dom#13) AND (d_dom#13 >= 1)) AND (d_dom#13 <= 2)) AND d_year#12 IN (1999,2000,2001)) AND isnotnull(d_date_sk#11))
+Condition : ((((d_year#12 IN (1999,2000,2001) AND isnotnull(d_dom#13)) AND isnotnull(d_date_sk#11)) AND (d_dom#13 >= 1)) AND (d_dom#13 <= 2))
 
 (7) Project [codegen id : 1]
 Output [1]: [d_date_sk#11]
@@ -125,7 +125,7 @@ Input [9]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_tic
 Output [3]: [hd_demo_sk#18, hd_dep_count#19, hd_vehicle_count#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [Or(EqualTo(hd_dep_count,4),EqualTo(hd_vehicle_count,3)), IsNotNull(hd_demo_sk)]
+PushedFilters: [IsNotNull(hd_demo_sk), Or(EqualTo(hd_dep_count,4),EqualTo(hd_vehicle_count,3))]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int,hd_vehicle_count:int>
 
 (19) ColumnarToRow [codegen id : 3]
@@ -133,7 +133,7 @@ Input [3]: [hd_demo_sk#18, hd_dep_count#19, hd_vehicle_count#20]
 
 (20) Filter [codegen id : 3]
 Input [3]: [hd_demo_sk#18, hd_dep_count#19, hd_vehicle_count#20]
-Condition : (((hd_dep_count#19 = 4) OR (hd_vehicle_count#20 = 3)) AND isnotnull(hd_demo_sk#18))
+Condition : (isnotnull(hd_demo_sk#18) AND ((hd_dep_count#19 = 4) OR (hd_vehicle_count#20 = 3)))
 
 (21) Project [codegen id : 3]
 Output [1]: [hd_demo_sk#18]

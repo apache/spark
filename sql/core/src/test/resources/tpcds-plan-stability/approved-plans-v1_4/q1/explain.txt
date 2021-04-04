@@ -64,7 +64,7 @@ Condition : (isnotnull(sr_store_sk#2) AND isnotnull(sr_customer_sk#1))
 Output [2]: [d_date_sk#6, d_year#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_date_sk), EqualTo(d_year,2000)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -72,7 +72,7 @@ Input [2]: [d_date_sk#6, d_year#7]
 
 (6) Filter [codegen id : 1]
 Input [2]: [d_date_sk#6, d_year#7]
-Condition : ((isnotnull(d_year#7) AND (d_year#7 = 2000)) AND isnotnull(d_date_sk#6))
+Condition : ((isnotnull(d_year#7) AND isnotnull(d_date_sk#6)) AND (d_year#7 = 2000))
 
 (7) Project [codegen id : 1]
 Output [1]: [d_date_sk#6]
@@ -197,7 +197,7 @@ Input [5]: [ctr_customer_sk#13, ctr_store_sk#14, ctr_total_return#15, (avg(ctr_t
 Output [2]: [s_store_sk#34, s_state#35]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_state), EqualTo(s_state,TN), IsNotNull(s_store_sk)]
+PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_state), EqualTo(s_state,TN)]
 ReadSchema: struct<s_store_sk:int,s_state:string>
 
 (32) ColumnarToRow [codegen id : 7]
@@ -205,7 +205,7 @@ Input [2]: [s_store_sk#34, s_state#35]
 
 (33) Filter [codegen id : 7]
 Input [2]: [s_store_sk#34, s_state#35]
-Condition : ((isnotnull(s_state#35) AND (s_state#35 = TN)) AND isnotnull(s_store_sk#34))
+Condition : ((isnotnull(s_store_sk#34) AND isnotnull(s_state#35)) AND (s_state#35 = TN))
 
 (34) Project [codegen id : 7]
 Output [1]: [s_store_sk#34]

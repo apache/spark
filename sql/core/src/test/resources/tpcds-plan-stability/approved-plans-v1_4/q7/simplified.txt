@@ -23,7 +23,7 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                                 BroadcastExchange #3
                                   WholeStageCodegen (1)
                                     Project [cd_demo_sk]
-                                      Filter [cd_gender,cd_marital_status,cd_education_status,cd_demo_sk]
+                                      Filter [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
@@ -46,7 +46,7 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                     BroadcastExchange #5
                       WholeStageCodegen (4)
                         Project [p_promo_sk]
-                          Filter [p_channel_email,p_channel_event,p_promo_sk]
+                          Filter [p_promo_sk,p_channel_email,p_channel_event]
                             ColumnarToRow
                               InputAdapter
                                 Scan parquet default.promotion [p_promo_sk,p_channel_email,p_channel_event]

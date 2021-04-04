@@ -37,7 +37,7 @@ TakeOrderedAndProject [i_item_id,total_sales]
                                         BroadcastExchange #4
                                           WholeStageCodegen (2)
                                             Project [ca_address_sk]
-                                              Filter [ca_gmt_offset,ca_address_sk]
+                                              Filter [ca_address_sk,ca_gmt_offset]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.customer_address [ca_address_sk,ca_gmt_offset]

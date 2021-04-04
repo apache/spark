@@ -109,7 +109,7 @@ Input [3]: [ws_item_sk#8, ws_bill_customer_sk#9, ws_sold_date_sk#10]
 Output [3]: [i_item_sk#14, i_class#15, i_category#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_category), IsNotNull(i_class), EqualTo(i_category,Women                                             ), EqualTo(i_class,maternity                                         ), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_category), IsNotNull(i_class), EqualTo(i_category,Women                                             ), EqualTo(i_class,maternity                                         )]
 ReadSchema: struct<i_item_sk:int,i_class:string,i_category:string>
 
 (11) ColumnarToRow [codegen id : 3]
@@ -117,7 +117,7 @@ Input [3]: [i_item_sk#14, i_class#15, i_category#16]
 
 (12) Filter [codegen id : 3]
 Input [3]: [i_item_sk#14, i_class#15, i_category#16]
-Condition : ((((isnotnull(i_category#16) AND isnotnull(i_class#15)) AND (i_category#16 = Women                                             )) AND (i_class#15 = maternity                                         )) AND isnotnull(i_item_sk#14))
+Condition : ((((isnotnull(i_item_sk#14) AND isnotnull(i_category#16)) AND isnotnull(i_class#15)) AND (i_category#16 = Women                                             )) AND (i_class#15 = maternity                                         ))
 
 (13) Project [codegen id : 3]
 Output [1]: [i_item_sk#14]
@@ -140,7 +140,7 @@ Input [4]: [sold_date_sk#5, customer_sk#6, item_sk#7, i_item_sk#14]
 Output [3]: [d_date_sk#18, d_year#19, d_moy#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,12), EqualTo(d_year,1998), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), IsNotNull(d_date_sk), EqualTo(d_moy,12), EqualTo(d_year,1998)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (18) ColumnarToRow [codegen id : 4]
@@ -148,7 +148,7 @@ Input [3]: [d_date_sk#18, d_year#19, d_moy#20]
 
 (19) Filter [codegen id : 4]
 Input [3]: [d_date_sk#18, d_year#19, d_moy#20]
-Condition : ((((isnotnull(d_moy#20) AND isnotnull(d_year#19)) AND (d_moy#20 = 12)) AND (d_year#19 = 1998)) AND isnotnull(d_date_sk#18))
+Condition : ((((isnotnull(d_moy#20) AND isnotnull(d_year#19)) AND isnotnull(d_date_sk#18)) AND (d_moy#20 = 12)) AND (d_year#19 = 1998))
 
 (20) Project [codegen id : 4]
 Output [1]: [d_date_sk#18]
@@ -306,7 +306,7 @@ Input [2]: [d_date_sk#38, d_month_seq#39]
 
 (53) Filter [codegen id : 10]
 Input [2]: [d_date_sk#38, d_month_seq#39]
-Condition : (((isnotnull(d_month_seq#39) AND (d_month_seq#39 >= Subquery scalar-subquery#40, [id=#41])) AND (d_month_seq#39 <= Subquery scalar-subquery#42, [id=#43])) AND isnotnull(d_date_sk#38))
+Condition : (((isnotnull(d_month_seq#39) AND isnotnull(d_date_sk#38)) AND (d_month_seq#39 >= Subquery scalar-subquery#40, [id=#41])) AND (d_month_seq#39 <= Subquery scalar-subquery#42, [id=#43]))
 
 (54) Project [codegen id : 10]
 Output [1]: [d_date_sk#38]

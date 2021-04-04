@@ -176,7 +176,7 @@ Input [11]: [cs_ship_date_sk#1, cs_bill_cdemo_sk#2, cs_bill_hdemo_sk#3, cs_item_
 Output [2]: [cd_demo_sk#21, cd_marital_status#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [IsNotNull(cd_marital_status), EqualTo(cd_marital_status,M), IsNotNull(cd_demo_sk)]
+PushedFilters: [IsNotNull(cd_demo_sk), IsNotNull(cd_marital_status), EqualTo(cd_marital_status,M)]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string>
 
 (23) ColumnarToRow [codegen id : 4]
@@ -184,7 +184,7 @@ Input [2]: [cd_demo_sk#21, cd_marital_status#22]
 
 (24) Filter [codegen id : 4]
 Input [2]: [cd_demo_sk#21, cd_marital_status#22]
-Condition : ((isnotnull(cd_marital_status#22) AND (cd_marital_status#22 = M)) AND isnotnull(cd_demo_sk#21))
+Condition : ((isnotnull(cd_demo_sk#21) AND isnotnull(cd_marital_status#22)) AND (cd_marital_status#22 = M))
 
 (25) Project [codegen id : 4]
 Output [1]: [cd_demo_sk#21]
@@ -207,7 +207,7 @@ Input [11]: [cs_ship_date_sk#1, cs_bill_cdemo_sk#2, cs_bill_hdemo_sk#3, cs_item_
 Output [2]: [hd_demo_sk#24, hd_buy_potential#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_buy_potential), EqualTo(hd_buy_potential,1001-5000      ), IsNotNull(hd_demo_sk)]
+PushedFilters: [IsNotNull(hd_demo_sk), IsNotNull(hd_buy_potential), EqualTo(hd_buy_potential,1001-5000      )]
 ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string>
 
 (30) ColumnarToRow [codegen id : 5]
@@ -215,7 +215,7 @@ Input [2]: [hd_demo_sk#24, hd_buy_potential#25]
 
 (31) Filter [codegen id : 5]
 Input [2]: [hd_demo_sk#24, hd_buy_potential#25]
-Condition : ((isnotnull(hd_buy_potential#25) AND (hd_buy_potential#25 = 1001-5000      )) AND isnotnull(hd_demo_sk#24))
+Condition : ((isnotnull(hd_demo_sk#24) AND isnotnull(hd_buy_potential#25)) AND (hd_buy_potential#25 = 1001-5000      ))
 
 (32) Project [codegen id : 5]
 Output [1]: [hd_demo_sk#24]
@@ -238,7 +238,7 @@ Input [10]: [cs_ship_date_sk#1, cs_bill_hdemo_sk#3, cs_item_sk#4, cs_promo_sk#5,
 Output [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#30]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk), IsNotNull(d_week_seq), IsNotNull(d_date)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_date_sk), IsNotNull(d_week_seq), IsNotNull(d_date), EqualTo(d_year,2001)]
 ReadSchema: struct<d_date_sk:int,d_date:date,d_week_seq:int,d_year:int>
 
 (37) ColumnarToRow [codegen id : 6]
@@ -246,7 +246,7 @@ Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#30]
 
 (38) Filter [codegen id : 6]
 Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#30]
-Condition : ((((isnotnull(d_year#30) AND (d_year#30 = 2001)) AND isnotnull(d_date_sk#27)) AND isnotnull(d_week_seq#29)) AND isnotnull(d_date#28))
+Condition : ((((isnotnull(d_year#30) AND isnotnull(d_date_sk#27)) AND isnotnull(d_week_seq#29)) AND isnotnull(d_date#28)) AND (d_year#30 = 2001))
 
 (39) Project [codegen id : 6]
 Output [3]: [d_date_sk#27, d_date#28, d_week_seq#29]

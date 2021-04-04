@@ -24,7 +24,7 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                                   BroadcastExchange #3
                                     WholeStageCodegen (1)
                                       Project [cd_demo_sk]
-                                        Filter [cd_gender,cd_marital_status,cd_education_status,cd_demo_sk]
+                                        Filter [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
@@ -39,7 +39,7 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                         InputAdapter
                           BroadcastExchange #4
                             WholeStageCodegen (3)
-                              Filter [s_state,s_store_sk]
+                              Filter [s_store_sk,s_state]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.store [s_store_sk,s_state]
@@ -77,7 +77,7 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                           BroadcastExchange #7
                             WholeStageCodegen (9)
                               Project [s_store_sk]
-                                Filter [s_state,s_store_sk]
+                                Filter [s_store_sk,s_state]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet default.store [s_store_sk,s_state]

@@ -187,7 +187,7 @@ Input [11]: [ss_item_sk#1, ss_store_sk#2, ss_promo_sk#3, ss_ticket_number#4, ss_
 Output [2]: [d_date_sk#16, d_date#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1998-08-04), LessThanOrEqual(d_date,1998-09-03), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date), IsNotNull(d_date_sk), GreaterThanOrEqual(d_date,1998-08-04), LessThanOrEqual(d_date,1998-09-03)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (15) ColumnarToRow [codegen id : 5]
@@ -195,7 +195,7 @@ Input [2]: [d_date_sk#16, d_date#17]
 
 (16) Filter [codegen id : 5]
 Input [2]: [d_date_sk#16, d_date#17]
-Condition : (((isnotnull(d_date#17) AND (d_date#17 >= 1998-08-04)) AND (d_date#17 <= 1998-09-03)) AND isnotnull(d_date_sk#16))
+Condition : (((isnotnull(d_date#17) AND isnotnull(d_date_sk#16)) AND (d_date#17 >= 1998-08-04)) AND (d_date#17 <= 1998-09-03))
 
 (17) Project [codegen id : 5]
 Output [1]: [d_date_sk#16]
@@ -245,7 +245,7 @@ Input [9]: [ss_item_sk#1, ss_store_sk#2, ss_promo_sk#3, ss_ext_sales_price#5, ss
 Output [2]: [i_item_sk#22, i_current_price#23]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), GreaterThan(i_current_price,50.00), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_current_price), GreaterThan(i_current_price,50.00)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2)>
 
 (28) ColumnarToRow [codegen id : 7]
@@ -253,7 +253,7 @@ Input [2]: [i_item_sk#22, i_current_price#23]
 
 (29) Filter [codegen id : 7]
 Input [2]: [i_item_sk#22, i_current_price#23]
-Condition : ((isnotnull(i_current_price#23) AND (i_current_price#23 > 50.00)) AND isnotnull(i_item_sk#22))
+Condition : ((isnotnull(i_item_sk#22) AND isnotnull(i_current_price#23)) AND (i_current_price#23 > 50.00))
 
 (30) Project [codegen id : 7]
 Output [1]: [i_item_sk#22]
@@ -276,7 +276,7 @@ Input [8]: [ss_item_sk#1, ss_promo_sk#3, ss_ext_sales_price#5, ss_net_profit#6, 
 Output [2]: [p_promo_sk#25, p_channel_tv#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/promotion]
-PushedFilters: [IsNotNull(p_channel_tv), EqualTo(p_channel_tv,N), IsNotNull(p_promo_sk)]
+PushedFilters: [IsNotNull(p_promo_sk), IsNotNull(p_channel_tv), EqualTo(p_channel_tv,N)]
 ReadSchema: struct<p_promo_sk:int,p_channel_tv:string>
 
 (35) ColumnarToRow [codegen id : 8]
@@ -284,7 +284,7 @@ Input [2]: [p_promo_sk#25, p_channel_tv#26]
 
 (36) Filter [codegen id : 8]
 Input [2]: [p_promo_sk#25, p_channel_tv#26]
-Condition : ((isnotnull(p_channel_tv#26) AND (p_channel_tv#26 = N)) AND isnotnull(p_promo_sk#25))
+Condition : ((isnotnull(p_promo_sk#25) AND isnotnull(p_channel_tv#26)) AND (p_channel_tv#26 = N))
 
 (37) Project [codegen id : 8]
 Output [1]: [p_promo_sk#25]

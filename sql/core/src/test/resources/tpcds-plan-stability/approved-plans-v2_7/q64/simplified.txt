@@ -178,7 +178,7 @@ WholeStageCodegen (54)
                                     BroadcastExchange #17
                                       WholeStageCodegen (24)
                                         Project [i_item_sk,i_product_name]
-                                          Filter [i_current_price,i_color,i_item_sk]
+                                          Filter [i_item_sk,i_color,i_current_price]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.item [i_item_sk,i_current_price,i_color,i_product_name]

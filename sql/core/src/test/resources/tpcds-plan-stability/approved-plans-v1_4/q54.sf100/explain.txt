@@ -72,7 +72,7 @@ TakeOrderedAndProject (67)
 Output [3]: [ca_address_sk#1, ca_county#2, ca_state#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_county), IsNotNull(ca_state)]
+PushedFilters: [IsNotNull(ca_state), IsNotNull(ca_county), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_county:string,ca_state:string>
 
 (2) ColumnarToRow [codegen id : 2]
@@ -80,7 +80,7 @@ Input [3]: [ca_address_sk#1, ca_county#2, ca_state#3]
 
 (3) Filter [codegen id : 2]
 Input [3]: [ca_address_sk#1, ca_county#2, ca_state#3]
-Condition : ((isnotnull(ca_address_sk#1) AND isnotnull(ca_county#2)) AND isnotnull(ca_state#3))
+Condition : ((isnotnull(ca_state#3) AND isnotnull(ca_county#2)) AND isnotnull(ca_address_sk#1))
 
 (4) Scan parquet default.store
 Output [2]: [s_county#4, s_state#5]
@@ -118,7 +118,7 @@ Output [3]: [cs_bill_customer_sk#8, cs_item_sk#9, cs_sold_date_sk#10]
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#10), dynamicpruningexpression(cs_sold_date_sk#10 IN dynamicpruning#11)]
-PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_bill_customer_sk)]
+PushedFilters: [IsNotNull(cs_bill_customer_sk), IsNotNull(cs_item_sk)]
 ReadSchema: struct<cs_bill_customer_sk:int,cs_item_sk:int>
 
 (12) ColumnarToRow [codegen id : 3]
@@ -126,7 +126,7 @@ Input [3]: [cs_bill_customer_sk#8, cs_item_sk#9, cs_sold_date_sk#10]
 
 (13) Filter [codegen id : 3]
 Input [3]: [cs_bill_customer_sk#8, cs_item_sk#9, cs_sold_date_sk#10]
-Condition : (isnotnull(cs_item_sk#9) AND isnotnull(cs_bill_customer_sk#8))
+Condition : (isnotnull(cs_bill_customer_sk#8) AND isnotnull(cs_item_sk#9))
 
 (14) Project [codegen id : 3]
 Output [3]: [cs_sold_date_sk#10 AS sold_date_sk#12, cs_bill_customer_sk#8 AS customer_sk#13, cs_item_sk#9 AS item_sk#14]
@@ -137,7 +137,7 @@ Output [3]: [ws_item_sk#15, ws_bill_customer_sk#16, ws_sold_date_sk#17]
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#17), dynamicpruningexpression(ws_sold_date_sk#17 IN dynamicpruning#11)]
-PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_bill_customer_sk)]
+PushedFilters: [IsNotNull(ws_bill_customer_sk), IsNotNull(ws_item_sk)]
 ReadSchema: struct<ws_item_sk:int,ws_bill_customer_sk:int>
 
 (16) ColumnarToRow [codegen id : 4]
@@ -145,7 +145,7 @@ Input [3]: [ws_item_sk#15, ws_bill_customer_sk#16, ws_sold_date_sk#17]
 
 (17) Filter [codegen id : 4]
 Input [3]: [ws_item_sk#15, ws_bill_customer_sk#16, ws_sold_date_sk#17]
-Condition : (isnotnull(ws_item_sk#15) AND isnotnull(ws_bill_customer_sk#16))
+Condition : (isnotnull(ws_bill_customer_sk#16) AND isnotnull(ws_item_sk#15))
 
 (18) Project [codegen id : 4]
 Output [3]: [ws_sold_date_sk#17 AS sold_date_sk#18, ws_bill_customer_sk#16 AS customer_sk#19, ws_item_sk#15 AS item_sk#20]
@@ -157,7 +157,7 @@ Input [3]: [ws_item_sk#15, ws_bill_customer_sk#16, ws_sold_date_sk#17]
 Output [3]: [d_date_sk#21, d_year#22, d_moy#23]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,12), EqualTo(d_year,1998), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_year,1998), EqualTo(d_moy,12), IsNotNull(d_moy), IsNotNull(d_year), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (21) ColumnarToRow [codegen id : 5]
@@ -165,7 +165,7 @@ Input [3]: [d_date_sk#21, d_year#22, d_moy#23]
 
 (22) Filter [codegen id : 5]
 Input [3]: [d_date_sk#21, d_year#22, d_moy#23]
-Condition : ((((isnotnull(d_moy#23) AND isnotnull(d_year#22)) AND (d_moy#23 = 12)) AND (d_year#22 = 1998)) AND isnotnull(d_date_sk#21))
+Condition : (((((d_year#22 = 1998) AND (d_moy#23 = 12)) AND isnotnull(d_moy#23)) AND isnotnull(d_year#22)) AND isnotnull(d_date_sk#21))
 
 (23) Project [codegen id : 5]
 Output [1]: [d_date_sk#21]
@@ -188,7 +188,7 @@ Input [4]: [sold_date_sk#12, customer_sk#13, item_sk#14, d_date_sk#21]
 Output [3]: [i_item_sk#25, i_class#26, i_category#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_category), IsNotNull(i_class), EqualTo(i_category,Women                                             ), EqualTo(i_class,maternity                                         ), IsNotNull(i_item_sk)]
+PushedFilters: [EqualTo(i_class,maternity                                         ), EqualTo(i_category,Women                                             ), IsNotNull(i_class), IsNotNull(i_category), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_class:string,i_category:string>
 
 (28) ColumnarToRow [codegen id : 6]
@@ -196,7 +196,7 @@ Input [3]: [i_item_sk#25, i_class#26, i_category#27]
 
 (29) Filter [codegen id : 6]
 Input [3]: [i_item_sk#25, i_class#26, i_category#27]
-Condition : ((((isnotnull(i_category#27) AND isnotnull(i_class#26)) AND (i_category#27 = Women                                             )) AND (i_class#26 = maternity                                         )) AND isnotnull(i_item_sk#25))
+Condition : (((((i_class#26 = maternity                                         ) AND (i_category#27 = Women                                             )) AND isnotnull(i_class#26)) AND isnotnull(i_category#27)) AND isnotnull(i_item_sk#25))
 
 (30) Project [codegen id : 6]
 Output [1]: [i_item_sk#25]
@@ -308,7 +308,7 @@ Input [2]: [d_date_sk#37, d_month_seq#38]
 
 (53) Filter [codegen id : 12]
 Input [2]: [d_date_sk#37, d_month_seq#38]
-Condition : (((isnotnull(d_month_seq#38) AND (d_month_seq#38 >= Subquery scalar-subquery#39, [id=#40])) AND (d_month_seq#38 <= Subquery scalar-subquery#41, [id=#42])) AND isnotnull(d_date_sk#37))
+Condition : ((((d_month_seq#38 >= Subquery scalar-subquery#39, [id=#40]) AND (d_month_seq#38 <= Subquery scalar-subquery#41, [id=#42])) AND isnotnull(d_month_seq#38)) AND isnotnull(d_date_sk#37))
 
 (54) Project [codegen id : 12]
 Output [1]: [d_date_sk#37]
@@ -412,7 +412,7 @@ Subquery:4 Hosting operator id = 53 Hosting Expression = Subquery scalar-subquer
 Output [3]: [d_month_seq#55, d_year#56, d_moy#57]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,1998), EqualTo(d_moy,12)]
+PushedFilters: [EqualTo(d_year,1998), EqualTo(d_moy,12), IsNotNull(d_year), IsNotNull(d_moy)]
 ReadSchema: struct<d_month_seq:int,d_year:int,d_moy:int>
 
 (71) ColumnarToRow [codegen id : 1]
@@ -420,7 +420,7 @@ Input [3]: [d_month_seq#55, d_year#56, d_moy#57]
 
 (72) Filter [codegen id : 1]
 Input [3]: [d_month_seq#55, d_year#56, d_moy#57]
-Condition : (((isnotnull(d_year#56) AND isnotnull(d_moy#57)) AND (d_year#56 = 1998)) AND (d_moy#57 = 12))
+Condition : ((((d_year#56 = 1998) AND (d_moy#57 = 12)) AND isnotnull(d_year#56)) AND isnotnull(d_moy#57))
 
 (73) Project [codegen id : 1]
 Output [1]: [(d_month_seq#55 + 1) AS (d_month_seq + 1)#58]
@@ -458,7 +458,7 @@ Subquery:5 Hosting operator id = 53 Hosting Expression = Subquery scalar-subquer
 Output [3]: [d_month_seq#60, d_year#61, d_moy#62]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,1998), EqualTo(d_moy,12)]
+PushedFilters: [EqualTo(d_year,1998), EqualTo(d_moy,12), IsNotNull(d_year), IsNotNull(d_moy)]
 ReadSchema: struct<d_month_seq:int,d_year:int,d_moy:int>
 
 (78) ColumnarToRow [codegen id : 1]
@@ -466,7 +466,7 @@ Input [3]: [d_month_seq#60, d_year#61, d_moy#62]
 
 (79) Filter [codegen id : 1]
 Input [3]: [d_month_seq#60, d_year#61, d_moy#62]
-Condition : (((isnotnull(d_year#61) AND isnotnull(d_moy#62)) AND (d_year#61 = 1998)) AND (d_moy#62 = 12))
+Condition : ((((d_year#61 = 1998) AND (d_moy#62 = 12)) AND isnotnull(d_year#61)) AND isnotnull(d_moy#62))
 
 (80) Project [codegen id : 1]
 Output [1]: [(d_month_seq#60 + 3) AS (d_month_seq + 3)#63]

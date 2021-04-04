@@ -299,7 +299,7 @@ Input [6]: [cs_item_sk#17, cs_sold_date_sk#18, i_item_sk#19, i_brand_id#20, i_cl
 Output [2]: [d_date_sk#24, d_year#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), GreaterThanOrEqual(d_year,1999), LessThanOrEqual(d_year,2001), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_date_sk), GreaterThanOrEqual(d_year,1999), LessThanOrEqual(d_year,2001)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
 (23) ColumnarToRow [codegen id : 2]
@@ -307,7 +307,7 @@ Input [2]: [d_date_sk#24, d_year#25]
 
 (24) Filter [codegen id : 2]
 Input [2]: [d_date_sk#24, d_year#25]
-Condition : (((isnotnull(d_year#25) AND (d_year#25 >= 1999)) AND (d_year#25 <= 2001)) AND isnotnull(d_date_sk#24))
+Condition : (((isnotnull(d_year#25) AND isnotnull(d_date_sk#24)) AND (d_year#25 >= 1999)) AND (d_year#25 <= 2001))
 
 (25) Project [codegen id : 2]
 Output [1]: [d_date_sk#24]
@@ -501,7 +501,7 @@ Input [8]: [ss_item_sk#1, ss_quantity#2, ss_list_price#3, ss_sold_date_sk#4, i_i
 Output [3]: [d_date_sk#50, d_year#51, d_moy#52]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2000), EqualTo(d_moy,11), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk), EqualTo(d_year,2000), EqualTo(d_moy,11)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (67) ColumnarToRow [codegen id : 24]
@@ -509,7 +509,7 @@ Input [3]: [d_date_sk#50, d_year#51, d_moy#52]
 
 (68) Filter [codegen id : 24]
 Input [3]: [d_date_sk#50, d_year#51, d_moy#52]
-Condition : ((((isnotnull(d_year#51) AND isnotnull(d_moy#52)) AND (d_year#51 = 2000)) AND (d_moy#52 = 11)) AND isnotnull(d_date_sk#50))
+Condition : ((((isnotnull(d_year#51) AND isnotnull(d_moy#52)) AND isnotnull(d_date_sk#50)) AND (d_year#51 = 2000)) AND (d_moy#52 = 11))
 
 (69) Project [codegen id : 24]
 Output [1]: [d_date_sk#50]
@@ -1158,7 +1158,7 @@ Input [3]: [ss_quantity#347, ss_list_price#348, ss_sold_date_sk#349]
 Output [2]: [d_date_sk#351, d_year#352]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), GreaterThanOrEqual(d_year,1999), LessThanOrEqual(d_year,2001), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_date_sk), GreaterThanOrEqual(d_year,1999), LessThanOrEqual(d_year,2001)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
 (198) ColumnarToRow [codegen id : 1]
@@ -1166,7 +1166,7 @@ Input [2]: [d_date_sk#351, d_year#352]
 
 (199) Filter [codegen id : 1]
 Input [2]: [d_date_sk#351, d_year#352]
-Condition : (((isnotnull(d_year#352) AND (d_year#352 >= 1999)) AND (d_year#352 <= 2001)) AND isnotnull(d_date_sk#351))
+Condition : (((isnotnull(d_year#352) AND isnotnull(d_date_sk#351)) AND (d_year#352 >= 1999)) AND (d_year#352 <= 2001))
 
 (200) Project [codegen id : 1]
 Output [1]: [d_date_sk#351]
@@ -1199,7 +1199,7 @@ Input [3]: [cs_quantity#356, cs_list_price#357, cs_sold_date_sk#358]
 Output [2]: [d_date_sk#360, d_year#361]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), GreaterThanOrEqual(d_year,1998), LessThanOrEqual(d_year,2000), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_date_sk), GreaterThanOrEqual(d_year,1998), LessThanOrEqual(d_year,2000)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
 (207) ColumnarToRow [codegen id : 3]
@@ -1207,7 +1207,7 @@ Input [2]: [d_date_sk#360, d_year#361]
 
 (208) Filter [codegen id : 3]
 Input [2]: [d_date_sk#360, d_year#361]
-Condition : (((isnotnull(d_year#361) AND (d_year#361 >= 1998)) AND (d_year#361 <= 2000)) AND isnotnull(d_date_sk#360))
+Condition : (((isnotnull(d_year#361) AND isnotnull(d_date_sk#360)) AND (d_year#361 >= 1998)) AND (d_year#361 <= 2000))
 
 (209) Project [codegen id : 3]
 Output [1]: [d_date_sk#360]

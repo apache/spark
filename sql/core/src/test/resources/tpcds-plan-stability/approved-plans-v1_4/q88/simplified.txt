@@ -26,7 +26,7 @@ WholeStageCodegen (40)
                                         BroadcastExchange #2
                                           WholeStageCodegen (1)
                                             Project [hd_demo_sk]
-                                              Filter [hd_dep_count,hd_vehicle_count,hd_demo_sk]
+                                              Filter [hd_demo_sk,hd_dep_count,hd_vehicle_count]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count,hd_vehicle_count]
@@ -42,7 +42,7 @@ WholeStageCodegen (40)
                                 BroadcastExchange #4
                                   WholeStageCodegen (3)
                                     Project [s_store_sk]
-                                      Filter [s_store_name,s_store_sk]
+                                      Filter [s_store_sk,s_store_name]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.store [s_store_sk,s_store_name]

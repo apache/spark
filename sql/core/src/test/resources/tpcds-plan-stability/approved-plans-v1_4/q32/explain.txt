@@ -51,7 +51,7 @@ Condition : (isnotnull(cs_item_sk#1) AND isnotnull(cs_ext_discount_amt#2))
 Output [2]: [i_item_sk#5, i_manufact_id#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_manufact_id), EqualTo(i_manufact_id,977), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_manufact_id), IsNotNull(i_item_sk), EqualTo(i_manufact_id,977)]
 ReadSchema: struct<i_item_sk:int,i_manufact_id:int>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -59,7 +59,7 @@ Input [2]: [i_item_sk#5, i_manufact_id#6]
 
 (6) Filter [codegen id : 1]
 Input [2]: [i_item_sk#5, i_manufact_id#6]
-Condition : ((isnotnull(i_manufact_id#6) AND (i_manufact_id#6 = 977)) AND isnotnull(i_item_sk#5))
+Condition : ((isnotnull(i_manufact_id#6) AND isnotnull(i_item_sk#5)) AND (i_manufact_id#6 = 977))
 
 (7) Project [codegen id : 1]
 Output [1]: [i_item_sk#5]
@@ -97,7 +97,7 @@ Condition : isnotnull(cs_item_sk#8)
 Output [2]: [d_date_sk#11, d_date#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-01-27), LessThanOrEqual(d_date,2000-04-26), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date), IsNotNull(d_date_sk), GreaterThanOrEqual(d_date,2000-01-27), LessThanOrEqual(d_date,2000-04-26)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (15) ColumnarToRow [codegen id : 2]
@@ -105,7 +105,7 @@ Input [2]: [d_date_sk#11, d_date#12]
 
 (16) Filter [codegen id : 2]
 Input [2]: [d_date_sk#11, d_date#12]
-Condition : (((isnotnull(d_date#12) AND (d_date#12 >= 2000-01-27)) AND (d_date#12 <= 2000-04-26)) AND isnotnull(d_date_sk#11))
+Condition : (((isnotnull(d_date#12) AND isnotnull(d_date_sk#11)) AND (d_date#12 >= 2000-01-27)) AND (d_date#12 <= 2000-04-26))
 
 (17) Project [codegen id : 2]
 Output [1]: [d_date_sk#11]

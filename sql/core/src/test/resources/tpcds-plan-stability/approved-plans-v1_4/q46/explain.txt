@@ -125,7 +125,7 @@ Input [8]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_tic
 Output [3]: [hd_demo_sk#17, hd_dep_count#18, hd_vehicle_count#19]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [Or(EqualTo(hd_dep_count,4),EqualTo(hd_vehicle_count,3)), IsNotNull(hd_demo_sk)]
+PushedFilters: [IsNotNull(hd_demo_sk), Or(EqualTo(hd_dep_count,4),EqualTo(hd_vehicle_count,3))]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int,hd_vehicle_count:int>
 
 (19) ColumnarToRow [codegen id : 3]
@@ -133,7 +133,7 @@ Input [3]: [hd_demo_sk#17, hd_dep_count#18, hd_vehicle_count#19]
 
 (20) Filter [codegen id : 3]
 Input [3]: [hd_demo_sk#17, hd_dep_count#18, hd_vehicle_count#19]
-Condition : (((hd_dep_count#18 = 4) OR (hd_vehicle_count#19 = 3)) AND isnotnull(hd_demo_sk#17))
+Condition : (isnotnull(hd_demo_sk#17) AND ((hd_dep_count#18 = 4) OR (hd_vehicle_count#19 = 3)))
 
 (21) Project [codegen id : 3]
 Output [1]: [hd_demo_sk#17]

@@ -43,7 +43,7 @@ TakeOrderedAndProject [sales_cnt_diff,prev_year,year,i_brand_id,i_class_id,i_cat
                                                                         BroadcastExchange #6
                                                                           WholeStageCodegen (1)
                                                                             Project [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id]
-                                                                              Filter [i_category,i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id]
+                                                                              Filter [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id,i_category]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id,i_category,i_manufact_id]

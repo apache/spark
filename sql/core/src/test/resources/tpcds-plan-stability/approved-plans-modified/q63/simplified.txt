@@ -21,7 +21,7 @@ TakeOrderedAndProject [i_manager_id,avg_monthly_sales,sum_sales]
                                         Project [i_manager_id,ss_store_sk,ss_sales_price,ss_sold_date_sk]
                                           BroadcastHashJoin [i_item_sk,ss_item_sk]
                                             Project [i_item_sk,i_manager_id]
-                                              Filter [i_category,i_class,i_brand,i_item_sk]
+                                              Filter [i_item_sk,i_category,i_class,i_brand]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_manager_id]
@@ -38,7 +38,7 @@ TakeOrderedAndProject [i_manager_id,avg_monthly_sales,sum_sales]
                                           BroadcastExchange #4
                                             WholeStageCodegen (2)
                                               Project [d_date_sk,d_moy]
-                                                Filter [d_month_seq,d_date_sk]
+                                                Filter [d_date_sk,d_month_seq]
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.date_dim [d_date_sk,d_month_seq,d_moy]

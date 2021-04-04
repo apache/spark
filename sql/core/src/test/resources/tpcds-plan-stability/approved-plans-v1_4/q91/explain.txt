@@ -94,7 +94,7 @@ Input [8]: [cc_call_center_sk#1, cc_call_center_id#2, cc_name#3, cc_manager#4, c
 Output [3]: [d_date_sk#11, d_year#12, d_moy#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,1998), EqualTo(d_moy,11), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk), EqualTo(d_year,1998), EqualTo(d_moy,11)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (11) ColumnarToRow [codegen id : 2]
@@ -102,7 +102,7 @@ Input [3]: [d_date_sk#11, d_year#12, d_moy#13]
 
 (12) Filter [codegen id : 2]
 Input [3]: [d_date_sk#11, d_year#12, d_moy#13]
-Condition : ((((isnotnull(d_year#12) AND isnotnull(d_moy#13)) AND (d_year#12 = 1998)) AND (d_moy#13 = 11)) AND isnotnull(d_date_sk#11))
+Condition : ((((isnotnull(d_year#12) AND isnotnull(d_moy#13)) AND isnotnull(d_date_sk#11)) AND (d_year#12 = 1998)) AND (d_moy#13 = 11))
 
 (13) Project [codegen id : 2]
 Output [1]: [d_date_sk#11]
@@ -152,7 +152,7 @@ Input [9]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_returning_customer_
 Output [2]: [ca_address_sk#20, ca_gmt_offset#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_gmt_offset), EqualTo(ca_gmt_offset,-7.00), IsNotNull(ca_address_sk)]
+PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_gmt_offset), EqualTo(ca_gmt_offset,-7.00)]
 ReadSchema: struct<ca_address_sk:int,ca_gmt_offset:decimal(5,2)>
 
 (24) ColumnarToRow [codegen id : 4]
@@ -160,7 +160,7 @@ Input [2]: [ca_address_sk#20, ca_gmt_offset#21]
 
 (25) Filter [codegen id : 4]
 Input [2]: [ca_address_sk#20, ca_gmt_offset#21]
-Condition : ((isnotnull(ca_gmt_offset#21) AND (ca_gmt_offset#21 = -7.00)) AND isnotnull(ca_address_sk#20))
+Condition : ((isnotnull(ca_address_sk#20) AND isnotnull(ca_gmt_offset#21)) AND (ca_gmt_offset#21 = -7.00))
 
 (26) Project [codegen id : 4]
 Output [1]: [ca_address_sk#20]
@@ -183,7 +183,7 @@ Input [8]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_curre
 Output [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Unknown             )),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,Advanced Degree     ))), IsNotNull(cd_demo_sk)]
+PushedFilters: [IsNotNull(cd_demo_sk), Or(And(EqualTo(cd_marital_status,M),EqualTo(cd_education_status,Unknown             )),And(EqualTo(cd_marital_status,W),EqualTo(cd_education_status,Advanced Degree     )))]
 ReadSchema: struct<cd_demo_sk:int,cd_marital_status:string,cd_education_status:string>
 
 (31) ColumnarToRow [codegen id : 5]
@@ -191,7 +191,7 @@ Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
 
 (32) Filter [codegen id : 5]
 Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
-Condition : ((((cd_marital_status#24 = M) AND (cd_education_status#25 = Unknown             )) OR ((cd_marital_status#24 = W) AND (cd_education_status#25 = Advanced Degree     ))) AND isnotnull(cd_demo_sk#23))
+Condition : (isnotnull(cd_demo_sk#23) AND (((cd_marital_status#24 = M) AND (cd_education_status#25 = Unknown             )) OR ((cd_marital_status#24 = W) AND (cd_education_status#25 = Advanced Degree     ))))
 
 (33) BroadcastExchange
 Input [3]: [cd_demo_sk#23, cd_marital_status#24, cd_education_status#25]
@@ -210,7 +210,7 @@ Input [9]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cr_net_loss#7, c_curre
 Output [2]: [hd_demo_sk#27, hd_buy_potential#28]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_buy_potential), StringStartsWith(hd_buy_potential,Unknown), IsNotNull(hd_demo_sk)]
+PushedFilters: [IsNotNull(hd_demo_sk), IsNotNull(hd_buy_potential), StringStartsWith(hd_buy_potential,Unknown)]
 ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string>
 
 (37) ColumnarToRow [codegen id : 6]
@@ -218,7 +218,7 @@ Input [2]: [hd_demo_sk#27, hd_buy_potential#28]
 
 (38) Filter [codegen id : 6]
 Input [2]: [hd_demo_sk#27, hd_buy_potential#28]
-Condition : ((isnotnull(hd_buy_potential#28) AND StartsWith(hd_buy_potential#28, Unknown)) AND isnotnull(hd_demo_sk#27))
+Condition : ((isnotnull(hd_demo_sk#27) AND isnotnull(hd_buy_potential#28)) AND StartsWith(hd_buy_potential#28, Unknown))
 
 (39) Project [codegen id : 6]
 Output [1]: [hd_demo_sk#27]

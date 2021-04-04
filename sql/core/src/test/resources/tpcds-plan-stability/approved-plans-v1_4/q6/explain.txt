@@ -126,7 +126,7 @@ Input [2]: [d_date_sk#11, d_month_seq#12]
 
 (18) Filter [codegen id : 3]
 Input [2]: [d_date_sk#11, d_month_seq#12]
-Condition : ((isnotnull(d_month_seq#12) AND (d_month_seq#12 = Subquery scalar-subquery#13, [id=#14])) AND isnotnull(d_date_sk#11))
+Condition : ((isnotnull(d_month_seq#12) AND isnotnull(d_date_sk#11)) AND (d_month_seq#12 = Subquery scalar-subquery#13, [id=#14]))
 
 (19) Project [codegen id : 3]
 Output [1]: [d_date_sk#11]
@@ -149,7 +149,7 @@ Input [4]: [ca_state#2, ss_item_sk#6, ss_sold_date_sk#8, d_date_sk#11]
 Output [3]: [i_item_sk#16, i_current_price#17, i_category#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_current_price)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_category:string>
 
 (24) ColumnarToRow [codegen id : 6]
@@ -157,7 +157,7 @@ Input [3]: [i_item_sk#16, i_current_price#17, i_category#18]
 
 (25) Filter [codegen id : 6]
 Input [3]: [i_item_sk#16, i_current_price#17, i_category#18]
-Condition : (isnotnull(i_current_price#17) AND isnotnull(i_item_sk#16))
+Condition : (isnotnull(i_item_sk#16) AND isnotnull(i_current_price#17))
 
 (26) Scan parquet default.item
 Output [2]: [i_current_price#19, i_category#20]

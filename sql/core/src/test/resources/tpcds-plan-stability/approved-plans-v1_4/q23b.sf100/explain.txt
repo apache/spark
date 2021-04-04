@@ -381,7 +381,7 @@ Join condition: None
 Output [3]: [d_date_sk#43, d_year#44, d_moy#45]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2000), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_year,2000), EqualTo(d_moy,2), IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (54) ColumnarToRow [codegen id : 16]
@@ -389,7 +389,7 @@ Input [3]: [d_date_sk#43, d_year#44, d_moy#45]
 
 (55) Filter [codegen id : 16]
 Input [3]: [d_date_sk#43, d_year#44, d_moy#45]
-Condition : ((((isnotnull(d_year#44) AND isnotnull(d_moy#45)) AND (d_year#44 = 2000)) AND (d_moy#45 = 2)) AND isnotnull(d_date_sk#43))
+Condition : (((((d_year#44 = 2000) AND (d_moy#45 = 2)) AND isnotnull(d_year#44)) AND isnotnull(d_moy#45)) AND isnotnull(d_date_sk#43))
 
 (56) Project [codegen id : 16]
 Output [1]: [d_date_sk#43]
@@ -807,7 +807,7 @@ Subquery:3 Hosting operator id = 49 Hosting Expression = Subquery scalar-subquer
 Output [4]: [ss_customer_sk#95, ss_quantity#96, ss_sales_price#97, ss_sold_date_sk#98]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ss_sold_date_sk#98), dynamicpruningexpression(ss_sold_date_sk#98 IN dynamicpruning#99)]
+PartitionFilters: [dynamicpruningexpression(ss_sold_date_sk#98 IN dynamicpruning#99), isnotnull(ss_sold_date_sk#98)]
 PushedFilters: [IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_customer_sk:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
 

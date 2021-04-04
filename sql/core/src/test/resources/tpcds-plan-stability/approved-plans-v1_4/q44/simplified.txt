@@ -10,7 +10,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                   WholeStageCodegen (4)
                     Sort [rnk]
                       Project [item_sk,rnk]
-                        Filter [rnk,item_sk]
+                        Filter [item_sk,rnk]
                           InputAdapter
                             Window [rank_col]
                               WholeStageCodegen (3)
@@ -46,7 +46,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                   WholeStageCodegen (8)
                     Sort [rnk]
                       Project [item_sk,rnk]
-                        Filter [rnk,item_sk]
+                        Filter [item_sk,rnk]
                           InputAdapter
                             Window [rank_col]
                               WholeStageCodegen (7)

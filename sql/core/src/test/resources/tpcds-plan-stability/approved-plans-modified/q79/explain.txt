@@ -54,7 +54,7 @@ Condition : ((isnotnull(ss_store_sk#4) AND isnotnull(ss_hdemo_sk#2)) AND isnotnu
 Output [3]: [d_date_sk#10, d_year#11, d_dow#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_dow), EqualTo(d_dow,1), In(d_year, [1998,1999,2000]), GreaterThanOrEqual(d_date_sk,2450819), LessThanOrEqual(d_date_sk,2451904), IsNotNull(d_date_sk)]
+PushedFilters: [In(d_year, [1998,1999,2000]), IsNotNull(d_dow), IsNotNull(d_date_sk), EqualTo(d_dow,1), GreaterThanOrEqual(d_date_sk,2450819), LessThanOrEqual(d_date_sk,2451904)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dow:int>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -62,7 +62,7 @@ Input [3]: [d_date_sk#10, d_year#11, d_dow#12]
 
 (6) Filter [codegen id : 1]
 Input [3]: [d_date_sk#10, d_year#11, d_dow#12]
-Condition : (((((isnotnull(d_dow#12) AND (d_dow#12 = 1)) AND d_year#11 IN (1998,1999,2000)) AND (d_date_sk#10 >= 2450819)) AND (d_date_sk#10 <= 2451904)) AND isnotnull(d_date_sk#10))
+Condition : (((((d_year#11 IN (1998,1999,2000) AND isnotnull(d_dow#12)) AND isnotnull(d_date_sk#10)) AND (d_dow#12 = 1)) AND (d_date_sk#10 >= 2450819)) AND (d_date_sk#10 <= 2451904))
 
 (7) Project [codegen id : 1]
 Output [1]: [d_date_sk#10]
@@ -85,7 +85,7 @@ Input [9]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_tic
 Output [3]: [s_store_sk#14, s_number_employees#15, s_city#16]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_number_employees), GreaterThanOrEqual(s_number_employees,200), LessThanOrEqual(s_number_employees,295), IsNotNull(s_store_sk)]
+PushedFilters: [IsNotNull(s_number_employees), IsNotNull(s_store_sk), GreaterThanOrEqual(s_number_employees,200), LessThanOrEqual(s_number_employees,295)]
 ReadSchema: struct<s_store_sk:int,s_number_employees:int,s_city:string>
 
 (12) ColumnarToRow [codegen id : 2]
@@ -93,7 +93,7 @@ Input [3]: [s_store_sk#14, s_number_employees#15, s_city#16]
 
 (13) Filter [codegen id : 2]
 Input [3]: [s_store_sk#14, s_number_employees#15, s_city#16]
-Condition : (((isnotnull(s_number_employees#15) AND (s_number_employees#15 >= 200)) AND (s_number_employees#15 <= 295)) AND isnotnull(s_store_sk#14))
+Condition : (((isnotnull(s_number_employees#15) AND isnotnull(s_store_sk#14)) AND (s_number_employees#15 >= 200)) AND (s_number_employees#15 <= 295))
 
 (14) Project [codegen id : 2]
 Output [2]: [s_store_sk#14, s_city#16]
@@ -116,7 +116,7 @@ Input [9]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_tic
 Output [3]: [hd_demo_sk#18, hd_dep_count#19, hd_vehicle_count#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [Or(EqualTo(hd_dep_count,8),GreaterThan(hd_vehicle_count,0)), IsNotNull(hd_demo_sk)]
+PushedFilters: [IsNotNull(hd_demo_sk), Or(EqualTo(hd_dep_count,8),GreaterThan(hd_vehicle_count,0))]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int,hd_vehicle_count:int>
 
 (19) ColumnarToRow [codegen id : 3]
@@ -124,7 +124,7 @@ Input [3]: [hd_demo_sk#18, hd_dep_count#19, hd_vehicle_count#20]
 
 (20) Filter [codegen id : 3]
 Input [3]: [hd_demo_sk#18, hd_dep_count#19, hd_vehicle_count#20]
-Condition : (((hd_dep_count#19 = 8) OR (hd_vehicle_count#20 > 0)) AND isnotnull(hd_demo_sk#18))
+Condition : (isnotnull(hd_demo_sk#18) AND ((hd_dep_count#19 = 8) OR (hd_vehicle_count#20 > 0)))
 
 (21) Project [codegen id : 3]
 Output [1]: [hd_demo_sk#18]

@@ -96,7 +96,7 @@ Arguments: [rank(rank_col#12) windowspecdefinition(rank_col#12 ASC NULLS FIRST, 
 
 (13) Filter [codegen id : 4]
 Input [3]: [item_sk#11, rank_col#12, rnk#17]
-Condition : ((rnk#17 < 11) AND isnotnull(item_sk#11))
+Condition : (isnotnull(item_sk#11) AND (rnk#17 < 11))
 
 (14) Project [codegen id : 4]
 Output [2]: [item_sk#11, rnk#17]
@@ -138,7 +138,7 @@ Arguments: [rank(rank_col#24) windowspecdefinition(rank_col#24 DESC NULLS LAST, 
 
 (23) Filter [codegen id : 8]
 Input [3]: [item_sk#23, rank_col#24, rnk#27]
-Condition : ((rnk#27 < 11) AND isnotnull(item_sk#23))
+Condition : (isnotnull(item_sk#23) AND (rnk#27 < 11))
 
 (24) Project [codegen id : 8]
 Output [2]: [item_sk#23, rnk#27]
@@ -216,7 +216,7 @@ Subquery:1 Hosting operator id = 8 Hosting Expression = Subquery scalar-subquery
 Output [4]: [ss_addr_sk#35, ss_store_sk#36, ss_net_profit#37, ss_sold_date_sk#38]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4), IsNull(ss_addr_sk)]
+PushedFilters: [IsNotNull(ss_store_sk), IsNull(ss_addr_sk), EqualTo(ss_store_sk,4)]
 ReadSchema: struct<ss_addr_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
 
 (39) ColumnarToRow [codegen id : 1]
@@ -224,7 +224,7 @@ Input [4]: [ss_addr_sk#35, ss_store_sk#36, ss_net_profit#37, ss_sold_date_sk#38]
 
 (40) Filter [codegen id : 1]
 Input [4]: [ss_addr_sk#35, ss_store_sk#36, ss_net_profit#37, ss_sold_date_sk#38]
-Condition : ((isnotnull(ss_store_sk#36) AND (ss_store_sk#36 = 4)) AND isnull(ss_addr_sk#35))
+Condition : ((isnotnull(ss_store_sk#36) AND isnull(ss_addr_sk#35)) AND (ss_store_sk#36 = 4))
 
 (41) Project [codegen id : 1]
 Output [2]: [ss_store_sk#36, ss_net_profit#37]

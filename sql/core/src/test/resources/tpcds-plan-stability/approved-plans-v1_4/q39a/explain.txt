@@ -126,7 +126,7 @@ Input [6]: [inv_warehouse_sk#2, inv_quantity_on_hand#3, inv_date_sk#4, i_item_sk
 Output [3]: [d_date_sk#11, d_year#12, d_moy#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,1), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk), EqualTo(d_year,2001), EqualTo(d_moy,1)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (17) ColumnarToRow [codegen id : 3]
@@ -134,7 +134,7 @@ Input [3]: [d_date_sk#11, d_year#12, d_moy#13]
 
 (18) Filter [codegen id : 3]
 Input [3]: [d_date_sk#11, d_year#12, d_moy#13]
-Condition : ((((isnotnull(d_year#12) AND isnotnull(d_moy#13)) AND (d_year#12 = 2001)) AND (d_moy#13 = 1)) AND isnotnull(d_date_sk#11))
+Condition : ((((isnotnull(d_year#12) AND isnotnull(d_moy#13)) AND isnotnull(d_date_sk#11)) AND (d_year#12 = 2001)) AND (d_moy#13 = 1))
 
 (19) Project [codegen id : 3]
 Output [2]: [d_date_sk#11, d_moy#13]
@@ -173,7 +173,7 @@ Results [5]: [w_warehouse_sk#8, i_item_sk#6, d_moy#13, stddev_samp(cast(inv_quan
 
 (26) Filter [codegen id : 10]
 Input [5]: [w_warehouse_sk#8, i_item_sk#6, d_moy#13, stdev#28, mean#29]
-Condition : ((isnotnull(mean#29) AND isnotnull(stdev#28)) AND (NOT (mean#29 = 0.0) AND ((stdev#28 / mean#29) > 1.0)))
+Condition : (((isnotnull(mean#29) AND isnotnull(stdev#28)) AND NOT (mean#29 = 0.0)) AND ((stdev#28 / mean#29) > 1.0))
 
 (27) Project [codegen id : 10]
 Output [5]: [w_warehouse_sk#8, i_item_sk#6, d_moy#13, mean#29, CASE WHEN (mean#29 = 0.0) THEN null ELSE (stdev#28 / mean#29) END AS cov#30]
@@ -222,7 +222,7 @@ Input [6]: [inv_warehouse_sk#32, inv_quantity_on_hand#33, inv_date_sk#34, i_item
 Output [3]: [d_date_sk#39, d_year#40, d_moy#41]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk), EqualTo(d_year,2001), EqualTo(d_moy,2)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (38) ColumnarToRow [codegen id : 7]
@@ -230,7 +230,7 @@ Input [3]: [d_date_sk#39, d_year#40, d_moy#41]
 
 (39) Filter [codegen id : 7]
 Input [3]: [d_date_sk#39, d_year#40, d_moy#41]
-Condition : ((((isnotnull(d_year#40) AND isnotnull(d_moy#41)) AND (d_year#40 = 2001)) AND (d_moy#41 = 2)) AND isnotnull(d_date_sk#39))
+Condition : ((((isnotnull(d_year#40) AND isnotnull(d_moy#41)) AND isnotnull(d_date_sk#39)) AND (d_year#40 = 2001)) AND (d_moy#41 = 2))
 
 (40) Project [codegen id : 7]
 Output [2]: [d_date_sk#39, d_moy#41]
@@ -269,7 +269,7 @@ Results [5]: [w_warehouse_sk#37, i_item_sk#36, d_moy#41, stddev_samp(cast(inv_qu
 
 (47) Filter [codegen id : 9]
 Input [5]: [w_warehouse_sk#37, i_item_sk#36, d_moy#41, stdev#56, mean#57]
-Condition : ((isnotnull(mean#57) AND isnotnull(stdev#56)) AND (NOT (mean#57 = 0.0) AND ((stdev#56 / mean#57) > 1.0)))
+Condition : (((isnotnull(mean#57) AND isnotnull(stdev#56)) AND NOT (mean#57 = 0.0)) AND ((stdev#56 / mean#57) > 1.0))
 
 (48) Project [codegen id : 9]
 Output [5]: [w_warehouse_sk#37, i_item_sk#36, d_moy#41, mean#57, CASE WHEN (mean#57 = 0.0) THEN null ELSE (stdev#56 / mean#57) END AS cov#58]

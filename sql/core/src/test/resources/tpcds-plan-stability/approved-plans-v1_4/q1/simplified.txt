@@ -55,7 +55,7 @@ TakeOrderedAndProject [c_customer_id]
               BroadcastExchange #6
                 WholeStageCodegen (7)
                   Project [s_store_sk]
-                    Filter [s_state,s_store_sk]
+                    Filter [s_store_sk,s_state]
                       ColumnarToRow
                         InputAdapter
                           Scan parquet default.store [s_store_sk,s_state]

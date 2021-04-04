@@ -385,7 +385,7 @@ Input [7]: [cs_bill_customer_sk#1, cs_quantity#3, cs_list_price#4, cs_sold_date_
 Output [3]: [d_date_sk#48, d_year#49, d_moy#50]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2000), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk), EqualTo(d_year,2000), EqualTo(d_moy,2)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (62) ColumnarToRow [codegen id : 16]
@@ -393,7 +393,7 @@ Input [3]: [d_date_sk#48, d_year#49, d_moy#50]
 
 (63) Filter [codegen id : 16]
 Input [3]: [d_date_sk#48, d_year#49, d_moy#50]
-Condition : ((((isnotnull(d_year#49) AND isnotnull(d_moy#50)) AND (d_year#49 = 2000)) AND (d_moy#50 = 2)) AND isnotnull(d_date_sk#48))
+Condition : ((((isnotnull(d_year#49) AND isnotnull(d_moy#50)) AND isnotnull(d_date_sk#48)) AND (d_year#49 = 2000)) AND (d_moy#50 = 2))
 
 (64) Project [codegen id : 16]
 Output [1]: [d_date_sk#48]

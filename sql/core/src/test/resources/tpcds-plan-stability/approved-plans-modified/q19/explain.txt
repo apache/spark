@@ -44,7 +44,7 @@ TakeOrderedAndProject (39)
 Output [3]: [d_date_sk#1, d_year#2, d_moy#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,11), EqualTo(d_year,1999), GreaterThanOrEqual(d_date_sk,2451484), LessThanOrEqual(d_date_sk,2451513), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), IsNotNull(d_date_sk), EqualTo(d_moy,11), EqualTo(d_year,1999), GreaterThanOrEqual(d_date_sk,2451484), LessThanOrEqual(d_date_sk,2451513)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (2) ColumnarToRow [codegen id : 6]
@@ -52,7 +52,7 @@ Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
 
 (3) Filter [codegen id : 6]
 Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
-Condition : ((((((isnotnull(d_moy#3) AND isnotnull(d_year#2)) AND (d_moy#3 = 11)) AND (d_year#2 = 1999)) AND (d_date_sk#1 >= 2451484)) AND (d_date_sk#1 <= 2451513)) AND isnotnull(d_date_sk#1))
+Condition : ((((((isnotnull(d_moy#3) AND isnotnull(d_year#2)) AND isnotnull(d_date_sk#1)) AND (d_moy#3 = 11)) AND (d_year#2 = 1999)) AND (d_date_sk#1 >= 2451484)) AND (d_date_sk#1 <= 2451513))
 
 (4) Project [codegen id : 6]
 Output [1]: [d_date_sk#1]
@@ -90,7 +90,7 @@ Input [6]: [d_date_sk#1, ss_item_sk#4, ss_customer_sk#5, ss_store_sk#6, ss_ext_s
 Output [6]: [i_item_sk#10, i_brand_id#11, i_brand#12, i_manufact_id#13, i_manufact#14, i_manager_id#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,7), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_manager_id), IsNotNull(i_item_sk), EqualTo(i_manager_id,7)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_brand:string,i_manufact_id:int,i_manufact:string,i_manager_id:int>
 
 (12) ColumnarToRow [codegen id : 2]
@@ -98,7 +98,7 @@ Input [6]: [i_item_sk#10, i_brand_id#11, i_brand#12, i_manufact_id#13, i_manufac
 
 (13) Filter [codegen id : 2]
 Input [6]: [i_item_sk#10, i_brand_id#11, i_brand#12, i_manufact_id#13, i_manufact#14, i_manager_id#15]
-Condition : ((isnotnull(i_manager_id#15) AND (i_manager_id#15 = 7)) AND isnotnull(i_item_sk#10))
+Condition : ((isnotnull(i_manager_id#15) AND isnotnull(i_item_sk#10)) AND (i_manager_id#15 = 7))
 
 (14) Project [codegen id : 2]
 Output [5]: [i_item_sk#10, i_brand_id#11, i_brand#12, i_manufact_id#13, i_manufact#14]
@@ -175,7 +175,7 @@ Input [9]: [ss_store_sk#6, ss_ext_sales_price#7, i_brand_id#11, i_brand#12, i_ma
 Output [2]: [s_store_sk#23, s_zip#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_zip), IsNotNull(s_store_sk)]
+PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_zip)]
 ReadSchema: struct<s_store_sk:int,s_zip:string>
 
 (31) ColumnarToRow [codegen id : 5]
@@ -183,7 +183,7 @@ Input [2]: [s_store_sk#23, s_zip#24]
 
 (32) Filter [codegen id : 5]
 Input [2]: [s_store_sk#23, s_zip#24]
-Condition : (isnotnull(s_zip#24) AND isnotnull(s_store_sk#23))
+Condition : (isnotnull(s_store_sk#23) AND isnotnull(s_zip#24))
 
 (33) BroadcastExchange
 Input [2]: [s_store_sk#23, s_zip#24]

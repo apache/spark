@@ -154,7 +154,7 @@ Input [2]: [d_date_sk#19, d_month_seq#20]
 
 (22) Filter [codegen id : 4]
 Input [2]: [d_date_sk#19, d_month_seq#20]
-Condition : ((isnotnull(d_month_seq#20) AND (d_month_seq#20 = Subquery scalar-subquery#21, [id=#22])) AND isnotnull(d_date_sk#19))
+Condition : (((d_month_seq#20 = Subquery scalar-subquery#21, [id=#22]) AND isnotnull(d_month_seq#20)) AND isnotnull(d_date_sk#19))
 
 (23) Project [codegen id : 4]
 Output [1]: [d_date_sk#19]
@@ -304,7 +304,7 @@ Subquery:2 Hosting operator id = 22 Hosting Expression = Subquery scalar-subquer
 Output [3]: [d_month_seq#39, d_year#40, d_moy#41]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2000), EqualTo(d_moy,1)]
+PushedFilters: [EqualTo(d_year,2000), EqualTo(d_moy,1), IsNotNull(d_year), IsNotNull(d_moy)]
 ReadSchema: struct<d_month_seq:int,d_year:int,d_moy:int>
 
 (53) ColumnarToRow [codegen id : 1]
@@ -312,7 +312,7 @@ Input [3]: [d_month_seq#39, d_year#40, d_moy#41]
 
 (54) Filter [codegen id : 1]
 Input [3]: [d_month_seq#39, d_year#40, d_moy#41]
-Condition : (((isnotnull(d_year#40) AND isnotnull(d_moy#41)) AND (d_year#40 = 2000)) AND (d_moy#41 = 1))
+Condition : ((((d_year#40 = 2000) AND (d_moy#41 = 1)) AND isnotnull(d_year#40)) AND isnotnull(d_moy#41))
 
 (55) Project [codegen id : 1]
 Output [1]: [d_month_seq#39]

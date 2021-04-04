@@ -60,7 +60,7 @@ TakeOrderedAndProject (55)
 Output [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk)]
+PushedFilters: [IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int>
 
 (2) ColumnarToRow [codegen id : 1]
@@ -68,7 +68,7 @@ Input [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
 
 (3) Filter [codegen id : 1]
 Input [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
-Condition : (isnotnull(c_current_addr_sk#5) AND isnotnull(c_current_cdemo_sk#4))
+Condition : (isnotnull(c_current_cdemo_sk#4) AND isnotnull(c_current_addr_sk#5))
 
 (4) Exchange
 Input [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
@@ -92,7 +92,7 @@ Input [2]: [ss_customer_sk#7, ss_sold_date_sk#8]
 Output [3]: [d_date_sk#10, d_year#11, d_moy#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2002), GreaterThanOrEqual(d_moy,1), LessThanOrEqual(d_moy,4), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_year,2002), LessThanOrEqual(d_moy,4), IsNotNull(d_year), IsNotNull(d_moy), GreaterThanOrEqual(d_moy,1), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (9) ColumnarToRow [codegen id : 3]
@@ -100,7 +100,7 @@ Input [3]: [d_date_sk#10, d_year#11, d_moy#12]
 
 (10) Filter [codegen id : 3]
 Input [3]: [d_date_sk#10, d_year#11, d_moy#12]
-Condition : (((((isnotnull(d_year#11) AND isnotnull(d_moy#12)) AND (d_year#11 = 2002)) AND (d_moy#12 >= 1)) AND (d_moy#12 <= 4)) AND isnotnull(d_date_sk#10))
+Condition : ((((((d_year#11 = 2002) AND (d_moy#12 <= 4)) AND isnotnull(d_year#11)) AND isnotnull(d_moy#12)) AND (d_moy#12 >= 1)) AND isnotnull(d_date_sk#10))
 
 (11) Project [codegen id : 3]
 Output [1]: [d_date_sk#10]

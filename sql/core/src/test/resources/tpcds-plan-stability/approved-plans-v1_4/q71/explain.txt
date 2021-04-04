@@ -47,7 +47,7 @@
 Output [4]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manager_id#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,1), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_manager_id), IsNotNull(i_item_sk), EqualTo(i_manager_id,1)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_brand:string,i_manager_id:int>
 
 (2) ColumnarToRow [codegen id : 1]
@@ -55,7 +55,7 @@ Input [4]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manager_id#4]
 
 (3) Filter [codegen id : 1]
 Input [4]: [i_item_sk#1, i_brand_id#2, i_brand#3, i_manager_id#4]
-Condition : ((isnotnull(i_manager_id#4) AND (i_manager_id#4 = 1)) AND isnotnull(i_item_sk#1))
+Condition : ((isnotnull(i_manager_id#4) AND isnotnull(i_item_sk#1)) AND (i_manager_id#4 = 1))
 
 (4) Project [codegen id : 1]
 Output [3]: [i_item_sk#1, i_brand_id#2, i_brand#3]
@@ -84,7 +84,7 @@ Condition : (isnotnull(ws_item_sk#7) AND isnotnull(ws_sold_time_sk#6))
 Output [3]: [d_date_sk#11, d_year#12, d_moy#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,11), EqualTo(d_year,1999), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), IsNotNull(d_date_sk), EqualTo(d_moy,11), EqualTo(d_year,1999)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (10) ColumnarToRow [codegen id : 2]
@@ -92,7 +92,7 @@ Input [3]: [d_date_sk#11, d_year#12, d_moy#13]
 
 (11) Filter [codegen id : 2]
 Input [3]: [d_date_sk#11, d_year#12, d_moy#13]
-Condition : ((((isnotnull(d_moy#13) AND isnotnull(d_year#12)) AND (d_moy#13 = 11)) AND (d_year#12 = 1999)) AND isnotnull(d_date_sk#11))
+Condition : ((((isnotnull(d_moy#13) AND isnotnull(d_year#12)) AND isnotnull(d_date_sk#11)) AND (d_moy#13 = 11)) AND (d_year#12 = 1999))
 
 (12) Project [codegen id : 2]
 Output [1]: [d_date_sk#11]
@@ -180,7 +180,7 @@ Input [6]: [i_item_sk#1, i_brand_id#2, i_brand#3, ext_price#15, sold_item_sk#16,
 Output [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
-PushedFilters: [Or(EqualTo(t_meal_time,breakfast           ),EqualTo(t_meal_time,dinner              )), IsNotNull(t_time_sk)]
+PushedFilters: [IsNotNull(t_time_sk), Or(EqualTo(t_meal_time,breakfast           ),EqualTo(t_meal_time,dinner              ))]
 ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int,t_meal_time:string>
 
 (32) ColumnarToRow [codegen id : 8]
@@ -188,7 +188,7 @@ Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
 
 (33) Filter [codegen id : 8]
 Input [4]: [t_time_sk#34, t_hour#35, t_minute#36, t_meal_time#37]
-Condition : (((t_meal_time#37 = breakfast           ) OR (t_meal_time#37 = dinner              )) AND isnotnull(t_time_sk#34))
+Condition : (isnotnull(t_time_sk#34) AND ((t_meal_time#37 = breakfast           ) OR (t_meal_time#37 = dinner              )))
 
 (34) Project [codegen id : 8]
 Output [3]: [t_time_sk#34, t_hour#35, t_minute#36]

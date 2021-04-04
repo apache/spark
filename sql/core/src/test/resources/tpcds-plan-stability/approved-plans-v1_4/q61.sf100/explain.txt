@@ -75,7 +75,7 @@ Output [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ex
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#6), dynamicpruningexpression(ss_sold_date_sk#6 IN dynamicpruning#7)]
-PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_promo_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_item_sk)]
+PushedFilters: [IsNotNull(ss_promo_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_promo_sk:int,ss_ext_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 7]
@@ -83,13 +83,13 @@ Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext
 
 (3) Filter [codegen id : 7]
 Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6]
-Condition : (((isnotnull(ss_store_sk#3) AND isnotnull(ss_promo_sk#4)) AND isnotnull(ss_customer_sk#2)) AND isnotnull(ss_item_sk#1))
+Condition : (((isnotnull(ss_promo_sk#4) AND isnotnull(ss_customer_sk#2)) AND isnotnull(ss_store_sk#3)) AND isnotnull(ss_item_sk#1))
 
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#8, d_year#9, d_moy#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,1998), EqualTo(d_moy,11), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_year,1998), EqualTo(d_moy,11), IsNotNull(d_year), IsNotNull(d_moy), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -97,7 +97,7 @@ Input [3]: [d_date_sk#8, d_year#9, d_moy#10]
 
 (6) Filter [codegen id : 1]
 Input [3]: [d_date_sk#8, d_year#9, d_moy#10]
-Condition : ((((isnotnull(d_year#9) AND isnotnull(d_moy#10)) AND (d_year#9 = 1998)) AND (d_moy#10 = 11)) AND isnotnull(d_date_sk#8))
+Condition : (((((d_year#9 = 1998) AND (d_moy#10 = 11)) AND isnotnull(d_year#9)) AND isnotnull(d_moy#10)) AND isnotnull(d_date_sk#8))
 
 (7) Project [codegen id : 1]
 Output [1]: [d_date_sk#8]
@@ -120,7 +120,7 @@ Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext
 Output [2]: [i_item_sk#12, i_category#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Jewelry                                           ), IsNotNull(i_item_sk)]
+PushedFilters: [EqualTo(i_category,Jewelry                                           ), IsNotNull(i_category), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_category:string>
 
 (12) ColumnarToRow [codegen id : 2]
@@ -128,7 +128,7 @@ Input [2]: [i_item_sk#12, i_category#13]
 
 (13) Filter [codegen id : 2]
 Input [2]: [i_item_sk#12, i_category#13]
-Condition : ((isnotnull(i_category#13) AND (i_category#13 = Jewelry                                           )) AND isnotnull(i_item_sk#12))
+Condition : (((i_category#13 = Jewelry                                           ) AND isnotnull(i_category#13)) AND isnotnull(i_item_sk#12))
 
 (14) Project [codegen id : 2]
 Output [1]: [i_item_sk#12]
@@ -182,7 +182,7 @@ Input [5]: [ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5
 Output [2]: [s_store_sk#20, s_gmt_offset#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_gmt_offset), EqualTo(s_gmt_offset,-5.00), IsNotNull(s_store_sk)]
+PushedFilters: [EqualTo(s_gmt_offset,-5.00), IsNotNull(s_gmt_offset), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_gmt_offset:decimal(5,2)>
 
 (26) ColumnarToRow [codegen id : 4]
@@ -190,7 +190,7 @@ Input [2]: [s_store_sk#20, s_gmt_offset#21]
 
 (27) Filter [codegen id : 4]
 Input [2]: [s_store_sk#20, s_gmt_offset#21]
-Condition : ((isnotnull(s_gmt_offset#21) AND (s_gmt_offset#21 = -5.00)) AND isnotnull(s_store_sk#20))
+Condition : (((s_gmt_offset#21 = -5.00) AND isnotnull(s_gmt_offset#21)) AND isnotnull(s_store_sk#20))
 
 (28) Project [codegen id : 4]
 Output [1]: [s_store_sk#20]
@@ -227,7 +227,7 @@ Condition : (isnotnull(c_customer_sk#23) AND isnotnull(c_current_addr_sk#24))
 Output [2]: [ca_address_sk#25, ca_gmt_offset#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_gmt_offset), EqualTo(ca_gmt_offset,-5.00), IsNotNull(ca_address_sk)]
+PushedFilters: [EqualTo(ca_gmt_offset,-5.00), IsNotNull(ca_gmt_offset), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_gmt_offset:decimal(5,2)>
 
 (36) ColumnarToRow [codegen id : 5]
@@ -235,7 +235,7 @@ Input [2]: [ca_address_sk#25, ca_gmt_offset#26]
 
 (37) Filter [codegen id : 5]
 Input [2]: [ca_address_sk#25, ca_gmt_offset#26]
-Condition : ((isnotnull(ca_gmt_offset#26) AND (ca_gmt_offset#26 = -5.00)) AND isnotnull(ca_address_sk#25))
+Condition : (((ca_gmt_offset#26 = -5.00) AND isnotnull(ca_gmt_offset#26)) AND isnotnull(ca_address_sk#25))
 
 (38) Project [codegen id : 5]
 Output [1]: [ca_address_sk#25]
@@ -290,7 +290,7 @@ Output [5]: [ss_item_sk#34, ss_customer_sk#35, ss_store_sk#36, ss_ext_sales_pric
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#38), dynamicpruningexpression(ss_sold_date_sk#38 IN dynamicpruning#7)]
-PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_item_sk)]
+PushedFilters: [IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ext_sales_price:decimal(7,2)>
 
 (49) ColumnarToRow [codegen id : 13]
@@ -298,7 +298,7 @@ Input [5]: [ss_item_sk#34, ss_customer_sk#35, ss_store_sk#36, ss_ext_sales_price
 
 (50) Filter [codegen id : 13]
 Input [5]: [ss_item_sk#34, ss_customer_sk#35, ss_store_sk#36, ss_ext_sales_price#37, ss_sold_date_sk#38]
-Condition : ((isnotnull(ss_store_sk#36) AND isnotnull(ss_customer_sk#35)) AND isnotnull(ss_item_sk#34))
+Condition : ((isnotnull(ss_customer_sk#35) AND isnotnull(ss_store_sk#36)) AND isnotnull(ss_item_sk#34))
 
 (51) ReusedExchange [Reuses operator id: 8]
 Output [1]: [d_date_sk#39]

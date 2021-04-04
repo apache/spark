@@ -2011,8 +2011,10 @@ object SQLConf {
     .createWithDefault(0.9)
 
   val PREDICATE_REORDER_ENABLED = buildConf("spark.sql.predicateReorder.enabled")
-    .doc("Enables predicate reorder. Expressions with higher priority are executed in preference " +
-      "to expressions with lower priority.")
+    .internal()
+    .doc("When true (default), enables reorder conditions in filters base on estimated " +
+      s"selectivity (when ${CBO_ENABLED.key} is true or ${PLAN_STATS_ENABLED.key} is true) " +
+      "and compute cost.")
     .version("3.2.0")
     .booleanConf
     .createWithDefault(true)
