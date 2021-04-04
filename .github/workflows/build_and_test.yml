@@ -19,7 +19,7 @@ jobs:
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
     env:
-      LC_ALL:C.UTF-8
+      LC_ALL: C.UTF-8
       LANG: C.UTF-8
     container:
       image: dongjoon/apache-spark-github-action-image:20201025
