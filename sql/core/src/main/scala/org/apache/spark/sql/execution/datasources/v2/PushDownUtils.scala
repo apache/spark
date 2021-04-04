@@ -89,22 +89,15 @@ object PushDownUtils extends PredicateHelper {
 
     scanBuilder match {
       case r: SupportsPushDownAggregates =>
-        val translatedAggregates = mutable.ArrayBuffer.empty[sources.AggregateFunc]
+        val translatedAggregates = aggregates.map(DataSourceStrategy.translateAggregate)
+        val translatedGroupBys = groupBy.map(columnAsString)
 
-        for (aggregateExpr <- aggregates) {
-          val translated = DataSourceStrategy.translateAggregate(aggregateExpr)
-          if (translated.isEmpty) {
-            return Aggregation.empty
-          } else {
-            translatedAggregates += translated.get
-          }
+        if (translatedAggregates.exists(_.isEmpty) || translatedGroupBys.exists(_.isEmpty)) {
+          Aggregation.empty
+        } else {
+          r.pushAggregation(Aggregation(translatedAggregates.flatten, translatedGroupBys))
+          r.pushedAggregation
         }
-        val groupByCols = groupBy.map(columnAsString(_))
-        if (!groupByCols.exists(_.isEmpty)) {
-          r.pushAggregation(Aggregation(translatedAggregates, groupByCols))
-        }
-        r.pushedAggregation
-
       case _ => Aggregation.empty
     }
   }

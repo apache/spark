@@ -677,25 +677,14 @@ object DataSourceStrategy
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 
-  private def columnAsString(e: Expression): String = e match {
-    case AttributeReference(name, _, _, _) => name
-    case Cast(child, _, _) => columnAsString (child)
-    // Add, Subtract, Multiply and Divide are only supported by JDBC agg pushdown
-    case Add(left, right, _) =>
-      columnAsString(left) + " + " + columnAsString(right)
-    case Subtract(left, right, _) =>
-      columnAsString(left) + " - " + columnAsString(right)
-    case Multiply(left, right, _) =>
-      columnAsString(left) + " * " + columnAsString(right)
-    case Divide(left, right, _) =>
-      columnAsString(left) + " / " + columnAsString(right)
-
-    case CheckOverflow(child, _, _) => columnAsString (child)
-    case PromotePrecision(child) => columnAsString (child)
-    case _ => ""
-  }
-
   protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
+
+    def columnAsString(e: Expression): String = e match {
+        case AttributeReference(name, _, _, _) => name
+        case Cast(child, _, _) => columnAsString(child)
+        case _ => ""
+    }
+
     aggregates.aggregateFunction match {
       case min: aggregate.Min =>
         val colName = columnAsString(min.child)
@@ -711,7 +700,7 @@ object DataSourceStrategy
         if (colName.nonEmpty) Some(Sum(colName, sum.dataType, aggregates.isDistinct)) else None
       case count: aggregate.Count =>
         val columnName = count.children.head match {
-          case Literal(_, _) => "1"
+          case Literal(_, _) => "1"  // SELECT (*) FROM table is translated to SELECT 1 FROM table
           case _ => columnAsString(count.children.head)
         }
         if (columnName.nonEmpty) {

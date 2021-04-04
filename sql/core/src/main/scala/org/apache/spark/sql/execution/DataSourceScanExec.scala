@@ -136,7 +136,7 @@ case class RowDataSourceScanExec(
     val markedAggregates = for (aggregate <- aggregation.aggregateExpressions) yield {
       s"*$aggregate"
     }
-    val markedGroupby = for (groupby <- aggregation.groupByExpressions) yield {
+    val markedGroupby = for (groupby <- aggregation.groupByColumns) yield {
       s"*$groupby"
     }
     Map(

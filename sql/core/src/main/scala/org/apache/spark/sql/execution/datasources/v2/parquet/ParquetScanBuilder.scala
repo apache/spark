@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates, Su
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
-import org.apache.spark.sql.sources.{Aggregation, Count, Filter, Min, Max}
+import org.apache.spark.sql.sources.{Aggregation, Count, Filter, Max, Min}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -75,7 +75,7 @@ case class ParquetScanBuilder(
 
   override def pushAggregation(aggregation: Aggregation): Unit = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown ||
-      aggregation.groupByExpressions.nonEmpty) {
+      aggregation.groupByColumns.nonEmpty) {
       Aggregation.empty
       return
     }

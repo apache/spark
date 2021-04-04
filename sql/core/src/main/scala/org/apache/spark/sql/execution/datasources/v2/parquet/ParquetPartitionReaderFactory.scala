@@ -25,7 +25,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
-import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
+import org.apache.parquet.format.converter.ParquetMetadataConverter.{NO_FILTER, SKIP_ROW_GROUPS}
 import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetRecordReader}
 
 import org.apache.spark.TaskContext
@@ -148,9 +148,19 @@ case class ParquetPartitionReaderFactory(
         override def get(): InternalRow = {
           val conf = broadcastedConf.value.value
           val filePath = new Path(new URI(file.filePath))
+          val footer = ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
+          def isCreatedByParquetMr: Boolean =
+            footer.getFileMetaData.getCreatedBy().startsWith("parquet-mr")
+          val convertTz =
+            if (timestampConversion && !isCreatedByParquetMr) {
+              Some(DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
+            } else {
+              None
+            }
           val (parquetTypes, values) =
-            ParquetUtils.getPushedDownAggResult(conf, filePath, dataSchema, aggregation)
-          ParquetUtils.aggResultToSparkInternalRows(parquetTypes, values, aggSchema)
+            ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)
+          ParquetUtils.aggResultToSparkInternalRows(footer, parquetTypes, values, aggSchema,
+            datetimeRebaseModeInRead, int96RebaseModeInRead, convertTz)
         }
 
         override def close(): Unit = return
@@ -185,12 +195,22 @@ case class ParquetPartitionReaderFactory(
         }
 
         override def get(): ColumnarBatch = {
+
           val conf = broadcastedConf.value.value
           val filePath = new Path(new URI(file.filePath))
+          val footer = ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
+          def isCreatedByParquetMr: Boolean =
+            footer.getFileMetaData.getCreatedBy().startsWith("parquet-mr")
+          val convertTz =
+            if (timestampConversion && !isCreatedByParquetMr) {
+              Some(DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
+            } else {
+              None
+            }
           val (parquetTypes, values) =
-            ParquetUtils.getPushedDownAggResult(conf, filePath, dataSchema, aggregation)
-          ParquetUtils.aggResultToSparkColumnarBatch(parquetTypes, values, aggSchema,
-            enableOffHeapColumnVector)
+            ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)
+          ParquetUtils.aggResultToSparkColumnarBatch(footer, parquetTypes, values, aggSchema,
+            enableOffHeapColumnVector, datetimeRebaseModeInRead, int96RebaseModeInRead, convertTz)
         }
 
         override def close(): Unit = return

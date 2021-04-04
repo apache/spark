@@ -19,9 +19,11 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.types.DataType
 
-// groupBy only used by JDBC agg pushdown, not supported by parquet agg pushdown yet
+// Aggregate Functions in SQL statement.
+// e.g. SELECT COUNT(EmployeeID), AVG(salary), deptID FROM dept GROUP BY deptID
+// aggregateExpressions are (COUNT(EmployeeID), AVG(salary)), groupByColumns are (deptID)
 case class Aggregation(aggregateExpressions: Seq[AggregateFunc],
-                       groupByExpressions: Seq[String])
+                       groupByColumns: Seq[String])
 
 abstract class AggregateFunc
 

@@ -34,7 +34,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case Aggregate(groupingExpressions, resultExpressions, child) =>
+    case aggNode@Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
         case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
           val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
@@ -67,7 +67,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
 
           val (pushedFilters, postScanFilters) = pushDownFilter(scanBuilder, newFilters, relation)
           if (postScanFilters.nonEmpty) {
-            Aggregate(groupingExpressions, resultExpressions, child)
+            aggNode // return original plan node
           } else { // only push down aggregate if all the filers can be push down
             val aggregation = PushDownUtils.pushAggregates(scanBuilder, aggregates,
               normalizedGroupingExpressions)
@@ -81,7 +81,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
                  |Pushed Filters: ${pushedFilters.mkString(", ")}
                  |Post-Scan Filters: ${postScanFilters.mkString(",")}
                  |Pushed Aggregate Functions: ${aggregation.aggregateExpressions.mkString(", ")}
-                 |Pushed Groupby: ${aggregation.groupByExpressions.mkString(", ")}
+                 |Pushed Groupby: ${aggregation.groupByColumns.mkString(", ")}
                  |Output: ${output.mkString(", ")}
              """.stripMargin)
 
@@ -93,8 +93,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
             }
 
             if (aggregation.aggregateExpressions.isEmpty) {
-              Aggregate(groupingExpressions, resultExpressions, child)
+              aggNode // return original plan node
             } else {
+              // build the aggregate expressions + groupby expressions
               val aggOutputBuilder = ArrayBuilder.make[AttributeReference]
               for (i <- 0 until aggregates.length) {
                 aggOutputBuilder += AttributeReference(
@@ -111,31 +112,35 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
               val plan = Aggregate(groupingExpressions, resultExpressions, r)
 
               var i = 0
+              // scalastyle:off line.size.limit
+              // change the original optimized logical plan to reflect the pushed down aggregate
+              // e.g. sql("select max(id), min(id) FROM h2.test.people")
+              // the the original optimized logical plan is
+              // == Optimized Logical Plan ==
+              // Aggregate [max(ID#35) AS max(ID)#38, min(ID#35) AS min(ID)#39]
+              // +- RelationV2[ID#35] test.people
+              // We want to change it to the following
+              // == Optimized Logical Plan ==
+              // Aggregate [max(Max(ID,IntegerType)#298) AS max(ID)#293, min(Min(ID,IntegerType)#299) AS min(ID)#294]
+              //   +- RelationV2[Max(ID,IntegerType)#298, Min(ID,IntegerType)#299] test.people
+              // scalastyle:on line.size.limit
               plan.transformExpressions {
                 case agg: AggregateExpression =>
                   i += 1
-                  val aggFunction: aggregate.AggregateFunction = {
-                    if (agg.aggregateFunction.isInstanceOf[aggregate.Max]) {
-                      aggregate.Max(aggOutput(i - 1))
-                    } else if (agg.aggregateFunction.isInstanceOf[aggregate.Min]) {
-                      aggregate.Min(aggOutput(i - 1))
-                    } else if (agg.aggregateFunction.isInstanceOf[aggregate.Average]) {
-                      aggregate.Average(aggOutput(i - 1))
-                    } else if (agg.aggregateFunction.isInstanceOf[aggregate.Sum]) {
-                      aggregate.Sum(aggOutput(i - 1))
-                    } else if (agg.aggregateFunction.isInstanceOf[aggregate.Count]) {
-                      val count = aggregate.Count(aggOutput(i - 1))
-                      aggregate.PushDownCount(aggOutput(i - 1), true)
-                    } else {
-                      agg.aggregateFunction
-                    }
+                  val aggFunction: aggregate.AggregateFunction = agg.aggregateFunction match {
+                    case max: aggregate.Max => aggregate.Max(aggOutput(i - 1))
+                    case min: aggregate.Min => aggregate.Min(aggOutput(i - 1))
+                    case sum: aggregate.Sum => aggregate.Sum(aggOutput(i - 1))
+                    case avg: aggregate.Average => aggregate.Average(aggOutput(i - 1))
+                    case count: aggregate.Count => aggregate.PushDownCount(aggOutput(i - 1), true)
+                    case _ => agg.aggregateFunction
                   }
                   agg.copy(aggregateFunction = aggFunction, filter = None)
               }
             }
           }
 
-        case _ => Aggregate(groupingExpressions, resultExpressions, child)
+        case _ => aggNode // return original plan node
       }
     case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
       val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)

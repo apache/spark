@@ -19,19 +19,20 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.LongType
 
 case class PushDownCount(children: Seq[Expression], pushdown: Boolean) extends CountBase(children) {
 
-  protected override lazy val count =
-    AttributeReference("PushDownCount", LongType, nullable = false)()
-
   override lazy val updateExpressions = {
-    Seq(
-      // if count is pushed down to Data Source layer, add the count result retrieved from
-      // Data Source
-      /* count = */ count + children.head
-    )
+    val nullableChildren = children.filter(_.nullable)
+    if (nullableChildren.isEmpty) {
+      Seq(
+        /* count = */ count + children.head
+      )
+    } else {
+      Seq(
+        /* count = */ If(nullableChildren.map(IsNull).reduce(Or), count, count + children.head)
+      )
+    }
   }
 }
 
