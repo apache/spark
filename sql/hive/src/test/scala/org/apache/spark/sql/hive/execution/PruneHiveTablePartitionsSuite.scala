@@ -91,8 +91,9 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
           " ((p0 = 17) && (p1 = 17))) || ((p0 = 18) && (p1 = 18))) ||" +
           " (((p0 = 19) && (p1 = 19)) || ((p0 = 20) && (p1 = 20))))))"
         }
-        assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale,
-          expectedStr)
+        withSQLConf(SQLConf.PREDICATE_REORDER_ENABLED.key -> "false") {
+          assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale, expectedStr)
+        }
       }
     }
   }
