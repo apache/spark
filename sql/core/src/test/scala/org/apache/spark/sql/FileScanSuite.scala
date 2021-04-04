@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.v2.json.JsonScan
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.datasources.v2.text.TextScan
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.{Aggregation, Filter}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -354,7 +354,8 @@ class FileScanSuite extends FileScanSuiteBase {
   val scanBuilders = Seq[(String, ScanBuilder, Seq[String])](
     ("ParquetScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
-        ParquetScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, f, o, pf, df),
+        ParquetScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, f, Aggregation.empty,
+          o, pf, df),
       Seq.empty),
     ("OrcScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>

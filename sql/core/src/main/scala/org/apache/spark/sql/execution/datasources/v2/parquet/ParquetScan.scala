@@ -94,21 +94,30 @@ case class ParquetScan(
   override def equals(obj: Any): Boolean = obj match {
     case p: ParquetScan =>
       super.equals(p) && dataSchema == p.dataSchema && options == p.options &&
-        equivalentFilters(pushedFilters, p.pushedFilters)
+        equivalentFilters(pushedFilters, p.pushedFilters) &&
+        equivalentAggregations(pushedAggregations, p.pushedAggregations)
     case _ => false
   }
 
   override def hashCode(): Int = getClass.hashCode()
 
   override def description(): String = {
-    super.description() + ", PushedFilters: " + seqToString(pushedFilters)
+    super.description() + ", PushedFilters: " + seqToString(pushedFilters) +
+      ", PushedAggregation: " + seqToString(pushedAggregations.aggregateExpressions)
   }
 
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters))
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters)) ++
+      Map("PushedAggregation" -> seqToString(pushedAggregations.aggregateExpressions))
   }
 
   override def withFilters(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
     this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
+
+  // Returns whether the two given [[Aggregation]]s are equivalent.
+  private def equivalentAggregations(a: Aggregation, b: Aggregation): Boolean = {
+    a.aggregateExpressions.sortBy(_.hashCode())
+      .sameElements(b.aggregateExpressions.sortBy(_.hashCode()))
+  }
 }
