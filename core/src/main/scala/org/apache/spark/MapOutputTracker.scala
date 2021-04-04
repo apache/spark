@@ -75,7 +75,7 @@ private class ShuffleStatus(numPartitions: Int) {
    * broadcast variable in order to keep it from being garbage collected and to allow for it to be
    * explicitly destroyed later on when the ShuffleMapStage is garbage-collected.
    */
-  private[this] var cachedSerializedBroadcast: Broadcast[Array[Byte]] = _
+  private[spark] var cachedSerializedBroadcast: Broadcast[Array[Byte]] = _
 
   /**
    * Counter tracking the number of partitions that have output. This is a performance optimization
@@ -737,6 +737,11 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
+        } catch {
+          case e: SparkException =>
+            throw new MetadataFetchFailedException(shuffleId, -1,
+              s"Unable to deserialize broadcasted map statuses for shuffle $shuffleId: " +
+                e.getCause)
         } finally {
           fetching.synchronized {
             fetching -= shuffleId
@@ -840,13 +845,19 @@ private[spark] object MapOutputTracker extends Logging {
       case DIRECT =>
         deserializeObject(bytes, 1, bytes.length - 1).asInstanceOf[Array[MapStatus]]
       case BROADCAST =>
-        // deserialize the Broadcast, pull .value array out of it, and then deserialize that
-        val bcast = deserializeObject(bytes, 1, bytes.length - 1).
-          asInstanceOf[Broadcast[Array[Byte]]]
-        logInfo("Broadcast mapstatuses size = " + bytes.length +
-          ", actual size = " + bcast.value.length)
-        // Important - ignore the DIRECT tag ! Start from offset 1
-        deserializeObject(bcast.value, 1, bcast.value.length - 1).asInstanceOf[Array[MapStatus]]
+        try {
+          // deserialize the Broadcast, pull .value array out of it, and then deserialize that
+          val bcast = deserializeObject(bytes, 1, bytes.length - 1).
+            asInstanceOf[Broadcast[Array[Byte]]]
+          logInfo("Broadcast mapstatuses size = " + bytes.length +
+            ", actual size = " + bcast.value.length)
+          // Important - ignore the DIRECT tag ! Start from offset 1
+          deserializeObject(bcast.value, 1, bcast.value.length - 1).asInstanceOf[Array[MapStatus]]
+        } catch {
+          case e: IOException =>
+            logWarning("Exception encountered during deserializing broadcasted map statuses: ", e)
+            throw new SparkException("Unable to deserialize broadcasted map statuses", e)
+        }
       case _ => throw new IllegalArgumentException("Unexpected byte tag = " + bytes(0))
     }
   }

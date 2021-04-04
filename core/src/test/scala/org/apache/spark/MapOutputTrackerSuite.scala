@@ -327,4 +327,45 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
+  test("SPARK-34939: remote fetch using broadcast if broadcasted value is destroyed") {
+    val newConf = new SparkConf
+    newConf.set("spark.rpc.message.maxSize", "1")
+    newConf.set("spark.rpc.askTimeout", "1") // Fail fast
+    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "10240") // 10 KB << 1MB framesize
+
+    // needs TorrentBroadcast so need a SparkContext
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val rpcEnv = sc.env.rpcEnv
+      val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
+      rpcEnv.stop(masterTracker.trackerEndpoint)
+      rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+
+      masterTracker.registerShuffle(20, 100)
+      (0 until 100).foreach { i =>
+        masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
+          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0)))
+      }
+
+      val mapWorkerRpcEnv = createRpcEnv("spark-worker", "localhost", 0, new SecurityManager(conf))
+      val mapWorkerTracker = new MapOutputTrackerWorker(conf)
+      mapWorkerTracker.trackerEndpoint =
+        mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+      val fetchedBytes = mapWorkerTracker.trackerEndpoint
+        .askSync[Array[Byte]](GetMapOutputStatuses(20))
+      assert(fetchedBytes(0) == 1)
+
+      // Normally `unregisterMapOutput` triggers the destroy of broadcasted value.
+      // But the timing of destroying broadcasted value is indeterminate, we manually destroy
+      // it by blocking.
+      masterTracker.shuffleStatuses.get(20).foreach { shuffleStatus =>
+        shuffleStatus.cachedSerializedBroadcast.destroy(true)
+      }
+      val err = intercept[SparkException] {
+        MapOutputTracker.deserializeMapStatuses(fetchedBytes)
+      }
+      assert(err.getMessage.contains("Unable to deserialize broadcasted map statuses"))
+    }
+  }
 }
