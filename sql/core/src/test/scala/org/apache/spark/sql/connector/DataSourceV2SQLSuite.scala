@@ -2706,6 +2706,23 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-34923: do not propagate metadata columns through View") {
+    val t1 = s"${catalogAndNamespace}table"
+    val view = "view"
+
+    withTable(t1) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+          "PARTITIONED BY (bucket(4, id), id)")
+        sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+        sql(s"CACHE TABLE $view AS SELECT * FROM $t1")
+        assertThrows[AnalysisException] {
+          sql(s"SELECT index, _partition FROM $view")
+        }
+      }
+    }
+  }
+
   test("SPARK-34923: propagate metadata columns through Filter") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
@@ -2750,6 +2767,25 @@ class DataSourceV2SQLSuite
       val tbl = spark.table(t1)
       val dfQuery = tbl.repartitionByRange(3, tbl.col("id"))
         .select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
+    }
+  }
+
+  test("SPARK-34923: propagate metadata columns through SubqueryAlias") {
+    val t1 = s"${catalogAndNamespace}table"
+    val sbq = "sbq"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val sqlQuery = spark.sql(
+        s"SELECT $sbq.id, $sbq.data, $sbq.index, $sbq._partition FROM $t1 as $sbq")
+      val dfQuery = spark.table(t1).as(sbq).select(
+        s"$sbq.id", s"$sbq.data", s"$sbq.index", s"$sbq._partition")
 
       Seq(sqlQuery, dfQuery).foreach { query =>
         checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
