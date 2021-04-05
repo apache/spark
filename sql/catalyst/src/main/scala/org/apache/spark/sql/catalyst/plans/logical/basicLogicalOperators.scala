@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
 /**
- * When planning take() or collect() operations, this special node is inserted at the top of
+ * When planning take() or collect() operations, this special node that is inserted at the top of
  * the logical plan before invoking the query planner.
  *
  * Rules can pattern-match on this node in order to apply transformations that only take effect
@@ -40,7 +40,6 @@ import org.apache.spark.util.random.RandomSampler
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }
 
 /**
@@ -52,7 +51,6 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
  */
 case class Subquery(child: LogicalPlan, correlated: Boolean) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }
 
 object Subquery {
@@ -136,13 +134,11 @@ case class Generate(
   }
 
   def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 
   override def maxRows: Option[Long] = child.maxRows
 
@@ -535,8 +531,6 @@ object View {
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
-
   override def simpleString(maxFields: Int): String = {
     val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]", maxFields)
     s"CTE $cteAliases"
@@ -549,7 +543,6 @@ case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }
 
 /**
@@ -563,7 +556,6 @@ case class Sort(
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
   override def maxRows: Option[Long] = child.maxRows
   override def outputOrdering: Seq[SortOrder] = order
 }
@@ -688,7 +680,6 @@ case class Window(
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 
   override def producedAttributes: AttributeSet = windowOutputSet
 
@@ -881,7 +872,6 @@ object Limit {
  */
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -898,7 +888,6 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderP
  */
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 
   override def maxRowsPerPartition: Option[Long] = {
     limitExpr match {
@@ -920,7 +909,6 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
  */
 case class Tail(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -1001,7 +989,6 @@ case class Sample(
 
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }
 
 /**
@@ -1010,7 +997,6 @@ case class Sample(
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }
 
 /**
@@ -1021,7 +1007,6 @@ abstract class RepartitionOperation extends UnaryNode {
   def numPartitions: Int
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
   def partitioning: Partitioning
 }
 
@@ -1116,7 +1101,6 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }
 
 /**
@@ -1145,5 +1129,4 @@ case class CollectMetrics(
   }
 
   override def output: Seq[Attribute] = child.output
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }

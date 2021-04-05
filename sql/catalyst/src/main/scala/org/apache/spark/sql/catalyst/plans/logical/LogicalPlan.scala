@@ -36,9 +36,9 @@ abstract class LogicalPlan
 
   /**
    * Metadata fields that can be projected from this node.
-   * Should be non-empty if the plan propagates its children's output.
+   * Should be overridden if the plan does not propagate its children's output.
    */
-  def metadataOutput: Seq[Attribute] = Nil
+  def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
 
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming)

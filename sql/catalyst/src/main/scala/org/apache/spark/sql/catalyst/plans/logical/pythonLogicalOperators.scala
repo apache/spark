@@ -74,8 +74,6 @@ trait BaseEvalPython extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
-
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 }
 

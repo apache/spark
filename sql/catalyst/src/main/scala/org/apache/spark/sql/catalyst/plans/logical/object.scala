@@ -238,8 +238,6 @@ case class TypedFilter(
 
   override def output: Seq[Attribute] = child.output
 
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
-
   def withObjectProducerChild(obj: LogicalPlan): Filter = {
     assert(obj.output.length == 1)
     Filter(typedCondition(obj.output.head), obj)
@@ -335,8 +333,6 @@ case class AppendColumns(
 
   override def output: Seq[Attribute] = child.output ++ newColumns
 
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
-
   def newColumns: Seq[Attribute] = serializer.map(_.toAttribute)
 }
 
@@ -350,8 +346,6 @@ case class AppendColumnsWithObject(
     child: LogicalPlan) extends ObjectConsumer {
 
   override def output: Seq[Attribute] = (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
-
-  override def metadataOutput: Seq[Attribute] = child.metadataOutput
 }
 
 /** Factory for constructing new `MapGroups` nodes. */
