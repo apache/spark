@@ -441,7 +441,7 @@ object ParquetUtils {
 
           case Count(col, _, _) =>
             index = dataSchema.fieldNames.toList.indexOf(col)
-            rowCount = getRowCountFromParquetMetadata(footer)
+            rowCount += getRowCountFromParquetMetadata(footer)
             if (!col.equals("1")) {  // "1" is for count(*)
               rowCount -= getNumNulls(footer, blockMetaData, index)
             }
