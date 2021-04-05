@@ -814,6 +814,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         Cast(Literal(period), StringType),
         s"interval '$intervalPayload' year to month")
     }
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Cast(child, StringType), YearMonthIntervalType)
   }
 }
 
