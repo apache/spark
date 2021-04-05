@@ -916,11 +916,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
       val groupByExpressions = expressionList(ctx.groupingExpressions)
       if (ctx.GROUPING != null) {
-        // GROUP BY .... GROUPING SETS (...)
-        // `GROUP BY warehouse, product GROUPING SETS((warehouse, producets), (warehouse))` is
-        // semantically equivalent to `GROUP BY GROUPING SETS((warehouse, produce), (warehouse))`.
-        // Under this grammar, the fields appearing in `GROUPING SETS`'s groupingSets must be a
-        // subset of the columns appearing in group by expression.
+        // GROUP BY ... GROUPING SETS (...)
+        // `groupByExpressions` can be non-empty for Hive compatibility. It may add extra grouping
+        // expressions that do not exist in GROUPING SETS (...), and the value is always null.
+        // For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`, the output
+        // of column `c` is always null.
         val groupingSets =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
         Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
@@ -960,8 +960,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 Rollup(groupingSets.toSeq)
               } else {
                 assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-                GroupingSets(groupingSets.toSeq,
-                  groupingSets.flatten.distinct.toSeq)
+                GroupingSets(groupingSets.toSeq)
               }
             } else {
               expression(groupByExpr.expression)
