@@ -16,4 +16,6 @@
  */
 package org.apache.spark.errors
 
-abstract class ErrorCode(val id: Int, val sqlState: String) {}
+abstract class ErrorCode(val id: Int, val sqlState: String) {
+  def this() = this(DEFAULT.id, DEFAULT.sqlState)
+}
