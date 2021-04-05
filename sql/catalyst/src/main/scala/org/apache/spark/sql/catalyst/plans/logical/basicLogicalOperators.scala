@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -552,18 +552,20 @@ case class Sort(
 
 /** Factory for constructing new `Range` nodes. */
 object Range {
-  def apply(start: Long, end: Long, step: Long,
-            numSlices: Option[Int], isStreaming: Boolean = false): Range = {
-    val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
-    new Range(start, end, step, numSlices, output, isStreaming)
-  }
-
   def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
     Range(start, end, step, Some(numSlices))
   }
 
+  def getOutputAttrs: Seq[Attribute] = {
+    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+  }
+
+  private def typeCoercion: TypeCoercionBase = {
+    if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
+  }
+
   private def castAndEval[T](expression: Expression, dataType: DataType): T = {
-    TypeCoercion.implicitCast(expression, dataType)
+    typeCoercion.implicitCast(expression, dataType)
       .map(_.eval())
       .filter(_ != null)
       .getOrElse {
@@ -578,7 +580,7 @@ object Range {
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(start: long, end: long, step: long, numPartitions: integer)
+    _FUNC_(start: long, end: long, step: long, numSlices: integer)
     _FUNC_(start: long, end: long, step: long)
     _FUNC_(start: long, end: long)
     _FUNC_(end: long)""",
@@ -597,7 +599,7 @@ object Range {
         |0  |
         |1  |
         +---+
-      > SELECT _FUNC_(0, 4, 2);
+      > SELECT * FROM _FUNC_(0, 4, 2);
         +---+
         |id |
         +---+
@@ -612,29 +614,17 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Option[Int],
-    output: Seq[Attribute],
-    override val isStreaming: Boolean)
+    override val output: Seq[Attribute] = Range.getOutputAttrs,
+    override val isStreaming: Boolean = false)
   extends LeafNode with MultiInstanceRelation {
 
   require(step != 0, s"step ($step) cannot be 0")
 
   def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) =
-    this(
-      start = Range.toLong(start),
-      end = Range.toLong(end),
-      step = Range.toLong(step),
-      numSlices = Some(Range.toInt(numSlices)),
-      output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes,
-      isStreaming = false)
+    this(Range.toLong(start), Range.toLong(end), Range.toLong(step), Some(Range.toInt(numSlices)))
 
   def this(start: Expression, end: Expression, step: Expression) =
-    this(
-      start = Range.toLong(start),
-      end = Range.toLong(end),
-      step = Range.toLong(step),
-      numSlices = None,
-      output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes,
-      isStreaming = false)
+    this(Range.toLong(start), Range.toLong(end), Range.toLong(step), None)
 
   def this(start: Expression, end: Expression) = this(start, end, Literal.create(1L, LongType))
 

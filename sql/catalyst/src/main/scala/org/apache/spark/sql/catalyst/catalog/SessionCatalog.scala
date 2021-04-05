@@ -1544,7 +1544,6 @@ class SessionCatalog(
     functionRegistry.lookupFunction(name)
       .orElse(functionRegistry.lookupFunction(qualifiedName))
       .orElse(tableFunctionRegistry.lookupFunction(name))
-      .orElse(tableFunctionRegistry.lookupFunction(qualifiedName))
       .getOrElse {
         val db = qualifiedName.database.get
         requireDbExists(db)

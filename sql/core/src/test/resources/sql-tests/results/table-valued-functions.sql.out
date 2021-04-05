@@ -70,7 +70,12 @@ select * from range(1, 1, 1, 1, 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5; line 1 pos 14
+Table-valued function range with alternatives: 
+    range(start: long, end: long, step: long, numSlices: integer)
+    range(start: long, end: long, step: long)
+    range(start: long, end: long)
+    range(end: long)
+cannot be applied to (integer, integer, integer, integer, integer): Invalid number of arguments for function range. Expected: one of 1, 2, 3 and 4; Found: 5; line 1 pos 14
 
 
 -- !query
@@ -80,7 +85,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numPartitions: integer)
+    range(start: long, end: long, step: long, numSlices: integer)
     range(start: long, end: long, step: long)
     range(start: long, end: long)
     range(end: long)
@@ -94,7 +99,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numPartitions: integer)
+    range(start: long, end: long, step: long, numSlices: integer)
     range(start: long, end: long, step: long)
     range(start: long, end: long)
     range(end: long)
@@ -108,7 +113,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numPartitions: integer)
+    range(start: long, end: long, step: long, numSlices: integer)
     range(start: long, end: long, step: long)
     range(start: long, end: long)
     range(end: long)

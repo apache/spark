@@ -29,9 +29,6 @@ case class ResolveTableValuedFunctions(catalog: SessionCatalog) extends Rule[Log
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
-      // The whole resolution is somewhat difficult to understand here due to too much abstractions.
-      // We should probably rewrite the following at some point. Reynold was just here to improve
-      // error messages and didn't have time to do a proper rewrite.
       withPosition(u) {
         val resolvedFunc = try {
           catalog.lookupTableFunction(u.name, u.functionArgs)
