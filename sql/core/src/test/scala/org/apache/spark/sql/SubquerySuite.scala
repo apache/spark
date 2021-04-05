@@ -1765,4 +1765,35 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-34946: correlated scalar subquery in grouping expressions only") {
+    withTempView("t") {
+      Seq((0, 1), (0, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val error = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT SUM(c2) FROM t t1 GROUP BY (SELECT SUM(c2) FROM t t2 WHERE t1.c1 = t2.c1)
+            |""".stripMargin)
+      }
+      assert(error.getMessage.contains("Correlated scalar subqueries in the group by clause " +
+        "must also be in the aggregate expressions"))
+    }
+  }
+
+  test("SPARK-34946: correlated scalar subquery in aggregate expressions only") {
+    withTempView("t") {
+      Seq((0, 1), (0, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      val error = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT (SELECT SUM(c2) FROM t t2 WHERE t1.c1 = t2.c1), SUM(c2)
+            |FROM t t1 GROUP BY c1
+            |""".stripMargin)
+      }
+      assert(error.getMessage.contains(
+        "Correlated scalar subquery 'scalarsubquery(t1.c1)' is neither present in the group by, " +
+          "nor in an aggregate function. Add it to group by using ordinal position or wrap it " +
+          "in first() (or first_value) if you don't care which value you get."))
+    }
+  }
 }
