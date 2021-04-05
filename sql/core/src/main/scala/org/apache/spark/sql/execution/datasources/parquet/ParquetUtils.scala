@@ -148,6 +148,14 @@ object ParquetUtils {
       file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
   }
 
+  /**
+   * When the Aggregates (Max/Min/Count) are pushed down to parquet, we don't need to
+   * createRowBaseReader to read data from parquet and aggregate at spark layer. Instead we want
+   * to calculate the Aggregates (Max/Min/Count) result using the statistics information
+   * from parquet footer file, and then construct an InternalRow from these Aggregate results.
+   *
+   * @return Aggregate results in the format of InternalRow
+   */
   private[sql] def aggResultToSparkInternalRows(
       footer: ParquetMetadata,
       parquetTypes: Seq[PrimitiveType.PrimitiveTypeName],
@@ -194,7 +202,7 @@ object ParquetUtils {
             case long: LongType =>
               mutableRow.setLong(i, values(i).asInstanceOf[Long])
             case d: DecimalType =>
-              val decimal = Decimal(values(i).asInstanceOf[Integer].toLong, d.precision, d.scale)
+              val decimal = Decimal(values(i).asInstanceOf[Long], d.precision, d.scale)
               mutableRow.setDecimal(i, decimal, d.precision)
             case _ => throw new IllegalArgumentException("Unexpected type for INT64")
           }
@@ -216,7 +224,7 @@ object ParquetUtils {
                 convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
                   .getOrElse(gregorianMicros)
               mutableRow.setLong(i, adjTime)
-            case _ =>
+            case _ => throw new IllegalArgumentException("Unexpected type for INT96")
           }
         }
       case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
@@ -273,6 +281,15 @@ object ParquetUtils {
     mutableRow
   }
 
+  /**
+   * When the Aggregates (Max/Min/Count) are pushed down to parquet, in the case of
+   * PARQUET_VECTORIZED_READER_ENABLED sets to true, we don't need buildColumnarReader
+   * to read data from parquet and aggregate at spark layer. Instead we want
+   * to calculate the Aggregates (Max/Min/Count) result using the statistics information
+   * from parquet footer file, and then construct a ColumnarBatch from these Aggregate results.
+   *
+   * @return Aggregate results in the format of ColumnarBatch
+   */
   private[sql] def aggResultToSparkColumnarBatch(
       footer: ParquetMetadata,
       parquetTypes: Seq[PrimitiveType.PrimitiveTypeName],
@@ -379,6 +396,14 @@ object ParquetUtils {
     new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)
   }
 
+  /**
+   * Calculate the pushed down Aggregates (Max/Min/Count) result using the statistics
+   * information from parquet footer file.
+   *
+   * @return A tuple of `Array[PrimitiveType.PrimitiveTypeName]` and Array[Any].
+   *         The first element is the PrimitiveTypeName of the Aggregate column,
+   *         and the second element is the aggregated value.
+   */
   private[sql] def getPushedDownAggResult(
       footer: ParquetMetadata,
       dataSchema: StructType,
@@ -390,59 +415,68 @@ object ParquetUtils {
     val typesBuilder = ArrayBuilder.make[PrimitiveType.PrimitiveTypeName]
     val valuesBuilder = ArrayBuilder.make[Any]
 
-    blocks.forEach { block =>
-      val columns = block.getColumns()
-      for (i <- 0 until aggregation.aggregateExpressions.size) {
-        var index = 0
+    for (i <- 0 until aggregation.aggregateExpressions.size) {
+      var value: Any = None
+      var rowCount = 0L
+      var isCount = false
+      var index = 0
+      blocks.forEach { block =>
+        val blockMetaData = block.getColumns()
         aggregation.aggregateExpressions(i) match {
           case Max(col, _) =>
             index = dataSchema.fieldNames.toList.indexOf(col)
-            valuesBuilder += getPushedDownMaxMin(footer, columns, index, true)
-            typesBuilder += fields.get(index).asPrimitiveType.getPrimitiveTypeName
+            val currentMax = getCurrentBlockMaxOrMin(footer, blockMetaData, index, true)
+            if (currentMax != None &&
+              (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0)) {
+              value = currentMax
+            }
+
           case Min(col, _) =>
             index = dataSchema.fieldNames.toList.indexOf(col)
-            valuesBuilder += getPushedDownMaxMin(footer, columns, index, false)
-            typesBuilder += fields.get(index).asPrimitiveType.getPrimitiveTypeName
+            val currentMin = getCurrentBlockMaxOrMin(footer, blockMetaData, index, false)
+            if (currentMin != None &&
+              (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0)) {
+              value = currentMin
+            }
+
           case Count(col, _, _) =>
             index = dataSchema.fieldNames.toList.indexOf(col)
-            var rowCount = getRowCountFromParquetMetadata(footer)
-            if (!col.equals("1")) {  // count(*)
-              rowCount -= getNumNulls(footer, columns, index)
+            rowCount = getRowCountFromParquetMetadata(footer)
+            if (!col.equals("1")) {  // "1" is for count(*)
+              rowCount -= getNumNulls(footer, blockMetaData, index)
             }
-            valuesBuilder += rowCount
-            typesBuilder += PrimitiveType.PrimitiveTypeName.INT96
+            isCount = true
+
           case _ =>
         }
+      }
+      if (isCount) {
+        valuesBuilder += rowCount
+        typesBuilder += PrimitiveType.PrimitiveTypeName.INT96
+      } else {
+        valuesBuilder += value
+        typesBuilder += fields.get(index).asPrimitiveType.getPrimitiveTypeName
       }
     }
     (typesBuilder.result(), valuesBuilder.result())
   }
 
-  private def getPushedDownMaxMin(
+  /**
+   * get the Max or Min value for ith column in the current block
+   *
+   * @return the Max or Min value
+   */
+  private def getCurrentBlockMaxOrMin(
       footer: ParquetMetadata,
       columnChunkMetaData: util.List[ColumnChunkMetaData],
       i: Int,
-      isMax: Boolean) = {
+      isMax: Boolean): Any = {
     val parquetType = footer.getFileMetaData.getSchema.getType(i)
     if (!parquetType.isPrimitive) {
       throw new IllegalArgumentException("Unsupported type : " + parquetType.toString)
     }
-    var value: Any = None
     val statistics = columnChunkMetaData.get(i).getStatistics()
-    if (isMax) {
-      val currentMax = statistics.genericGetMax()
-      if (currentMax != None &&
-        (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0)) {
-        value = currentMax
-      }
-    } else {
-      val currentMin = statistics.genericGetMin()
-      if (currentMin != None &&
-        (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0)) {
-        value = currentMin
-      }
-    }
-    value
+    if (isMax) statistics.genericGetMax() else statistics.genericGetMin()
   }
 
   private def getRowCountFromParquetMetadata(footer: ParquetMetadata): Long = {
@@ -459,14 +493,12 @@ object ParquetUtils {
       i: Int): Long = {
     val parquetType = footer.getFileMetaData.getSchema.getType(i)
     if (!parquetType.isPrimitive) {
-      throw new IllegalArgumentException("Unsupported type : " + parquetType.toString)
+      throw new IllegalArgumentException("Unsupported type: " + parquetType.toString)
     }
     var numNulls: Long = 0;
     val statistics = columnChunkMetaData.get(i).getStatistics()
     if (!statistics.isNumNullsSet()) {
-      throw new UnsupportedOperationException("Number of nulls not set for parquet file." +
-        " Set session property hive.pushdown_partial_aggregations_into_scan=false and execute" +
-        " query again");
+      throw new UnsupportedOperationException("Number of nulls not set for parquet file.");
     }
     numNulls += statistics.getNumNulls();
     numNulls

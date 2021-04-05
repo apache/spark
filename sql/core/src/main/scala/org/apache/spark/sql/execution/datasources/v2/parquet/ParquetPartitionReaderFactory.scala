@@ -195,7 +195,6 @@ case class ParquetPartitionReaderFactory(
         }
 
         override def get(): ColumnarBatch = {
-
           val conf = broadcastedConf.value.value
           val filePath = new Path(new URI(file.filePath))
           val footer = ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)

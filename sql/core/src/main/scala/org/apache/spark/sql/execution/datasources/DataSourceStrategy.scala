@@ -677,36 +677,21 @@ object DataSourceStrategy
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 
-  protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
-
-    def columnAsString(e: Expression): String = e match {
-        case AttributeReference(name, _, _, _) => name
-        case Cast(child, _, _) => columnAsString(child)
-        case _ => ""
-    }
-
+  protected[sql] def translateAggregate(
+      aggregates: AggregateExpression,
+      pushableColumn: PushableColumnBase): Option[AggregateFunc] = {
     aggregates.aggregateFunction match {
-      case min: aggregate.Min =>
-        val colName = columnAsString(min.child)
-        if (colName.nonEmpty) Some(Min(colName, min.dataType)) else None
-      case max: aggregate.Max =>
-        val colName = columnAsString(max.child)
-        if (colName.nonEmpty) Some(Max(colName, max.dataType)) else None
-      case avg: aggregate.Average =>
-        val colName = columnAsString(avg.child)
-        if (colName.nonEmpty) Some(Avg(colName, avg.dataType, aggregates.isDistinct)) else None
-      case sum: aggregate.Sum =>
-        val colName = columnAsString(sum.child)
-        if (colName.nonEmpty) Some(Sum(colName, sum.dataType, aggregates.isDistinct)) else None
-      case count: aggregate.Count =>
+      case min@aggregate.Min(pushableColumn(name)) =>
+        Some(Min(name, min.dataType))
+      case max@aggregate.Max(pushableColumn(name)) =>
+        Some(Max(name, max.dataType))
+      case count@aggregate.Count(pushableColumn(name)) =>
         val columnName = count.children.head match {
-          case Literal(_, _) => "1"  // SELECT (*) FROM table is translated to SELECT 1 FROM table
-          case _ => columnAsString(count.children.head)
+          // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
+          case Literal(_, _) => "1"
+          case _ => name
         }
-        if (columnName.nonEmpty) {
-          Some(Count(columnName, count.dataType, aggregates.isDistinct))
-        }
-        else None
+        Some(Count(columnName, count.dataType, aggregates.isDistinct))
       case _ => None
     }
   }
