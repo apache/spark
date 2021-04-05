@@ -298,6 +298,70 @@ def csv_dataset_example(spark):
     # $example off:csv_dataset$
 
 
+def text_dataset_example(spark):
+    # $example on:text_dataset$
+    # spark is from the previous example
+    sc = spark.sparkContext
+
+    # A text dataset is pointed to by path.
+    # The path can be either a single text file or a directory of text files
+    path = "examples/src/main/resources/people.txt"
+
+    df1 = spark.read.text(path)
+    df1.show()
+    # +-----------+
+    # |      value|
+    # +-----------+
+    # |Michael, 29|
+    # |   Andy, 30|
+    # | Justin, 19|
+    # +-----------+
+
+    # You can use 'lineSep' option to define the line separator.
+    # If None is set, it covers all `\r`, `\r\n` and `\n` (default).
+    df2 = spark.read.text(path, lineSep=",")
+    df2.show()
+    # +-----------+
+    # |      value|
+    # +-----------+
+    # |    Michael|
+    # |   29\nAndy|
+    # | 30\nJustin|
+    # |       19\n|
+    # +-----------+
+
+    # You can also use 'wholetext' option to read each input file as a single row.
+    df3 = spark.read.text(path, wholetext=True)
+    df3.show()
+    # +--------------------+
+    # |               value|
+    # +--------------------+
+    # |Michael, 29\nAndy...|
+    # +--------------------+
+
+    # "output" is a folder which contains multiple text files and a _SUCCESS file.
+    df1.write.csv("output")
+
+    # You can specify the compression format using the 'compression' option.
+    df1.write.text("output_compressed", compression="gzip")
+
+    # Read all files in a folder.
+    folderPath = "examples/src/main/resources"
+    df = spark.read.text(folderPath)
+    df.show()
+    # +-----------+
+    # |      value|
+    # +-----------+
+    # |238val_238|
+    # |  86val_86|
+    # |311val_311|
+    # |  27val_27|
+    # |165val_165|
+    # +-----------+
+
+    # $example off:text_dataset$
+
+
 def jdbc_dataset_example(spark):
     # $example on:jdbc_dataset$
     # Note: JDBC loading and saving can be achieved via either the load/save or jdbc methods
@@ -357,6 +421,7 @@ if __name__ == "__main__":
     parquet_schema_merging_example(spark)
     json_dataset_example(spark)
     csv_dataset_example(spark)
+    text_dataset_example(spark)
     jdbc_dataset_example(spark)
 
     spark.stop()

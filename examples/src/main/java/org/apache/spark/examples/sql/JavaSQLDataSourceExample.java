@@ -30,8 +30,10 @@ import org.apache.spark.sql.Encoders;
 // $example on:schema_merging$
 // $example on:json_dataset$
 // $example on:csv_dataset$
+// $example on:text_dataset$
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+// $example off:text_dataset$
 // $example off:csv_dataset$
 // $example off:json_dataset$
 // $example off:schema_merging$
@@ -105,6 +107,7 @@ public class JavaSQLDataSourceExample {
     runParquetSchemaMergingExample(spark);
     runJsonDatasetExample(spark);
     runCsvDatasetExample(spark);
+    runTextDatasetExample(spark);
     runJdbcDatasetExample(spark);
 
     spark.stop();
@@ -387,6 +390,67 @@ public class JavaSQLDataSourceExample {
     // +-----------+
 
     // $example off:csv_dataset$
+  }
+
+  private static void runTextDatasetExample(SparkSession spark) {
+    // $example on:text_dataset$
+    // A text dataset is pointed to by path.
+    // The path can be either a single text file or a directory of text files
+    String path = "examples/src/main/resources/people.txt";
+
+    Dataset<Row> df1 = spark.read().text(path);
+    df1.show();
+    // +-----------+
+    // |      value|
+    // +-----------+
+    // |Michael, 29|
+    // |   Andy, 30|
+    // | Justin, 19|
+    // +-----------+
+
+    // You can use 'lineSep' option to define the line separator.
+    // If None is set, it covers all `\r`, `\r\n` and `\n` (default).
+    Dataset<Row> df2 = spark.read().option("lineSep", ",").text(path);
+    df2.show();
+    // +-----------+
+    // |      value|
+    // +-----------+
+    // |    Michael|
+    // |   29\nAndy|
+    // | 30\nJustin|
+    // |       19\n|
+    // +-----------+
+
+    // You can also use 'wholetext' option to read each input file as a single row.
+    Dataset<Row> df3 = spark.read().option("wholetext", "true").text(path);
+    df3.show();
+    //  +--------------------+
+    //  |               value|
+    //  +--------------------+
+    //  |Michael, 29\nAndy...|
+    //  +--------------------+
+
+    // "output" is a folder which contains multiple text files and a _SUCCESS file.
+    df1.write().text("output");
+
+    // You can specify the compression format using the 'compression' option.
+    df1.write().option("compression", "gzip").text("output_compressed");
+
+    // Read all files in a folder.
+    String folderPath = "examples/src/main/resources";
+    Dataset<Row> df = spark.read().text(folderPath);
+    df.show();
+    // +-----------+
+    // |      value|
+    // +-----------+
+    // |238val_238|
+    // |  86val_86|
+    // |311val_311|
+    // |  27val_27|
+    // |165val_165|
+    // +-----------+
+
+    // $example off:text_dataset$
   }
 
   private static void runJdbcDatasetExample(SparkSession spark) {
