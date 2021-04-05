@@ -440,14 +440,14 @@ class ExecutorSuite extends SparkFunSuite
         }
         val reportHeartbeat = PrivateMethod[Unit](Symbol("reportHeartBeat"))
         executor.invokePrivate(reportHeartbeat())
-        assert(reregisterInvoked.get(),
-          "BlockManager.reregister not invoked when reregisterBlockManager was true")
+        assert(reregisterInvoked.get(), "BlockManager.reregister should be invoked " +
+          "on HeartbeatResponse(reregisterBlockManager = true) when executor is not shutting down")
 
         reregisterInvoked.getAndSet(false)
         executor.stop()
         executor.invokePrivate(reportHeartbeat())
         assert(!reregisterInvoked.get(),
-          "BlockManager.reregister should not be invoked when executor is stopping")
+          "BlockManager.reregister should not be invoked when executor is shutting down")
       }
     }
   }
