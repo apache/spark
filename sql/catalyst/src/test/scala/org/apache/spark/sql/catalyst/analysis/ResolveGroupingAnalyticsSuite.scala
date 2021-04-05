@@ -87,16 +87,27 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
         Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
     checkAnalysis(originalPlan2, expected2)
 
+    // `b` should be included in the GROUP BY expressions even though it's not in the grouping sets.
+    val originalPlan3 = Aggregate(
+      Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a)), Seq(unresolved_a, unresolved_b))),
+      Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)
+    val expected3 = Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
+      Expand(
+        Seq(Seq(a, b, c, nulInt, nulStr, 3L), Seq(a, b, c, a, nulStr, 1L)),
+        Seq(a, b, c, a, b, gid),
+        Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))
+    checkAnalysis(originalPlan3, expected3)
+
     // Computation of grouping expression should remove duplicate expression based on their
     // semantics (semanticEqual).
-    val originalPlan3 = Aggregate(
+    val originalPlan4 = Aggregate(
       Seq(GroupingSets(Seq(
         Seq(Multiply(unresolved_a, Literal(2))),
         Seq(Multiply(Literal(2), unresolved_a), unresolved_b)))),
       Seq(UnresolvedAlias(Multiply(unresolved_a, Literal(2))),
         unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)
 
-    val resultPlan = getAnalyzer.executeAndCheck(originalPlan3, new QueryPlanningTracker)
+    val resultPlan = getAnalyzer.executeAndCheck(originalPlan4, new QueryPlanningTracker)
     val gExpressions = resultPlan.asInstanceOf[Aggregate].groupingExpressions
     assert(gExpressions.size == 3)
     val firstGroupingExprAttrName =

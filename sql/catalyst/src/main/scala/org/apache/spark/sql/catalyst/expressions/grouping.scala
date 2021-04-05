@@ -31,7 +31,20 @@ trait GroupingSet extends Expression with CodegenFallback {
   def groupingSets: Seq[Seq[Expression]]
   def selectedGroupByExprs: Seq[Seq[Expression]]
 
-  def groupByExprs: Seq[Expression] = children.distinct
+  def groupByExprs: Seq[Expression] = {
+    assert(children.forall(_.resolved),
+      "Cannot call GroupingSet.groupByExprs before the children expressions are all resolved.")
+    children.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
+      // Only unique expressions are included in the group by expressions and is determined
+      // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
+      // in grouping expression (a * b)
+      if (result.exists(_.semanticEquals(currentExpr))) {
+        result
+      } else {
+        result :+ currentExpr
+      }
+    }
+  }
 
   // this should be replaced first
   override lazy val resolved: Boolean = false
@@ -119,15 +132,25 @@ object Rollup {
 
 case class GroupingSets(
     groupingSetIndexes: Seq[Seq[Int]],
-    children: Seq[Expression]) extends GroupingSet {
-  override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
+    flatGroupingSets: Seq[Expression],
+    userGivenGroupByExprs: Seq[Expression]) extends GroupingSet {
+  override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(flatGroupingSets))
   override def selectedGroupByExprs: Seq[Seq[Expression]] = groupingSets
+  // Includes the `userGivenGroupByExprs` in the children, which will be included in the final
+  // GROUP BY expressions, so that `SELECT c ... GROUP BY (a, b, c) GROUPING SETS (a, b)` works.
+  override def children: Seq[Expression] = flatGroupingSets ++ userGivenGroupByExprs
 }
 
 object GroupingSets {
-  def apply(groupingSets: Seq[Seq[Expression]]): GroupingSets = {
+  def apply(
+      groupingSets: Seq[Seq[Expression]],
+      userGivenGroupByExprs: Seq[Expression]): GroupingSets = {
     val groupingSetIndexes = GroupingSet.computeGroupingSetIndexes(groupingSets)
-    GroupingSets(groupingSetIndexes, groupingSets.flatten)
+    GroupingSets(groupingSetIndexes, groupingSets.flatten, userGivenGroupByExprs)
+  }
+
+  def apply(groupingSets: Seq[Seq[Expression]]): GroupingSets = {
+    apply(groupingSets, userGivenGroupByExprs = Nil)
   }
 }
 

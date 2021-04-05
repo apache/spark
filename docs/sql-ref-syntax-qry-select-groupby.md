@@ -65,6 +65,12 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
     equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
     and global aggregate.
+    
+    **Note:** For Hive compatibility Spark allows `GROUP BY ... GROUPING SETS (...)`. The GROUP BY
+    expressions are usually ignored, but if it contains extra expressions than the GROUPING SETS
+    expressions, the extra expressions will be included in the grouping expressions and the value
+    is always null. For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`,
+    the output of column `c` is always null.
 
 * **ROLLUP**
 

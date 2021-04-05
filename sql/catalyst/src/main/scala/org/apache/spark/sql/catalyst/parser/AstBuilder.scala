@@ -914,19 +914,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
+      val groupByExpressions = expressionList(ctx.groupingExpressions)
       if (ctx.GROUPING != null) {
-        // GROUP BY GROUPING SETS (...)
-        if (!ctx.groupingExpressions.isEmpty) {
-          logWarning("The groupBy expressions between 'GROUP BY' and 'GROUPING SETS' will " +
-            "be ignored and this syntax is deprecated. Please use 'GROUP BY GROUPING SETS (...)' " +
-            "directly.")
-        }
+        // GROUP BY (...) GROUPING SETS (...)
+        // `groupByExpressions` can be non-empty for Hive compatibility. It may add extra grouping
+        // expressions that do not exist in GROUPING SETS (...), and the value is always null.
+        // For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`, the output
+        // of column `c` is always null.
         val groupingSets =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-        Aggregate(Seq(GroupingSets(groupingSets.toSeq)), selectExpressions, query)
+        Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
+          selectExpressions, query)
       } else {
         // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
-        val groupByExpressions = expressionList(ctx.groupingExpressions)
         val mappedGroupByExpressions = if (ctx.CUBE != null) {
           Seq(Cube(groupByExpressions.map(Seq(_))))
         } else if (ctx.ROLLUP != null) {
