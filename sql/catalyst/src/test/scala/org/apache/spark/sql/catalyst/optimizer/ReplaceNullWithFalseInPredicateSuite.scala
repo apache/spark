@@ -465,9 +465,9 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       val notMatchedAssignments = Seq(
         Assignment('i, 'd)
       )
-      val matchedActions = UpdateAction(Some(expr), matchedAssignments) ::
+      val matchedActions = UpdateAction(Some(expr), matchedAssignments, false) ::
         DeleteAction(Some(expr)) :: Nil
-      val notMatchedActions = InsertAction(None, notMatchedAssignments) :: Nil
+      val notMatchedActions = InsertAction(None, notMatchedAssignments, false) :: Nil
       MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
     }
     val originalPlan = func(testRelation, anotherTestRelation, originalCond).analyze

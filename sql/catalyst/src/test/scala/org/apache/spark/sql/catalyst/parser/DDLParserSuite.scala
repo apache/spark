@@ -1424,10 +1424,11 @@ class DDLParserSuite extends AnalysisTest {
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
             Seq(Assignment(UnresolvedAttribute("target.col2"),
-              UnresolvedAttribute("source.col2"))))),
+              UnresolvedAttribute("source.col2"))), false)),
         Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))),
+          false))))
   }
 
   test("merge into table: using subquery") {
@@ -1449,10 +1450,11 @@ class DDLParserSuite extends AnalysisTest {
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
             Seq(Assignment(UnresolvedAttribute("target.col2"),
-              UnresolvedAttribute("source.col2"))))),
+              UnresolvedAttribute("source.col2"))), false)),
         Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))),
+          false))))
   }
 
   test("merge into table: cte") {
@@ -1476,10 +1478,11 @@ class DDLParserSuite extends AnalysisTest {
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
             Seq(Assignment(UnresolvedAttribute("target.col2"),
-              UnresolvedAttribute("source.col2"))))),
+              UnresolvedAttribute("source.col2"))), false)),
         Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))),
+          false))))
   }
 
   test("merge into table: no additional condition") {
@@ -1497,10 +1500,12 @@ class DDLParserSuite extends AnalysisTest {
       SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
       EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
       Seq(UpdateAction(None,
-        Seq(Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))))),
+        Seq(Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))),
+        false)),
       Seq(InsertAction(None,
         Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-          Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
+          Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))),
+        false))))
   }
 
   test("merge into table: star") {
@@ -1519,9 +1524,10 @@ class DDLParserSuite extends AnalysisTest {
       SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
       EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
       Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
-        UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))), Seq())),
+        UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+          Seq(), true)),
       Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
-        Seq()))))
+        Seq(), true))))
   }
 
   test("merge into table: columns aliases are not allowed") {
@@ -1564,15 +1570,15 @@ class DDLParserSuite extends AnalysisTest {
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update1"))),
-            Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(1)))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(1))), false),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update2"))),
-            Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(2))))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"), Literal(2))), false)),
         Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert1"))),
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-            Assignment(UnresolvedAttribute("target.col2"), Literal(1)))),
+            Assignment(UnresolvedAttribute("target.col2"), Literal(1))), false),
           InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert2"))),
             Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
-              Assignment(UnresolvedAttribute("target.col2"), Literal(2)))))))
+              Assignment(UnresolvedAttribute("target.col2"), Literal(2))), false))))
   }
 
   test("merge into table: only the last matched clause can omit the condition") {

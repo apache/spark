@@ -415,9 +415,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         } else if (clause.matchedAction().UPDATE() != null) {
           val condition = Option(clause.matchedCond).map(expression)
           if (clause.matchedAction().ASTERISK() != null) {
-            UpdateAction(condition, Seq())
+            UpdateAction(condition, Seq(), assignStar = true)
           } else {
-            UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
+            UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()),
+              assignStar = false)
           }
         } else {
           // It should not be here.
@@ -430,7 +431,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         if (clause.notMatchedAction().INSERT() != null) {
           val condition = Option(clause.notMatchedCond).map(expression)
           if (clause.notMatchedAction().ASTERISK() != null) {
-            InsertAction(condition, Seq())
+            InsertAction(condition, Seq(), assignStar = true)
           } else {
             val columns = clause.notMatchedAction().columns.multipartIdentifier()
                 .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
@@ -438,7 +439,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             if (columns.size != values.size) {
               throw QueryParsingErrors.insertedValueNumberNotMatchFieldNumberError(clause)
             }
-            InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq)
+            InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq,
+              assignStar = false)
           }
         } else {
           // It should not be here.

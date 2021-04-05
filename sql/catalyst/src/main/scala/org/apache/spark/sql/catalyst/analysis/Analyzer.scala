@@ -1487,24 +1487,26 @@ class Analyzer(override val catalogManager: CatalogManager)
                 val resolvedDeleteCondition = deleteCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
+              case u @ UpdateAction(updateCondition, assignments, _) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 // The update value can access columns from both target and source tables.
-                UpdateAction(
-                  resolvedUpdateCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
+                u.copy(
+                  condition = resolvedUpdateCondition,
+                  assignments =
+                    resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
-              case InsertAction(insertCondition, assignments) =>
+              case i @ InsertAction(insertCondition, assignments, _) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
-                InsertAction(
-                  resolvedInsertCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
+                i.copy(
+                  condition = resolvedInsertCondition,
+                  assignments =
+                    resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
               case o => o
             }
             val resolvedMergeCondition = resolveExpressionByPlanChildren(m.mergeCondition, m)

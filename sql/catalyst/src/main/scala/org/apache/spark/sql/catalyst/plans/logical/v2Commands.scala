@@ -420,13 +420,15 @@ case class DeleteAction(condition: Option[Expression]) extends MergeAction
 
 case class UpdateAction(
     condition: Option[Expression],
-    assignments: Seq[Assignment]) extends MergeAction {
+    assignments: Seq[Assignment],
+    assignStar: Boolean) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 }
 
 case class InsertAction(
     condition: Option[Expression],
-    assignments: Seq[Assignment]) extends MergeAction {
+    assignments: Seq[Assignment],
+    assignStar: Boolean) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 }
 

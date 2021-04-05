@@ -145,7 +145,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       testRelation2,
       cond,
       Seq(DeleteAction(None)),
-      Seq(InsertAction(None, Seq(Assignment('a, 'c), Assignment('b, 'd)))))
+      Seq(InsertAction(None, Seq(Assignment('a, 'c), Assignment('b, 'd)), false)))
     val analyzedMergePlan = mergePlan.analyze
     assert(analyzedMergePlan.resolved)
 
