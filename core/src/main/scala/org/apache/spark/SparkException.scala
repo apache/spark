@@ -25,12 +25,14 @@ import java.util.ConcurrentModificationException
 
 import org.apache.spark.errors.{DEFAULT, ErrorCode, INTERNAL_ERROR}
 
-class SparkException(message: String, cause: Throwable, val errorCode: ErrorCode = DEFAULT)
+private[spark] class SparkException(
+    message: String,
+    cause: Throwable,
+    val errorCode: ErrorCode = DEFAULT)
   extends Exception(message, cause) {
 
-  def this(message: String) = this(message, null)
-
-  def this(cause: Throwable) = this(cause.toString, cause)
+  def this(message: String) = this(message, null, DEFAULT)
+  def this(message: String, cause: Throwable) = this(message, cause, DEFAULT)
 }
 
 /**
