@@ -834,4 +834,21 @@ object IntervalUtils {
    * @return The period of months, not null
    */
   def monthsToPeriod(months: Int): Period = Period.ofMonths(months).normalized()
+
+  /**
+   * Converts an year-month interval as a number of months to its textual representation
+   * which conforms to the ANSI SQL standard.
+   *
+   * @param months The number of months, positive or negative
+   * @return Year-month interval string
+   */
+  def toYMIntervalString(months: Int): String = {
+    var sign = ""
+    var absMonths: Long = months
+    if (months < 0) {
+      sign = "-"
+      absMonths = -absMonths
+    }
+    s"interval '$sign${absMonths / MONTHS_PER_YEAR}-${absMonths % MONTHS_PER_YEAR}' year to month"
+  }
 }
