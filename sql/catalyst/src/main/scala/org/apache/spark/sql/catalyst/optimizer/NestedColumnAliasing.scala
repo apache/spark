@@ -264,15 +264,13 @@ object GeneratorNestedColumnAliasing {
       val exprsToPrune = projectList ++ g.generator.children
       NestedColumnAliasing.getAliasSubMap(exprsToPrune).map {
         case (nestedFieldToAlias, attrToAliases) =>
-          // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
-
           val (nestedFieldsOnGenerator, nestedFieldsNotOnGenerator) =
             nestedFieldOnGeneratorOutput(nestedFieldToAlias, g.qualifiedGeneratorOutput)
           val (attrToAliasesOnGenerator, attrToAliasesNotOnGenerator) =
             aliasesOnGeneratorOutput(attrToAliases, g.qualifiedGeneratorOutput)
 
-          // Push nested column accessors through `Generator`. We cannot prune on `Generator`'s
-          // output.
+          // Push nested column accessors through `Generator`.
+          // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
           val newChild = NestedColumnAliasing.replaceWithAliases(g,
             nestedFieldsNotOnGenerator, attrToAliasesNotOnGenerator)
           val pushedThrough = Project(NestedColumnAliasing
@@ -282,15 +280,18 @@ object GeneratorNestedColumnAliasing {
           // For multiple field case, we cannot directly move field extractor into
           // the generator expression. A workaround is to re-construct array of struct
           // from multiple fields. But it will be more complicated and may not worth.
-          if (nestedFieldsOnGenerator.size == 1) {
+          // TODO(SPARK-34956): support multiple fields.
+          if (nestedFieldsOnGenerator.size > 1 || nestedFieldsOnGenerator.size == 0) {
+            pushedThrough
+          } else {
             // Only one nested column accessor.
             // E.g., df.select(explode($"items").as("item")).select($"item.a")
             pushedThrough match {
               case p @ Project(_, newG: Generate) =>
                 // Replace the child expression of `ExplodeBase` generator with
                 // nested column accessor.
-                // E.g., df.select(explode($"items").as("item")) =>
-                //       df.select(explode($"items.a").as("item"))
+                // E.g., df.select(explode($"items").as("item")).select($"item.a") =>
+                //       df.select(explode($"items.a").as("item.a"))
                 val rewrittenG = newG.transformExpressions {
                   case e: ExplodeBase =>
                     val extractor = nestedFieldsOnGenerator.head._1.transformUp {
@@ -322,8 +323,6 @@ object GeneratorNestedColumnAliasing {
 
               case _ => pushedThrough
             }
-          } else {
-            pushedThrough
           }
       }
 

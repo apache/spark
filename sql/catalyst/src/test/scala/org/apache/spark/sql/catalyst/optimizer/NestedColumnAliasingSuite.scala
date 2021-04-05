@@ -329,7 +329,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
-  test("Nested field pruning for Project and Generate: not prune on generator output") {
+  test("Nested field pruning for Project and Generate: multiple-field case is not supported") {
     val companies = LocalRelation(
       'id.int,
       'employers.array(employer))
