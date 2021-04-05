@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -27,6 +28,7 @@ import org.apache.spark.sql.types._
  */
 case class ProjectionOverSchema(schema: StructType) {
   private val fieldNames = schema.fieldNames.toSet
+  private val resolver = SQLConf.get.resolver
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)
 
@@ -41,9 +43,10 @@ case class ProjectionOverSchema(schema: StructType) {
       case a: GetArrayStructFields =>
         getProjection(a.child).map(p => (p, p.dataType)).map {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>
+            val selectedField = projSchema.find(f => resolver(f.name, a.field.name)).get
             GetArrayStructFields(projection,
-              projSchema(a.field.name),
-              projSchema.fieldIndex(a.field.name),
+              selectedField,
+              projSchema.fieldIndex(selectedField.name),
               projSchema.size,
               a.containsNull)
           case (_, projSchema) =>
