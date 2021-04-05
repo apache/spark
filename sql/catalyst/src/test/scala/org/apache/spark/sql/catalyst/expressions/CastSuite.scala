@@ -64,9 +64,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
     (atomicTypes -- Set(
       // TODO(SPARK-34668): Support casting of day-time intervals to strings
-      DayTimeIntervalType,
-      // TODO(SPARK-34667): Support casting of year-month intervals to strings
-      YearMonthIntervalType)).foreach(dt => checkNullCast(dt, StringType))
+      DayTimeIntervalType)).foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
