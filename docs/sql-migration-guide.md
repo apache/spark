@@ -73,7 +73,7 @@ license: |
 
   - In Spark 3.2, the timestamps subtraction expression such as `timestamp '2021-03-31 23:48:00' - timestamp '2021-01-01 00:00:00'` returns values of `DayTimeIntervalType`. In Spark 3.1 and earlier, the type of the same expression is `CalendarIntervalType`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.interval.enabled` to `true`.
 
-  - In Spark 3.2, `CREATE TABLE .. LIKE ..` command can not use reserved properties. You need their specific clauses to specify them, for example, `CREATE TABLE test1 LIKE test LOCATION 'some path'`. You can set `spark.sql.legacy.notReserveProperties` to `true` to ignore the `ParseException`, in this case, these properties will be silently removed, for example: `TBLPROPERTIES('owner'='yao')` will have no effect. In Spark version 3.1 and below, the reserved properties are only affect other DDLs except for this one, for example, `TBLPROPERTIES('location'='/tmp')` does not change the location of the table but only create a headless property just like `'a'='b'`.
+  - In Spark 3.2, `CREATE TABLE .. LIKE ..` command can not use reserved properties. You need their specific clauses to specify them, for example, `CREATE TABLE test1 LIKE test LOCATION 'some path'`. You can set `spark.sql.legacy.notReserveProperties` to `true` to ignore the `ParseException`, in this case, these properties will be silently removed, for example: `TBLPROPERTIES('owner'='yao')` will have no effect. In Spark version 3.1 and below, the reserved properties can be used in `CREATE TABLE .. LIKE ..` command but have no side effects, for example, `TBLPROPERTIES('location'='/tmp')` does not change the location of the table but only create a headless property just like `'a'='b'`.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 
