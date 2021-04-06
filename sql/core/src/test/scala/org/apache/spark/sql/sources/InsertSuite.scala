@@ -731,13 +731,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue1 to long causes overflow"))
+        assert(msg.contains(s"Casting $outOfRangeValue1 to bigint causes overflow"))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting $outOfRangeValue2 to long causes overflow"))
+        assert(msg.contains(s"Casting $outOfRangeValue2 to bigint causes overflow"))
       }
     }
   }
@@ -931,6 +931,23 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           """.stripMargin)
       }.getMessage
       assert(msg.contains("cannot resolve 'c3' given input columns"))
+    }
+  }
+
+  test("SPARK-34926: PartitioningUtils.getPathFragment() should respect partition value is null") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(id INT) USING PARQUET")
+      sql(
+        """
+          |CREATE TABLE t2 (c1 INT, part STRING)
+          |  USING parquet
+          |PARTITIONED BY (part)
+          |""".stripMargin)
+      sql(
+        """
+          |INSERT INTO TABLE t2 PARTITION (part = null)
+          |SELECT * FROM t1 where 1=0""".stripMargin)
+      checkAnswer(spark.table("t2"), Nil)
     }
   }
 }

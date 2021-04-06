@@ -154,7 +154,7 @@ class SparkSession private(
       .map(_.clone(this))
       .getOrElse {
         val state = SparkSession.instantiateSessionState(
-          SparkSession.sessionStateClassName(sparkContext.conf),
+          SparkSession.sessionStateClassName(sharedState.conf),
           self)
         state
       }

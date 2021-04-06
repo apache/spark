@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.UnresolvedTable
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, RecoverPartitions, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, RecoverPartitions, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
@@ -416,17 +416,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  private def uncacheView(viewDef: LogicalPlan): Unit = {
+  private def uncacheView(viewDef: View): Unit = {
     try {
       // If view text is defined, it means we are not storing analyzed logical plan for the view
       // and instead its behavior follows that of a permanent view (see SPARK-33142 for more
       // details). Therefore, when uncaching the view we should also do in a cascade fashion, the
       // same way as how a permanent view is handled. This also avoids a potential issue where a
       // dependent view becomes invalid because of the above while its data is still cached.
-      val viewText = viewDef match {
-        case v: View => v.desc.viewText
-        case _ => None
-      }
+      val viewText = viewDef.desc.viewText
       val plan = sparkSession.sessionState.executePlan(viewDef)
       sparkSession.sharedState.cacheManager.uncacheQuery(
         sparkSession, plan.analyzed, cascade = viewText.isDefined)

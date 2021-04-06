@@ -828,3 +828,25 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case _ => false
   }
 }
+
+trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  override final def children: Seq[T] = Nil
+}
+
+trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def child: T
+  @transient override final lazy val children: Seq[T] = child :: Nil
+}
+
+trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def left: T
+  def right: T
+  @transient override final lazy val children: Seq[T] = left :: right :: Nil
+}
+
+trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def first: T
+  def second: T
+  def third: T
+  @transient override final lazy val children: Seq[T] = first :: second :: third :: Nil
+}

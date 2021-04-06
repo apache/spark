@@ -272,7 +272,7 @@ abstract class TypeCoercionBase {
     private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
       val casted = plan.output.zip(targetTypes).map {
         case (e, dt) if e.dataType != dt =>
-          Alias(Cast(e, dt, Some(SQLConf.get.sessionLocalTimeZone)), e.name)()
+          Alias(Cast(e, dt, Some(conf.sessionLocalTimeZone)), e.name)()
         case (e, _) => e
       }
       Project(casted, plan)
@@ -626,10 +626,10 @@ abstract class TypeCoercionBase {
       case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateType(), _) =>
-        s.copy(endTimestamp = Cast(s.endTimestamp, TimestampType))
-      case s @ SubtractTimestamps(_, DateType()) =>
-        s.copy(startTimestamp = Cast(s.startTimestamp, TimestampType))
+      case s @ SubtractTimestamps(DateType(), _, _, _) =>
+        s.copy(left = Cast(s.left, TimestampType))
+      case s @ SubtractTimestamps(_, DateType(), _, _) =>
+        s.copy(right = Cast(s.right, TimestampType))
 
       case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }
@@ -1182,7 +1182,7 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
             case Some(newType) if a.dataType == newType.dataType => a
             case Some(newType) =>
               logDebug(s"Promoting $a from ${a.dataType} to ${newType.dataType} in " +
-                s" ${q.simpleString(SQLConf.get.maxToStringFields)}")
+                s" ${q.simpleString(conf.maxToStringFields)}")
               newType
           }
       }

@@ -860,6 +860,20 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(partitions(1) === Seq((1, 3), (3, 8), (3, 8)))
   }
 
+  test("SPARK-32384: repartitionAndSortWithinPartitions without shuffle") {
+    val data = sc.parallelize(Seq((0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)), 2)
+
+    val partitioner = new HashPartitioner(2)
+    val agged = data.reduceByKey(_ + _, 2)
+    assert(agged.partitioner == Some(partitioner))
+
+    val sorted = agged.repartitionAndSortWithinPartitions(partitioner)
+    assert(sorted.partitioner == Some(partitioner))
+
+    assert(sorted.dependencies.nonEmpty &&
+      sorted.dependencies.forall(_.isInstanceOf[OneToOneDependency[_]]))
+  }
+
   test("cartesian on empty RDD") {
     val a = sc.emptyRDD[Int]
     val b = sc.parallelize(1 to 3)

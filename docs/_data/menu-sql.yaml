@@ -32,6 +32,8 @@
       url: sql-data-sources-orc.html
     - text: JSON Files
       url: sql-data-sources-json.html
+    - text: CSV Files
+      url: sql-data-sources-csv.html
     - text: Hive Tables
       url: sql-data-sources-hive-tables.html
     - text: JDBC To Other Databases

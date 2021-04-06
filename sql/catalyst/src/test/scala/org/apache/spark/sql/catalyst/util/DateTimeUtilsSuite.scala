@@ -711,4 +711,80 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("xx")))
     intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("\"quote")))
   }
+
+  test("SPARK-34761: timestamp add day-time interval") {
+    // transit from Pacific Standard Time to Pacific Daylight Time
+    assert(timestampAddDayTime(
+      // 2019-3-9 is the end of Pacific Standard Time
+      date(2019, 3, 9, 12, 0, 0, 123000, LA),
+      MICROS_PER_DAY, LA) ===
+      // 2019-3-10 is the start of Pacific Daylight Time
+      date(2019, 3, 10, 12, 0, 0, 123000, LA))
+    // just normal days
+    outstandingZoneIds.foreach { zid =>
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 100000, zid), 0, zid) ===
+        date(2021, 3, 18, 19, 44, 1, 100000, zid))
+      assert(timestampAddDayTime(
+        date(2021, 1, 19, 0, 0, 0, 0, zid), -18 * MICROS_PER_DAY, zid) ===
+        date(2021, 1, 1, 0, 0, 0, 0, zid))
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 999999, zid), 10 * MICROS_PER_MINUTE, zid) ===
+        date(2021, 3, 18, 19, 54, 1, 999999, zid))
+      assert(timestampAddDayTime(
+        date(2021, 3, 18, 19, 44, 1, 1, zid), -MICROS_PER_DAY - 1, zid) ===
+        date(2021, 3, 17, 19, 44, 1, 0, zid))
+      assert(timestampAddDayTime(
+        date(2019, 5, 9, 12, 0, 0, 123456, zid), 2 * MICROS_PER_DAY + 1, zid) ===
+        date(2019, 5, 11, 12, 0, 0, 123457, zid))
+    }
+    // transit from Pacific Daylight Time to Pacific Standard Time
+    assert(timestampAddDayTime(
+      // 2019-11-2 is the end of Pacific Daylight Time
+      date(2019, 11, 2, 12, 0, 0, 123000, LA),
+      MICROS_PER_DAY, LA) ===
+      // 2019-11-3 is the start of Pacific Standard Time
+      date(2019, 11, 3, 12, 0, 0, 123000, LA))
+  }
+
+  test("SPARK-34903: subtract timestamps") {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      Seq(
+        // 1000-02-29 exists in Julian calendar because 1000 is a leap year
+        (LocalDateTime.of(1000, 2, 28, 1, 2, 3, 456789000),
+          LocalDateTime.of(1000, 3, 1, 1, 2, 3, 456789000)) -> TimeUnit.DAYS.toMicros(1),
+        // The range 1582-10-04 .. 1582-10-15 doesn't exist in Julian calendar
+        (LocalDateTime.of(1582, 10, 4, 23, 59, 59, 999999000),
+          LocalDateTime.of(1582, 10, 15, 23, 59, 59, 999999000)) -> TimeUnit.DAYS.toMicros(11),
+        // America/Los_Angeles -08:00 zone offset
+        (LocalDateTime.of(1883, 11, 20, 0, 0, 0, 123456000),
+          // America/Los_Angeles -08:00 zone offset
+          LocalDateTime.of(1883, 11, 10, 0, 0, 0)) -> (TimeUnit.DAYS.toMicros(-10) - 123456),
+        // No difference between Proleptic Gregorian and Julian calendars after 1900-01-01
+        (LocalDateTime.of(1900, 1, 1, 0, 0, 0, 1000),
+          LocalDateTime.of(1899, 12, 31, 23, 59, 59, 999999000)) -> -2,
+        // The 'Asia/Hong_Kong' time zone switched from 'Japan Standard Time' (JST = UTC+9)
+        // to 'Hong Kong Time' (HKT = UTC+8). After Sunday, 18 November, 1945 01:59:59 AM,
+        // clocks were moved backward to become Sunday, 18 November, 1945 01:00:00 AM.
+        // In this way, the overlap happened w/o Daylight Saving Time.
+        (LocalDateTime.of(1945, 11, 18, 0, 30, 30),
+          LocalDateTime.of(1945, 11, 18, 1, 30, 30)) -> TimeUnit.HOURS.toMicros(1),
+        (LocalDateTime.of(1945, 11, 18, 2, 0, 0),
+          LocalDateTime.of(1945, 11, 18, 1, 0, 0)) -> TimeUnit.HOURS.toMicros(-1),
+        // The epoch has zero offset in microseconds
+        (LocalDateTime.of(1970, 1, 1, 0, 0, 0), LocalDateTime.of(1970, 1, 1, 0, 0, 0)) -> 0,
+        // 2020 is a leap year
+        (LocalDateTime.of(2020, 2, 29, 0, 0, 0),
+          LocalDateTime.of(2021, 3, 1, 0, 0, 0)) -> TimeUnit.DAYS.toMicros(366),
+        // Daylight saving in America/Los_Angeles: from winter to summer time
+        (LocalDateTime.of(2021, 3, 14, 1, 0, 0), LocalDateTime.of(2021, 3, 14, 3, 0, 0)) ->
+          TimeUnit.HOURS.toMicros(2)
+      ).foreach { case ((start, end), expected) =>
+        val startMicros = localDateTimeToMicros(start, zid)
+        val endMicros = localDateTimeToMicros(end, zid)
+        val result = subtractTimestamps(endMicros, startMicros, zid)
+        assert(result === expected)
+      }
+    }
+  }
 }
