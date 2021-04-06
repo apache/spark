@@ -33,6 +33,8 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
+import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, _}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
@@ -40,6 +42,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
@@ -76,6 +79,35 @@ object CurrentOrigin {
 
 // A tag of a `TreeNode`, which defines name and type
 case class TreeNodeTag[T](name: String)
+
+// A wrapper of Bitset for pattern enums.
+trait TreePatternBits {
+  val treePatternBits: BitSet
+
+  @inline final def containsPattern(t: TreePattern): Boolean = {
+    treePatternBits.get(t.id)
+  }
+
+  final def containsAllPatterns(types: TreePattern*): Boolean = {
+    val iterator = types.iterator
+    while (iterator.hasNext) {
+      if (!containsPattern(iterator.next)) {
+        return false
+      }
+    }
+    true
+  }
+
+  final def containsAnyPattern(types: TreePattern*): Boolean = {
+    val iterator = types.iterator
+    while (iterator.hasNext) {
+      if (containsPattern(iterator.next)) {
+        return true
+      }
+    }
+    false
+  }
+}
 
 // scalastyle:off
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
