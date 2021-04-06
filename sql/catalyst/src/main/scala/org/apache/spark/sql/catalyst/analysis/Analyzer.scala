@@ -1495,11 +1495,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                   resolvedUpdateCondition,
                   resolveAssignments(Some(assignments), m, resolveValuesWithSourceOnly = false))
               case UpdateStarAction(updateCondition) =>
-                val x = UpdateAction(
+                UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   resolveAssignments(assignments = None, m, resolveValuesWithSourceOnly = false))
-                println(s"replaced UpdateStarAction with $x")
-                x
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
