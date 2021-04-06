@@ -351,7 +351,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
      * Some of these, that we have experimented with, but have gotten worse result,
      * than with the current one:
      * 1) Weighted arithmetic mean of these two ratios - adding up fractions puts
-     * less emphasis on ratios between 0 and 1. With ratios 10 and 0.1 should be considered
+     * less emphasis on ratios between 0 and 1. Ratios 10 and 0.1 should be considered
      * to be just as strong evidences in opposite directions. The arithmetic mean of these
      * would be heavily biased towards the 10.
      * 2) Absolute cost (cost = weight * rowCount + (1 - weight) * size) - when adding up
