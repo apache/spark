@@ -1298,7 +1298,7 @@ private[spark] object QueryCompilationErrors {
     throw new AnalysisException("The number of partitions can't be specified with unspecified" +
       " distribution. Invalid writer requirements detected.")
   }
-  
+
   def groupAggPandasUDFUnsupportedByStreamingAggError(): Throwable = {
     new AnalysisException("Streaming aggregation doesn't support group aggregate pandas UDF")
   }
