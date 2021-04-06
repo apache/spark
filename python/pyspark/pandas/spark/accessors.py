@@ -1247,3 +1247,51 @@ class CachedSparkFrameMethods(SparkFrameMethods):
         """
         if self._kdf._cached.is_cached:
             self._kdf._cached.unpersist()
+
+
+def _test():
+    import os
+    import doctest
+    import shutil
+    import sys
+    import tempfile
+    import uuid
+    import numpy
+    import pandas
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.spark.accessors
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.spark.accessors.__dict__.copy()
+    globs["np"] = numpy
+    globs["pd"] = pandas
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.spark.accessors tests")
+        .getOrCreate()
+    )
+
+    db_name = "db%s" % str(uuid.uuid4()).replace("-", "")
+    spark.sql("CREATE DATABASE %s" % db_name)
+    globs["db"] = db_name
+
+    path = tempfile.mkdtemp()
+    globs["path"] = path
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.spark.accessors,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+
+    shutil.rmtree(path, ignore_errors=True)
+    spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db_name)
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

@@ -18,7 +18,6 @@
 """
 MLflow-related functions to load models and apply them to Koalas dataframes.
 """
-from mlflow import pyfunc
 from pyspark.sql.types import DataType
 import pandas as pd
 import numpy as np
@@ -62,10 +61,14 @@ class PythonModelWrapper(object):
         """
         The return object has to follow the API of mlflow.pyfunc.PythonModel.
         """
+        from mlflow import pyfunc
+
         return pyfunc.load_model(model_uri=self._model_uri)
 
     @lazy_property
     def _model_udf(self):
+        from mlflow import pyfunc
+
         spark = default_session()
         return pyfunc.spark_udf(spark, model_uri=self._model_uri, result_type=self._return_type)
 
@@ -190,3 +193,37 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     0  2.0  3.0 -1  1.376932
     """
     return PythonModelWrapper(model_uri, predict_type)
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.mlflow
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.mlflow.__dict__.copy()
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]").appName("pyspark.pandas.mlflow tests").getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.mlflow,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    try:
+        import mlflow  # noqa: F401
+        import sklearn  # noqa: F401
+
+        _test()
+    except ImportError:
+        pass

@@ -161,6 +161,8 @@ jobs:
             pyspark-sql, pyspark-mllib, pyspark-resource
           - >-
             pyspark-core, pyspark-streaming, pyspark-ml
+          - >-
+            pyspark-pandas
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: hadoop3.2

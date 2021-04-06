@@ -740,3 +740,33 @@ class DatetimeIndex(Index):
 def disallow_nanoseconds(freq):
     if freq in ["N", "ns"]:
         raise ValueError("nanoseconds is not supported")
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.indexes.datetimes
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.indexes.datetimes.__dict__.copy()
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.indexes.datetimes tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.indexes.datetimes,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

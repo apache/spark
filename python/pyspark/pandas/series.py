@@ -6233,3 +6233,31 @@ def first_series(df) -> Union["Series", pd.Series]:
         return df._kser_for(df._internal.column_labels[0])
     else:
         return df[df.columns[0]]
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.series
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.series.__dict__.copy()
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]").appName("pyspark.pandas.series tests").getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.series,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

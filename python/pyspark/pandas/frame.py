@@ -4694,16 +4694,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Create a new Delta Lake table, partitioned by one column:
 
-        >>> df.to_delta('%s/to_delta/foo' % path, partition_cols='date')
+        >>> df.to_delta('%s/to_delta/foo' % path, partition_cols='date')  # doctest: +SKIP
 
         Partitioned by two columns:
 
-        >>> df.to_delta('%s/to_delta/bar' % path, partition_cols=['date', 'country'])
+        >>> df.to_delta('%s/to_delta/bar' % path,
+        ...             partition_cols=['date', 'country'])  # doctest: +SKIP
 
         Overwrite an existing table's partitions, using the 'replaceWhere' capability in Delta:
 
         >>> df.to_delta('%s/to_delta/bar' % path,
-        ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')
+        ...             mode='overwrite', replaceWhere='date >= "2012-01-01"')  # doctest: +SKIP
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore
@@ -11974,3 +11975,45 @@ class CachedDataFrame(DataFrame):
         return self.spark.unpersist()
 
     unpersist.__doc__ = CachedSparkFrameMethods.unpersist.__doc__
+
+
+def _test():
+    import os
+    import doctest
+    import shutil
+    import sys
+    import tempfile
+    import uuid
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.frame
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.frame.__dict__.copy()
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
+    )
+
+    db_name = "db%s" % str(uuid.uuid4()).replace("-", "")
+    spark.sql("CREATE DATABASE %s" % db_name)
+    globs["db"] = db_name
+
+    path = tempfile.mkdtemp()
+    globs["path"] = path
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.frame,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+
+    shutil.rmtree(path, ignore_errors=True)
+    spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db_name)
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
