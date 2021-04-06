@@ -23,7 +23,6 @@ import java.sql.{Date, Timestamp}
 import scala.util.Random
 
 import org.apache.spark.SparkException
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
