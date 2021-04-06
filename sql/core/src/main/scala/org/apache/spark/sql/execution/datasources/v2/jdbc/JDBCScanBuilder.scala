@@ -17,9 +17,11 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
+import org.apache.spark.sql.connector.read.sqlpushdown.{SQLStatement, SupportsSQLPushDown}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.v2.pushdown.sql.{SingleCatalystStatement, SingleSQLStatement, SQLBuilder}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -28,11 +30,13 @@ case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
     jdbcOptions: JDBCOptions)
-  extends ScanBuilder with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
+  extends ScanBuilder with SupportsSQLPushDown {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
 
   private var pushedFilter = Array.empty[Filter]
+
+  private var statement: SingleSQLStatement = _
 
   private var prunedSchema = schema
 
@@ -65,6 +69,37 @@ case class JDBCScanBuilder(
     val resolver = session.sessionState.conf.resolver
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), prunedSchema, pushedFilter)
+    val relationSchema = if (statement != null) {
+      prunedSchema
+    } else {
+      schema
+    }
+    JDBCScan(JDBCRelation(relationSchema, parts, jdbcOptions)(session),
+      prunedSchema, pushedFilter, statement)
   }
+
+  private def toSQLStatement(catalystStatement: SingleCatalystStatement): SingleSQLStatement = {
+    val projects = catalystStatement.projects
+    val filters = catalystStatement.filters
+    val groupBy = catalystStatement.groupBy
+    SingleSQLStatement (
+      relation = jdbcOptions.tableOrQuery,
+      projects = Some(projects.map(SQLBuilder.expressionToSql(_))),
+      filters = if (filters.isEmpty) None else Some(filters),
+      groupBy = if (groupBy.isEmpty) None else Some(groupBy.map(SQLBuilder.expressionToSql(_))),
+      url = Some(jdbcOptions.url)
+    )
+  }
+
+  override def isMultiplePartitionExecution: Boolean = true
+
+ override def pushStatement(push: SQLStatement, outputSchema: StructType): Array[Filter] = {
+   statement = toSQLStatement(push.asInstanceOf[SingleCatalystStatement])
+   if (outputSchema != null) {
+     prunedSchema = outputSchema
+   }
+   statement.filters.map(f => pushFilters(f.toArray)).getOrElse(Array.empty)
+ }
+
+  override def pushedStatement(): SQLStatement = statement
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning, SubqueryExpression}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -81,33 +81,58 @@ object PushDownUtils extends PredicateHelper {
       relation: DataSourceV2Relation,
       projects: Seq[NamedExpression],
       filters: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
+    prunedColumns(scanBuilder, relation, projects, filters)
+      .map { prunedSchema =>
+        scanBuilder.asInstanceOf[SupportsPushDownRequiredColumns]
+          .pruneColumns(prunedSchema)
+        val scan = scanBuilder.build()
+        scan -> toOutputAttrs(scan.readSchema(), relation)}
+      .getOrElse(scanBuilder.build() -> relation.output)
+  }
+
+  def prunedColumns(
+    scanBuilder: ScanBuilder,
+    relation: DataSourceV2Relation,
+    projects: Seq[NamedExpression],
+    filters: Seq[Expression]): Option[StructType] = {
     scanBuilder match {
-      case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
+      case _: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
         val rootFields = SchemaPruning.identifyRootFields(projects, filters)
         val prunedSchema = if (rootFields.nonEmpty) {
           SchemaPruning.pruneDataSchema(relation.schema, rootFields)
         } else {
           new StructType()
         }
-        r.pruneColumns(prunedSchema)
-        val scan = r.build()
-        scan -> toOutputAttrs(scan.readSchema(), relation)
+        Some(prunedSchema)
 
-      case r: SupportsPushDownRequiredColumns =>
+      case _: SupportsPushDownRequiredColumns =>
         val exprs = projects ++ filters
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
-        r.pruneColumns(neededOutput.toStructType)
-        val scan = r.build()
         // always project, in case the relation's output has been updated and doesn't match
         // the underlying table schema
-        scan -> toOutputAttrs(scan.readSchema(), relation)
-
-      case _ => scanBuilder.build() -> relation.output
+        Some(neededOutput.toStructType)
+      case _ => None
     }
   }
+  def pushDownFilter(
+       scanBuilder: ScanBuilder,
+       filters: Seq[Expression],
+       relation: DataSourceV2Relation): (Seq[sources.Filter], Seq[Expression]) = {
+    val normalizedFilters = DataSourceStrategy.normalizeExprs(filters, relation.output)
+    val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
+      normalizedFilters.partition(SubqueryExpression.hasSubquery)
 
-  private def toOutputAttrs(
+    // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
+    // `postScanFilters` need to be evaluated after the scan.
+    // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
+    val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
+      scanBuilder, normalizedFiltersWithoutSubquery)
+    val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+    (pushedFilters, postScanFilters)
+  }
+
+  def toOutputAttrs(
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap

@@ -25,6 +25,7 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.v2.pushdown.sql.SingleSQLStatement
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -152,19 +153,19 @@ object JDBCRDD extends Logging {
       requiredColumns: Array[String],
       filters: Array[Filter],
       parts: Array[Partition],
-      options: JDBCOptions): RDD[InternalRow] = {
-    val url = options.url
-    val dialect = JdbcDialects.get(url)
-    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+      options: JDBCOptions,
+      statement: Option[SingleSQLStatement] = None)
+    : RDD[InternalRow] = {
+    val pushedStatement =
+      statement.getOrElse(SingleSQLStatement(requiredColumns, filters, options))
     new JDBCRDD(
       sc,
       JdbcUtils.createConnectionFactory(options),
       pruneSchema(schema, requiredColumns),
-      quotedColumns,
-      filters,
       parts,
-      url,
-      options)
+      options.url,
+      options,
+      pushedStatement)
   }
 }
 
@@ -177,49 +178,16 @@ private[jdbc] class JDBCRDD(
     sc: SparkContext,
     getConnection: () => Connection,
     schema: StructType,
-    columns: Array[String],
-    filters: Array[Filter],
     partitions: Array[Partition],
     url: String,
-    options: JDBCOptions)
+    options: JDBCOptions,
+    statement: SingleSQLStatement)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
    * Retrieve the list of partitions corresponding to this RDD.
    */
   override def getPartitions: Array[Partition] = partitions
-
-  /**
-   * `columns`, but as a String suitable for injection into a SQL query.
-   */
-  private val columnList: String = {
-    val sb = new StringBuilder()
-    columns.foreach(x => sb.append(",").append(x))
-    if (sb.isEmpty) "1" else sb.substring(1)
-  }
-
-  /**
-   * `filters`, but as a WHERE clause suitable for injection into a SQL query.
-   */
-  private val filterWhereClause: String =
-    filters
-      .flatMap(JDBCRDD.compileFilter(_, JdbcDialects.get(url)))
-      .map(p => s"($p)").mkString(" AND ")
-
-  /**
-   * A WHERE clause representing both `filters`, if any, and the current partition.
-   */
-  private def getWhereClause(part: JDBCPartition): String = {
-    if (part.whereClause != null && filterWhereClause.length > 0) {
-      "WHERE " + s"($filterWhereClause)" + " AND " + s"(${part.whereClause})"
-    } else if (part.whereClause != null) {
-      "WHERE " + part.whereClause
-    } else if (filterWhereClause.length > 0) {
-      "WHERE " + filterWhereClause
-    } else {
-      ""
-    }
-  }
 
   /**
    * Runs the SQL query against the JDBC driver.
@@ -294,9 +262,8 @@ private[jdbc] class JDBCRDD(
     // fully-qualified table name in the SELECT statement.  I don't know how to
     // talk about a table in a completely portable way.
 
-    val myWhereClause = getWhereClause(part)
+    val sqlText = statement.toSQL(part.whereClause)
 
-    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

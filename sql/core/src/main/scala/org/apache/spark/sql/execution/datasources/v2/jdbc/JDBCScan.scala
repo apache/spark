@@ -20,13 +20,15 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
+import org.apache.spark.sql.execution.datasources.v2.pushdown.sql.SingleSQLStatement
 import org.apache.spark.sql.sources.{BaseRelation, Filter, TableScan}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScan(
     relation: JDBCRelation,
     prunedSchema: StructType,
-    pushedFilters: Array[Filter]) extends V1Scan {
+    pushedFilters: Array[Filter],
+    pushedStatement: SingleSQLStatement) extends V1Scan {
 
   override def readSchema(): StructType = prunedSchema
 
@@ -36,12 +38,14 @@ case class JDBCScan(
       override def schema: StructType = prunedSchema
       override def needConversion: Boolean = relation.needConversion
       override def buildScan(): RDD[Row] = {
-        relation.buildScan(prunedSchema.map(_.name).toArray, pushedFilters)
+        relation.buildScan(prunedSchema.map(_.name).toArray, pushedFilters,
+          pushedStatement)
       }
     }.asInstanceOf[T]
   }
 
   override def description(): String = {
+    // TODO: fix description()
     super.description()  + ", prunedSchema: " + seqToString(prunedSchema) +
       ", PushedFilters: " + seqToString(pushedFilters)
   }

@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuilder
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.read.sqlpushdown.SupportsSQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -33,7 +34,7 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging {
+class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with SupportsSQL with Logging {
   private var catalogName: String = null
   private var options: JDBCOptions = _
   private var dialect: JdbcDialect = _
