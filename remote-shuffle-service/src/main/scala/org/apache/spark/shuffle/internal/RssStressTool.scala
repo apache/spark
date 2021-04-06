@@ -29,7 +29,6 @@ import org.apache.spark.remoteshuffle.{StreamServer, StreamServerConfig}
 import org.apache.spark.remoteshuffle.clients.{MultiServerAsyncWriteClient, MultiServerSyncWriteClient, ServerReplicationGroupUtil, ShuffleDataWriter, ShuffleWriteConfig}
 import org.apache.spark.remoteshuffle.common.{AppMapId, AppShuffleId, AppTaskAttemptId, ServerDetail, ServerList}
 import org.apache.spark.remoteshuffle.metadata.ServiceRegistry
-import org.apache.spark.remoteshuffle.metrics.{ShuffleClientStageMetrics, ShuffleClientStageMetricsKey}
 import org.apache.spark.remoteshuffle.storage.ShuffleFileStorage
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle._
@@ -332,15 +331,12 @@ class RssStressTool extends Logging {
     }
 
     val shuffleWriter = new RssShuffleWriter(
-      user = "user1",
       rssServers = new ServerList(serverDetails),
       writeClient = writeClient,
       mapInfo = new AppTaskAttemptId(appMapId, taskAttemptId),
       serializer = new KryoSerializer(sparkConf),
       bufferOptions = BufferManagerOptions(writerBufferSize, 256 * 1024 * 1024, writerBufferSpill),
       shuffleDependency = shuffleDependency,
-      stageMetrics = new ShuffleClientStageMetrics(
-        new ShuffleClientStageMetricsKey("user1", "queue=1")),
       shuffleWriteMetrics = new ShuffleWriteMetrics()
     )
 
@@ -377,9 +373,6 @@ class RssStressTool extends Logging {
       shuffleDependency = shuffleDependency,
       rssServers = new ServerList(serverDetails),
       partitionFanout = 1,
-      serviceRegistry = registryServer.getServiceRegistry,
-      serviceRegistryDataCenter = ServiceRegistry.DEFAULT_DATA_CENTER,
-      serviceRegistryCluster = ServiceRegistry.DEFAULT_TEST_CLUSTER,
       timeoutMillis = 30000,
       maxRetryMillis = 60000,
       dataAvailablePollInterval = 1000,

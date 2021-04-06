@@ -15,16 +15,12 @@
 
 package org.apache.spark.shuffle.internal
 
-import java.util
-import java.util.Random
-
 import org.apache.spark.internal.Logging
-import org.apache.spark.remoteshuffle.clients.{ClientRetryOptions, MultiServerSocketReadClient, ReadClientDataOptions, ServerConnectionStringResolver, ShuffleDataReader}
-import org.apache.spark.remoteshuffle.common.{AppShufflePartitionId, ServerDetail, ServerList}
-import org.apache.spark.remoteshuffle.exceptions.{RssException, RssInvalidStateException, RssRetryTimeoutException, RssServerResolveException}
-import org.apache.spark.remoteshuffle.metadata.ServiceRegistry
+import org.apache.spark.remoteshuffle.clients.{ClientRetryOptions, MultiServerSocketReadClient, ReadClientDataOptions, ShuffleDataReader}
+import org.apache.spark.remoteshuffle.common.{AppShufflePartitionId, ServerList}
+import org.apache.spark.remoteshuffle.exceptions.{RssException, RssRetryTimeoutException}
 import org.apache.spark.remoteshuffle.metrics.M3Stats
-import org.apache.spark.remoteshuffle.util.{ExceptionUtils, ThreadUtils}
+import org.apache.spark.remoteshuffle.util.ExceptionUtils
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 
@@ -42,9 +38,6 @@ class BlockDownloaderPartitionRangeRecordIterator[K, C](
     serializer: Serializer,
     rssServers: ServerList,
     partitionFanout: Int,
-    serviceRegistry: ServiceRegistry,
-    serviceRegistryDataCenter: String,
-    serviceRegistryCluster: String,
     timeoutMillis: Int,
     maxRetryMillis: Int,
     dataAvailablePollInterval: Long,
@@ -119,27 +112,6 @@ class BlockDownloaderPartitionRangeRecordIterator[K, C](
           s"Creating replicated read client for partition $partition, $serverReplicationGroups")
         val appShufflePartitionId = new AppShufflePartitionId(appId, appAttempt, shuffleId,
           partition)
-
-        val serverConnectionResolver = new ServerConnectionStringResolver {
-          override def resolveConnection(serverId: String): ServerDetail = {
-            // random sleep some time to avoid request spike on service registry
-            val random = new Random()
-            val randomWaitMillis = random.nextInt(dataAvailablePollInterval.intValue())
-            ThreadUtils.sleep(randomWaitMillis)
-            val lookupResult = serviceRegistry
-              .lookupServers(serviceRegistryDataCenter, serviceRegistryCluster,
-                util.Arrays.asList(serverId))
-            if (lookupResult == null) {
-              throw new RssServerResolveException(s"Got null when looking up server for $serverId")
-            }
-            if (lookupResult.size() != 1) {
-              throw new RssInvalidStateException(
-                s"Invalid result $lookupResult when looking up server for $serverId")
-            }
-            lookupResult.get(0)
-          }
-        }
-
         val client = new MultiServerSocketReadClient(
           serverReplicationGroups,
           timeoutMillis,
@@ -205,10 +177,9 @@ class BlockDownloaderPartitionRangeRecordIterator[K, C](
       try {
         return createBlockDownloaderPartitionRecordIteratorWithoutRetry(partition)
       } catch {
-        case ex: FetchFailedException => {
+        case ex: FetchFailedException =>
           throw ex
-        }
-        case ex: Throwable => {
+        case ex: Throwable =>
           lastException = ex
           logInfo(
             s"Retrying to create downloader iterator for shuffle $shuffleId " +
@@ -216,7 +187,6 @@ class BlockDownloaderPartitionRangeRecordIterator[K, C](
               ExceptionUtils.getSimpleMessage(ex)
             })", ex)
           remainMillis -= (System.currentTimeMillis() - retryStartTime)
-        }
       }
     }
 

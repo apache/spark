@@ -24,20 +24,17 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.clients.ShuffleDataWriter
 import org.apache.spark.remoteshuffle.common.{AppTaskAttemptId, ServerList}
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidStateException
-import org.apache.spark.remoteshuffle.metrics.ShuffleClientStageMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.internal.{BufferManagerOptions, RssUtils, WriteBufferManager}
 
 class RssShuffleWriter[K, V, C](
-                                 user: String,
                                  rssServers: ServerList,
                                  writeClient: ShuffleDataWriter,
                                  mapInfo: AppTaskAttemptId,
                                  serializer: Serializer,
                                  bufferOptions: BufferManagerOptions,
                                  shuffleDependency: ShuffleDependency[K, V, C],
-                                 stageMetrics: ShuffleClientStageMetrics,
                                  shuffleWriteMetrics: ShuffleWriteMetricsReporter)
   extends ShuffleWriter[K, V] with Logging {
 

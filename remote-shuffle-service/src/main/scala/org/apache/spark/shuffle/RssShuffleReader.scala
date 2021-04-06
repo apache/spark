@@ -17,7 +17,6 @@ package org.apache.spark.shuffle
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.common.{AppShuffleId, ServerList}
-import org.apache.spark.remoteshuffle.metadata.ServiceRegistry
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.internal.BlockDownloaderPartitionRangeRecordIterator
 import org.apache.spark.util.CompletionIterator
@@ -36,9 +35,6 @@ class RssShuffleReader[K, C](
                               shuffleDependency: ShuffleDependency[K, _, C],
                               rssServers: ServerList,
                               partitionFanout: Int,
-                              serviceRegistry: ServiceRegistry,
-                              serviceRegistryDataCenter: String,
-                              serviceRegistryCluster: String,
                               timeoutMillis: Int,
                               maxRetryMillis: Int,
                               dataAvailablePollInterval: Long,
@@ -65,9 +61,6 @@ class RssShuffleReader[K, C](
       serializer = serializer,
       rssServers = rssServers,
       partitionFanout = partitionFanout,
-      serviceRegistry = serviceRegistry,
-      serviceRegistryDataCenter = serviceRegistryDataCenter,
-      serviceRegistryCluster = serviceRegistryCluster,
       timeoutMillis = timeoutMillis,
       maxRetryMillis = maxRetryMillis,
       dataAvailablePollInterval = dataAvailablePollInterval,

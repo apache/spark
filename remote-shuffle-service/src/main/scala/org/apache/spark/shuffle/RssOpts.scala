@@ -126,11 +126,6 @@ object RssOpts {
       .doc("type of service registry to use: zookeeper, standalone.")
       .stringConf
       .createWithDefault("zookeeper")
-  val serviceRegistryZKServers: ConfigEntry[String] =
-    ConfigBuilder("spark.shuffle.rss.serviceRegistry.zookeeper.servers")
-      .doc("ZooKeeper host:port addresses. Specify more than one as a comma-separated string.")
-      .stringConf
-      .createWithDefault("")
   val serviceRegistryServer: ConfigEntry[String] =
     ConfigBuilder("spark.shuffle.rss.serviceRegistry.server")
       .doc("Registry server host:port addresses.")

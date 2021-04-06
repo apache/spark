@@ -24,8 +24,6 @@ public class NetworkUtilsTest {
   @Test
   public void validHostName() {
     Assert.assertTrue(NetworkUtils.isReachable("localhost", timeout));
-    Assert.assertTrue(NetworkUtils.isReachable(NetworkUtils.getLocalHostName(), timeout));
-    Assert.assertTrue(NetworkUtils.isReachable(NetworkUtils.getLocalFQDN(), timeout));
   }
 
   @Test
