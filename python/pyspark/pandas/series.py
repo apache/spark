@@ -336,7 +336,7 @@ def _create_type_for_series_type(param):
     return SeriesType[new_class]
 
 
-if (3, 5) <= sys.version_info < (3, 7):
+if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
     from typing import GenericMeta  # type: ignore
 
     old_getitem = GenericMeta.__getitem__  # type: ignore

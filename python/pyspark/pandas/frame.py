@@ -387,7 +387,7 @@ def _create_tuple_for_frame_type(params):
     return Tuple[tuple(new_params)]
 
 
-if (3, 5) <= sys.version_info < (3, 7):
+if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
     from typing import GenericMeta  # type: ignore
 
     # This is a workaround to support variadic generic in DataFrame in Python 3.5+.
@@ -3506,7 +3506,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> pp.range(1001).style  # doctest: +ELLIPSIS
+        >>> pp.range(1001).style  # doctest: +SKIP
         <pandas.io.formats.style.Styler object at ...>
         """
         max_results = get_option("compute.max_rows")
