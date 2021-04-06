@@ -350,8 +350,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
 
     /**
      * To identify the plan with smaller computational cost,
-     * we use the weighted geometric mean of ratio of rows in the two plans
-     * and the ratio of sizes in bytes.
+     * we use the weighted geometric mean of ratio of rows and the ratio of sizes in bytes.
      *
      * There are other ways to combine these values as a cost comparison function.
      * Some of these, that we have experimented with, but have gotten worse result,
