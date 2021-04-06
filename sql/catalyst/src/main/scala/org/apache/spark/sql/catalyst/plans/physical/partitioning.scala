@@ -222,7 +222,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
       required match {
         case h: HashClusteredDistribution =>
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
-            case (l: Expression, Cast(r: Expression, dataType, _)) if l.semanticEquals(r) =>
+            case (l, c @ Cast(r, dataType, _)) if !l.semanticEquals(c) && l.semanticEquals(r) =>
               TypeCoercion.findTightestCommonType(l.dataType, dataType).contains(dataType)
             case (l, r) => l.semanticEquals(r)
           }
