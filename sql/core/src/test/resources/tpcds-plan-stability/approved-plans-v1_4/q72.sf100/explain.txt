@@ -294,7 +294,7 @@ Arguments: [cs_item_sk#4 ASC NULLS FIRST, d_date_sk#28 ASC NULLS FIRST], false, 
 Output [4]: [inv_item_sk#32, inv_warehouse_sk#33, inv_quantity_on_hand#34, inv_date_sk#35]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(inv_date_sk#35)]
+PartitionFilters: [isnotnull(inv_date_sk#35), dynamicpruningexpression(true)]
 PushedFilters: [IsNotNull(inv_quantity_on_hand), IsNotNull(inv_item_sk), IsNotNull(inv_warehouse_sk)]
 ReadSchema: struct<inv_item_sk:int,inv_warehouse_sk:int,inv_quantity_on_hand:int>
 

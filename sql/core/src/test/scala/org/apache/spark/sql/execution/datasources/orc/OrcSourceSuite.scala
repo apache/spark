@@ -602,6 +602,8 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
       val path = dir.getAbsolutePath
       spark.range(3).write.option("compression", "zstd").orc(path)
       checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
+      assert(files.nonEmpty && files.forall(_.getName.contains("zstd")))
     }
   }
 
