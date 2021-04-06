@@ -343,6 +343,22 @@ object JoinReorderDP extends PredicateHelper with Logging {
       }
     }
 
+    /**
+     * To identify the plan with smaller computational cost,
+     * we use the weighted geometric mean of ratio of rows in the two plans
+     * and the ratio of sizes in bytes.
+     *
+     * There are other ways to combine these values as a cost comparison function.
+     * Some of these, that we have experimented with, but have gotten worse result,
+     * than with the current one:
+     * 1) Weighted arithmetic mean of these two ratios - adding up fractions puts
+     * less emphasis on ratios between 0 and 1. With ratios 10 and 0.1 should be considered
+     * to be just as strong evidences in opposite directions. The arithmetic mean of these
+     * would be heavily biased towards the 10.
+     * 2) Absolute cost (cost = weight * rowCount + (1 - weight) * size) - when adding up
+     * two numeric measurements that have different units we can easily end up with one
+     * overwhelming the other.
+     */
     def betterThan(other: JoinPlan, conf: SQLConf): Boolean = {
       if (other.planCost.card == 0 || other.planCost.size == 0) {
         false
