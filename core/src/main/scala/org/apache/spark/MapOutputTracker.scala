@@ -1172,51 +1172,33 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    *
    * (It would be nice to remove this restriction in the future.)
    */
-  private def getStatuses(
-      shuffleId: Int, conf: SparkConf): (Array[MapStatus], Array[MergeStatus]) = {
-    val mapOutputStatuses = mapStatuses.get(shuffleId).orNull
-    val mergeResultStatuses = mergeStatuses.get(shuffleId).orNull
-    if (mapOutputStatuses == null || (fetchMergeResult && mergeResultStatuses == null)) {
-      logInfo(s"Don't have map/merge outputs for shuffle $shuffleId, fetching them")
+  private def getStatuses(shuffleId: Int, conf: SparkConf): Array[MapStatus] = {
+    val statuses = mapStatuses.get(shuffleId).orNull
+    if (statuses == null) {
+      logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
       val startTimeNs = System.nanoTime()
       fetchingLock.withLock(shuffleId) {
-        var fetchedMapStatuses = mapStatuses.get(shuffleId).orNull
-        if (fetchedMapStatuses == null) {
-          logInfo("Doing the map fetch; tracker endpoint = " + trackerEndpoint)
+        var fetchedStatuses = mapStatuses.get(shuffleId).orNull
+        if (fetchedStatuses == null) {
+          logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
           val fetchedBytes = askTracker[(Array[Byte], Array[Byte])](GetMapOutputStatuses(shuffleId))
           try {
-            fetchedMapStatuses = MapOutputTracker.deserializeOutputStatuses(fetchedBytes._1, conf)
+            fetchedStatuses = MapOutputTracker.deserializeOutputStatuses(fetchedBytes._1, conf)
           } catch {
             case e: SparkException =>
               throw new MetadataFetchFailedException(shuffleId, -1,
                 s"Unable to deserialize broadcasted map statuses for shuffle $shuffleId: " +
                   e.getCause)
           }
-          logInfo("Got the map output locations")
-          mapStatuses.put(shuffleId, fetchedMapStatuses)
+          logInfo("Got the output locations")
+          mapStatuses.put(shuffleId, fetchedStatuses)
         }
-        var fetchedMergeStatuses = mergeStatuses.get(shuffleId).orNull
-        if (fetchMergeResult && fetchedMergeStatuses == null) {
-          logInfo("Doing the merge fetch; tracker endpoint = " + trackerEndpoint)
-          val fetchedBytes =
-            askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
-          try {
-            fetchedMergeStatuses = MapOutputTracker.deserializeOutputStatuses(fetchedBytes._2, conf)
-          } catch {
-            case e: SparkException =>
-              throw new MetadataFetchFailedException(shuffleId, -1,
-                s"Unable to deserialize broadcasted merge statuses for shuffle $shuffleId: " +
-                  e.getCause)
-          }
-          logInfo("Got the merge output locations")
-          mergeStatuses.put(shuffleId, fetchedMergeStatuses)
-        }
-        logDebug(s"Fetching map ${if (fetchMergeResult) "/merge"} for shuffle $shuffleId took " +
+        logDebug(s"Fetching map output statuses for shuffle $shuffleId took " +
           s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
-        (fetchedMapStatuses, fetchedMergeStatuses)
+        fetchedStatuses
       }
     } else {
-      (mapOutputStatuses, mergeResultStatuses)
+      statuses
     }
   }
 
