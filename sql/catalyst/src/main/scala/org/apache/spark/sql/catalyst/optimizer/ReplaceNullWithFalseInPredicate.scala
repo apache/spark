@@ -127,7 +127,6 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       case d @ DeleteAction(Some(cond)) => d.copy(condition = Some(replaceNullWithFalse(cond)))
       case i @ InsertAction(Some(cond), _) => i.copy(condition = Some(replaceNullWithFalse(cond)))
       case i @ InsertStarAction(Some(cond)) => i.copy(condition = Some(replaceNullWithFalse(cond)))
-
       case other => other
     }
   }
