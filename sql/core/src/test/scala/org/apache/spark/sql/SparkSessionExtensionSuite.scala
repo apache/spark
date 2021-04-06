@@ -582,6 +582,10 @@ class ColumnarAlias(child: ColumnarExpression, name: String)(
   with ColumnarExpression {
 
   override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
+
+  override protected def withNewChild(newChild: Expression): ColumnarAlias =
+    new ColumnarAlias(newChild.asInstanceOf[ColumnarExpression], name)(exprId, qualifier,
+      explicitMetadata, nonInheritableMetadataKeys)
 }
 
 class ColumnarAttributeReference(
@@ -641,6 +645,9 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def hashCode(): Int = super.hashCode()
+
+  override def withNewChild(newChild: SparkPlan): ColumnarProjectExec =
+    new ColumnarProjectExec(projectList, newChild)
 }
 
 /**
@@ -705,6 +712,11 @@ class BrokenColumnarAdd(
     }
     ret
   }
+
+  override def withNewChildren(newLeft: Expression, newRight: Expression): BrokenColumnarAdd =
+    new BrokenColumnarAdd(
+      left = newLeft.asInstanceOf[ColumnarExpression],
+      right = newRight.asInstanceOf[ColumnarExpression], failOnError)
 }
 
 class CannotReplaceException(str: String) extends RuntimeException(str) {
@@ -820,6 +832,9 @@ class ReplacedRowToColumnarExec(override val child: SparkPlan)
   }
 
   override def hashCode(): Int = super.hashCode()
+
+  override def withNewChild(newChild: SparkPlan): ReplacedRowToColumnarExec =
+    new ReplacedRowToColumnarExec(newChild)
 }
 
 case class MyPostRule() extends Rule[SparkPlan] {
