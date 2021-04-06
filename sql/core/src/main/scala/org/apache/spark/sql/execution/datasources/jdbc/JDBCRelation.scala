@@ -175,7 +175,7 @@ private[sql] object JDBCRelation extends Logging {
    *
    * @param partitions The object being extended.
    */
-  implicit class ArrayPartitionOps(partitions: Array[Partition]) {
+  private implicit class ArrayPartitionOps(partitions: Array[Partition]) {
     /**
      * An extension method that orders an array of partitions in the stride order provided.
      *
