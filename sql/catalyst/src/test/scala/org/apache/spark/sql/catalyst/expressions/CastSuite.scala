@@ -812,7 +812,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach { case (period, intervalPayload) =>
       checkEvaluation(
         Cast(Literal(period), StringType),
-        s"interval '$intervalPayload' year to month")
+        s"INTERVAL '$intervalPayload' YEAR TO MONTH")
     }
 
     checkConsistencyBetweenInterpretedAndCodegen(

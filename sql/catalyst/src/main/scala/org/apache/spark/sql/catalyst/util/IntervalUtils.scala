@@ -849,6 +849,6 @@ object IntervalUtils {
       sign = "-"
       absMonths = -absMonths
     }
-    s"interval '$sign${absMonths / MONTHS_PER_YEAR}-${absMonths % MONTHS_PER_YEAR}' year to month"
+    s"INTERVAL '$sign${absMonths / MONTHS_PER_YEAR}-${absMonths % MONTHS_PER_YEAR}' YEAR TO MONTH"
   }
 }
