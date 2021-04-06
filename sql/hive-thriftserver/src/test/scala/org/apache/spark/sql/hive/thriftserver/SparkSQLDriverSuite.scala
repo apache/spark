@@ -41,15 +41,19 @@ class SparkSQLDriverSuite extends SparkFunSuite {
   test("Avoid wrapped in withNewExecutionId twice when run SQL with side effects") {
     val listener = new TestListener
     driver.context.sparkContext.addSparkListener(listener)
-    val sqls = Seq(
-      "CREATE TABLE t AS SELECT 1 AS i",
-      "SELECT * FROM t",
-      "DROP TABLE t")
-    sqls.foreach(driver.run)
+    try {
+      val sqls = Seq(
+        "CREATE TABLE t AS SELECT 1 AS i",
+        "SELECT * FROM t",
+        "DROP TABLE t")
+      sqls.foreach(driver.run)
 
-    assert(sqls.size === listener.sqlStartEvents.size)
-    sqls.zip(listener.sqlStartEvents).foreach { case (sql, event) =>
-      assert(sql === event.description)
+      assert(sqls.size === listener.sqlStartEvents.size)
+      sqls.zip(listener.sqlStartEvents).foreach { case (sql, event) =>
+        assert(sql === event.description)
+      }
+    } finally {
+      driver.context.sparkContext.removeSparkListener(listener)
     }
   }
 

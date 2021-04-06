@@ -223,16 +223,16 @@ class Dataset[T] private[sql](
   @transient private[sql] val logicalPlan: LogicalPlan = {
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
-    def eagerRun(plan: LogicalPlan): LogicalPlan = {
+    def runCommand(plan: LogicalPlan): LogicalPlan = {
       LocalRelation(plan.output, withAction("command", queryExecution)(_.executeCollect()),
         fromCommand = true)
     }
 
     val plan = queryExecution.analyzed match {
       case c: Command =>
-        eagerRun(c)
+        runCommand(c)
       case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
-        eagerRun(u)
+        runCommand(u)
       case _ =>
         queryExecution.analyzed
     }
