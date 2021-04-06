@@ -868,7 +868,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |ON f.store_id = s.store_id WHERE s.country = 'DE'
         """.stripMargin)
 
-      checkPartitionPruningPredicate(df, false, false)
+      checkPartitionPruningPredicate(df, true, false)
 
       checkAnswer(df,
         Row(1030, 2, 10, 3) ::
@@ -1461,26 +1461,6 @@ abstract class DynamicPartitionPruningSuiteBase
           checkPartitionPruningPredicate(df, threshold > 10L, false)
         }
       }
-    }
-  }
-
-  test("SPARK-34884: DPP evaluation consider broadcast hint") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val df = sql(
-        """
-          |SELECT /*+ BROADCAST(s) */ f.date_id, f.product_id, f.units_sold FROM fact_stats f
-          |JOIN dim_stats s
-          |ON f.store_id = s.store_id WHERE s.country = 'DE'
-        """.stripMargin)
-
-      checkPartitionPruningPredicate(df, false, true)
-
-      checkAnswer(df,
-        Row(1030, 2, 10) ::
-        Row(1040, 2, 50) ::
-        Row(1050, 2, 50) ::
-        Row(1060, 2, 50) :: Nil
-      )
     }
   }
 }
