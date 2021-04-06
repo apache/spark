@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
 import org.apache.spark.sql.types.StructType
 
 
@@ -35,9 +36,9 @@ abstract class LogicalPlan
 
   /**
    * Metadata fields that can be projected from this node.
-   * Should be non-empty if the plan propagates its children's output.
+   * Should be overridden if the plan does not propagate its children's output.
    */
-  def metadataOutput: Seq[Attribute] = Nil
+  def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
 
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming)
@@ -163,8 +164,7 @@ abstract class LogicalPlan
 /**
  * A logical plan node with no children.
  */
-abstract class LeafNode extends LogicalPlan {
-  override final def children: Seq[LogicalPlan] = Nil
+trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
 
   /** Leaf nodes that can survive analysis must define their own statistics. */
@@ -174,11 +174,7 @@ abstract class LeafNode extends LogicalPlan {
 /**
  * A logical plan node with single child.
  */
-abstract class UnaryNode extends LogicalPlan {
-  def child: LogicalPlan
-
-  override final def children: Seq[LogicalPlan] = child :: Nil
-
+trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
   /**
    * Generates all valid constraints including an set of aliased constraints by replacing the
    * original constraint expressions with the corresponding alias
@@ -207,12 +203,7 @@ abstract class UnaryNode extends LogicalPlan {
 /**
  * A logical plan node with a left and right child.
  */
-abstract class BinaryNode extends LogicalPlan {
-  def left: LogicalPlan
-  def right: LogicalPlan
-
-  override final def children: Seq[LogicalPlan] = Seq(left, right)
-}
+trait BinaryNode extends LogicalPlan with BinaryLike[LogicalPlan]
 
 abstract class OrderPreservingUnaryNode extends UnaryNode {
   override final def outputOrdering: Seq[SortOrder] = child.outputOrdering

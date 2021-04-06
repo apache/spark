@@ -839,6 +839,13 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
+  val ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED =
+    buildConf("spark.sql.orc.enableNestedColumnVectorizedReader")
+      .doc("Enables vectorized orc decoding for nested column.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .version("1.4.0")
@@ -2049,8 +2056,8 @@ object SQLConf {
 
   val ARROW_PYSPARK_SELF_DESTRUCT_ENABLED =
     buildConf("spark.sql.execution.arrow.pyspark.selfDestruct.enabled")
-      .doc("When true, make use of Apache Arrow's self-destruct and split-blocks options " +
-        "for columnar data transfers in PySpark, when converting from Arrow to Pandas. " +
+      .doc("(Experimental) When true, make use of Apache Arrow's self-destruct and split-blocks " +
+        "options for columnar data transfers in PySpark, when converting from Arrow to Pandas. " +
         "This reduces memory usage at the cost of some CPU time. " +
         "This optimization applies to: pyspark.sql.DataFrame.toPandas " +
         "when 'spark.sql.execution.arrow.pyspark.enabled' is set.")
@@ -3112,6 +3119,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_INTERVAL_ENABLED = buildConf("spark.sql.legacy.interval.enabled")
+    .internal()
+    .doc("When set to true, Spark SQL uses the mixed legacy interval type `CalendarIntervalType` " +
+      "instead of the ANSI compliant interval types `YearMonthIntervalType` and " +
+      "`DayTimeIntervalType`. For instance, the date subtraction expression returns " +
+      "`CalendarIntervalType` when the SQL config is set to `true` otherwise an ANSI interval.")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3328,6 +3345,9 @@ class SQLConf extends Serializable with Logging {
   def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
 
   def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+
+  def orcVectorizedReaderNestedColumnEnabled: Boolean =
+    getConf(ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
@@ -3793,6 +3813,8 @@ class SQLConf extends Serializable with Logging {
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
+
+  def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

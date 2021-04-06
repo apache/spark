@@ -20,6 +20,9 @@ import java.util.{HashMap, List => JList, Locale}
 import javax.ws.rs.{NotFoundException => _, _}
 import javax.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
 
+import scala.collection.JavaConverters._
+
+import org.apache.spark.status.api.v1.TaskStatus._
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.ui.jobs.ApiHelper._
 import org.apache.spark.util.Utils
@@ -28,8 +31,32 @@ import org.apache.spark.util.Utils
 private[v1] class StagesResource extends BaseAppResource {
 
   @GET
-  def stageList(@QueryParam("status") statuses: JList[StageStatus]): Seq[StageData] = {
-    withUI(_.store.stageList(statuses))
+  def stageList(
+      @QueryParam("status") statuses: JList[StageStatus],
+      @QueryParam("details") @DefaultValue("false") details: Boolean,
+      @QueryParam("withSummaries") @DefaultValue("false") withSummaries: Boolean,
+      @QueryParam("quantiles") @DefaultValue("0.0,0.25,0.5,0.75,1.0") quantileString: String,
+      @QueryParam("taskStatus") taskStatus: JList[TaskStatus]): Seq[StageData] = {
+    withUI {
+      val quantiles = parseQuantileString(quantileString)
+      ui => {
+        ui.store.stageList(statuses, details, withSummaries, quantiles, taskStatus)
+          .filter { stage =>
+            if (details && taskStatus.asScala.nonEmpty) {
+              taskStatus.asScala.exists {
+                case FAILED => stage.numFailedTasks > 0
+                case KILLED => stage.numKilledTasks > 0
+                case RUNNING => stage.numActiveTasks > 0
+                case SUCCESS => stage.numCompleteTasks > 0
+                case UNKNOWN => stage.numTasks - stage.numFailedTasks - stage.numKilledTasks -
+                  stage.numActiveTasks - stage.numCompleteTasks > 0
+              }
+            } else {
+              true
+            }
+          }
+      }
+    }
   }
 
   @GET

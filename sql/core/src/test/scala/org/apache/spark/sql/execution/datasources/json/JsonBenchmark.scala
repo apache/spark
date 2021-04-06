@@ -519,16 +519,16 @@ object JsonBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
     runBenchmark("Benchmark for performance of JSON parsing") {
-      schemaInferring(100 * 1000 * 1000, numIters)
-      countShortColumn(100 * 1000 * 1000, numIters)
-      countWideColumn(10 * 1000 * 1000, numIters)
-      countWideRow(500 * 1000, numIters)
-      selectSubsetOfColumns(10 * 1000 * 1000, numIters)
-      jsonParserCreation(10 * 1000 * 1000, numIters)
-      jsonFunctions(10 * 1000 * 1000, numIters)
-      jsonInDS(50 * 1000 * 1000, numIters)
-      jsonInFile(50 * 1000 * 1000, numIters)
-      datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
+      schemaInferring(5 * 1000 * 1000, numIters)
+      countShortColumn(5 * 1000 * 1000, numIters)
+      countWideColumn(1000 * 1000, numIters)
+      countWideRow(50 * 1000, numIters)
+      selectSubsetOfColumns(1000 * 1000, numIters)
+      jsonParserCreation(1000 * 1000, numIters)
+      jsonFunctions(1000 * 1000, numIters)
+      jsonInDS(5 * 1000 * 1000, numIters)
+      jsonInFile(5 * 1000 * 1000, numIters)
+      datetimeBenchmark(rowsNum = 1000 * 1000, numIters)
       // Benchmark pushdown filters that refer to top-level columns.
       // TODO (SPARK-32325): Add benchmarks for filters with nested column attributes.
       filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)

@@ -56,14 +56,20 @@ case class MapInPandas(
  * This is used by DataFrame.groupby().cogroup().apply().
  */
 case class FlatMapCoGroupsInPandas(
-    leftAttributes: Seq[Attribute],
-    rightAttributes: Seq[Attribute],
+    leftGroupingLen: Int,
+    rightGroupingLen: Int,
     functionExpr: Expression,
     output: Seq[Attribute],
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode {
 
   override val producedAttributes = AttributeSet(output)
+  override lazy val references: AttributeSet =
+    AttributeSet(leftAttributes ++ rightAttributes ++ functionExpr.references) -- producedAttributes
+
+  def leftAttributes: Seq[Attribute] = left.output.take(leftGroupingLen)
+
+  def rightAttributes: Seq[Attribute] = right.output.take(rightGroupingLen)
 }
 
 trait BaseEvalPython extends UnaryNode {

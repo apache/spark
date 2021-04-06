@@ -25,17 +25,17 @@ import org.apache.spark.annotation.Evolving;
 /**
  * A data writer returned by {@link DataWriterFactory#createWriter(int, long)} and is
  * responsible for writing data for an input RDD partition.
- *
+ * <p>
  * One Spark task has one exclusive data writer, so there is no thread-safe concern.
- *
+ * <p>
  * {@link #write(Object)} is called for each record in the input RDD partition. If one record fails
  * the {@link #write(Object)}, {@link #abort()} is called afterwards and the remaining records will
  * not be processed. If all records are successfully written, {@link #commit()} is called.
- *
+ * <p>
  * Once a data writer returns successfully from {@link #commit()} or {@link #abort()}, Spark will
  * call {@link #close()} to let DataWriter doing resource cleanup. After calling {@link #close()},
  * its lifecycle is over and Spark will not use it again.
- *
+ * <p>
  * If this data writer succeeds(all records are successfully written and {@link #commit()}
  * succeeds), a {@link WriterCommitMessage} will be sent to the driver side and pass to
  * {@link BatchWrite#commit(WriterCommitMessage[])} with commit messages from other data
@@ -44,7 +44,7 @@ import org.apache.spark.annotation.Evolving;
  * In each retry, {@link DataWriterFactory#createWriter(int, long)} will receive a
  * different `taskId`. Spark will call {@link BatchWrite#abort(WriterCommitMessage[])}
  * when the configured number of retries is exhausted.
- *
+ * <p>
  * Besides the retry mechanism, Spark may launch speculative tasks if the existing writing task
  * takes too long to finish. Different from retried tasks, which are launched one by one after the
  * previous one fails, speculative tasks are running simultaneously. It's possible that one input
@@ -54,8 +54,9 @@ import org.apache.spark.annotation.Evolving;
  * these data writers can commit successfully. Or implementations can allow all of them to commit
  * successfully, and have a way to revert committed data writers without the commit message, because
  * Spark only accepts the commit message that arrives first and ignore others.
- *
- * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}.
+ * <p>
+ * Note that, Currently the type {@code T} can only be
+ * {@link org.apache.spark.sql.catalyst.InternalRow}.
  *
  * @since 3.0.0
  */
@@ -64,7 +65,7 @@ public interface DataWriter<T> extends Closeable {
 
   /**
    * Writes one record.
-   *
+   * <p>
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
    *
@@ -76,12 +77,12 @@ public interface DataWriter<T> extends Closeable {
    * Commits this writer after all records are written successfully, returns a commit message which
    * will be sent back to driver side and passed to
    * {@link BatchWrite#commit(WriterCommitMessage[])}.
-   *
+   * <p>
    * The written data should only be visible to data source readers after
    * {@link BatchWrite#commit(WriterCommitMessage[])} succeeds, which means this method
    * should still "hide" the written data and ask the {@link BatchWrite} at driver side to
    * do the final commit via {@link WriterCommitMessage}.
-   *
+   * <p>
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this
    * data writer is considered to have been failed.
    *
@@ -92,10 +93,10 @@ public interface DataWriter<T> extends Closeable {
   /**
    * Aborts this writer if it is failed. Implementations should clean up the data for already
    * written records.
-   *
+   * <p>
    * This method will only be called if there is one record failed to write, or {@link #commit()}
    * failed.
-   *
+   * <p>
    * If this method fails(by throwing an exception), the underlying data source may have garbage
    * that need to be cleaned by {@link BatchWrite#abort(WriterCommitMessage[])} or manually,
    * but these garbage should not be visible to data source readers.

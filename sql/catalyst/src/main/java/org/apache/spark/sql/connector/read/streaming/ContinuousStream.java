@@ -62,7 +62,7 @@ public interface ContinuousStream extends SparkDataStream {
    * The execution engine will call this method in every epoch to determine if new input
    * partitions need to be generated, which may be required if for example the underlying
    * source system has had partitions added or removed.
-   *
+   * <p>
    * If true, the Spark job to scan this continuous data stream will be interrupted and Spark will
    * launch it again with a new list of {@link InputPartition input partitions}.
    */
