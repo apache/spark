@@ -833,7 +833,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         "-1234 23:59:59.999",
       microsToDuration(Long.MaxValue) -> "106751991 4:0:54.775807",
       microsToDuration(Long.MinValue + 1) -> "-106751991 4:0:54.775807",
-      microsToDuration(Long.MinValue) -> "-106751991 4:0:54.775808",
+      microsToDuration(Long.MinValue) -> "-106751991 4:0:54.775808"
     ).foreach { case (period, intervalPayload) =>
       checkEvaluation(
         Cast(Literal(period), StringType),
