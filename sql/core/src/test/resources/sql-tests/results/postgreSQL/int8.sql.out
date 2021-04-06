@@ -700,7 +700,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 Table-valued function range with alternatives: 
-    range(start: long, end: long, step: long, numPartitions: integer)
+    range(start: long, end: long, step: long, numSlices: integer)
     range(start: long, end: long, step: long)
     range(start: long, end: long)
     range(end: long)
