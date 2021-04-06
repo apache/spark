@@ -20,17 +20,14 @@ package org.apache.spark
 import java.io.{ByteArrayInputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOutputStream}
 import org.roaringbitmap.RoaringBitmap
-
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -289,45 +286,86 @@ private class ShuffleStatus(
       isLocal: Boolean,
       minBroadcastSize: Int,
       conf: SparkConf,
-      isMapOutput: Boolean): Array[Byte] = {
-    var result: Array[Byte] = null
+      isMapOutput: Boolean): (Array[Byte], Array[Byte]) = {
+    var mapStatuses: Array[Byte] = null
+    var mergeStatuses: Array[Byte] = null
 
     withReadLock {
       if (isMapOutput) {
         if (cachedSerializedMapStatus != null) {
-          result = cachedSerializedMapStatus
+          mapStatuses = cachedSerializedMapStatus
         }
       } else {
+        if (cachedSerializedMapStatus != null) {
+          mapStatuses = cachedSerializedMapStatus
+        }
+
         if (cachedSerializedMergeStatus != null) {
-          result = cachedSerializedMergeStatus
+          mergeStatuses = cachedSerializedMergeStatus
         }
       }
     }
 
-    if (result == null) withWriteLock {
-      if (isMapOutput) {
-        if (cachedSerializedMapStatus == null) {
-          val serResult = MapOutputTracker.serializeOutputStatuses(
-            mapStatuses, broadcastManager, isLocal, minBroadcastSize, conf)
-          cachedSerializedMapStatus = serResult._1
-          cachedSerializedBroadcast = serResult._2
-        }
-        // The following line has to be outside if statement since it's possible that another
-        // thread initializes cachedSerializedMapStatus in-between `withReadLock` and
-        // `withWriteLock`.
-        result = cachedSerializedMapStatus
-      } else {
-        if (cachedSerializedMergeStatus == null) {
-          val serResult = MapOutputTracker.serializeOutputStatuses(
-            mergeStatuses, broadcastManager, isLocal, minBroadcastSize, conf)
-          cachedSerializedMergeStatus = serResult._1
-          cachedSerializedBroadcastMergeStatus = serResult._2
-        }
-        // The following line has to be outside if statement for similar reasons as above.
-        result = cachedSerializedMergeStatus
+    if (isMapOutput) {
+      if (mapStatuses == null) {
+        mapStatuses =
+          serializeAndCacheMapStatuses(broadcastManager, isLocal, minBroadcastSize, conf)
+      }
+    } else {
+      if (mapStatuses == null) {
+        mapStatuses =
+          serializeAndCacheMapStatuses(broadcastManager, isLocal, minBroadcastSize, conf)
+      }
+
+      if (mergeStatuses == null) {
+        mergeStatuses =
+          serializeAndCacheMergeStatuses(broadcastManager, isLocal, minBroadcastSize, conf)
       }
     }
-    result
+    (mapStatuses, mergeStatuses)
+  }
+
+  private def serializeAndCacheMapStatuses(
+      broadcastManager: BroadcastManager,
+      isLocal: Boolean,
+      minBroadcastSize: Int,
+      conf: SparkConf): Array[Byte] = {
+    var mapStatuses: Array[Byte] = null
+    withWriteLock {
+      if (cachedSerializedMapStatus == null) {
+        val serResult = MapOutputTracker.serializeOutputStatuses(
+          mapStatuses, broadcastManager, isLocal, minBroadcastSize, conf)
+        cachedSerializedMapStatus = serResult._1
+        cachedSerializedBroadcast = serResult._2
+      }
+      // The following line has to be outside if statement since it's possible that another
+      // thread initializes cachedSerializedMapStatus in-between `withReadLock` and
+      // `withWriteLock`.
+      mapStatuses = cachedSerializedMapStatus
+    }
+    mapStatuses
+  }
+
+  private def serializeAndCacheMergeStatuses(
+      broadcastManager: BroadcastManager,
+      isLocal: Boolean,
+      minBroadcastSize: Int,
+      conf: SparkConf): Array[Byte] = {
+    var mergeStatuses: Array[Byte] = null
+    withWriteLock {
+      if (cachedSerializedMergeStatus == null) {
+        val serResult = MapOutputTracker.serializeOutputStatuses(
+          mergeStatuses, broadcastManager, isLocal, minBroadcastSize, conf)
+        cachedSerializedMergeStatus = serResult._1
+        cachedSerializedBroadcastMergeStatus = serResult._2
+      }
+
+      // The following line has to be outside if statement since it's possible that another
+      // thread initializes cachedSerializedMergeStatus in-between `withReadLock` and
+      // `withWriteLock`.
+      mergeStatuses = cachedSerializedMergeStatus
+    }
+    mergeStatuses
   }
 
   // Used in testing.
@@ -382,14 +420,14 @@ private class ShuffleStatus(
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
-private[spark] case class GetMergeResultStatuses(shuffleId: Int)
+private[spark] case class GetMapAndMergeResultStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
 private[spark] sealed trait MapOutputTrackerMasterMessage
 private[spark] case class GetMapStatusMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
-private[spark] case class GetMergeStatusMessage(shuffleId: Int,
+private[spark] case class GetMapAndMergeStatusMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 
 /** RpcEndpoint class for MapOutputTrackerMaster */
@@ -405,10 +443,10 @@ private[spark] class MapOutputTrackerMasterEndpoint(
       logInfo(s"Asked to send map output locations for shuffle $shuffleId to $hostPort")
       tracker.post(GetMapStatusMessage(shuffleId, context))
 
-    case GetMergeResultStatuses(shuffleId: Int) =>
+    case GetMapAndMergeResultStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
       logInfo(s"Asked to send merge result locations for shuffle $shuffleId to $hostPort")
-      tracker.post(GetMergeStatusMessage(shuffleId, context))
+      tracker.post(GetMapAndMergeStatusMessage(shuffleId, context))
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
@@ -633,7 +671,7 @@ private[spark] class MapOutputTrackerMaster(
             data match {
               case GetMapStatusMessage(shuffleId, context) =>
                 handleStatusMessage(shuffleId, context, true)
-              case GetMergeStatusMessage(shuffleId, context) =>
+              case GetMapAndMergeStatusMessage(shuffleId, context) =>
                 handleStatusMessage(shuffleId, context, false)
             }
           } catch {
@@ -1145,9 +1183,9 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         var fetchedMapStatuses = mapStatuses.get(shuffleId).orNull
         if (fetchedMapStatuses == null) {
           logInfo("Doing the map fetch; tracker endpoint = " + trackerEndpoint)
-          val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
+          val fetchedBytes = askTracker[(Array[Byte], Array[Byte])](GetMapOutputStatuses(shuffleId))
           try {
-            fetchedMapStatuses = MapOutputTracker.deserializeOutputStatuses(fetchedBytes, conf)
+            fetchedMapStatuses = MapOutputTracker.deserializeOutputStatuses(fetchedBytes._1, conf)
           } catch {
             case e: SparkException =>
               throw new MetadataFetchFailedException(shuffleId, -1,
@@ -1157,12 +1195,13 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           logInfo("Got the map output locations")
           mapStatuses.put(shuffleId, fetchedMapStatuses)
         }
-        var fetchedMergeStatues = mergeStatuses.get(shuffleId).orNull
-        if (fetchMergeResult && fetchedMergeStatues == null) {
+        var fetchedMergeStatuses = mergeStatuses.get(shuffleId).orNull
+        if (fetchMergeResult && fetchedMergeStatuses == null) {
           logInfo("Doing the merge fetch; tracker endpoint = " + trackerEndpoint)
-          val fetchedBytes = askTracker[Array[Byte]](GetMergeResultStatuses(shuffleId))
+          val fetchedBytes =
+            askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
           try {
-            fetchedMergeStatues = MapOutputTracker.deserializeOutputStatuses(fetchedBytes, conf)
+            fetchedMergeStatuses = MapOutputTracker.deserializeOutputStatuses(fetchedBytes._2, conf)
           } catch {
             case e: SparkException =>
               throw new MetadataFetchFailedException(shuffleId, -1,
@@ -1170,11 +1209,11 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
                   e.getCause)
           }
           logInfo("Got the merge output locations")
-          mergeStatuses.put(shuffleId, fetchedMergeStatues)
+          mergeStatuses.put(shuffleId, fetchedMergeStatuses)
         }
         logDebug(s"Fetching map ${if (fetchMergeResult) "/merge"} for shuffle $shuffleId took " +
           s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
-        (fetchedMapStatuses, fetchedMergeStatues)
+        (fetchedMapStatuses, fetchedMergeStatuses)
       }
     } else {
       (mapOutputStatuses, mergeResultStatuses)
