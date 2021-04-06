@@ -108,10 +108,9 @@ abstract class LogicalPlan
    */
   def resolveChildren(
       nameParts: Seq[String],
-      resolver: Resolver): Option[NamedExpression] = {
+      resolver: Resolver): Option[NamedExpression] =
     childAttributes.resolve(nameParts, resolver)
       .orElse(childMetadataAttributes.resolve(nameParts, resolver))
-  }
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -120,10 +119,9 @@ abstract class LogicalPlan
    */
   def resolve(
       nameParts: Seq[String],
-      resolver: Resolver): Option[NamedExpression] = {
+      resolver: Resolver): Option[NamedExpression] =
     outputAttributes.resolve(nameParts, resolver)
       .orElse(outputMetadataAttributes.resolve(nameParts, resolver))
-  }
 
   /**
    * Given an attribute name, split it to name parts by dot, but
