@@ -407,7 +407,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case udt: UserDefinedType[_] =>
       buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
     case YearMonthIntervalType =>
-      buildCast[Int](_, i => UTF8String.fromString(IntervalUtils.toYMIntervalString(i)))
+      buildCast[Int](_, i => UTF8String.fromString(IntervalUtils.toYearMonthIntervalString(i)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -1125,7 +1125,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         }
       case YearMonthIntervalType =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.toYMIntervalString($c));"""
+        (c, evPrim, _) =>
+          code"""$evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c));"""
       case _ =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }

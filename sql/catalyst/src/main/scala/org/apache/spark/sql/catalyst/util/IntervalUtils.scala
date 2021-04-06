@@ -842,7 +842,7 @@ object IntervalUtils {
    * @param months The number of months, positive or negative
    * @return Year-month interval string
    */
-  def toYMIntervalString(months: Int): String = {
+  def toYearMonthIntervalString(months: Int): String = {
     var sign = ""
     var absMonths: Long = months
     if (months < 0) {
