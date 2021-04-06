@@ -52,7 +52,7 @@ object SQLExecution {
       // started execution of a query didn't call withNewExecutionId. The execution ID should be
       // set by calling withNewExecutionId in the action that begins execution, like
       // Dataset.collect or DataFrameWriter.insertInto.
-      throw QueryExecutionErrors.notSetExecutionIDError()
+      throw QueryExecutionErrors.executionIDNotSetError()
     }
   }
 

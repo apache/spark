@@ -263,7 +263,7 @@ object StatFunctions extends Logging {
           case "stddev" => (child: Expression) => StddevSamp(child).toAggregateExpression()
           case "min" => (child: Expression) => Min(child).toAggregateExpression()
           case "max" => (child: Expression) => Max(child).toAggregateExpression()
-          case _ => throw QueryExecutionErrors.statisticIsNotRecognisedStatisticError(stats)
+          case _ => throw QueryExecutionErrors.statisticNotRecognizedError(stats)
         }
       }
     }

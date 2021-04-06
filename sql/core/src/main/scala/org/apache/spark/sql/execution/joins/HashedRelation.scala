@@ -747,7 +747,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   def append(key: Long, row: UnsafeRow): Unit = {
     val sizeInBytes = row.getSizeInBytes
     if (sizeInBytes >= (1 << SIZE_BITS)) {
-      throw QueryExecutionErrors.rowLargerThanLimitUnsupportedError()
+      throw QueryExecutionErrors.rowLargerThan256MUnsupportedError()
     }
 
     if (key < minKey) {
@@ -806,7 +806,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     val neededNumWords = (cursor - Platform.LONG_ARRAY_OFFSET + 8 + inputRowSize + 7) / 8
     if (neededNumWords > page.length) {
       if (neededNumWords > (1 << 30)) {
-        throw QueryExecutionErrors.cannotBuildHashedRelationLargerThanLimitError()
+        throw QueryExecutionErrors.cannotBuildHashedRelationLargerThan8GError()
       }
       val newNumWords = math.max(neededNumWords, math.min(page.length * 2, 1 << 30))
       ensureAcquireMemory(newNumWords * 8L)

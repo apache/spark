@@ -617,25 +617,25 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         LocalTableScanExec(output, sink.allData.map(r => toRow(r).copy())) :: Nil
 
       case logical.Distinct(child) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedByOptimizedOperatorError(
+        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
           "logical distinct operator", "aggregate")
       case logical.Intersect(left, right, false) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedByOptimizedOperatorError(
+        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
           "logical intersect operator", "semi-join")
       case logical.Intersect(left, right, true) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedByOptimizedOperatorError(
+        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
           "logical intersect operator", "union, aggregate and generate operators")
       case logical.Except(left, right, false) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedByOptimizedOperatorError(
+        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
           "logical except operator", "anti-join")
       case logical.Except(left, right, true) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedByOptimizedOperatorError(
+        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
           "logical except (all) operator", "union, aggregate and generate operators")
       case logical.ResolvedHint(child, hints) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedByOptimizedOperatorError(
+        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
           "ResolvedHint operator", "join hint")
       case Deduplicate(_, child) if !child.isStreaming =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedByOptimizedOperatorError(
+        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
           "Deduplicate operator for non streaming data source", "aggregate")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>

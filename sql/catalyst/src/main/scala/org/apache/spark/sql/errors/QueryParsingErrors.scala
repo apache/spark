@@ -303,7 +303,7 @@ object QueryParsingErrors {
     new ParseException(s"Found duplicate keys '$key'.", ctx)
   }
 
-  def formatForSetConfigurationUnExpectedError(ctx: SetConfigurationContext): Throwable = {
+  def unexpectedFomatForSetConfigurationError(ctx: SetConfigurationContext): Throwable = {
     new ParseException(
       s"""
          |Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include
@@ -324,7 +324,7 @@ object QueryParsingErrors {
       s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
   }
 
-  def formatForResetConfigurationUnExpectedError(ctx: ResetConfigurationContext): Throwable = {
+  def unexpectedFormatForResetConfigurationError(ctx: ResetConfigurationContext): Throwable = {
     new ParseException(
       s"""
          |Expected format is 'RESET' or 'RESET key'. If you want to include special characters
@@ -354,12 +354,12 @@ object QueryParsingErrors {
       "Unsupported operation: Used defined record reader/writer classes.", ctx)
   }
 
-  def directoryPathAndOptionPathBothSpecifiedError(ctx: InsertOverwriteDirContext): Throwable = {
+  def directoryPathAndOptionsPathBothSpecifiedError(ctx: InsertOverwriteDirContext): Throwable = {
     new ParseException(
       "Directory path and 'path' in OPTIONS should be specified one, but not both", ctx)
   }
 
-  def illegalLocalFileSchemaError(ctx: InsertOverwriteDirContext): Throwable = {
+  def unsupportedLocalFileSchemeError(ctx: InsertOverwriteDirContext): Throwable = {
     new ParseException("LOCAL is supported only with file: scheme", ctx)
   }
 

@@ -79,7 +79,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         SetCommand(Some("-v" -> None))
       case s if s.isEmpty =>
         SetCommand(None)
-      case _ => throw QueryParsingErrors.formatForSetConfigurationUnExpectedError(ctx)
+      case _ => throw QueryParsingErrors.unexpectedFomatForSetConfigurationError(ctx)
     }
   }
 
@@ -124,7 +124,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         ResetCommand(Some(key))
       case s if s.trim.isEmpty =>
         ResetCommand(None)
-      case _ => throw QueryParsingErrors.formatForResetConfigurationUnExpectedError(ctx)
+      case _ => throw QueryParsingErrors.unexpectedFormatForResetConfigurationError(ctx)
     }
   }
 
@@ -570,7 +570,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val path = Option(ctx.path).map(string).getOrElse("")
 
     if (!(path.isEmpty ^ storage.locationUri.isEmpty)) {
-      throw QueryParsingErrors.directoryPathAndOptionPathBothSpecifiedError(ctx)
+      throw QueryParsingErrors.directoryPathAndOptionsPathBothSpecifiedError(ctx)
     }
 
     if (!path.isEmpty) {
@@ -583,7 +583,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val scheme = Option(storage.locationUri.get.getScheme)
       scheme match {
         case Some(pathScheme) if (!pathScheme.equals("file")) =>
-          throw QueryParsingErrors.illegalLocalFileSchemaError(ctx)
+          throw QueryParsingErrors.unsupportedLocalFileSchemeError(ctx)
         case _ =>
           // force scheme to be file rather than fs.default.name
           val loc = Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())

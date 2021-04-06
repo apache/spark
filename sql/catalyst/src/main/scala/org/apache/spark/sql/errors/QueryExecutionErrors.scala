@@ -675,7 +675,7 @@ object QueryExecutionErrors {
     new IllegalArgumentException(s"Unsupported type for argument values: $values")
   }
 
-  def notSetExecutionIDError(): Throwable = {
+  def executionIDNotSetError(): Throwable = {
     new IllegalStateException("Execution ID should be set")
   }
 
@@ -692,7 +692,7 @@ object QueryExecutionErrors {
       s" mismatch:\n$plan")
   }
 
-  def logicalOperatorNotReplacedByOptimizedOperatorError(
+  def logicalOperatorNotReplacedError(
       logicalOperator: String, replaceOperator: String): Throwable = {
     new IllegalStateException(s"$logicalOperator should have been" +
       s" replaced by $replaceOperator in the optimizer")
@@ -796,7 +796,7 @@ object QueryExecutionErrors {
       s"got $got bytes")
   }
 
-  def rowLargerThanLimitUnsupportedError(): Throwable = {
+  def rowLargerThan256MUnsupportedError(): Throwable = {
     new UnsupportedOperationException("Does not support row that is larger than 256M")
   }
 
@@ -805,7 +805,7 @@ object QueryExecutionErrors {
       "Cannot build HashedRelation with more than 1/3 billions unique keys")
   }
 
-  def cannotBuildHashedRelationLargerThanLimitError(): Throwable = {
+  def cannotBuildHashedRelationLargerThan8GError(): Throwable = {
     new UnsupportedOperationException(
       "Can not build a HashedRelation that is larger than 8G")
   }
@@ -833,7 +833,7 @@ object QueryExecutionErrors {
     new IllegalArgumentException(s"Unable to parse $stats as a percentile", e)
   }
 
-  def statisticIsNotRecognisedStatisticError(stats: String): Throwable = {
+  def statisticNotRecognizedError(stats: String): Throwable = {
     new IllegalArgumentException(s"$stats is not a recognised statistic")
   }
 
