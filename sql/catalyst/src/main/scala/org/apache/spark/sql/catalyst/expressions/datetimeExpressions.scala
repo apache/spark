@@ -963,8 +963,7 @@ case class UnixTimestamp(
 
   override def prettyName: String = "unix_timestamp"
 
-  override protected def withNewChildren(
-      newLeft: Expression, newRight: Expression): UnixTimestamp =
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): UnixTimestamp =
     copy(timeExp = newLeft, format = newRight)
 }
 
@@ -1807,7 +1806,7 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   override def dataType: DataType = TimestampType
 
   override protected def withNewChild(newChild: Expression): ParseToTimestamp =
-    copy(left = newChild)
+    copy(child = newChild)
 }
 
 trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
