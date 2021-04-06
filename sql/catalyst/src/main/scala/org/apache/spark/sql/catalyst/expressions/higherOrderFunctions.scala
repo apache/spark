@@ -224,6 +224,7 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
       nullSafeEval(inputRow, value)
     }
   }
+
 }
 
 trait ArrayBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
@@ -295,8 +296,8 @@ case class ArrayTransform(
 
   override def prettyName: String = "transform"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
-    copy(argument = newChildren(0), function = newChildren(1))
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -387,8 +388,8 @@ case class ArraySort(
 
   override def prettyName: String = "array_sort"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArraySort =
-    copy(argument = newChildren(0), function = newChildren(1))
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    copy(argument = newLeft, function = newRight)
 }
 
 object ArraySort {
@@ -460,9 +461,8 @@ case class MapFilter(
 
   override def prettyName: String = "map_filter"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): MapFilter =
-    copy(argument = newChildren(0), function = newChildren(1))
-
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -529,8 +529,8 @@ case class ArrayFilter(
 
   override def prettyName: String = "filter"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArrayFilter =
-    copy(argument = newChildren(0), function = newChildren(1))
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -613,8 +613,8 @@ case class ArrayExists(
 
   override def prettyName: String = "exists"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArrayExists =
-    copy(argument = newChildren(0), function = newChildren(1))
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    copy(argument = newLeft, function = newRight)
 }
 
 object ArrayExists {
@@ -692,8 +692,8 @@ case class ArrayForAll(
 
   override def prettyName: String = "forall"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArrayForAll =
-    copy(argument = newChildren(0), function = newChildren(1))
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -850,8 +850,8 @@ case class TransformKeys(
 
   override def prettyName: String = "transform_keys"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): TransformKeys =
-    copy(argument = newChildren(0), function = newChildren(1))
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -901,8 +901,8 @@ case class TransformValues(
 
   override def prettyName: String = "transform_values"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): TransformValues =
-    copy(argument = newChildren(0), function = newChildren(1))
+  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    copy(argument = newLeft, function = newRight)
 }
 
 /**
@@ -1174,7 +1174,11 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
 
   override def prettyName: String = "zip_with"
 
-  override protected def withNewChildrenInternal(
-      first: Expression, second: Expression, third: Expression): ZipWith =
-    copy(left = first, right = second, function = third)
+  override def first: Expression = left
+  override def second: Expression = right
+  override def third: Expression = function
+  
+  override protected def withNewChildren(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+    copy(left = newFirst, right = newSecond, function = newThird)
 }
