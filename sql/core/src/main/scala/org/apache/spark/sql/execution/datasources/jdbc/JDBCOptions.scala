@@ -119,7 +119,7 @@ class JDBCOptions(
   // Optional parameters only for reading
   // ------------------------------------------------------------
 
-  // the ordering of strides (by default, strides are read in a sequential and ascending order)
+  // the ordering of strides (by default, strides are read in ascending order)
   val strideOrder = parameters.getOrElse(JDBC_STRIDE_ORDER, "ascending")
   // the column used to partition
   val partitionColumn = parameters.get(JDBC_PARTITION_COLUMN)

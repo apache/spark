@@ -177,8 +177,7 @@ private[sql] object JDBCRelation extends Logging {
    */
   implicit class ArrayPartitionOps(partitions: Array[Partition]) {
     /**
-     * An extension method that utilizes the stride order selector to order the array
-     * of partitions
+     * An extension method that orders an array of partitions in the stride order provided.
      *
      * @param partitionColumn The column used for partitioning.
      * @param strideOrder The stride order from JDBC options.
