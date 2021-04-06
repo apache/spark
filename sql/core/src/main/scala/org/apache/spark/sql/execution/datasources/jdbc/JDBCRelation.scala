@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import java.util.Locale
+
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
@@ -121,7 +123,7 @@ private[sql] object JDBCRelation extends Logging {
       }
 
     // Overflow can happen if you subtract then divide. For example:
-    // (Long.MaxValue - Long.MinValue) / (numPartitions - 2).
+    // (Long.MaxValue - Long.MinValue) / numPartitions.
     // Also, using fixed-point decimals here to avoid possible inaccuracy from floating point.
     val upperStride = (upperBound / BigDecimal(numPartitions))
       .setScale(18, RoundingMode.HALF_EVEN)
@@ -152,7 +154,7 @@ private[sql] object JDBCRelation extends Logging {
         if (uBound == null) {
           lBound
         } else if (lBound == null) {
-          s"$uBound or $column is null"
+          s"$uBound"
         } else {
           s"$lBound AND $uBound"
         }
@@ -162,7 +164,53 @@ private[sql] object JDBCRelation extends Logging {
     val partitions = ans.toArray
     logInfo(s"Number of partitions: $numPartitions, WHERE clauses of these partitions: " +
       partitions.map(_.asInstanceOf[JDBCPartition].whereClause).mkString(", "))
+
     partitions
+      .orderStrides(column, jdbcOptions.strideOrder)
+      .addNullToHeadWhereClause(column)
+  }
+
+  /**
+   * Extension methods for Array[Partition].
+   *
+   * @param partitions The object being extended.
+   */
+  implicit class ArrayPartitionOps(partitions: Array[Partition]) {
+    /**
+     * An extension method that utilizes the stride order selector to order the array
+     * of partitions
+     *
+     * @param partitionColumn The column used for partitioning.
+     * @param strideOrder The stride order from JDBC options.
+     * @return The array of partitions sorted in the stride order provided.
+     */
+    def orderStrides(partitionColumn: String,
+                     strideOrder: String): Array[Partition] = {
+
+      strideOrder.toLowerCase(Locale.ROOT) match {
+        case "ascending" => partitions
+        case "descending" => partitions.reverse
+        case "random" => scala.util.Random.shuffle(partitions.toList).toArray
+        case _ =>
+          logWarning(s"Stride order of: $strideOrder is not a valid option." +
+            " Using default sorting.")
+          partitions
+      }
+    }
+
+    /**
+     * Modifies the predicate of the head of a partition array to include null values.
+     *
+     * @param partitionColumn The column used for partitioning.
+     * @return An array of partitions with and updated head predicate that includes
+     *         null values.
+     */
+    def addNullToHeadWhereClause(partitionColumn: String): Array[Partition] = {
+      val headWhereClause = partitions.head.asInstanceOf[JDBCPartition].whereClause +
+        s" or $partitionColumn is null"
+
+      JDBCPartition(headWhereClause, 0) +: partitions.tail
+    }
   }
 
   // Verify column name and type based on the JDBC resolved schema

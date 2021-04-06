@@ -118,6 +118,9 @@ class JDBCOptions(
   // ------------------------------------------------------------
   // Optional parameters only for reading
   // ------------------------------------------------------------
+
+  // the ordering of strides (by default, strides are read in a sequential and ascending order)
+  val strideOrder = parameters.getOrElse(JDBC_STRIDE_ORDER, "ascending")
   // the column used to partition
   val partitionColumn = parameters.get(JDBC_PARTITION_COLUMN)
   // the lower bound of partition column
@@ -246,6 +249,7 @@ object JDBCOptions {
   val JDBC_LOWER_BOUND = newOption("lowerBound")
   val JDBC_UPPER_BOUND = newOption("upperBound")
   val JDBC_NUM_PARTITIONS = newOption("numPartitions")
+  val JDBC_STRIDE_ORDER = newOption("strideOrder")
   val JDBC_QUERY_TIMEOUT = newOption("queryTimeout")
   val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
   val JDBC_TRUNCATE = newOption("truncate")

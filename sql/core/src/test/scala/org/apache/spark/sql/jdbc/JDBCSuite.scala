@@ -463,6 +463,75 @@ class JDBCSuite extends QueryTest
     assert(lastPredicate == """"PartitionColumn" >= '2020-08-02'""")
   }
 
+  test("JDBCOptions strideOrder of descending should properly order the strides/partitions") {
+    val schema = StructType(Seq(
+      StructField("PartitionColumn", DateType)
+    ))
+
+    val numPartitions = 3
+    val partitionConfig = Map(
+      "lowerBound" -> "1930-01-01",
+      "upperBound" -> "2020-12-31",
+      "numPartitions" -> numPartitions.toString,
+      "partitionColumn" -> "PartitionColumn",
+      "strideOrder" -> "descending"
+    )
+
+    val partitions = JDBCRelation.columnPartition(
+      schema,
+      analysis.caseInsensitiveResolution,
+      TimeZone.getDefault.toZoneId.toString,
+      new JDBCOptions(url, "table", partitionConfig)
+    )
+
+    val firstPredicate = partitions.head.asInstanceOf[JDBCPartition].whereClause
+    val lastPredicate = partitions(numPartitions - 1).asInstanceOf[JDBCPartition].whereClause
+
+    assert(firstPredicate == """"PartitionColumn" >= '1990-09-01' or "PartitionColumn" is null""")
+    assert(lastPredicate == """"PartitionColumn" < '1960-05-02'""")
+  }
+
+  test("JDBCOptions strideOrder of random should randomly order the strides/partitions") {
+    val schema = StructType(Seq(
+      StructField("PartitionColumn", DateType)
+    ))
+
+    val numPartitions = 1000
+    val partitionConfig = Map(
+      "lowerBound" -> "1930-01-01",
+      "upperBound" -> "2020-12-31",
+      "numPartitions" -> numPartitions.toString,
+      "partitionColumn" -> "PartitionColumn",
+      "strideOrder" -> "random"
+    )
+
+    val indexToCheck = 499
+    var matchCount = 0
+    var nonMatchCount = 0
+    var priorWhereClause = JDBCRelation.columnPartition(
+      schema,
+      analysis.caseInsensitiveResolution,
+      TimeZone.getDefault.toZoneId.toString,
+      new JDBCOptions(url, "table", partitionConfig)
+    )(indexToCheck).asInstanceOf[JDBCPartition].whereClause
+
+    for (_ <- 1 to 10) {
+      val whereClause = JDBCRelation.columnPartition(
+        schema,
+        analysis.caseInsensitiveResolution,
+        TimeZone.getDefault.toZoneId.toString,
+        new JDBCOptions(url, "table", partitionConfig)
+      )(indexToCheck).asInstanceOf[JDBCPartition].whereClause
+
+      if (whereClause == priorWhereClause) matchCount += 1
+      else nonMatchCount += 1
+
+      priorWhereClause = whereClause
+    }
+
+    assert(nonMatchCount > 0)
+  }
+
   test("overflow of partition bound difference does not give negative stride") {
     val df = sql("SELECT * FROM partsoverflow")
     checkNumPartitions(df, expectedNumPartitions = 3)
