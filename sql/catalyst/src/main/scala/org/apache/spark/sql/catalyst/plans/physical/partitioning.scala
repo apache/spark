@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -221,6 +222,8 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
       required match {
         case h: HashClusteredDistribution =>
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
+            case (l: Expression, Cast(r: Expression, dataType, _)) if l.semanticEquals(r) =>
+              TypeCoercion.findTightestCommonType(l.dataType, dataType).contains(dataType)
             case (l, r) => l.semanticEquals(r)
           }
         case ClusteredDistribution(requiredClustering, _) =>

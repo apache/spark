@@ -1071,4 +1071,24 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
       }
     }
   }
+
+  test("SPARK-34966: Avoid shuffle if join type do not match",
+    DisableAdaptiveExecution("Collect ShuffleExchangeExec")) {
+    withTable("t1", "t2") {
+      df1.selectExpr("cast(j as bigint) as j", "k")
+        .write.format("parquet").bucketBy(8, "j").saveAsTable("t1")
+      df2.selectExpr("cast(j as int) as j", "k")
+        .write.format("parquet").bucketBy(8, "j").saveAsTable("t2")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        val df = spark.sql("SELECT t1.j, t2.k FROM t1 JOIN t2 ON t1.j = t2.j AND t1.k = '3'")
+        val plan = df.queryExecution.executedPlan
+        val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
+        assert(shuffles.isEmpty)
+        checkAnswer(
+          df,
+          Row(3, "3") :: Row(3, "14") :: Row(3, "25") :: Row(3, "36") :: Row(3, "47") :: Nil)
+      }
+    }
+  }
 }

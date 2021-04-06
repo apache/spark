@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.types.{DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType}
 
 class DistributionSuite extends SparkFunSuite {
 
@@ -302,5 +304,27 @@ class DistributionSuite extends SparkFunSuite {
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
       ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
       false)
+  }
+
+  test("HashPartitioning may be can match HashClusteredDistribution if type do not match") {
+    def satisfiedTest(
+        hashPartitioningExps: Seq[Expression],
+        hashClusteredDistributionExps: Seq[Expression],
+        expected: Boolean): Unit = {
+      checkSatisfied(
+        HashPartitioning(hashPartitioningExps, 10),
+        HashClusteredDistribution(hashClusteredDistributionExps, Some(10)),
+        expected)
+    }
+
+    satisfiedTest(Seq(Literal(1)), Seq(Literal(1).cast(LongType)), true)
+    satisfiedTest(Seq(Literal(1.2F)), Seq(Literal(1.2F).cast(DoubleType)), true)
+    satisfiedTest(Seq(Literal(1L)), Seq(Literal(1L).cast(DoubleType)), true)
+    satisfiedTest(Seq(Literal(1)), Seq(Literal(1).cast(DecimalType.USER_DEFAULT)), true)
+
+    satisfiedTest(Seq(Literal(1L)), Seq(Literal(1).cast(IntegerType)), false)
+    satisfiedTest(Seq(Literal(1.2D)), Seq(Literal(1.2D).cast(FloatType)), false)
+    satisfiedTest(Seq(Literal(1)), Seq(Literal(1.0D).cast(IntegerType)), false)
+    satisfiedTest(Seq(Literal(1)), Seq(Literal(1).cast(StringType)), false)
   }
 }
