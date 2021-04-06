@@ -1488,7 +1488,6 @@ case class WidthBucket(
     numBucket: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def children: Seq[Expression] = Seq(value, minValue, maxValue, numBucket)
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
@@ -1507,4 +1506,9 @@ case class WidthBucket(
       "org.apache.spark.sql.catalyst.expressions.WidthBucket" +
         s".computeBucketNumber($input, $min, $max, $numBucket)")
   }
+
+  override def first: Expression = value
+  override def second: Expression = minValue
+  override def third: Expression = maxValue
+  override def fourth: Expression = numBucket
 }

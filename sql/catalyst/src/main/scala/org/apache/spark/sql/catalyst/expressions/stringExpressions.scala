@@ -593,8 +593,6 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType),
     TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
-  override def children: Seq[Expression] = input :: replace :: pos :: len :: Nil
-
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {
@@ -631,6 +629,11 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
       "org.apache.spark.sql.catalyst.expressions.Overlay" +
         s".calculate($input, $replace, $pos, $len);")
   }
+
+  override def first: Expression = input
+  override def second: Expression = replace
+  override def third: Expression = pos
+  override def fourth: Expression = len
 }
 
 object StringTranslate {
