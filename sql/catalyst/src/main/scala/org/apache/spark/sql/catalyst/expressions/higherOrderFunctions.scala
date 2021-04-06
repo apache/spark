@@ -1091,9 +1091,12 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   override def second: Expression = right
   override def third: Expression = function
 
-  override protected def withNewChildrenInternal(
-      first: Expression, second: Expression, third: Expression): MapZipWith =
-    copy(left = first, right = second, function = third)
+  override protected def withNewChildren(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+    copy(
+      left = newFirst,
+      right = newSecond,
+      function = newThird)
 }
 
 // scalastyle:off line.size.limit
