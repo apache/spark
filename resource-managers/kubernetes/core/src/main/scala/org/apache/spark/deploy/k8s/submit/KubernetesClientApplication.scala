@@ -32,6 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
+import org.apache.spark.launcher.LauncherBackend
 import org.apache.spark.util.Utils
 
 /**
@@ -98,7 +99,10 @@ private[spark] class Client(
     conf: KubernetesDriverConf,
     builder: KubernetesDriverBuilder,
     kubernetesClient: KubernetesClient,
-    watcher: LoggingPodStatusWatcher) extends Logging {
+    watcher: PodStatusWatcher) extends Logging {
+
+  private val launcherBackend = new KubernetesLauncherBackend(conf.sparkConf, client = this)
+  private var driverPodName: String = _
 
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
@@ -131,7 +135,12 @@ private[spark] class Client(
           .endVolume()
         .endSpec()
       .build()
-    val driverPodName = resolvedDriverPod.getMetadata.getName
+    driverPodName = resolvedDriverPod.getMetadata.getName
+
+    launcherBackend.setAppId(driverPodName)
+    launcherBackend.connect()
+
+    watcher.registerLauncherBackend(launcherBackend)
 
     var watch: Watch = null
     var createdDriverPod: Pod = null
@@ -172,6 +181,34 @@ private[spark] class Client(
       }
     }
   }
+
+  def stop(): Unit = {
+    Option(driverPodName)
+      .map(podName => {
+        val driverPod = kubernetesClient
+          .pods()
+          .inNamespace(conf.namespace)
+          .withName(podName)
+
+        conf.sparkConf.get(KUBERNETES_SUBMIT_GRACE_PERIOD) match {
+          case Some(period) => driverPod.withGracePeriod(period).delete()
+          case _ => driverPod.delete()
+        }
+      })
+    launcherBackend.close()
+  }
+
+}
+
+private[spark] class KubernetesLauncherBackend(
+  private val k8sConf: SparkConf,
+  private val client: Client
+) extends LauncherBackend {
+
+  override protected def conf: SparkConf = k8sConf
+
+  override protected def onStopRequest(): Unit = client.stop()
+
 }
 
 /**
@@ -200,7 +237,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
     val master = KubernetesUtils.parseMasterUrl(sparkConf.get("spark.master"))
-    val watcher = new LoggingPodStatusWatcherImpl(kubernetesConf)
+    val watcher = new PodStatusWatcherImpl(kubernetesConf)
 
     Utils.tryWithResource(SparkKubernetesClientFactory.createKubernetesClient(
       master,
