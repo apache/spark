@@ -87,6 +87,88 @@ trait FunctionRegistryBase[T] {
   def clear(): Unit
 }
 
+object FunctionRegistryBase {
+
+  /**
+   * Return an expression info and a function builder for the function as defined by
+   * T using the given name.
+   */
+  def build[T : ClassTag](name: String): (ExpressionInfo, Seq[Expression] => T) = {
+    val runtimeClass = scala.reflect.classTag[T].runtimeClass
+    // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
+    // constructor and contains non-parameter `child` and should not be used as function builder.
+    val constructors = if (classOf[RuntimeReplaceable].isAssignableFrom(runtimeClass)) {
+      val all = runtimeClass.getConstructors
+      val maxNumArgs = all.map(_.getParameterCount).max
+      all.filterNot(_.getParameterCount == maxNumArgs)
+    } else {
+      runtimeClass.getConstructors
+    }
+    // See if we can find a constructor that accepts Seq[Expression]
+    val varargCtor = constructors.find(_.getParameterTypes.toSeq == Seq(classOf[Seq[_]]))
+    val builder = (expressions: Seq[Expression]) => {
+      if (varargCtor.isDefined) {
+        // If there is an apply method that accepts Seq[Expression], use that one.
+        try {
+          varargCtor.get.newInstance(expressions).asInstanceOf[T]
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
+        }
+      } else {
+        // Otherwise, find a constructor method that matches the number of arguments, and use that.
+        val params = Seq.fill(expressions.size)(classOf[Expression])
+        val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
+          val validParametersCount = constructors
+            .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
+            .map(_.getParameterCount).distinct.sorted
+          throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+            validParametersCount, name, params)
+        }
+        try {
+          f.newInstance(expressions : _*).asInstanceOf[T]
+        } catch {
+          // the exception is an invocation exception. To get a meaningful message, we need the
+          // cause.
+          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
+        }
+      }
+    }
+
+    (expressionInfo(name), builder)
+  }
+
+  /**
+   * Creates an [[ExpressionInfo]] for the function as defined by T using the given name.
+   */
+  def expressionInfo[T : ClassTag](name: String): ExpressionInfo = {
+    val clazz = scala.reflect.classTag[T].runtimeClass
+    val df = clazz.getAnnotation(classOf[ExpressionDescription])
+    if (df != null) {
+      if (df.extended().isEmpty) {
+        new ExpressionInfo(
+          clazz.getCanonicalName,
+          null,
+          name,
+          df.usage(),
+          df.arguments(),
+          df.examples(),
+          df.note(),
+          df.group(),
+          df.since(),
+          df.deprecated())
+      } else {
+        // This exists for the backward compatibility with old `ExpressionDescription`s defining
+        // the extended description in `extended()`.
+        new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      }
+    } else {
+      new ExpressionInfo(clazz.getCanonicalName, name)
+    }
+  }
+}
+
 trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging {
 
   @GuardedBy("this")
@@ -609,59 +691,13 @@ object FunctionRegistry {
   /** See usage above. */
   private def expression[T <: Expression : ClassTag](name: String, setAlias: Boolean = false)
       : (String, (ExpressionInfo, FunctionBuilder)) = {
-    val (expressionInfo, builder) = build[T](name)
+    val (expressionInfo, builder) = FunctionRegistryBase.build[T](name)
     val newBuilder = (expressions: Seq[Expression]) => {
       val expr = builder(expressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr
     }
     (name, (expressionInfo, newBuilder))
-  }
-
-  def build[T: ClassTag](name: String): (ExpressionInfo, Seq[Expression] => T) = {
-    val runtimeClass = scala.reflect.classTag[T].runtimeClass
-    // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
-    // constructor and contains non-parameter `child` and should not be used as function builder.
-    val constructors = if (classOf[RuntimeReplaceable].isAssignableFrom(runtimeClass)) {
-      val all = runtimeClass.getConstructors
-      val maxNumArgs = all.map(_.getParameterCount).max
-      all.filterNot(_.getParameterCount == maxNumArgs)
-    } else {
-      runtimeClass.getConstructors
-    }
-    // See if we can find a constructor that accepts Seq[Expression]
-    val varargCtor = constructors.find(_.getParameterTypes.toSeq == Seq(classOf[Seq[_]]))
-    val builder = (expressions: Seq[Expression]) => {
-      if (varargCtor.isDefined) {
-        // If there is an apply method that accepts Seq[Expression], use that one.
-        try {
-          varargCtor.get.newInstance(expressions).asInstanceOf[T]
-        } catch {
-          // the exception is an invocation exception. To get a meaningful message, we need the
-          // cause.
-          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
-        }
-      } else {
-        // Otherwise, find a constructor method that matches the number of arguments, and use that.
-        val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-          val validParametersCount = constructors
-            .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
-            .map(_.getParameterCount).distinct.sorted
-          throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
-            validParametersCount, name, params)
-        }
-        try {
-          f.newInstance(expressions : _*).asInstanceOf[T]
-        } catch {
-          // the exception is an invocation exception. To get a meaningful message, we need the
-          // cause.
-          case e: Exception => throw new AnalysisException(e.getCause.getMessage)
-        }
-      }
-    }
-
-    (expressionInfo[T](name), builder)
   }
 
   /**
@@ -687,35 +723,6 @@ object FunctionRegistry {
     (name, (expressionInfo, builder))
   }
 
-  /**
-   * Creates an [[ExpressionInfo]] for the function as defined by T using the given name.
-   */
-  def expressionInfo[T: ClassTag](name: String): ExpressionInfo = {
-    val clazz = scala.reflect.classTag[T].runtimeClass
-    val df = clazz.getAnnotation(classOf[ExpressionDescription])
-    if (df != null) {
-      if (df.extended().isEmpty) {
-        new ExpressionInfo(
-          clazz.getCanonicalName,
-          null,
-          name,
-          df.usage(),
-          df.arguments(),
-          df.examples(),
-          df.note(),
-          df.group(),
-          df.since(),
-          df.deprecated())
-      } else {
-        // This exists for the backward compatibility with old `ExpressionDescription`s defining
-        // the extended description in `extended()`.
-        new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
-      }
-    } else {
-      new ExpressionInfo(clazz.getCanonicalName, name)
-    }
-  }
-
   private def expressionGeneratorOuter[T <: Generator : ClassTag](name: String)
     : (String, (ExpressionInfo, FunctionBuilder)) = {
     val (_, (info, generatorBuilder)) = expression[T](name)
@@ -726,14 +733,16 @@ object FunctionRegistry {
   }
 }
 
+/**
+ * A catalog for looking up table functions.
+ */
 trait TableFunctionRegistry extends FunctionRegistryBase[LogicalPlan] {
 
   /** Create a copy of this registry with identical functions as this registry. */
   override def clone(): TableFunctionRegistry = throw new CloneNotSupportedException()
 }
 
-class SimpleTableFunctionRegistry
-    extends SimpleFunctionRegistryBase[LogicalPlan]
+class SimpleTableFunctionRegistry extends SimpleFunctionRegistryBase[LogicalPlan]
     with TableFunctionRegistry {
 
   override def clone(): SimpleTableFunctionRegistry = synchronized {
@@ -745,8 +754,7 @@ class SimpleTableFunctionRegistry
   }
 }
 
-object EmptyTableFunctionRegistry
-    extends EmptyFunctionRegistryBase[LogicalPlan]
+object EmptyTableFunctionRegistry extends EmptyFunctionRegistryBase[LogicalPlan]
     with TableFunctionRegistry {
 
   override def clone(): TableFunctionRegistry = this
@@ -758,13 +766,13 @@ object TableFunctionRegistry {
 
   private def logicalPlan[T <: LogicalPlan : ClassTag](name: String)
       : (String, (ExpressionInfo, TableFunctionBuilder)) = {
-    val (info, builder) = FunctionRegistry.build[T](name)
+    val (info, builder) = FunctionRegistryBase.build[T](name)
     val newBuilder = (expressions: Seq[Expression]) => {
-      val argTypes = expressions.map(_.dataType.typeName).mkString(", ")
       try {
         builder(expressions)
       } catch {
         case e: AnalysisException =>
+          val argTypes = expressions.map(_.dataType.typeName).mkString(", ")
           throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
             name, argTypes, info.getUsage, e.getMessage)
       }
