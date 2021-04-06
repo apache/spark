@@ -155,7 +155,7 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  private def closeState(): Unit = {
+  private def closeState(): Unit = withHiveState {
     // These temp files are registered in o.a.h.u.ShutdownHookManager too during state start.
     // The state.close() will delete them if they are not null and try remove them from the
     // o.a.h.u.ShutdownHookManager which causes undesirable IllegalStateException.

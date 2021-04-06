@@ -1,10 +1,10 @@
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Mac OS X 10.14.6
-Intel(R) Core(TM) i5-8210Y CPU @ 1.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 constructor:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-arrayOfAny                                            7              8           2       1471.6           0.7       1.0X
-arrayOfAnyAsObject                                  197            207           9         50.7          19.7       0.0X
-arrayOfAnyAsSeq                                      25             27           2        398.0           2.5       0.3X
-arrayOfInt                                          613            630          15         16.3          61.3       0.0X
-arrayOfIntAsObject                                  866            872           8         11.5          86.6       0.0X
+arrayOfAny                                            3              4           0       2907.2           0.3       1.0X
+arrayOfAnyAsObject                                  274            276           2         36.5          27.4       0.0X
+arrayOfAnyAsSeq                                      21             23           1        470.1           2.1       0.2X
+arrayOfInt                                          727            735           8         13.8          72.7       0.0X
+arrayOfIntAsObject                                  998           1002           6         10.0          99.8       0.0X
 

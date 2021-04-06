@@ -1584,7 +1584,11 @@ class SparkContext(config: SparkConf) extends Logging {
       path: String, recursive: Boolean, addedOnSubmit: Boolean, isArchive: Boolean = false
     ): Unit = {
     val uri = if (!isArchive) {
-      new Path(path).toUri
+      if (Utils.isAbsoluteURI(path) && path.contains("%")) {
+        new URI(path)
+      } else {
+        new Path(path).toUri
+      }
     } else {
       Utils.resolveURI(path)
     }
@@ -1619,10 +1623,8 @@ class SparkContext(config: SparkConf) extends Logging {
       env.rpcEnv.fileServer.addFile(new File(uri.getPath))
     } else if (uri.getScheme == null) {
       schemeCorrectedURI.toString
-    } else if (isArchive) {
-      uri.toString
     } else {
-      path
+      uri.toString
     }
 
     val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
@@ -1977,7 +1979,11 @@ class SparkContext(config: SparkConf) extends Logging {
         // For local paths with backslashes on Windows, URI throws an exception
         (addLocalJarFile(new File(path)), "local")
       } else {
-        val uri = new Path(path).toUri
+        val uri = if (Utils.isAbsoluteURI(path) && path.contains("%")) {
+          new URI(path)
+        } else {
+          new Path(path).toUri
+        }
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
         val uriScheme = uri.getScheme

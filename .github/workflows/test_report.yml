@@ -15,6 +15,7 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         workflow: ${{ github.event.workflow_run.workflow_id }}
         commit: ${{ github.event.workflow_run.head_commit.id }}
+        workflow_conclusion: completed
     - name: Publish test report
       uses: scacap/action-surefire-report@v1
       with:
