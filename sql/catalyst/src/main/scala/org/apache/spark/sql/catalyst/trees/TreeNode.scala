@@ -259,7 +259,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
-    if (children.isEmpty || childrenTheSame(children, newChildren)) {
+    assert(newChildren.size == children.size, "Incorrect number of children")
+    if (children.isEmpty || childrenTheSame(newChildren, children)) {
       this
     } else {
       CurrentOrigin.withOrigin(origin) {
