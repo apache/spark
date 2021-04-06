@@ -784,9 +784,10 @@ private[spark] class ApplicationMaster(
       // if deployment mode for yarn Application is client
       // then send the AM Log Info to spark driver
       if (!isClusterMode) {
-        val hostName = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
-        driver.send(MiscellaneousProcessInfo(System.currentTimeMillis(),
-          sparkConf.get(AM_CORES), Runtime.getRuntime().maxMemory(), hostName, extractLogUrls))
+        val hostPort = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
+        val yarnAMID = "yarn-am"
+        driver.send(MiscellaneousProcessInfo(yarnAMID, System.currentTimeMillis(),
+          sparkConf.get(AM_CORES), Runtime.getRuntime().maxMemory(), hostPort, extractLogUrls))
       }
     }
 

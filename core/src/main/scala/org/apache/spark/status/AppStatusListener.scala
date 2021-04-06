@@ -84,12 +84,9 @@ private[spark] class AppStatusListener(
   // Keep the active executor count as a separate variable to avoid having to do synchronization
   // around liveExecutors.
   @volatile private var activeExecutorCount = 0
-  @volatile private var activeProcessCount = 0
 
   /** The last time when flushing `LiveEntity`s. This is to avoid flushing too frequently. */
   private var lastFlushTimeNs = System.nanoTime()
-
-  private[spark] lazy val yarnAMID = "yarn-am"
 
   kvstore.addTrigger(classOf[ExecutorSummaryWrapper], conf.get(MAX_RETAINED_DEAD_EXECUTORS))
     { count => cleanupExecutors(count) }
@@ -111,8 +108,8 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
-    case MiscellaneousProcessInfoEvent(time, cores, memory, hostName, urlInfo) =>
-      updateAMInfoInLiveProcess(time, cores, memory, hostName, urlInfo.toMap)
+    case processInfoEvent: MiscellaneousProcessInfoEvent =>
+      onMiscellaneousProcessAdded(processInfoEvent)
     case _ =>
   }
 
@@ -1133,7 +1130,6 @@ private[spark] class AppStatusListener(
   private def getOrCreateOtherProcess(processId: String,
       addTime: Long): LiveMiscellaneousProcess = {
     liveMiscellaneousProcess.getOrElseUpdate(processId, {
-      activeProcessCount += 1
       new LiveMiscellaneousProcess(processId, addTime)
     })
   }
@@ -1369,21 +1365,18 @@ private[spark] class AppStatusListener(
 
   /**
    *
-   * @param time Spark AM start time in client mode
-   * @param hostName Spark AM Host Name
-   * @param urlInfo Url for Spark AM host(stderr, stdout)
+   * @param processInfoEvent Miscellaneous Process Info Event
+   *
    */
-  private def updateAMInfoInLiveProcess(time: Long,
-    cores: Int,
-    memory: Long,
-    hostName: String,
-    urlInfo: Map[String, String]): Unit = {
-    val process = getOrCreateOtherProcess(yarnAMID, time)
-    process.processLogs = urlInfo
-    process.hostPort = hostName
+  private def onMiscellaneousProcessAdded(
+      processInfoEvent: MiscellaneousProcessInfoEvent): Unit = {
+    val info = processInfoEvent.info
+    val process = getOrCreateOtherProcess(info.processName, processInfoEvent.time)
+    process.processLogs = info.logUrlInfo
+    process.hostPort = info.hostPort
     process.isActive = true
-    process.totalCores = cores
-    process.maxMemory = memory
+    process.totalCores = info.cores
+    process.maxMemory = info.memory
     update(process, System.nanoTime())
   }
 

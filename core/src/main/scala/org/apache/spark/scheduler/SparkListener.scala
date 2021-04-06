@@ -229,10 +229,7 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
 
 @DeveloperApi
 case class MiscellaneousProcessInfoEvent(time: Long,
-  cores: Int,
-  memory: Long,
-  hostName: String,
-  urlInfo: Map[String, String]) extends SparkListenerEvent
+  info: MiscellaneousProcessDetails) extends SparkListenerEvent
 
 /**
  * Periodic updates from executors.

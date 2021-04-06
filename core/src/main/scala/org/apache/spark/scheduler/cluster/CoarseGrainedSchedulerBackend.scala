@@ -214,13 +214,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
         makeOffers(executorId)
 
-      case MiscellaneousProcessInfo(time: Long,
+      case MiscellaneousProcessInfo(processName: String,
+          time: Long,
           cores: Int,
           memory: Long,
-          hostName: String,
+          hostPort: String,
           logUrlInfo: Map[String, String]) =>
+        val info = new MiscellaneousProcessDetails(processName, hostPort,
+          cores, memory, logUrlInfo)
         listenerBus.post(
-          MiscellaneousProcessInfoEvent(time, cores, memory, hostName, logUrlInfo))
+          MiscellaneousProcessInfoEvent(time, info))
 
       case e =>
         logError(s"Received unexpected message. ${e}")

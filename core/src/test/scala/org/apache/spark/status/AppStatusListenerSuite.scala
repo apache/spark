@@ -1798,28 +1798,30 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-34877 - check YarnAmInfoEvent is populated correctly") {
     def checkInfoPopulated(listener: AppStatusListener,
-      logUrlMap: Map[String, String]): Unit = {
-      val yarnAmInfo = listener.liveMiscellaneousProcess.get(listener.yarnAMID)
+      logUrlMap: Map[String, String], processName: String): Unit = {
+      val yarnAmInfo = listener.liveMiscellaneousProcess.get(processName)
       assert(yarnAmInfo.isDefined)
       yarnAmInfo.foreach { info =>
-        assert(info.processId == listener.yarnAMID)
+        assert(info.processId == processName)
         assert(info.isActive)
         assert(info.processLogs == logUrlMap)
       }
-      check[ProcessSummaryWrapper](listener.yarnAMID) { process =>
-        assert(process.info.id === listener.yarnAMID)
+      check[ProcessSummaryWrapper](processName) { process =>
+        assert(process.info.id === processName)
         assert(process.info.isActive)
         assert(process.info.processLogs == logUrlMap)
       }
     }
+    val processName = "yarn-am"
     val listener = new AppStatusListener(store, conf, true)
     var stdout = "http:yarnAmHost:2453/con1/stdout"
     var stderr = "http:yarnAmHost:2453/con2/stderr"
     var logUrlMap: Map[String, String] = Map("stdout" -> stdout,
       "stderr" -> stderr)
-    var yarnHostName = "yarnAmHost:2453"
-    listener.onOtherEvent(MiscellaneousProcessInfoEvent(123678L, 1, 512, yarnHostName, logUrlMap))
-    checkInfoPopulated(listener, logUrlMap)
+    var hostport = "yarnAmHost:2453"
+    var info = new MiscellaneousProcessDetails(processName, hostport, 1, 512, logUrlMap)
+    listener.onOtherEvent(MiscellaneousProcessInfoEvent(123678L, info))
+    checkInfoPopulated(listener, logUrlMap, processName)
 
     // Launch new AM in case of failure
     // New container entry will be updated in this scenario
@@ -1827,9 +1829,10 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     stderr = "http:yarnAmHost:2451/con2/stderr"
     logUrlMap = Map("stdout" -> stdout,
       "stderr" -> stderr)
-    yarnHostName = "yarnAmHost:2451"
-    listener.onOtherEvent(MiscellaneousProcessInfoEvent(123678L, 1, 512, yarnHostName, logUrlMap))
-    checkInfoPopulated(listener, logUrlMap)
+    hostport = "yarnAmHost:2451"
+    info = new MiscellaneousProcessDetails(processName, hostport, 1, 512, logUrlMap)
+    listener.onOtherEvent(MiscellaneousProcessInfoEvent(123678L, info))
+    checkInfoPopulated(listener, logUrlMap, processName)
   }
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
