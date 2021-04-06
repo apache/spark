@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
 
 class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-    with AlterTableTests with DatasourceV2SQLBase {
+  with AlterTableTests with DatasourceV2SQLBase {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -128,9 +128,9 @@ class DataSourceV2SQLSuite
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
     assert(descriptionDf.schema.map(field => (field.name, field.dataType))
       === Seq(
-      ("col_name", StringType),
-      ("data_type", StringType),
-      ("comment", StringType)))
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
     assert(descriptionDf.collect()
       .map(_.toSeq)
       .map(_.toArray.map(_.toString.trim)) === Array(
@@ -480,7 +480,7 @@ class DataSourceV2SQLSuite
     }
 
     assert(!testCatalog.tableExists(Identifier.of(Array(), "table_name")),
-      "Table should have been dropped as a result of the replace.")
+        "Table should have been dropped as a result of the replace.")
   }
 
   test("ReplaceTableAsSelect: Non-atomic catalog drops the table permanently if the" +
@@ -537,9 +537,9 @@ class DataSourceV2SQLSuite
     val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
-      "Replaced table should have no rows after committing.")
+        "Replaced table should have no rows after committing.")
     assert(replaced.schema().fields.length === 1,
-      "Replaced table should have new schema.")
+        "Replaced table should have new schema.")
     assert(replaced.schema().fields(0) === StructField("id", LongType, nullable = false),
       "Replaced table should have new schema.")
   }
@@ -597,8 +597,8 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
     assert(table.schema == new StructType()
-      .add("id", LongType)
-      .add("data", StringType))
+        .add("id", LongType)
+        .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
@@ -614,8 +614,8 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
-      .add("id", LongType)
-      .add("data", StringType))
+        .add("id", LongType)
+        .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
@@ -634,8 +634,8 @@ class DataSourceV2SQLSuite
     assert(table2.partitioning.isEmpty)
     assert(table2.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table2.schema == new StructType()
-      .add("id", LongType)
-      .add("data", StringType))
+        .add("id", LongType)
+        .add("data", StringType))
 
     val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), spark.table("source"))
@@ -652,8 +652,8 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
-      .add("id", LongType)
-      .add("data", StringType))
+        .add("id", LongType)
+        .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
@@ -683,8 +683,8 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == withDefaultOwnership(Map("provider" -> "foo")).asJava)
     assert(table.schema == new StructType()
-      .add("id", LongType)
-      .add("data", StringType))
+        .add("id", LongType)
+        .add("data", StringType))
 
     val rdd = sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
@@ -870,8 +870,8 @@ class DataSourceV2SQLSuite
       sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
       checkAnswer(
         sql(s"""
-               |WITH cte AS (SELECT * FROM $t1)
-               |SELECT * FROM cte
+          |WITH cte AS (SELECT * FROM $t1)
+          |SELECT * FROM cte
         """.stripMargin),
         spark.table("source"))
     }
@@ -900,9 +900,9 @@ class DataSourceV2SQLSuite
       val df_joined = df1.join(df2).where(df1("id") + 1 === df2("id"))
       checkAnswer(
         sql(s"""
-               |SELECT *
-               |FROM $t1 t1, $t2 t2
-               |WHERE t1.id + 1 = t2.id
+          |SELECT *
+          |FROM $t1 t1, $t2 t2
+          |WHERE t1.id + 1 = t2.id
         """.stripMargin),
         df_joined)
     }
@@ -1285,8 +1285,8 @@ class DataSourceV2SQLSuite
   }
 
   private def testShowNamespaces(
-                                  sqlText: String,
-                                  expected: Seq[String]): Unit = {
+      sqlText: String,
+      expected: Seq[String]): Unit = {
     val schema = new StructType().add("namespace", StringType, nullable = false)
 
     val df = spark.sql(sqlText)
@@ -1349,7 +1349,7 @@ class DataSourceV2SQLSuite
   }
 
   test("SPARK-31100: Use: v2 catalog that implements SupportsNamespaces is used " +
-    "and namespace not exists") {
+      "and namespace not exists") {
     // Namespaces are required to exist for v2 catalogs that implements SupportsNamespaces.
     val exception = intercept[NoSuchNamespaceException] {
       sql("USE testcat.ns1.ns2")
@@ -1358,7 +1358,7 @@ class DataSourceV2SQLSuite
   }
 
   test("SPARK-31100: Use: v2 catalog that does not implement SupportsNameSpaces is used " +
-    "and namespace does not exist") {
+      "and namespace does not exist") {
     // Namespaces are not required to exist for v2 catalogs
     // that does not implement SupportsNamespaces.
     withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
@@ -1735,7 +1735,7 @@ class DataSourceV2SQLSuite
     val v1Table = "tbl"
     withTable(v1Table) {
       sql(s"CREATE TABLE $v1Table" +
-        s" USING ${classOf[SimpleScanSource].getName} OPTIONS (from=0,to=1)")
+          s" USING ${classOf[SimpleScanSource].getName} OPTIONS (from=0,to=1)")
       val exc = intercept[AnalysisException] {
         sql(s"DELETE FROM $v1Table WHERE i = 2")
       }
@@ -2412,10 +2412,10 @@ class DataSourceV2SQLSuite
         df.createOrReplaceTempView("source_view")
 
         sql(s"CREATE TABLE $t1 (ts timestamp, data string) " +
-          s"USING $v2Format PARTITIONED BY (days(ts))")
+            s"USING $v2Format PARTITIONED BY (days(ts))")
         sql(s"INSERT INTO $t1 VALUES " +
-          s"(CAST(date_add('2020-01-01', 2) AS timestamp), 'dummy'), " +
-          s"(CAST(date_add('2020-01-01', 4) AS timestamp), 'keep')")
+            s"(CAST(date_add('2020-01-01', 2) AS timestamp), 'dummy'), " +
+            s"(CAST(date_add('2020-01-01', 4) AS timestamp), 'keep')")
         sql(s"INSERT OVERWRITE TABLE $t1 SELECT ts, data FROM source_view")
 
         val expected = spark.createDataFrame(Seq(
@@ -2433,7 +2433,7 @@ class DataSourceV2SQLSuite
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
-        "PARTITIONED BY (bucket(4, id), id)")
+          "PARTITIONED BY (bucket(4, id), id)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
 
       val sqlQuery = spark.sql(s"SELECT id, data, index, _partition FROM $t1")
@@ -2449,7 +2449,7 @@ class DataSourceV2SQLSuite
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (index bigint, data string) USING $v2Format " +
-        "PARTITIONED BY (bucket(4, index), index)")
+          "PARTITIONED BY (bucket(4, index), index)")
       sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
 
       val sqlQuery = spark.sql(s"SELECT index, data, _partition FROM $t1")
@@ -2465,7 +2465,7 @@ class DataSourceV2SQLSuite
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
-        "PARTITIONED BY (bucket(4, id), id)")
+          "PARTITIONED BY (bucket(4, id), id)")
       sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
 
       val sqlQuery = spark.sql(s"SELECT * FROM $t1")
@@ -2527,9 +2527,9 @@ class DataSourceV2SQLSuite
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
       sql(s"""
-             |CREATE TABLE $t (id bigint, city string, data string)
-             |USING foo
-             |PARTITIONED BY (id, city)""".stripMargin)
+        |CREATE TABLE $t (id bigint, city string, data string)
+        |USING foo
+        |PARTITIONED BY (id, city)""".stripMargin)
       val partTable = catalog("testpart").asTableCatalog
         .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
       val expectedPartitionIdent = InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))
@@ -2544,10 +2544,10 @@ class DataSourceV2SQLSuite
 
   test("View commands are not supported in v2 catalogs") {
     def validateViewCommand(
-                             sql: String,
-                             catalogName: String,
-                             viewName: String,
-                             cmdName: String): Unit = {
+        sql: String,
+        catalogName: String,
+        viewName: String,
+        cmdName: String): Unit = {
       assertAnalysisError(
         sql,
         s"Cannot specify catalog `$catalogName` for view $viewName because view support " +
@@ -2576,9 +2576,9 @@ class DataSourceV2SQLSuite
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
       sql(s"""
-             |CREATE TABLE $t (id bigint, city string, data string)
-             |USING foo
-             |PARTITIONED BY (id, city)""".stripMargin)
+        |CREATE TABLE $t (id bigint, city string, data string)
+        |USING foo
+        |PARTITIONED BY (id, city)""".stripMargin)
       val partTable = catalog("testpart").asTableCatalog
         .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
 
