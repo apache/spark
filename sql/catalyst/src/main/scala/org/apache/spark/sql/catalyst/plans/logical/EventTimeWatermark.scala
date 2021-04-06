@@ -61,6 +61,4 @@ case class EventTimeWatermark(
       a
     }
   }
-
-  override val metadataOutput: Seq[Attribute] = child.metadataOutput
 }
