@@ -404,17 +404,13 @@ case class MergeIntoTable(
     mergeCondition: Expression,
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
-
   override lazy val resolved: Boolean = {
     expressions.forall(_.resolved) && childrenResolved &&
       matchedActions.forall(!_.isInstanceOf[UpdateStarAction]) &&
       notMatchedActions.forall(!_.isInstanceOf[InsertStarAction])
   }
-
   def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
-
   override def left: LogicalPlan = targetTable
-
   override def right: LogicalPlan = sourceTable
 }
 
