@@ -850,3 +850,11 @@ trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def third: T
   @transient override final lazy val children: Seq[T] = first :: second :: third :: Nil
 }
+
+trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def first: T
+  def second: T
+  def third: T
+  def fourth: T
+  @transient override final lazy val children: Seq[T] = first :: second :: third :: fourth :: Nil
+}

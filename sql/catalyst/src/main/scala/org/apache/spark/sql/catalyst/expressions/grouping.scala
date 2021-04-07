@@ -175,7 +175,7 @@ object GroupingSets {
   group = "agg_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Grouping(child: Expression) extends Expression with Unevaluable
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
   @transient
   override lazy val references: AttributeSet =
     AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
