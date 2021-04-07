@@ -599,7 +599,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
         case a @ Aggregate(Seq(gs: GroupingAnalytic), _, _) =>
-          a.copy(groupingExpressions =gs.groupingSets, gs.groupByExprs)
+          a.copy(groupingExpressions = gs.groupByExprs)
       }
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val resolvedInfo =
@@ -1815,10 +1815,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         cube.copy(children = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
       case rollup @ Rollup(_, groupByExprs) =>
         rollup.copy(children = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
-      case groupingSets @ GroupingSets(_, flatGroupingSets, groupByExprs) =>
+      case groupingSets @ GroupingSets(_, flatGroupingSets, userGivenGroupByExprs) =>
         groupingSets.copy(
           flatGroupingSets = flatGroupingSets.map(resolveGroupByExpressionOrdinal(_, aggs)),
-          groupByExprs = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
+          userGivenGroupByExprs =
+            userGivenGroupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
       case others => others
     }
   }
