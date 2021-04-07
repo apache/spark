@@ -867,19 +867,20 @@ object IntervalUtils {
         // Especial handling of minimum `Long` value because negate op overflows `Long`.
         // seconds = 106751991 * (24 * 60 * 60) + 4 * 60 * 60 + 54 = 9223372036854
         // microseconds = -9223372036854000000L-775808 == Long.MinValue
-        return "INTERVAL '-106751991 4:0:54.775808' DAY TO SECOND"
+        return "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND"
       } else {
         sign = "-"
         rest = -rest
       }
     }
     val seconds = rest % MICROS_PER_MINUTE
-    val secondStr = java.math.BigDecimal.valueOf(seconds, 6).stripTrailingZeros().toPlainString()
     rest /= MICROS_PER_MINUTE
     val minutes = rest % MINUTES_PER_HOUR
     rest /= MINUTES_PER_HOUR
     val hours = rest % HOURS_PER_DAY
     val days = rest / HOURS_PER_DAY
-    s"INTERVAL '$sign$days $hours:$minutes:$secondStr' DAY TO SECOND"
+    val leadSecZero = if (seconds < 10000000) "0" else ""
+    val secStr = java.math.BigDecimal.valueOf(seconds, 6).stripTrailingZeros().toPlainString()
+    f"INTERVAL '$sign$days $hours%02d:$minutes%02d:$leadSecZero$secStr' DAY TO SECOND"
   }
 }

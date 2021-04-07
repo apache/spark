@@ -821,19 +821,19 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-34668: cast day-time interval to string") {
     Seq(
-      Duration.ZERO -> "0 0:0:0",
-      Duration.of(1, ChronoUnit.MICROS) -> "0 0:0:0.000001",
-      Duration.ofMillis(-1) -> "-0 0:0:0.001",
-      Duration.ofMillis(1234) -> "0 0:0:1.234",
-      Duration.ofSeconds(-59).minus(999999, ChronoUnit.MICROS) -> "-0 0:0:59.999999",
-      Duration.ofMinutes(30).plusMillis(10) -> "0 0:30:0.01",
-      Duration.ofHours(-23).minusSeconds(59) -> "-0 23:0:59",
-      Duration.ofDays(1).plus(123456, ChronoUnit.MICROS) -> "1 0:0:0.123456",
+      Duration.ZERO -> "0 00:00:00",
+      Duration.of(1, ChronoUnit.MICROS) -> "0 00:00:00.000001",
+      Duration.ofMillis(-1) -> "-0 00:00:00.001",
+      Duration.ofMillis(1234) -> "0 00:00:01.234",
+      Duration.ofSeconds(-9).minus(999999, ChronoUnit.MICROS) -> "-0 00:00:09.999999",
+      Duration.ofMinutes(30).plusMillis(59010) -> "0 00:30:59.01",
+      Duration.ofHours(-23).minusSeconds(59) -> "-0 23:00:59",
+      Duration.ofDays(1).plus(12345678, ChronoUnit.MICROS) -> "1 00:00:12.345678",
       Duration.ofDays(-1234).minusHours(23).minusMinutes(59).minusSeconds(59).minusMillis(999) ->
         "-1234 23:59:59.999",
-      microsToDuration(Long.MaxValue) -> "106751991 4:0:54.775807",
-      microsToDuration(Long.MinValue + 1) -> "-106751991 4:0:54.775807",
-      microsToDuration(Long.MinValue) -> "-106751991 4:0:54.775808"
+      microsToDuration(Long.MaxValue) -> "106751991 04:00:54.775807",
+      microsToDuration(Long.MinValue + 1) -> "-106751991 04:00:54.775807",
+      microsToDuration(Long.MinValue) -> "-106751991 04:00:54.775808"
     ).foreach { case (period, intervalPayload) =>
       checkEvaluation(
         Cast(Literal(period), StringType),
