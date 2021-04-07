@@ -345,20 +345,6 @@ def text_dataset_example(spark):
     # You can specify the compression format using the 'compression' option.
     df1.write.text("output_compressed", compression="gzip")
 
-    # Read all files in a folder.
-    folderPath = "examples/src/main/resources"
-    df = spark.read.text(folderPath)
-    df.show()
-    # +-----------+
-    # |      value|
-    # +-----------+
-    # |238val_238|
-    # |  86val_86|
-    # |311val_311|
-    # |  27val_27|
-    # |165val_165|
-    # +-----------+
-
     # $example off:text_dataset$
 
 

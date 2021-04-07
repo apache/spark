@@ -354,20 +354,6 @@ object SQLDataSourceExample {
     // You can specify the compression format using the 'compression' option.
     df1.write.option("compression", "gzip").text("output_compressed")
 
-    // Read all files in a folder.
-    val folderPath = "examples/src/main/resources";
-    val df = spark.read.text(folderPath);
-    df.show();
-    // +-----------+
-    // |      value|
-    // +-----------+
-    // |238val_238|
-    // |  86val_86|
-    // |311val_311|
-    // |  27val_27|
-    // |165val_165|
-    // +-----------+
-
     // $example off:text_dataset$
   }
 

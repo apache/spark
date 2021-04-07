@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL provides `spark.read().text("file_name")` to read a file or directory of text files into a Spark DataFrame, and `dataframe.write().text("path")` to write to a text file. When reading a text file, each line becomes each row that has string "value" column by default. The line separator can be changed as shown in the example below. The `option()` function can be used to customize the behavior of reading or writing, such as controlling behavior of the line separator, compression, and so on.
+Spark SQL provides `spark.read().text("file_name")` to read a file or directory of text files into a Spark DataFrame, and `dataframe.write().text("path")` to write to a text file. When reading a text file, each line becomes each row that has string "value" column by default. The line separator can be changed as shown in the example below. When specifying a directory as a file path, make sure that the files included in the directory do not contain a format that is inappropriate for reading text, such as ORC or Parquet. The `option()` function can be used to customize the behavior of reading or writing, such as controlling behavior of the line separator, compression, and so on.
 
 <!--TODO(SPARK-34491): add `option()` document reference-->
 
