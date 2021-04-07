@@ -105,7 +105,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * transformExpressionsDown or transformExpressionsUp should be used.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @param cond  a Lambda expression to stop traversals early on. If `cond.apply` returns false
+   * @param cond  a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *              on an expression T, skips processing T and its subtree; otherwise, processes
    *              T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
@@ -124,7 +124,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *             on an expression T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
@@ -143,7 +143,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *             on an expression T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is

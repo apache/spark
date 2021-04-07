@@ -19,10 +19,8 @@ package org.apache.spark.sql.catalyst.rules
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.Logging
-
 // A collection of rules that use rule ids to prune tree traversals.
-object RuleIdCollection extends Logging {
+object RuleIdCollection {
 
   // The rules listed here need a rule id. Rules are in alphabetical order.
   private val rulesNeedingIds: Seq[String] = {

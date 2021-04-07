@@ -409,7 +409,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * transformDown or transformUp should be used.
    *
    * @param rule the function use to transform this nodes children
-   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
@@ -429,7 +429,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
    *
    * @param rule the function use to transform this nodes children
-   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
@@ -470,7 +470,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * unchanged.
    *
    * @param rule the function use to transform this nodes children
-   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
