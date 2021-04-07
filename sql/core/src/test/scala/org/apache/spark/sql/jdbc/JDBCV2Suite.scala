@@ -122,7 +122,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row("mary"))
   }
 
-  test("aggregate pushdown with alias") {
+  test("aggregate push-down with alias") {
     val df1 = spark.table("h2.test.employee")
     val query1 = df1.select($"DEPT", $"SALARY".as("value"))
       .groupBy($"DEPT")
