@@ -79,7 +79,8 @@ case class TestingTypedCount(
 
   override val prettyName: String = "typed_count"
 
-  override protected def withNewChildInternal(newChild: Expression): Expression = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): TestingTypedCount =
+    copy(child = newChild)
 }
 
 object TestingTypedCount {

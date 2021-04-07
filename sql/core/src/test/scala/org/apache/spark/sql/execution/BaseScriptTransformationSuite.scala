@@ -601,7 +601,8 @@ case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): ExceptionInjectingOperator =
+    copy(child = newChild)
 }
 
 @SQLUserDefinedType(udt = classOf[SimpleTupleUDT])

@@ -713,7 +713,8 @@ class BrokenColumnarAdd(
     ret
   }
 
-  override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): BrokenColumnarAdd =
+  override def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): BrokenColumnarAdd =
     new BrokenColumnarAdd(
       left = newLeft.asInstanceOf[ColumnarExpression],
       right = newRight.asInstanceOf[ColumnarExpression], failOnError)
