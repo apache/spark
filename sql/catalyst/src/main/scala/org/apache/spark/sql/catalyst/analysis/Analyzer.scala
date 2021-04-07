@@ -1807,14 +1807,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
         }
-      case cube @ Cube(_, groupByExprs) =>
-        cube.withNewChildren(groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
-      case rollup @ Rollup(_, groupByExprs) =>
-        rollup.withNewChildren(groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
-      case groupingSets @ GroupingSets(_, flatGroupingSets, userGivenGroupByExprs) =>
-        groupingSets.withNewChildren(
-          flatGroupingSets.map(resolveGroupByExpressionOrdinal(_, aggs))
-            ++ userGivenGroupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
+      case gs: GroupingSet =>
+        gs.withNewChildren(gs.children.map(resolveGroupByExpressionOrdinal(_, aggs)))
       case others => others
     }
   }
