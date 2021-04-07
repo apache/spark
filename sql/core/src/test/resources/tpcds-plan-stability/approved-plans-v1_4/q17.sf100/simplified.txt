@@ -13,21 +13,21 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                         InputAdapter
                           Exchange [sr_customer_sk,sr_item_sk] #2
                             WholeStageCodegen (12)
-                              Project [ss_quantity,s_state,sr_item_sk,sr_customer_sk,sr_return_quantity,i_item_id,i_item_desc]
-                                SortMergeJoin [ss_item_sk,i_item_sk]
+                              Project [ss_quantity,s_state,i_item_id,i_item_desc,sr_item_sk,sr_customer_sk,sr_return_quantity]
+                                SortMergeJoin [ss_customer_sk,ss_item_sk,ss_ticket_number,sr_customer_sk,sr_item_sk,sr_ticket_number]
                                   InputAdapter
-                                    WholeStageCodegen (9)
-                                      Sort [ss_item_sk]
+                                    WholeStageCodegen (8)
+                                      Sort [ss_customer_sk,ss_item_sk,ss_ticket_number]
                                         InputAdapter
-                                          Exchange [ss_item_sk] #3
-                                            WholeStageCodegen (8)
-                                              Project [ss_item_sk,ss_quantity,s_state,sr_item_sk,sr_customer_sk,sr_return_quantity]
-                                                SortMergeJoin [ss_customer_sk,ss_item_sk,ss_ticket_number,sr_customer_sk,sr_item_sk,sr_ticket_number]
+                                          Exchange [ss_customer_sk,ss_item_sk,ss_ticket_number] #3
+                                            WholeStageCodegen (7)
+                                              Project [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,s_state,i_item_id,i_item_desc]
+                                                SortMergeJoin [ss_item_sk,i_item_sk]
                                                   InputAdapter
                                                     WholeStageCodegen (4)
-                                                      Sort [ss_customer_sk,ss_item_sk,ss_ticket_number]
+                                                      Sort [ss_item_sk]
                                                         InputAdapter
-                                                          Exchange [ss_customer_sk,ss_item_sk,ss_ticket_number] #4
+                                                          Exchange [ss_item_sk] #4
                                                             WholeStageCodegen (3)
                                                               Project [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,s_state]
                                                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
@@ -55,37 +55,37 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                                                             InputAdapter
                                                                               Scan parquet default.store [s_store_sk,s_state]
                                                   InputAdapter
-                                                    WholeStageCodegen (7)
-                                                      Sort [sr_customer_sk,sr_item_sk,sr_ticket_number]
+                                                    WholeStageCodegen (6)
+                                                      Sort [i_item_sk]
                                                         InputAdapter
-                                                          Exchange [sr_customer_sk,sr_item_sk,sr_ticket_number] #7
-                                                            WholeStageCodegen (6)
-                                                              Project [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity]
-                                                                BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
-                                                                  Filter [sr_customer_sk,sr_item_sk,sr_ticket_number]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.store_returns [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]
-                                                                          SubqueryBroadcast [d_date_sk] #2
-                                                                            ReusedExchange [d_date_sk] #8
+                                                          Exchange [i_item_sk] #7
+                                                            WholeStageCodegen (5)
+                                                              Filter [i_item_sk]
+                                                                ColumnarToRow
                                                                   InputAdapter
-                                                                    BroadcastExchange #8
-                                                                      WholeStageCodegen (5)
-                                                                        Project [d_date_sk]
-                                                                          Filter [d_quarter_name,d_date_sk]
-                                                                            ColumnarToRow
-                                                                              InputAdapter
-                                                                                Scan parquet default.date_dim [d_date_sk,d_quarter_name]
+                                                                    Scan parquet default.item [i_item_sk,i_item_id,i_item_desc]
                                   InputAdapter
                                     WholeStageCodegen (11)
-                                      Sort [i_item_sk]
+                                      Sort [sr_customer_sk,sr_item_sk,sr_ticket_number]
                                         InputAdapter
-                                          Exchange [i_item_sk] #9
+                                          Exchange [sr_customer_sk,sr_item_sk,sr_ticket_number] #8
                                             WholeStageCodegen (10)
-                                              Filter [i_item_sk]
-                                                ColumnarToRow
+                                              Project [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity]
+                                                BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                                                  Filter [sr_customer_sk,sr_item_sk,sr_ticket_number]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.store_returns [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]
+                                                          SubqueryBroadcast [d_date_sk] #2
+                                                            ReusedExchange [d_date_sk] #9
                                                   InputAdapter
-                                                    Scan parquet default.item [i_item_sk,i_item_id,i_item_desc]
+                                                    BroadcastExchange #9
+                                                      WholeStageCodegen (9)
+                                                        Project [d_date_sk]
+                                                          Filter [d_quarter_name,d_date_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.date_dim [d_date_sk,d_quarter_name]
                   InputAdapter
                     WholeStageCodegen (16)
                       Sort [cs_bill_customer_sk,cs_item_sk]
@@ -100,4 +100,4 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                         Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_sold_date_sk]
                                           ReusedSubquery [d_date_sk] #2
                                   InputAdapter
-                                    ReusedExchange [d_date_sk] #8
+                                    ReusedExchange [d_date_sk] #9
