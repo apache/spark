@@ -39,14 +39,17 @@ public interface SupportsPushDownFilters extends ScanBuilder {
 
   /**
    * Returns the filters that are pushed to the data source via {@link #pushFilters(Filter[])}.
-   *
+   * <p>
    * There are 3 kinds of filters:
-   *  1. pushable filters which don't need to be evaluated again after scanning.
-   *  2. pushable filters which still need to be evaluated after scanning, e.g. parquet
-   *     row group filter.
-   *  3. non-pushable filters.
+   * <ol>
+   *  <li>pushable filters which don't need to be evaluated again after scanning.</li>
+   *  <li>pushable filters which still need to be evaluated after scanning, e.g. parquet row
+   *  group filter.</li>
+   *  <li>non-pushable filters.</li>
+   * </ol>
+   * <p>
    * Both case 1 and 2 should be considered as pushed filters and should be returned by this method.
-   *
+   * <p>
    * It's possible that there is no filters in the query and {@link #pushFilters(Filter[])}
    * is never called, empty array should be returned for this case.
    */
