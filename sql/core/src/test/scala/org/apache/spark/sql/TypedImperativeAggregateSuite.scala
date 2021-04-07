@@ -297,7 +297,7 @@ object TypedImperativeAggregateSuite {
       new MaxValue(value, isValueSet)
     }
 
-    override protected def withNewChild(newChild: Expression): Expression = copy(child = newChild)
+    override protected def withNewChildInternal(newChild: Expression): Expression = copy(child = newChild)
   }
 
   private class MaxValue(var value: Int, var isValueSet: Boolean = false)

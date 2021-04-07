@@ -553,7 +553,7 @@ case class UnwrapOption(
     ev.copy(code = code)
   }
 
-  override protected def withNewChild(newChild: Expression): UnwrapOption = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): UnwrapOption = copy(child = newChild)
 }
 
 /**
@@ -585,7 +585,7 @@ case class WrapOption(child: Expression, optType: DataType)
     ev.copy(code = code, isNull = FalseLiteral)
   }
 
-  override protected def withNewChild(newChild: Expression): WrapOption = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): WrapOption = copy(child = newChild)
 }
 
 object LambdaVariable {
@@ -673,7 +673,7 @@ case class UnresolvedMapObjects(
     throw QueryExecutionErrors.customCollectionClsNotResolvedError
   }
 
-  override protected def withNewChild(newChild: Expression): UnresolvedMapObjects =
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedMapObjects =
     copy(child = newChild)
 }
 
@@ -1042,7 +1042,7 @@ case class MapObjects private(
     ev.copy(code = code, isNull = genInputData.isNull)
   }
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     copy(
       loopVar = newFirst.asInstanceOf[LambdaVariable],
@@ -1068,7 +1068,7 @@ case class UnresolvedCatalystToExternalMap(
 
   override def dataType: DataType = ObjectType(collClass)
 
-  override protected def withNewChild(newChild: Expression): UnresolvedCatalystToExternalMap =
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedCatalystToExternalMap =
     copy(child = newChild)
 }
 
@@ -1564,7 +1564,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 
   override def dataType: DataType = BinaryType
 
-  override protected def withNewChild(newChild: Expression): EncodeUsingSerializer =
+  override protected def withNewChildInternal(newChild: Expression): EncodeUsingSerializer =
     copy(child = newChild)
 }
 
@@ -1599,7 +1599,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 
   override def dataType: DataType = ObjectType(tag.runtimeClass)
 
-  override protected def withNewChild(newChild: Expression): DecodeUsingSerializer[T] =
+  override protected def withNewChildInternal(newChild: Expression): DecodeUsingSerializer[T] =
     copy(child = newChild)
 }
 
@@ -1733,7 +1733,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
     ev.copy(code = code, isNull = FalseLiteral, value = childGen.value)
   }
 
-  override protected def withNewChild(newChild: Expression): AssertNotNull =
+  override protected def withNewChildInternal(newChild: Expression): AssertNotNull =
     copy(child = newChild)
 }
 
@@ -1787,7 +1787,7 @@ case class GetExternalRowField(
     ev.copy(code = code, isNull = FalseLiteral)
   }
 
-  override protected def withNewChild(newChild: Expression): GetExternalRowField =
+  override protected def withNewChildInternal(newChild: Expression): GetExternalRowField =
     copy(child = newChild)
 }
 
@@ -1864,6 +1864,6 @@ case class ValidateExternalType(child: Expression, expected: DataType)
     ev.copy(code = code, isNull = input.isNull)
   }
 
-  override protected def withNewChild(newChild: Expression): ValidateExternalType =
+  override protected def withNewChildInternal(newChild: Expression): ValidateExternalType =
     copy(child = newChild)
 }

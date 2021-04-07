@@ -1109,7 +1109,7 @@ case class HashAggregateExec(
     }
   }
 
-  override protected def withNewChild(newChild: SparkPlan): HashAggregateExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): HashAggregateExec =
     copy(child = newChild)
 }
 

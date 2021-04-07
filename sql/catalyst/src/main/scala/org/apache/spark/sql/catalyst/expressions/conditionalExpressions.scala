@@ -96,7 +96,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   override def sql: String = s"(IF(${predicate.sql}, ${trueValue.sql}, ${falseValue.sql}))"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = copy(
     predicate = newFirst,
     trueValue = newSecond,

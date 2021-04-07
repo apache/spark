@@ -37,5 +37,5 @@ case class WriteToMicroBatchDataSource(write: StreamingWrite, query: LogicalPlan
     WriteToDataSourceV2(new MicroBatchWrite(batchId, write), query)
   }
 
-  override protected def withNewChild(newChild: LogicalPlan): LogicalPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(query = newChild)
 }

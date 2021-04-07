@@ -40,6 +40,6 @@ case class SubqueryAdaptiveBroadcastExec(
       "SubqueryAdaptiveBroadcastExec does not support the execute() code path.")
   }
 
-  override protected def withNewChild(newChild: SparkPlan): SubqueryAdaptiveBroadcastExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): SubqueryAdaptiveBroadcastExec =
     copy(child = newChild)
 }

@@ -57,7 +57,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = and(input1, input2)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): BitwiseAnd =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): BitwiseAnd =
     copy(left = newLeft, right = newRight)
 }
 
@@ -96,7 +96,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = or(input1, input2)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): BitwiseOr =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): BitwiseOr =
     copy(left = newLeft, right = newRight)
 }
 
@@ -135,7 +135,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = xor(input1, input2)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): BitwiseXor =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): BitwiseXor =
     copy(left = newLeft, right = newRight)
 }
 
@@ -179,7 +179,7 @@ case class BitwiseNot(child: Expression)
 
   override def sql: String = s"~${child.sql}"
 
-  override protected def withNewChild(newChild: Expression): BitwiseNot = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): BitwiseNot = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -216,7 +216,7 @@ case class BitwiseCount(child: Expression)
     case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
   }
 
-  override protected def withNewChild(newChild: Expression): BitwiseCount = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): BitwiseCount = copy(child = newChild)
 }
 
 object BitwiseGetUtil {
@@ -276,6 +276,6 @@ case class BitwiseGet(left: Expression, right: Expression)
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bit_get")
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): BitwiseGet =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): BitwiseGet =
     copy(left = newLeft, right = newRight)
 }

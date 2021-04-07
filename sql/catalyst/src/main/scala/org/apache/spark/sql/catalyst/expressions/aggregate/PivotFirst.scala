@@ -154,7 +154,7 @@ case class PivotFirst(
   override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): PivotFirst =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): PivotFirst =
     copy(pivotColumn = newLeft, valueColumn = newRight)
 }
 

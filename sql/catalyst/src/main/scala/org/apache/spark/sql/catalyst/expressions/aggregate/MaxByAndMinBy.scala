@@ -111,7 +111,7 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     greatest(oldExpr, newExpr)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): MaxBy =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MaxBy =
     copy(valueExpr = newLeft, orderingExpr = newRight)
 }
 
@@ -134,6 +134,6 @@ case class MinBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     least(oldExpr, newExpr)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): MinBy =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MinBy =
     copy(valueExpr = newLeft, orderingExpr = newRight)
 }

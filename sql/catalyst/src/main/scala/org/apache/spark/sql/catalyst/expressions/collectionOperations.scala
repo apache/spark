@@ -126,7 +126,7 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
     }
   }
 
-  override protected def withNewChild(newChild: Expression): Size = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Size = copy(child = newChild)
 }
 
 object Size {
@@ -162,7 +162,7 @@ case class MapKeys(child: Expression)
 
   override def prettyName: String = "map_keys"
 
-  override protected def withNewChild(newChild: Expression): MapKeys = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): MapKeys = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -359,7 +359,7 @@ case class MapValues(child: Expression)
 
   override def prettyName: String = "map_values"
 
-  override protected def withNewChild(newChild: Expression): MapValues = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): MapValues = copy(child = newChild)
 }
 
 /**
@@ -533,7 +533,7 @@ case class MapEntries(child: Expression)
 
   override def prettyName: String = "map_entries"
 
-  override def withNewChild(newChild: Expression): MapEntries = copy(child = newChild)
+  override def withNewChildInternal(newChild: Expression): MapEntries = copy(child = newChild)
 }
 
 /**
@@ -735,7 +735,7 @@ case class MapFromEntries(child: Expression) extends UnaryExpression with NullIn
 
   override def prettyName: String = "map_from_entries"
 
-  override protected def withNewChild(newChild: Expression): MapFromEntries = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): MapFromEntries = copy(child = newChild)
 }
 
 
@@ -936,7 +936,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 
   override def prettyName: String = "sort_array"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): SortArray =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): SortArray =
     copy(base = newLeft, ascendingOrder = newRight)
 }
 
@@ -1027,7 +1027,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
 
   override def freshCopy(): Shuffle = Shuffle(child, randomSeed)
 
-  override def withNewChild(newChild: Expression): Shuffle = copy(child = newChild)
+  override def withNewChildInternal(newChild: Expression): Shuffle = copy(child = newChild)
 }
 
 /**
@@ -1105,7 +1105,7 @@ case class Reverse(child: Expression)
 
   override def prettyName: String = "reverse"
 
-  override protected def withNewChild(newChild: Expression): Reverse = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Reverse = copy(child = newChild)
 }
 
 /**
@@ -1204,7 +1204,7 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def prettyName: String = "array_contains"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayContains =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayContains =
     copy(left = newLeft, right = newRight)
 }
 
@@ -1430,7 +1430,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   override def prettyName: String = "arrays_overlap"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArraysOverlap =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArraysOverlap =
     copy(left = newLeft, right = newRight)
 }
 
@@ -1546,7 +1546,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
      """.stripMargin
   }
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Slice = copy(
     x = newFirst,
     start = newSecond,
@@ -1803,7 +1803,7 @@ case class ArrayMin(child: Expression)
 
   override def prettyName: String = "array_min"
 
-  override protected def withNewChild(newChild: Expression): ArrayMin = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): ArrayMin = copy(child = newChild)
 }
 
 /**
@@ -1873,7 +1873,7 @@ case class ArrayMax(child: Expression)
 
   override def prettyName: String = "array_max"
 
-  override protected def withNewChild(newChild: Expression): ArrayMax = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): ArrayMax = copy(child = newChild)
 }
 
 
@@ -1954,7 +1954,7 @@ case class ArrayPosition(left: Expression, right: Expression)
     })
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayPosition =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayPosition =
     copy(left = newLeft, right = newRight)
 }
 
@@ -2139,7 +2139,7 @@ case class ElementAt(
 
   override def prettyName: String = "element_at"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ElementAt =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ElementAt =
     copy(left = newLeft, right = newRight)
 }
 
@@ -2463,7 +2463,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
 
   override def prettyName: String = "flatten"
 
-  override protected def withNewChild(newChild: Expression): Flatten = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Flatten = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -3017,7 +3017,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
      """.stripMargin
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayRepeat =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayRepeat =
     copy(left = newLeft, right = newRight)
 }
 
@@ -3134,7 +3134,7 @@ case class ArrayRemove(left: Expression, right: Expression)
 
   override def prettyName: String = "array_remove"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayRemove =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayRemove =
     copy(left = newLeft, right = newRight)
 }
 
@@ -3369,7 +3369,7 @@ case class ArrayDistinct(child: Expression)
 
   override def prettyName: String = "array_distinct"
 
-  override protected def withNewChild(newChild: Expression): ArrayDistinct = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): ArrayDistinct = copy(child = newChild)
 }
 
 /**
@@ -3573,7 +3573,7 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 
   override def prettyName: String = "array_union"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayUnion =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayUnion =
     copy(left = newLeft, right = newRight)
 }
 
@@ -3859,7 +3859,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 
   override def prettyName: String = "array_intersect"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayIntersect =
     copy(left = newLeft, right = newRight)
 }
@@ -4087,6 +4087,6 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 
   override def prettyName: String = "array_except"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): ArrayExcept =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayExcept =
     copy(left = newLeft, right = newRight)
 }

@@ -110,7 +110,7 @@ case class CovPopulation(
   }
   override def prettyName: String = "covar_pop"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): CovPopulation =
     copy(left = newLeft, right = newRight)
 }
@@ -140,6 +140,6 @@ case class CovSample(
   }
   override def prettyName: String = "covar_samp"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): CovSample = copy(left = newLeft, right = newRight)
 }

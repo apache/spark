@@ -209,7 +209,7 @@ case class ApproximatePercentile(
     ApproximatePercentile.serializer.deserialize(bytes)
   }
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): ApproximatePercentile =
     copy(child = newFirst, percentageExpression = newSecond, accuracyExpression = newThird)
 }

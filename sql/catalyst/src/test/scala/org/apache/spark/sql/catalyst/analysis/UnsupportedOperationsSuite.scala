@@ -998,7 +998,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   case class StreamingPlanWrapper(child: LogicalPlan) extends UnaryNode {
     override def output: Seq[Attribute] = child.output
     override def isStreaming: Boolean = true
-    override protected def withNewChild(newChild: LogicalPlan): LogicalPlan = copy(child = newChild)
+    override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(child = newChild)
   }
 
   case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {

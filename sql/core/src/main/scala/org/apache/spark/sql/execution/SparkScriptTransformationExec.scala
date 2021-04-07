@@ -73,7 +73,7 @@ case class SparkScriptTransformationExec(
     outputIterator
   }
 
-  override protected def withNewChild(newChild: SparkPlan): SparkScriptTransformationExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkScriptTransformationExec =
     copy(child = newChild)
 }
 

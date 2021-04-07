@@ -746,7 +746,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
 
   object MalformedClassObject extends Serializable {
     case class MalformedNameExpression(child: Expression) extends TaggingExpression {
-      override protected def withNewChild(newChild: Expression): Expression = copy(child = newChild)
+      override protected def withNewChildInternal(newChild: Expression): Expression = copy(child = newChild)
     }
   }
 

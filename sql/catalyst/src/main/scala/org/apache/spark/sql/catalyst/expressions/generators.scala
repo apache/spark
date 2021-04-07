@@ -279,7 +279,7 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
 
   override lazy val resolved: Boolean = false
 
-  override protected def withNewChild(newChild: Expression): GeneratorOuter =
+  override protected def withNewChildInternal(newChild: Expression): GeneratorOuter =
     copy(child = newChild.asInstanceOf[Generator])
 }
 
@@ -381,7 +381,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 // scalastyle:on line.size.limit
 case class Explode(child: Expression) extends ExplodeBase {
   override val position: Boolean = false
-  override protected def withNewChild(newChild: Expression): Explode = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Explode = copy(child = newChild)
 }
 
 /**
@@ -407,7 +407,7 @@ case class Explode(child: Expression) extends ExplodeBase {
 // scalastyle:on line.size.limit line.contains.tab
 case class PosExplode(child: Expression) extends ExplodeBase {
   override val position = true
-  override protected def withNewChild(newChild: Expression): PosExplode = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): PosExplode = copy(child = newChild)
 }
 
 /**
@@ -460,5 +460,5 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
     child.genCode(ctx)
   }
 
-  override protected def withNewChild(newChild: Expression): Inline = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Inline = copy(child = newChild)
 }

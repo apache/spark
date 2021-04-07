@@ -230,6 +230,6 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   override def dataType: DataType = LongType
 
-  override protected def withNewChild(newChild: Expression): SortPrefix =
+  override protected def withNewChildInternal(newChild: Expression): SortPrefix =
     copy(child = newChild.asInstanceOf[SortOrder])
 }

@@ -76,7 +76,7 @@ case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract 
     xpathUtil.evalBoolean(xml.asInstanceOf[UTF8String].toString, pathString)
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): XPathBoolean =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): XPathBoolean =
     copy(xml = newLeft, path = newRight)
 }
 
@@ -100,7 +100,7 @@ case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
     if (ret eq null) null else ret.shortValue()
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): XPathShort =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): XPathShort =
     copy(xml = newLeft, path = newRight)
 }
 
@@ -124,7 +124,7 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
     if (ret eq null) null else ret.intValue()
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(xml = newLeft, path = newRight)
 }
 
@@ -148,7 +148,7 @@ case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
     if (ret eq null) null else ret.longValue()
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): XPathLong =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): XPathLong =
     copy(xml = newLeft, path = newRight)
 }
 
@@ -172,7 +172,7 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
     if (ret eq null) null else ret.floatValue()
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): XPathFloat =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): XPathFloat =
     copy(xml = newLeft, path = newRight)
 }
 
@@ -197,7 +197,7 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
     if (ret eq null) null else ret.doubleValue()
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): XPathDouble =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): XPathDouble =
     copy(xml = newLeft, path = newRight)
 }
 
@@ -221,7 +221,7 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
     UTF8String.fromString(ret)
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(xml = newLeft, path = newRight)
 }
 
@@ -255,6 +255,6 @@ case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
     }
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): XPathList =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): XPathList =
     copy(xml = newLeft, path = newRight)
 }

@@ -139,7 +139,7 @@ case class HyperLogLogPlusPlus(
     hllppHelper.query(buffer, mutableAggBufferOffset)
   }
 
-  override protected def withNewChild(newChild: Expression): HyperLogLogPlusPlus =
+  override protected def withNewChildInternal(newChild: Expression): HyperLogLogPlusPlus =
     copy(child = newChild)
 }
 

@@ -94,5 +94,5 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     /* count = */ If(child.isNull, count, count + 1L)
   )
 
-  override protected def withNewChild(newChild: Expression): Average = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Average = copy(child = newChild)
 }

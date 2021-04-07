@@ -336,7 +336,7 @@ case class GetJsonObject(json: Expression, path: Expression)
     }
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): GetJsonObject =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): GetJsonObject =
     copy(json = newLeft, path = newRight)
 }
 
@@ -616,7 +616,7 @@ case class JsonToStructs(
 
   override def prettyName: String = "from_json"
 
-  override protected def withNewChild(newChild: Expression): JsonToStructs = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): JsonToStructs = copy(child = newChild)
 }
 
 /**
@@ -740,7 +740,7 @@ case class StructsToJson(
 
   override def prettyName: String = "to_json"
 
-  override protected def withNewChild(newChild: Expression): StructsToJson = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): StructsToJson = copy(child = newChild)
 }
 
 /**
@@ -816,7 +816,7 @@ case class SchemaOfJson(
 
   override def prettyName: String = "schema_of_json"
 
-  override protected def withNewChild(newChild: Expression): SchemaOfJson = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): SchemaOfJson = copy(child = newChild)
 }
 
 /**
@@ -887,7 +887,7 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
     length
   }
 
-  override protected def withNewChild(newChild: Expression): LengthOfJsonArray =
+  override protected def withNewChildInternal(newChild: Expression): LengthOfJsonArray =
     copy(child = newChild)
 }
 
@@ -959,5 +959,5 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
     new GenericArrayData(arrayBufferOfKeys.toArray)
   }
 
-  override protected def withNewChild(newChild: Expression): JsonObjectKeys = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys = copy(child = newChild)
 }

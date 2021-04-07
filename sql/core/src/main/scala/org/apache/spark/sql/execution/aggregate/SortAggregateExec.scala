@@ -102,6 +102,6 @@ case class SortAggregateExec(
     }
   }
 
-  override protected def withNewChild(newChild: SparkPlan): SortAggregateExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): SortAggregateExec =
     copy(child = newChild)
 }

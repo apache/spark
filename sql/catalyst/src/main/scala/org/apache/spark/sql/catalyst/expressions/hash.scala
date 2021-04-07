@@ -70,7 +70,7 @@ case class Md5(child: Expression)
       s"UTF8String.fromString(${classOf[DigestUtils].getName}.md5Hex($c))")
   }
 
-  override protected def withNewChild(newChild: Expression): Md5 = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Md5 = copy(child = newChild)
 }
 
 /**
@@ -155,7 +155,7 @@ case class Sha2(left: Expression, right: Expression)
     })
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Sha2 =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Sha2 =
     copy(left = newLeft, right = newRight)
 }
 
@@ -188,7 +188,7 @@ case class Sha1(child: Expression)
     )
   }
 
-  override protected def withNewChild(newChild: Expression): Sha1 = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Sha1 = copy(child = newChild)
 }
 
 /**
@@ -229,7 +229,7 @@ case class Crc32(child: Expression)
     })
   }
 
-  override protected def withNewChild(newChild: Expression): Crc32 = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Crc32 = copy(child = newChild)
 }
 
 

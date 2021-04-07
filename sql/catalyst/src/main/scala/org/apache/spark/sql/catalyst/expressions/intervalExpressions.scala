@@ -50,37 +50,37 @@ abstract class ExtractIntervalPart(
 
 case class ExtractIntervalYears(child: Expression)
   extends ExtractIntervalPart(child, IntegerType, getYears, "getYears") {
-  override protected def withNewChild(newChild: Expression): ExtractIntervalYears =
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalYears =
     copy(child = newChild)
 }
 
 case class ExtractIntervalMonths(child: Expression)
   extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths") {
-  override protected def withNewChild(newChild: Expression): ExtractIntervalMonths =
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMonths =
     copy(child = newChild)
 }
 
 case class ExtractIntervalDays(child: Expression)
   extends ExtractIntervalPart(child, IntegerType, getDays, "getDays") {
-  override protected def withNewChild(newChild: Expression): ExtractIntervalDays =
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalDays =
     copy(child = newChild)
 }
 
 case class ExtractIntervalHours(child: Expression)
   extends ExtractIntervalPart(child, LongType, getHours, "getHours") {
-  override protected def withNewChild(newChild: Expression): ExtractIntervalHours =
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalHours =
     copy(child = newChild)
 }
 
 case class ExtractIntervalMinutes(child: Expression)
   extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes") {
-  override protected def withNewChild(newChild: Expression): ExtractIntervalMinutes =
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMinutes =
     copy(child = newChild)
 }
 
 case class ExtractIntervalSeconds(child: Expression)
   extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds") {
-  override protected def withNewChild(newChild: Expression): ExtractIntervalSeconds =
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalSeconds =
     copy(child = newChild)
 }
 
@@ -138,7 +138,7 @@ case class MultiplyInterval(
 
   override protected def operationName: String = if (failOnError) "multiplyExact" else "multiply"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(interval = newLeft, num = newRight)
 }
 
@@ -153,7 +153,7 @@ case class DivideInterval(
 
   override protected def operationName: String = if (failOnError) "divideExact" else "divide"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): DivideInterval =
     copy(interval = newLeft, num = newRight)
 }
@@ -336,7 +336,7 @@ case class MultiplyYMInterval(
 
   override def toString: String = s"($left * $right)"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): MultiplyYMInterval =
     copy(interval = newLeft, num = newRight)
 }
@@ -382,7 +382,7 @@ case class MultiplyDTInterval(
 
   override def toString: String = s"($left * $right)"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): MultiplyDTInterval =
     copy(interval = newLeft, num = newRight)
 }
@@ -440,7 +440,7 @@ case class DivideYMInterval(
 
   override def toString: String = s"($left / $right)"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): DivideYMInterval =
     copy(interval = newLeft, num = newRight)
 }
@@ -487,7 +487,7 @@ case class DivideDTInterval(
 
   override def toString: String = s"($left / $right)"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): DivideDTInterval =
     copy(interval = newLeft, num = newRight)
 }

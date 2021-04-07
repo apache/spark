@@ -105,5 +105,5 @@ case class ExprReuseOutput(child: Expression) extends UnaryExpression {
     row
   }
 
-  override protected def withNewChild(newChild: Expression): Expression = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Expression = copy(child = newChild)
 }

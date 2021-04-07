@@ -326,5 +326,5 @@ case class GenerateExec(
     else Seq.empty
   }
 
-  override protected def withNewChild(newChild: SparkPlan): GenerateExec = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): GenerateExec = copy(child = newChild)
 }

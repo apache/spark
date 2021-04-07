@@ -41,7 +41,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression with NullInt
     defineCodeGen(ctx, ev, c => s"$c.toUnscaledLong()")
   }
 
-  override protected def withNewChild(newChild: Expression): UnscaledValue = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): UnscaledValue = copy(child = newChild)
 }
 
 /**
@@ -92,7 +92,7 @@ case class MakeDecimal(
     })
   }
 
-  override protected def withNewChild(newChild: Expression): MakeDecimal = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): MakeDecimal = copy(child = newChild)
 }
 
 object MakeDecimal {
@@ -116,7 +116,7 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
   override def sql: String = child.sql
   override lazy val canonicalized: Expression = child.canonicalized
 
-  override protected def withNewChild(newChild: Expression): Expression = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Expression = copy(child = newChild)
 }
 
 /**
@@ -152,7 +152,7 @@ case class CheckOverflow(
 
   override def sql: String = child.sql
 
-  override protected def withNewChild(newChild: Expression): CheckOverflow = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): CheckOverflow = copy(child = newChild)
 }
 
 // A variant `CheckOverflow`, which treats null as overflow. This is necessary in `Sum`.
@@ -203,6 +203,6 @@ case class CheckOverflowInSum(
 
   override def sql: String = child.sql
 
-  override protected def withNewChild(newChild: Expression): CheckOverflowInSum =
+  override protected def withNewChildInternal(newChild: Expression): CheckOverflowInSum =
     copy(child = newChild)
 }

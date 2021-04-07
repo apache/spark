@@ -250,7 +250,7 @@ case class ApproxCountDistinctForIntervals(
     override def setLong(offset: Int, value: Long): Unit = { array(offset) = value }
   }
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ApproxCountDistinctForIntervals =
     copy(child = newLeft, endpointsExpression = newRight)
 }

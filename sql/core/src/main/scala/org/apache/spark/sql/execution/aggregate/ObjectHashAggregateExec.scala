@@ -139,7 +139,7 @@ case class ObjectHashAggregateExec(
     }
   }
 
-  override protected def withNewChild(newChild: SparkPlan): ObjectHashAggregateExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): ObjectHashAggregateExec =
     copy(child = newChild)
 }
 

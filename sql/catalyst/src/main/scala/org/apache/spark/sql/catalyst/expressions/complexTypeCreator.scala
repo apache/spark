@@ -321,7 +321,7 @@ case class MapFromArrays(left: Expression, right: Expression)
 
   override def prettyName: String = "map_from_arrays"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): MapFromArrays =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MapFromArrays =
     copy(left = newLeft, right = newRight)
 }
 
@@ -589,7 +589,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def prettyName: String = "str_to_map"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = copy(
     text = newFirst,
     pairDelim = newSecond,
@@ -647,7 +647,7 @@ case class WithField(name: String, valExpr: Expression)
 
   override def prettyName: String = "WithField"
 
-  override protected def withNewChild(newChild: Expression): WithField =
+  override protected def withNewChildInternal(newChild: Expression): WithField =
     copy(valExpr = newChild)
 }
 

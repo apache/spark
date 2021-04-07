@@ -70,7 +70,7 @@ case class BitAndAgg(child: Expression) extends BitAggregate {
     BitwiseAnd(left, right)
   }
 
-  override protected def withNewChild(newChild: Expression): BitAndAgg = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): BitAndAgg = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -90,7 +90,7 @@ case class BitOrAgg(child: Expression) extends BitAggregate {
     BitwiseOr(left, right)
   }
 
-  override protected def withNewChild(newChild: Expression): BitOrAgg = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): BitOrAgg = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -110,5 +110,5 @@ case class BitXorAgg(child: Expression) extends BitAggregate {
     BitwiseXor(left, right)
   }
 
-  override protected def withNewChild(newChild: Expression): Expression = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Expression = copy(child = newChild)
 }

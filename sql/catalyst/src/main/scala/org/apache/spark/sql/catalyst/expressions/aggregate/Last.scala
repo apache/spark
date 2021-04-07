@@ -116,5 +116,5 @@ case class Last(child: Expression, ignoreNulls: Boolean)
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 
-  override protected def withNewChild(newChild: Expression): Last = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Last = copy(child = newChild)
 }

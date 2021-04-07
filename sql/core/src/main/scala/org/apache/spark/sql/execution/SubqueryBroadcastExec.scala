@@ -114,7 +114,7 @@ case class SubqueryBroadcastExec(
 
   override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
 
-  override protected def withNewChild(newChild: SparkPlan): SubqueryBroadcastExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): SubqueryBroadcastExec =
     copy(child = newChild)
 }
 

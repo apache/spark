@@ -583,7 +583,7 @@ class ColumnarAlias(child: ColumnarExpression, name: String)(
 
   override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
 
-  override protected def withNewChild(newChild: Expression): ColumnarAlias =
+  override protected def withNewChildInternal(newChild: Expression): ColumnarAlias =
     new ColumnarAlias(newChild.asInstanceOf[ColumnarExpression], name)(exprId, qualifier,
       explicitMetadata, nonInheritableMetadataKeys)
 }
@@ -646,7 +646,7 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def hashCode(): Int = super.hashCode()
 
-  override def withNewChild(newChild: SparkPlan): ColumnarProjectExec =
+  override def withNewChildInternal(newChild: SparkPlan): ColumnarProjectExec =
     new ColumnarProjectExec(projectList, newChild)
 }
 
@@ -713,7 +713,7 @@ class BrokenColumnarAdd(
     ret
   }
 
-  override def withNewChildren(newLeft: Expression, newRight: Expression): BrokenColumnarAdd =
+  override def withNewChildrenInternal(newLeft: Expression, newRight: Expression): BrokenColumnarAdd =
     new BrokenColumnarAdd(
       left = newLeft.asInstanceOf[ColumnarExpression],
       right = newRight.asInstanceOf[ColumnarExpression], failOnError)
@@ -793,7 +793,7 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
   override def child: SparkPlan = delegate.child
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning
-  override protected def withNewChild(newChild: SparkPlan): SparkPlan =
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     super.legacyWithNewChildren(Seq(newChild))
 }
 
@@ -813,7 +813,7 @@ case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends Broa
   override def doExecuteBroadcast[T](): Broadcast[T] = delegate.executeBroadcast()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning
 
-  override protected def withNewChild(newChild: SparkPlan): SparkPlan =
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     super.legacyWithNewChildren(Seq(newChild))
 }
 
@@ -833,7 +833,7 @@ class ReplacedRowToColumnarExec(override val child: SparkPlan)
 
   override def hashCode(): Int = super.hashCode()
 
-  override def withNewChild(newChild: SparkPlan): ReplacedRowToColumnarExec =
+  override def withNewChildInternal(newChild: SparkPlan): ReplacedRowToColumnarExec =
     new ReplacedRowToColumnarExec(newChild)
 }
 

@@ -886,7 +886,7 @@ trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
       this.asInstanceOf[T]
     } else {
       CurrentOrigin.withOrigin(origin) {
-        val res = withNewChild(newChild)
+        val res = withNewChildInternal(newChild)
         res.copyTagsFrom(this.asInstanceOf[T])
         res
       }
@@ -895,10 +895,10 @@ trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
 
   override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
     assert(newChildren.size == 1, "Incorrect number of children")
-    withNewChild(newChildren.head)
+    withNewChildInternal(newChildren.head)
   }
 
-  protected def withNewChild(newChild: T): T
+  protected def withNewChildInternal(newChild: T): T
 }
 
 trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
@@ -916,7 +916,7 @@ trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
       this.asInstanceOf[T]
     } else {
       CurrentOrigin.withOrigin(origin) {
-        val res = withNewChildren(newLeft, newRight)
+        val res = withNewChildrenInternal(newLeft, newRight)
         res.copyTagsFrom(this.asInstanceOf[T])
         res
       }
@@ -925,10 +925,10 @@ trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
 
   override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
     assert(newChildren.size == 2, "Incorrect number of children")
-    withNewChildren(newChildren(0), newChildren(1))
+    withNewChildrenInternal(newChildren(0), newChildren(1))
   }
 
-  protected def withNewChildren(newLeft: T, newRight: T): T
+  protected def withNewChildrenInternal(newLeft: T, newRight: T): T
 }
 
 trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
@@ -949,7 +949,7 @@ trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
       this.asInstanceOf[T]
     } else {
       CurrentOrigin.withOrigin(origin) {
-        val res = withNewChildren(newFirst, newSecond, newThird)
+        val res = withNewChildrenInternal(newFirst, newSecond, newThird)
         res.copyTagsFrom(this.asInstanceOf[T])
         res
       }
@@ -958,10 +958,10 @@ trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
 
   override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
     assert(newChildren.size == 3, "Incorrect number of children")
-    withNewChildren(newChildren(0), newChildren(1), newChildren(2))
+    withNewChildrenInternal(newChildren(0), newChildren(1), newChildren(2))
   }
 
-  protected def withNewChildren(newFirst: T, newSecond: T, newThird: T): T
+  protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T): T
 }
 
 trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
@@ -971,10 +971,31 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def fourth: T
   @transient override final lazy val children: Seq[T] = first :: second :: third :: fourth :: Nil
 
-  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
-    assert(newChildren.size == 4, "Incorrect number of children")
-    withNewChildren(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+  override final def mapChildren(f: T => T): T = {
+    var newFirst = f(first)
+    newFirst = if (newFirst fastEquals first) first else newFirst
+    var newSecond = f(second)
+    newSecond = if (newSecond fastEquals second) second else newSecond
+    var newThird = f(third)
+    newThird = if (newThird fastEquals third) third else newThird
+    var newFourth = f(fourth)
+    newFourth = if (newFourth fastEquals fourth) fourth else newFourth
+
+    if (newFirst.eq(first) && newSecond.eq(second) && newThird.eq(third) && newFourth.eq(fourth)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newFirst, newSecond, newThird, newFourth)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
   }
 
-  protected def withNewChildren(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
+  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
+    assert(newChildren.size == 4, "Incorrect number of children")
+    withNewChildrenInternal(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+  }
+
+  protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
 }

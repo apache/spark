@@ -128,6 +128,6 @@ case class Corr(
 
   override def prettyName: String = "corr"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Corr =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Corr =
     copy(x = newLeft, y = newRight)
 }

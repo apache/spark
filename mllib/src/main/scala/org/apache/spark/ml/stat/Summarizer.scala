@@ -373,7 +373,7 @@ private[spark] object SummaryBuilderImpl extends Logging {
     override def left: Expression = featuresExpr
     override def right: Expression = weightExpr
 
-    override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+    override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
       copy(featuresExpr = newLeft, weightExpr = newRight)
 
     override def update(state: SummarizerBuffer, row: InternalRow): SummarizerBuffer = {

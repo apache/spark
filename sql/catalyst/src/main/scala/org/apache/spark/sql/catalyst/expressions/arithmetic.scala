@@ -106,7 +106,7 @@ case class UnaryMinus(
     }
   }
 
-  override protected def withNewChild(newChild: Expression): UnaryMinus = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): UnaryMinus = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -134,7 +134,7 @@ case class UnaryPositive(child: Expression)
 
   override def sql: String = s"(+ ${child.sql})"
 
-  override protected def withNewChild(newChild: Expression): UnaryPositive = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): UnaryPositive = copy(child = newChild)
 }
 
 /**
@@ -188,7 +188,7 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 
-  override protected def withNewChild(newChild: Expression): Abs = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
 }
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
@@ -316,7 +316,7 @@ case class Add(
 
   override def exactMathMethod: Option[String] = Some("addExact")
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Add =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Add =
     copy(left = newLeft, right = newRight)
 }
 
@@ -362,7 +362,7 @@ case class Subtract(
 
   override def exactMathMethod: Option[String] = Some("subtractExact")
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Subtract =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Subtract =
     copy(left = newLeft, right = newRight)
 }
 
@@ -393,7 +393,7 @@ case class Multiply(
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Multiply =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Multiply =
     copy(left = newLeft, right = newRight)
 }
 
@@ -522,7 +522,7 @@ case class Divide(
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Divide =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Divide =
     copy(left = newLeft, right = newRight)
 }
 
@@ -572,7 +572,7 @@ case class IntegralDivide(
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): IntegralDivide =
     copy(left = newLeft, right = newRight)
 }
@@ -630,7 +630,7 @@ case class Remainder(
 
   override def evalOperation(left: Any, right: Any): Any = mod(left, right)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Remainder =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Remainder =
     copy(left = newLeft, right = newRight)
 }
 
@@ -817,7 +817,7 @@ case class Pmod(
 
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Pmod =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Pmod =
     copy(left = newLeft, right = newRight)
 }
 

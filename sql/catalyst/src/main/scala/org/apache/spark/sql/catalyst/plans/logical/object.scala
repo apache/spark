@@ -80,7 +80,7 @@ case class DeserializeToObject(
     deserializer: Expression,
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
-  override protected def withNewChild(newChild: LogicalPlan): DeserializeToObject =
+  override protected def withNewChildInternal(newChild: LogicalPlan): DeserializeToObject =
     copy(child = newChild)
 }
 
@@ -94,7 +94,7 @@ case class SerializeFromObject(
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
-  override protected def withNewChild(newChild: LogicalPlan): SerializeFromObject =
+  override protected def withNewChildInternal(newChild: LogicalPlan): SerializeFromObject =
     copy(child = newChild)
 }
 
@@ -118,7 +118,7 @@ case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
-  override protected def withNewChild(newChild: LogicalPlan): MapPartitions = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapPartitions = copy(child = newChild)
 }
 
 object MapPartitionsInR {
@@ -168,7 +168,7 @@ case class MapPartitionsInR(
   override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
     outputObjAttr, child)
 
-  override protected def withNewChild(newChild: LogicalPlan): MapPartitionsInR =
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapPartitionsInR =
     copy(child = newChild)
 }
 
@@ -194,7 +194,7 @@ case class MapPartitionsInRWithArrow(
 
   override val producedAttributes = AttributeSet(output)
 
-  override protected def withNewChild(newChild: LogicalPlan): MapPartitionsInRWithArrow =
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapPartitionsInRWithArrow =
     copy(child = newChild)
 }
 
@@ -222,7 +222,7 @@ case class MapElements(
     argumentSchema: StructType,
     outputObjAttr: Attribute,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
-  override protected def withNewChild(newChild: LogicalPlan): MapElements = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapElements = copy(child = newChild)
 }
 
 object TypedFilter {
@@ -268,7 +268,7 @@ case class TypedFilter(
     Invoke(funcObj, funcMethod._2, BooleanType, input :: Nil)
   }
 
-  override protected def withNewChild(newChild: LogicalPlan): TypedFilter = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): TypedFilter = copy(child = newChild)
 }
 
 object FunctionUtils {
@@ -353,7 +353,7 @@ case class AppendColumns(
 
   def newColumns: Seq[Attribute] = serializer.map(_.toAttribute)
 
-  override protected def withNewChild(newChild: LogicalPlan): AppendColumns = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): AppendColumns = copy(child = newChild)
 }
 
 /**
@@ -367,7 +367,7 @@ case class AppendColumnsWithObject(
 
   override def output: Seq[Attribute] = (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
 
-  override protected def withNewChild(newChild: LogicalPlan): AppendColumnsWithObject =
+  override protected def withNewChildInternal(newChild: LogicalPlan): AppendColumnsWithObject =
     copy(child = newChild)
 }
 
@@ -406,7 +406,7 @@ case class MapGroups(
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
-  override protected def withNewChild(newChild: LogicalPlan): MapGroups = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapGroups = copy(child = newChild)
 }
 
 /** Internal class representing State */
@@ -479,7 +479,7 @@ case class FlatMapGroupsWithState(
     assert(outputMode == OutputMode.Update)
   }
 
-  override protected def withNewChild(newChild: LogicalPlan): FlatMapGroupsWithState =
+  override protected def withNewChildInternal(newChild: LogicalPlan): FlatMapGroupsWithState =
     copy(child = newChild)
 }
 
@@ -542,7 +542,7 @@ case class FlatMapGroupsInR(
     keyDeserializer, valueDeserializer, groupingAttributes, dataAttributes, outputObjAttr,
     child)
 
-  override protected def withNewChild(newChild: LogicalPlan): FlatMapGroupsInR =
+  override protected def withNewChildInternal(newChild: LogicalPlan): FlatMapGroupsInR =
     copy(child = newChild)
 }
 
@@ -569,7 +569,7 @@ case class FlatMapGroupsInRWithArrow(
 
   override val producedAttributes = AttributeSet(output)
 
-  override protected def withNewChild(newChild: LogicalPlan): FlatMapGroupsInRWithArrow =
+  override protected def withNewChildInternal(newChild: LogicalPlan): FlatMapGroupsInRWithArrow =
     copy(child = newChild)
 }
 
@@ -619,6 +619,6 @@ case class CoGroup(
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer {
-  override protected def withNewChildren(newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup =
+  override protected def withNewChildrenInternal(newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup =
     copy(left = newLeft, right = newRight)
 }

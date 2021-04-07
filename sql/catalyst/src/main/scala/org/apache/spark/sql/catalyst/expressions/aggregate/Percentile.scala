@@ -305,7 +305,7 @@ case class Percentile(
     }
   }
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Percentile = copy(
     child = newFirst,
     percentageExpression = newSecond,

@@ -43,7 +43,7 @@ abstract class PartitionTransformExpression extends Expression with Unevaluable
  */
 case class Years(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override protected def withNewChild(newChild: Expression): Years = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Years = copy(child = newChild)
 }
 
 /**
@@ -51,7 +51,7 @@ case class Years(child: Expression) extends PartitionTransformExpression {
  */
 case class Months(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override protected def withNewChild(newChild: Expression): Months = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Months = copy(child = newChild)
 }
 
 /**
@@ -59,7 +59,7 @@ case class Months(child: Expression) extends PartitionTransformExpression {
  */
 case class Days(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override protected def withNewChild(newChild: Expression): Days = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Days = copy(child = newChild)
 }
 
 /**
@@ -67,7 +67,7 @@ case class Days(child: Expression) extends PartitionTransformExpression {
  */
 case class Hours(child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override protected def withNewChild(newChild: Expression): Hours = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Hours = copy(child = newChild)
 }
 
 /**
@@ -75,5 +75,5 @@ case class Hours(child: Expression) extends PartitionTransformExpression {
  */
 case class Bucket(numBuckets: Literal, child: Expression) extends PartitionTransformExpression {
   override def dataType: DataType = IntegerType
-  override protected def withNewChild(newChild: Expression): Bucket = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Bucket = copy(child = newChild)
 }

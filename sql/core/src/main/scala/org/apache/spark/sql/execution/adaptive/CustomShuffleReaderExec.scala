@@ -196,6 +196,6 @@ case class CustomShuffleReaderExec private(
     shuffleRDD.asInstanceOf[RDD[ColumnarBatch]]
   }
 
-  override protected def withNewChild(newChild: SparkPlan): CustomShuffleReaderExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): CustomShuffleReaderExec =
     copy(child = newChild)
 }

@@ -136,7 +136,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
 
-  override protected def withNewChild(newChild: SparkPlan): DataWritingCommandExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): DataWritingCommandExec =
     copy(child = newChild)
 }
 

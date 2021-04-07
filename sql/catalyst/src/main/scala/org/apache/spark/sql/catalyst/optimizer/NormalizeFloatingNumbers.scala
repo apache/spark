@@ -212,6 +212,6 @@ case class NormalizeNaNAndZero(child: Expression) extends UnaryExpression with E
     nullSafeCodeGen(ctx, ev, codeToNormalize)
   }
 
-  override protected def withNewChild(newChild: Expression): NormalizeNaNAndZero =
+  override protected def withNewChildInternal(newChild: Expression): NormalizeNaNAndZero =
     copy(child = newChild)
 }

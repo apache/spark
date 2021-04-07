@@ -149,5 +149,5 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     case _ => sum
   }
 
-  override protected def withNewChild(newChild: Expression): Sum = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Sum = copy(child = newChild)
 }

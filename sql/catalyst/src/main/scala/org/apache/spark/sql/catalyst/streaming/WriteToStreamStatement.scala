@@ -58,7 +58,7 @@ case class WriteToStreamStatement(
 
   override def child: LogicalPlan = inputQuery
 
-  override protected def withNewChild(newChild: LogicalPlan): WriteToStreamStatement =
+  override protected def withNewChildInternal(newChild: LogicalPlan): WriteToStreamStatement =
     copy(inputQuery = newChild)
 }
 

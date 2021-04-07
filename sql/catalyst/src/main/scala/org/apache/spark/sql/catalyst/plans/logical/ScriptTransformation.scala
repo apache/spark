@@ -36,7 +36,7 @@ case class ScriptTransformation(
   @transient
   override lazy val references: AttributeSet = AttributeSet(input.flatMap(_.references))
 
-  override protected def withNewChild(newChild: LogicalPlan): ScriptTransformation =
+  override protected def withNewChildInternal(newChild: LogicalPlan): ScriptTransformation =
     copy(child = newChild)
 }
 

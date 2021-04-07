@@ -57,5 +57,5 @@ case class CountIf(predicate: Expression) extends UnevaluableAggregate with Impl
       )
   }
 
-  override protected def withNewChild(newChild: Expression): CountIf = copy(predicate = newChild)
+  override protected def withNewChildInternal(newChild: Expression): CountIf = copy(predicate = newChild)
 }

@@ -119,7 +119,7 @@ case class First(child: Expression, ignoreNulls: Boolean)
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
 
-  override protected def withNewChild(newChild: Expression): First = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): First = copy(child = newChild)
 }
 
 object FirstLast {

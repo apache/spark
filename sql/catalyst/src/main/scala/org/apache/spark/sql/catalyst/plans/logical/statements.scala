@@ -167,7 +167,7 @@ case class CreateTableAsSelectStatement(
     ifNotExists: Boolean) extends UnaryParsedStatement {
 
   override def child: LogicalPlan = asSelect
-  override protected def withNewChild(newChild: LogicalPlan): CreateTableAsSelectStatement =
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateTableAsSelectStatement =
     copy(asSelect = newChild)
 }
 
@@ -184,7 +184,7 @@ case class CreateViewStatement(
     allowExisting: Boolean,
     replace: Boolean,
     viewType: ViewType) extends UnaryParsedStatement {
-  override protected def withNewChild(newChild: LogicalPlan): CreateViewStatement =
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateViewStatement =
     copy(child = newChild)
 }
 
@@ -225,7 +225,7 @@ case class ReplaceTableAsSelectStatement(
     orCreate: Boolean) extends UnaryParsedStatement {
 
   override def child: LogicalPlan = asSelect
-  override protected def withNewChild(newChild: LogicalPlan): ReplaceTableAsSelectStatement =
+  override protected def withNewChildInternal(newChild: LogicalPlan): ReplaceTableAsSelectStatement =
     copy(asSelect = newChild)
 }
 
@@ -307,7 +307,7 @@ case class InsertIntoStatement(
     "IF NOT EXISTS is only valid with static partitions")
 
   override def child: LogicalPlan = query
-  override protected def withNewChild(newChild: LogicalPlan): InsertIntoStatement =
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
 }
 

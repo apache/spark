@@ -168,7 +168,7 @@ case class StddevPop(
 
   override def prettyName: String = "stddev_pop"
 
-  override protected def withNewChild(newChild: Expression): StddevPop = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): StddevPop = copy(child = newChild)
 }
 
 // Compute the sample standard deviation of a column
@@ -200,7 +200,7 @@ case class StddevSamp(
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("stddev_samp")
 
-  override protected def withNewChild(newChild: Expression): StddevSamp = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): StddevSamp = copy(child = newChild)
 }
 
 // Compute the population variance of a column
@@ -228,7 +228,7 @@ case class VariancePop(
 
   override def prettyName: String = "var_pop"
 
-  override protected def withNewChild(newChild: Expression): VariancePop = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): VariancePop = copy(child = newChild)
 }
 
 // Compute the sample variance of a column
@@ -257,7 +257,7 @@ case class VarianceSamp(
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("var_samp")
 
-  override protected def withNewChild(newChild: Expression): VarianceSamp = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): VarianceSamp = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -287,7 +287,7 @@ case class Skewness(
       If(m2 === 0.0, divideByZeroEvalResult, sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
   }
 
-  override protected def withNewChild(newChild: Expression): Skewness = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Skewness = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -317,5 +317,5 @@ case class Kurtosis(
 
   override def prettyName: String = "kurtosis"
 
-  override protected def withNewChild(newChild: Expression): Kurtosis = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Kurtosis = copy(child = newChild)
 }

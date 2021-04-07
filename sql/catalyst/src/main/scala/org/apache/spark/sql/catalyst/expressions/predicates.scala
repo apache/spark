@@ -323,7 +323,7 @@ case class Not(child: Expression)
 
   override def sql: String = s"(NOT ${child.sql})"
 
-  override protected def withNewChild(newChild: Expression): Not = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Not = copy(child = newChild)
 }
 
 /**
@@ -634,7 +634,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     s"($valueSQL IN ($listSQL))"
   }
 
-  override protected def withNewChild(newChild: Expression): InSet = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): InSet = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -719,7 +719,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     }
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): And =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): And =
     copy(left = newLeft, right = newRight)
 }
 
@@ -806,7 +806,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     }
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Or =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Or =
     copy(left = newLeft, right = newRight)
 }
 
@@ -894,7 +894,7 @@ case class EqualTo(left: Expression, right: Expression)
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): EqualTo =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): EqualTo =
     copy(left = newLeft, right = newRight)
 }
 
@@ -958,7 +958,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
            (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = FalseLiteral)
   }
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): EqualNullSafe =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): EqualNullSafe =
     copy(left = newLeft, right = newRight)
 }
 
@@ -993,7 +993,7 @@ case class LessThan(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
 }
 
@@ -1028,7 +1028,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
 }
 
@@ -1063,7 +1063,7 @@ case class GreaterThan(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
 }
 
@@ -1098,7 +1098,7 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GreaterThanOrEqual =
     copy(left = newLeft, right = newRight)
 }

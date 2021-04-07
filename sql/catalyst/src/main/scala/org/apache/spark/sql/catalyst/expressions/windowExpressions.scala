@@ -274,7 +274,7 @@ case class SpecifiedWindowFrame(
     }
   }
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): SpecifiedWindowFrame =
     copy(lower = newLeft, upper = newRight)
 }
@@ -287,7 +287,7 @@ case class UnresolvedWindowExpression(
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 
-  override protected def withNewChild(newChild: Expression): UnresolvedWindowExpression =
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedWindowExpression =
     copy(child = newChild)
 }
 
@@ -305,7 +305,7 @@ case class WindowExpression(
   override def toString: String = s"$windowFunction $windowSpec"
   override def sql: String = windowFunction.sql + " OVER " + windowSpec.sql
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): WindowExpression =
     copy(windowFunction = newLeft, windowSpec = newRight.asInstanceOf[WindowSpecDefinition])
 }
@@ -477,7 +477,7 @@ case class Lead(
   override def second: Expression = offset
   override def third: Expression = default
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Lead =
     copy(input = newFirst, offset = newSecond, default = newThird)
 }
@@ -536,7 +536,7 @@ case class Lag(
   override def second: Expression = inputOffset
   override def third: Expression = default
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Lag =
     copy(input = newFirst, inputOffset = newSecond, default = newThird)
 }
@@ -725,7 +725,7 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
   override def sql: String =
     s"$prettyName(${input.sql}, ${offset.sql})${if (ignoreNulls) " ignore nulls" else ""}"
 
-  override protected def withNewChildren(newLeft: Expression, newRight: Expression): NthValue =
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): NthValue =
     copy(input = newLeft, offset = newRight)
 }
 
@@ -830,7 +830,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
 
   override val evaluateExpression = bucket
 
-  override protected def withNewChild(newChild: Expression): NTile = copy(buckets = newChild)
+  override protected def withNewChildInternal(newChild: Expression): NTile = copy(buckets = newChild)
 }
 
 /**

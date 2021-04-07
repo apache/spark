@@ -453,7 +453,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def toString: String = s"$child AS $names"
 
-  override protected def withNewChild(newChild: Expression): MultiAlias = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): MultiAlias = copy(child = newChild)
 }
 
 /**
@@ -489,7 +489,7 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   override def toString: String = s"$child[$extraction]"
   override def sql: String = s"${child.sql}[${extraction.sql}]"
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): UnresolvedExtractValue = {
       copy(child = newLeft, extraction = newRight)
   }
@@ -518,7 +518,7 @@ case class UnresolvedAlias(
 
   override lazy val resolved = false
 
-  override protected def withNewChild(newChild: Expression): UnresolvedAlias =
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedAlias =
     copy(child = newChild)
 }
 
@@ -542,7 +542,7 @@ case class UnresolvedSubqueryColumnAliases(
 
   override lazy val resolved = false
 
-  override protected def withNewChild(newChild: LogicalPlan): UnresolvedSubqueryColumnAliases =
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedSubqueryColumnAliases =
     copy(child = newChild)
 }
 
@@ -566,7 +566,7 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 
-  override protected def withNewChild(newChild: Expression): UnresolvedDeserializer =
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedDeserializer =
     copy(deserializer = newChild)
 }
 
@@ -614,7 +614,7 @@ case class UnresolvedHaving(
   extends UnaryNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
-  override protected def withNewChild(newChild: LogicalPlan): UnresolvedHaving =
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedHaving =
     copy(child = newChild)
 }
 

@@ -38,7 +38,7 @@ case class FlatMapGroupsInPandas(
    */
   override val producedAttributes = AttributeSet(output)
 
-  override protected def withNewChild(newChild: LogicalPlan): FlatMapGroupsInPandas =
+  override protected def withNewChildInternal(newChild: LogicalPlan): FlatMapGroupsInPandas =
     copy(child = newChild)
 }
 
@@ -53,7 +53,7 @@ case class MapInPandas(
 
   override val producedAttributes = AttributeSet(output)
 
-  override protected def withNewChild(newChild: LogicalPlan): MapInPandas = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapInPandas = copy(child = newChild)
 }
 
 /**
@@ -76,7 +76,7 @@ case class FlatMapCoGroupsInPandas(
 
   def rightAttributes: Seq[Attribute] = right.output.take(rightGroupingLen)
 
-  override protected def withNewChildren(
+  override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapCoGroupsInPandas =
     copy(left = newLeft, right = newRight)
 }
@@ -99,7 +99,7 @@ case class BatchEvalPython(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan) extends BaseEvalPython {
-  override protected def withNewChild(newChild: LogicalPlan): BatchEvalPython =
+  override protected def withNewChildInternal(newChild: LogicalPlan): BatchEvalPython =
     copy(child = newChild)
 }
 
@@ -111,6 +111,6 @@ case class ArrowEvalPython(
     resultAttrs: Seq[Attribute],
     child: LogicalPlan,
     evalType: Int) extends BaseEvalPython {
-  override protected def withNewChild(newChild: LogicalPlan): ArrowEvalPython =
+  override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPython =
     copy(child = newChild)
 }

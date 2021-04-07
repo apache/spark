@@ -135,5 +135,5 @@ private[avro] case class AvroDataToCatalyst(
     })
   }
 
-  override protected def withNewChild(newChild: Expression): Expression = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Expression = copy(child = newChild)
 }
