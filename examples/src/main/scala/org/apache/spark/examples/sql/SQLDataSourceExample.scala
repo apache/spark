@@ -340,7 +340,7 @@ object SQLDataSourceExample {
     // +-----------+
 
     // You can also use 'wholetext' option to read each input file as a single row.
-    val df3 = spark.read.option("wholetext", "true").text(path)
+    val df3 = spark.read.option("wholetext", true).text(path)
     df3.show()
     //  +--------------------+
     //  |               value|
