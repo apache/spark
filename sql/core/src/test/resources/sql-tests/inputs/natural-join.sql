@@ -16,6 +16,12 @@ create temporary view nt3 as select * from values
   ("one", 6)
   as nt3(k, v3);
 
+create temporary view nt4 as select * from values
+  ("one", 7),
+  ("two", 8),
+  ("one", 9)
+  as nt4(k, v4);
+
 SELECT * FROM nt1 natural join nt2;
 
 SELECT * FROM nt1 natural join nt2 where k = "one";
@@ -61,3 +67,5 @@ SELECT nt1.*, nt2.*, nt3.* FROM nt1 natural join nt2 join nt3 on nt2.k = nt3.k;
 SELECT * FROM nt1 natural join nt2 join nt3 on nt1.k = nt3.k;
 
 SELECT * FROM nt1 natural join nt2 join nt3 on nt2.k = nt3.k;
+
+SELECT nt1.*, nt2.*, nt3.*, nt4.* FROM nt1 natural join nt2 natural join nt3 natural join nt4;
