@@ -72,7 +72,7 @@ trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
     checkKeywordsExistsInExplain(df, ExtendedMode, keywords: _*)
   }
 
-    /**
+  /**
    * Runs the plan and makes sure the plans does not contain any of the keywords.
    */
   protected def checkKeywordsNotExistsInExplain(
@@ -360,7 +360,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         Nil: _*)
   }
 
-  test("Redact Map type options in explain output") {
+  test("SPARK-34970: Redact Map type options in explain output") {
     val password = "MyPassWord"
     val token = "MyToken"
     val value = "value"
@@ -377,7 +377,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
-  test("Redact CaseInsensitiveMap type options in explain output") {
+  test("SPARK-34970: Redact CaseInsensitiveMap type options in explain output") {
     val password = "MyPassWord"
     val token = "MyToken"
     val value = "value"
