@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
 /**
  * A placeholder expression for cube/rollup, which will be replaced by analyzer
  */
-trait GroupingSet extends Expression with CodegenFallback {
+trait GroupingAnalytic extends Expression with CodegenFallback {
 
   def groupingSets: Seq[Seq[Expression]]
   def selectedGroupByExprs: Seq[Seq[Expression]]
@@ -55,7 +55,7 @@ trait GroupingSet extends Expression with CodegenFallback {
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 }
 
-object GroupingSet {
+object GroupingAnalytic {
   /**
    * 'GROUP BY a, b, c WITH ROLLUP'
    * is equivalent to
@@ -106,34 +106,37 @@ object GroupingSet {
   }
 }
 
-case class Cube(groupingSetIndexes: Seq[Seq[Int]], children: Seq[Expression]) extends GroupingSet {
+case class Cube(
+    groupingSetIndexes: Seq[Seq[Int]],
+    children: Seq[Expression]) extends GroupingAnalytic {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.cubeExprs(groupingSets)
+  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingAnalytic.cubeExprs(groupingSets)
 }
 
 object Cube {
   def apply(groupingSets: Seq[Seq[Expression]]): Cube = {
-    Cube(GroupingSet.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
+    Cube(GroupingAnalytic.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
   }
 }
 
 case class Rollup(
     groupingSetIndexes: Seq[Seq[Int]],
-    children: Seq[Expression]) extends GroupingSet {
+    children: Seq[Expression]) extends GroupingAnalytic {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.rollupExprs(groupingSets)
+  override def selectedGroupByExprs: Seq[Seq[Expression]] =
+    GroupingAnalytic.rollupExprs(groupingSets)
 }
 
 object Rollup {
   def apply(groupingSets: Seq[Seq[Expression]]): Rollup = {
-    Rollup(GroupingSet.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
+    Rollup(GroupingAnalytic.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
   }
 }
 
 case class GroupingSets(
     groupingSetIndexes: Seq[Seq[Int]],
     flatGroupingSets: Seq[Expression],
-    userGivenGroupByExprs: Seq[Expression]) extends GroupingSet {
+    userGivenGroupByExprs: Seq[Expression]) extends GroupingAnalytic {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(flatGroupingSets))
   override def selectedGroupByExprs: Seq[Seq[Expression]] = groupingSets
   // Includes the `userGivenGroupByExprs` in the children, which will be included in the final
@@ -145,7 +148,7 @@ object GroupingSets {
   def apply(
       groupingSets: Seq[Seq[Expression]],
       userGivenGroupByExprs: Seq[Expression]): GroupingSets = {
-    val groupingSetIndexes = GroupingSet.computeGroupingSetIndexes(groupingSets)
+    val groupingSetIndexes = GroupingAnalytic.computeGroupingSetIndexes(groupingSets)
     GroupingSets(groupingSetIndexes, groupingSets.flatten, userGivenGroupByExprs)
   }
 
