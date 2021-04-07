@@ -1794,11 +1794,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def containUnresolvedOrdinal(e: Expression): Boolean = e match {
       case _: UnresolvedOrdinal => true
-      case Cube(_, groupByExprs) => groupByExprs.exists(containUnresolvedOrdinal)
-      case Rollup(_, groupByExprs) => groupByExprs.exists(containUnresolvedOrdinal)
-      case GroupingSets(_, flatGroupingSets, groupByExprs) =>
-        flatGroupingSets.exists(containUnresolvedOrdinal) ||
-          groupByExprs.exists(containUnresolvedOrdinal)
+      case gs: GroupingSet => gs.children.exists(containUnresolvedOrdinal)
       case _ => false
     }
 
@@ -1812,14 +1808,13 @@ class Analyzer(override val catalogManager: CatalogManager)
           throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
         }
       case cube @ Cube(_, groupByExprs) =>
-        cube.copy(children = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
+        cube.withNewChildren(groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
       case rollup @ Rollup(_, groupByExprs) =>
-        rollup.copy(children = groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
+        rollup.withNewChildren(groupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
       case groupingSets @ GroupingSets(_, flatGroupingSets, userGivenGroupByExprs) =>
-        groupingSets.copy(
-          flatGroupingSets = flatGroupingSets.map(resolveGroupByExpressionOrdinal(_, aggs)),
-          userGivenGroupByExprs =
-            userGivenGroupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
+        groupingSets.withNewChildren(
+          flatGroupingSets.map(resolveGroupByExpressionOrdinal(_, aggs))
+            ++ userGivenGroupByExprs.map(resolveGroupByExpressionOrdinal(_, aggs)))
       case others => others
     }
   }
