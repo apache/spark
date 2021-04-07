@@ -952,6 +952,12 @@ private[spark] class SparkSubmit extends Logging {
     } catch {
       case t: Throwable =>
         throw findCause(t)
+    } finally {
+      try {
+        org.apache.spark.SparkContext.getOrCreate().stop()
+      } catch {
+        case e: Throwable => logError(s"Failed to close SparkContext: $e")
+      }
     }
   }
 
