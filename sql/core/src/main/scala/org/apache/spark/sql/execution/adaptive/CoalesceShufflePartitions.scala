@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,6 +35,17 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     if (!conf.coalesceShufflePartitionsEnabled) {
       return plan
     }
+
+    if (shouldApplyChildren(plan)) {
+      plan.transformUp {
+        case p => p.withNewChildren(p.children.map(child => applyInternal(child)))
+      }
+    } else {
+      applyInternal(plan)
+    }
+  }
+
+  private def applyInternal(plan: SparkPlan): SparkPlan = {
     if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])
         || plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isDefined) {
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
@@ -91,6 +102,13 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
         plan
       }
     }
+  }
+
+  private def shouldApplyChildren(plan: SparkPlan): Boolean = {
+    plan.find {
+      case _: UnionExec => true
+      case _ => false
+    }.isDefined
   }
 
   private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {

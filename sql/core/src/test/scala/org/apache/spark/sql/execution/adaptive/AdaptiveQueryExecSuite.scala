@@ -1575,4 +1575,26 @@ class AdaptiveQueryExecSuite
       checkNoCoalescePartitions(df.sort($"key"), ENSURE_REQUIREMENTS)
     }
   }
+
+  test("SPARK-34980: Support coalesce partition through union") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      val df1 = spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 2).toDF()
+      val df2 = spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 4).toDF()
+
+      val df = df1.groupBy("key").count().unionAll(df2)
+      df.collect()
+      assert(
+        collect(df.queryExecution.executedPlan) {
+          case s: CustomShuffleReaderExec => s
+        }.size === 1
+      )
+      assert(df.rdd.partitions.length === 1 + 4)
+    }
+  }
 }
