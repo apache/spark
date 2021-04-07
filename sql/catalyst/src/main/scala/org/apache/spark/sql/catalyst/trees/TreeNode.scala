@@ -84,12 +84,20 @@ case class TreeNodeTag[T](name: String)
 trait TreePatternBits {
   val treePatternBits: BitSet
 
+  /**
+   * @param t, the tree pattern enum to be tested.
+   * @return true if the bit for `t` is set; false otherwise.
+   */
   @inline final def containsPattern(t: TreePattern): Boolean = {
     treePatternBits.get(t.id)
   }
 
-  final def containsAllPatterns(types: TreePattern*): Boolean = {
-    val iterator = types.iterator
+  /**
+   * @param patterns, a sequence of tree pattern enums to be tested.
+   * @return true if every bit for `patterns` is set; false otherwise.
+   */
+  final def containsAllPatterns(patterns: TreePattern*): Boolean = {
+    val iterator = patterns.iterator
     while (iterator.hasNext) {
       if (!containsPattern(iterator.next)) {
         return false
@@ -98,8 +106,12 @@ trait TreePatternBits {
     true
   }
 
-  final def containsAnyPattern(types: TreePattern*): Boolean = {
-    val iterator = types.iterator
+  /**
+   * @param patterns, a sequence of tree pattern enums to be tested.
+   * @return true if at least one bit for `patterns` is set; false otherwise.
+   */
+  final def containsAnyPattern(patterns: TreePattern*): Boolean = {
+    val iterator = patterns.iterator
     while (iterator.hasNext) {
       if (containsPattern(iterator.next)) {
         return true
@@ -109,6 +121,7 @@ trait TreePatternBits {
   }
 }
 
+// A functor that always returns true.
 object AlwaysProcess{
   val fn: TreePatternBits => Boolean = { _ => true}
 }
@@ -152,18 +165,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   protected val nodePatterns: Seq[TreePattern] = Seq()
 
   /**
-   *  Rule id bits to record ineffective rules for this TreeNode and its subtree.
-   *  If a purely functional rule is ineffective in one apply call for this TreeNode and its
-   *  subtree (or an equivalent tree), the rule will still be ineffective for subsequent
-   *  applications on this tree because a query plan or expression tree is immutable.
+   *  A BitSet of rule ids to record ineffective rules for this TreeNode and its subtree.
+   *  If a rule R (which does not read a varying state for each invocation) is ineffective in one
+   *  apply call for this TreeNode and its subtree, R will still be ineffective for subsequent
+   *  apply calls on this tree because query plan structures are immutable.
    */
   private val ineffectiveRules: BitSet = new BitSet(RuleIdCollection.NumRules)
 
   /**
-   * Record that a rule is ineffective for this TreeNode and its subtree. The reason is that the
-   * rule has been applied to the same true and verified to be ineffective.
+   * Mark that a rule (with id `ruleId`) is ineffective for this TreeNode and its subtree.
    *
-   * @param ruleId the unique identifier of the rule to be marked as ineffective.
+   * @param ruleId the unique identifier of the rule. If `ruleId` is UnknownId, it is a no-op.
    */
   def markRuleAsIneffective(ruleId : Int): Unit = {
     if (ruleId == RuleIdCollection.UnknownId ) {
@@ -173,10 +185,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
-   * Whether this TreeNode and its subtree has been verified as ineffective with a rule.
+   * Whether this TreeNode and its subtree have been marked as ineffective for the rule with id
+   * `ruleId`.
    *
    * @param ruleId the unique id of the rule
-   * @return true if the rule has been verified as ineffective; false otherwise.
+   * @return true if the rule has been marked as ineffective; false otherwise. If `ruleId` is
+   *         UnknownId, it returns false.
    */
   def isRuleIneffective(ruleId : Int): Boolean = {
     if (ruleId == RuleIdCollection.UnknownId) {
