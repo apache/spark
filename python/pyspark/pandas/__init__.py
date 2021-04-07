@@ -17,13 +17,24 @@
 import os
 import sys
 from distutils.version import LooseVersion
+import warnings
+
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+
+try:
+    require_minimum_pandas_version()
+    require_minimum_pyarrow_version()
+except ImportError as e:
+    if os.environ.get("SPARK_TESTING"):
+        warnings.warn(str(e))
+        sys.exit()
+    else:
+        raise
 
 from pyspark.pandas.version import __version__  # noqa: F401
 
 
 def assert_python_version():
-    import warnings
-
     major = 3
     minor = 5
     deprecated_version = (major, minor)
