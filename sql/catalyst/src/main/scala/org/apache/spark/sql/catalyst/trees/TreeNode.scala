@@ -141,7 +141,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 
   /**
    * A bit set of tree patterns for this TreeNode and its subtree. If this TreeNode node and its
-   * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this bitset.
+   * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
    */
   override lazy val treePatternBits: BitSet = {
     val bits: BitSet = new BitSet(TreePattern.maxId)
@@ -416,7 +416,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
    *        pass it if the rule is not purely functional and reads a varying initial state for
-   *        every invocation.
+   *        different invocations.
    */
   def transform(rule: PartialFunction[BaseType, BaseType],
     cond: TreePatternBits => Boolean = AlwaysProcess.fn,
@@ -436,7 +436,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
    *        pass it if the rule is not purely functional and reads a varying initial state for
-   *        every invocation.
+   *        different invocations.
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType],
     cond: TreePatternBits => Boolean = AlwaysProcess.fn,
@@ -477,7 +477,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
    *        pass it if the rule is not purely functional and reads a varying initial state for
-   *        every invocation.
+   *        different invocations.
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType],
     cond: TreePatternBits => Boolean = AlwaysProcess.fn,

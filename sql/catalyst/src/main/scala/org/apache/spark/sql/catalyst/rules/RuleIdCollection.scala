@@ -69,7 +69,7 @@ object RuleIdCollection extends Logging {
   // Return the rule name from its id. It is for debugging purpose.
   def getRuleName(ruleId: Int): String = {
     val ruleNameOpt = ruleIdToName.get(ruleId)
-    assert(ruleNameOpt.isDefined) // Add the rule name to ruleIdToName if this assert fails.
+    assert(ruleNameOpt.isDefined, s"rule id $ruleId does not exist")
     ruleNameOpt.get
   }
 }

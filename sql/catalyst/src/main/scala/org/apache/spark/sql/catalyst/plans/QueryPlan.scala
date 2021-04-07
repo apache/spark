@@ -111,8 +111,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
    *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on an expression T, skips processing T and its subtree. Do not
-   *        pass it if the rule is not purely functional not purely functional and reads a
-   *        varying initial state for every invocation.
+   *        pass it if the rule is not purely functional and reads a varying initial state for
+   *        different invocations.
    */
   def transformExpressions(rule: PartialFunction[Expression, Expression],
     cond: TreePatternBits => Boolean = AlwaysProcess.fn,
@@ -130,8 +130,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
    *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on an expression T, skips processing T and its subtree. Do not
-   *        pass it if the rule is not purely functional not purely functional and reads a
-   *        varying initial state for every invocation.
+   *        pass it if the rule is not purely functional and reads a varying initial state for
+   *        different invocations.
    */
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression],
     cond: TreePatternBits => Boolean = AlwaysProcess.fn,
@@ -149,8 +149,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
    *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on an expression T, skips processing T and its subtree. Do not
-   *        pass it if the rule is not purely functional and reads a varying inital state for
-   *        every invocation.
+   *        pass it if the rule is not purely functional and reads a varying initial state for
+   *        different invocations.
    */
   def transformExpressionsUp(rule: PartialFunction[Expression, Expression],
     cond: TreePatternBits => Boolean = AlwaysProcess.fn,
