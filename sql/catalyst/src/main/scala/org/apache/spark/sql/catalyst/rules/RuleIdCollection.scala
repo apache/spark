@@ -22,7 +22,10 @@ import scala.collection.mutable
 // A collection of rules that use rule ids to prune tree traversals.
 object RuleIdCollection {
 
-  // The rules listed here need a rule id. Rules are in alphabetical order.
+  // The rules listed here need a rule id. Typically, rules that are in a fixed point batch or
+  // invoked multiple times by Analyzer/Optimizer/Planner need a rule id to prune unnecessary
+  // tree traversals in the transform function family. Note that those rules should not depend on
+  // a changing, external state. Rules here are in alphabetical order.
   private val rulesNeedingIds: Seq[String] = {
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
@@ -52,7 +55,10 @@ object RuleIdCollection {
       ruleIdToName.put(ruleId, ruleName)
       ruleId = ruleId + 1
     })
-    assert(ruleId < 192) // The assertion can be relaxed when we have more rules.
+    // Currently, there are more than 128 but less than 192 rules needing an id. However, the
+    // assertion can be relaxed when we have more such rules. Note that increasing the max id can
+    // result in increased memory consumption from every TreeNode.
+    assert(ruleId < 192)
     ruleId
   }
 

@@ -181,6 +181,10 @@ class OptimizeInSuite extends PlanTest {
       }
     }
 
+    // Since OptimizeIn has been marked as ineffective for `plan` in the preceding test, we need
+    // a new `plan` to run the next test. Here, OptimizeIn depends on a changing, external state,
+    // i.e., conf OPTIMIZER_INSET_CONVERSION_THRESHOLD, which however cannot happen in the
+    // production code path.
     {
       val plan =
         testRelation
