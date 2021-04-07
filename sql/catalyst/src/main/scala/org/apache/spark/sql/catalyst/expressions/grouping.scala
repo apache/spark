@@ -106,9 +106,7 @@ object GroupingSet {
   }
 }
 
-case class Cube(
-    groupingSetIndexes: Seq[Seq[Int]],
-    children: Seq[Expression]) extends GroupingSet {
+case class Cube(groupingSetIndexes: Seq[Seq[Int]], children: Seq[Expression]) extends GroupingSet {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
   override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.cubeExprs(groupingSets)
 }
@@ -123,8 +121,7 @@ case class Rollup(
     groupingSetIndexes: Seq[Seq[Int]],
     children: Seq[Expression]) extends GroupingSet {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def selectedGroupByExprs: Seq[Seq[Expression]] =
-    GroupingSet.rollupExprs(groupingSets)
+  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.rollupExprs(groupingSets)
 }
 
 object Rollup {
@@ -147,12 +144,12 @@ case class GroupingSets(
 object GroupingSets {
   def apply(
       groupingSets: Seq[Seq[Expression]],
-      userGivenGroupByExprs: Seq[Expression]): GroupingSet = {
+      userGivenGroupByExprs: Seq[Expression]): GroupingSets = {
     val groupingSetIndexes = GroupingSet.computeGroupingSetIndexes(groupingSets)
     GroupingSets(groupingSetIndexes, groupingSets.flatten, userGivenGroupByExprs)
   }
 
-  def apply(groupingSets: Seq[Seq[Expression]]): GroupingSet = {
+  def apply(groupingSets: Seq[Seq[Expression]]): GroupingSets = {
     apply(groupingSets, userGivenGroupByExprs = Nil)
   }
 }
