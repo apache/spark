@@ -879,7 +879,7 @@ object IntervalUtils {
     rest /= MINUTES_PER_HOUR
     val hours = rest % HOURS_PER_DAY
     val days = rest / HOURS_PER_DAY
-    val leadSecZero = if (seconds < 10000000) "0" else ""
+    val leadSecZero = if (seconds < 10 * MICROS_PER_SECOND) "0" else ""
     val secStr = java.math.BigDecimal.valueOf(seconds, 6).stripTrailingZeros().toPlainString()
     f"INTERVAL '$sign$days $hours%02d:$minutes%02d:$leadSecZero$secStr' DAY TO SECOND"
   }
