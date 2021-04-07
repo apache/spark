@@ -159,12 +159,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
-   * @return a sequence of tree pattern enums in a TreeNode T. It does not include propagated
-   *         patterns in the subtree of T.
-   */
-  protected val nodePatterns: Seq[TreePattern] = Seq()
-
-  /**
    *  A BitSet of rule ids to record ineffective rules for this TreeNode and its subtree.
    *  If a rule R (which does not read a varying state for each invocation) is ineffective in one
    *  apply call for this TreeNode and its subtree, R will still be ineffective for subsequent
@@ -173,11 +167,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private val ineffectiveRules: BitSet = new BitSet(RuleIdCollection.NumRules)
 
   /**
+   * @return a sequence of tree pattern enums in a TreeNode T. It does not include propagated
+   *         patterns in the subtree of T.
+   */
+  protected val nodePatterns: Seq[TreePattern] = Seq()
+
+  /**
    * Mark that a rule (with id `ruleId`) is ineffective for this TreeNode and its subtree.
    *
    * @param ruleId the unique identifier of the rule. If `ruleId` is UnknownId, it is a no-op.
    */
-  def markRuleAsIneffective(ruleId : Int): Unit = {
+  private def markRuleAsIneffective(ruleId : Int): Unit = {
     if (ruleId == RuleIdCollection.UnknownId ) {
       return
     }
@@ -192,7 +192,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * @return true if the rule has been marked as ineffective; false otherwise. If `ruleId` is
    *         UnknownId, it returns false.
    */
-  def isRuleIneffective(ruleId : Int): Boolean = {
+  private def isRuleIneffective(ruleId : Int): Boolean = {
     if (ruleId == RuleIdCollection.UnknownId) {
       return false
     }
