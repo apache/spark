@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreePatternBits}
 import org.apache.spark.util.Utils
 
 
@@ -173,27 +174,34 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * the scope of a [[resolveOperatorsDown()]] call.
    * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformDown()]].
    */
-  override def transformDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+  override def transformDown(rule: PartialFunction[LogicalPlan, LogicalPlan],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): LogicalPlan = {
     assertNotAnalysisRule()
-    super.transformDown(rule)
+    super.transformDown(rule, cond, ruleId)
   }
 
   /**
    * Use [[resolveOperators()]] in the analyzer.
+   *
    * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformUp()]]
    */
-  override def transformUp(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+  override def transformUp(rule: PartialFunction[LogicalPlan, LogicalPlan],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): LogicalPlan = {
     assertNotAnalysisRule()
-    super.transformUp(rule)
+    super.transformUp(rule, cond, ruleId)
   }
 
   /**
    * Use [[resolveExpressions()]] in the analyzer.
    * @see [[QueryPlan.transformAllExpressions()]]
    */
-  override def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
+  override def transformAllExpressions(rule: PartialFunction[Expression, Expression],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): this.type = {
     assertNotAnalysisRule()
-    super.transformAllExpressions(rule)
+    super.transformAllExpressions(rule, cond, ruleId)
   }
 
   override def clone(): LogicalPlan = {

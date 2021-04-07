@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
-import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, _}
+import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
@@ -109,8 +109,12 @@ trait TreePatternBits {
   }
 }
 
+object AlwaysProcess{
+  val fn: TreePatternBits => Boolean = { _ => true}
+}
+
 // scalastyle:off
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
+abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with TreePatternBits{
 // scalastyle:on
   self: BaseType =>
 
@@ -121,6 +125,57 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
    */
   private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
+
+  override lazy val treePatternBits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    // Propagate node type bits
+    val nodePatternIterator = nodePatterns.iterator
+    while (nodePatternIterator.hasNext) {
+      bits.set(nodePatternIterator.next().id)
+    }
+    // Propagate children bits
+    val childIterator = children.iterator
+    while (childIterator.hasNext) {
+      bits.union(childIterator.next().treePatternBits)
+    }
+    bits
+  }
+
+  protected val nodePatterns: Seq[TreePattern] = Seq()
+
+  /**
+   *  Rule id bits to record ineffective rules for this TreeNode and its subtree.
+   *  If a purely functional rule is ineffective in one apply call for this TreeNode and its
+   *  subtree (or an equivalent tree), the rule will still be ineffective for subsequent
+   *  applications on this tree because a query plan or expression tree is immutable.
+   */
+  private val ineffectiveRules: BitSet = new BitSet(RuleIdCollection.NumRules)
+
+  /**
+   * Record that a rule is ineffective for this TreeNode and its subtree. The reason is that the
+   * rule has been applied to the same true and verified to be ineffective.
+   *
+   * @param ruleId the unique identifier of the rule to be marked as ineffective.
+   */
+  def markRuleAsIneffective(ruleId : Int): Unit = {
+    if (ruleId == RuleIdCollection.UnknownId ) {
+      return
+    }
+    ineffectiveRules.set(ruleId)
+  }
+
+  /**
+   * Whether this TreeNode and its subtree has been verified as ineffective with a rule.
+   *
+   * @param ruleId the unique id of the rule
+   * @return true if the rule has been verified as ineffective; false otherwise.
+   */
+  def isRuleIneffective(ruleId : Int): Boolean = {
+    if (ruleId == RuleIdCollection.UnknownId) {
+      return false
+    }
+    ineffectiveRules.get(ruleId)
+  }
 
   def copyTagsFrom(other: BaseType): Unit = {
     // SPARK-32753: it only makes sense to copy tags to a new node
@@ -332,29 +387,58 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * transformDown or transformUp should be used.
    *
    * @param rule the function use to transform this nodes children
+   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *             T and its subtree recursively.
+   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
+   *        pass it if the rule is not purely functional and reads a varying initial state for
+   *        every invocation.
    */
-  def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    transformDown(rule)
+  def transform(rule: PartialFunction[BaseType, BaseType],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): BaseType = {
+    transformDown(rule, cond, ruleId)
   }
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied to it and all of its
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
    *
-   * @param rule the function used to transform this nodes children
+   * @param rule the function use to transform this nodes children
+   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *             T and its subtree recursively.
+   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
+   *        pass it if the rule is not purely functional and reads a varying initial state for
+   *        every invocation.
    */
-  def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+  def transformDown(rule: PartialFunction[BaseType, BaseType],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): BaseType = {
+    if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+      return this
+    }
     val afterRule = CurrentOrigin.withOrigin(origin) {
       rule.applyOrElse(this, identity[BaseType])
     }
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
-      mapChildren(_.transformDown(rule))
+      val rewritten_plan = mapChildren(_.transformDown(rule, cond, ruleId))
+      if (this eq rewritten_plan) {
+        markRuleAsIneffective(ruleId)
+        this
+      } else {
+        rewritten_plan
+      }
     } else {
       // If the transform function replaces this node with a new one, carry over the tags.
       afterRule.copyTagsFrom(this)
-      afterRule.mapChildren(_.transformDown(rule))
+      afterRule.mapChildren(_.transformDown(rule, cond, ruleId))
     }
   }
 
@@ -364,9 +448,22 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * unchanged.
    *
    * @param rule the function use to transform this nodes children
+   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *             T and its subtree recursively.
+   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
+   *        pass it if the rule is not purely functional and reads a varying initial state for
+   *        every invocation.
    */
-  def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRuleOnChildren = mapChildren(_.transformUp(rule))
+  def transformUp(rule: PartialFunction[BaseType, BaseType],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): BaseType = {
+    if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+      return this
+    }
+    val afterRuleOnChildren = mapChildren(_.transformUp(rule, cond, ruleId))
     val newNode = if (this fastEquals afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
@@ -376,9 +473,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
       }
     }
-    // If the transform function replaces this node with a new one, carry over the tags.
-    newNode.copyTagsFrom(this)
-    newNode
+    if (this eq newNode) {
+      markRuleAsIneffective(ruleId)
+      this
+    } else {
+      // If the transform function replaces this node with a new one, carry over the tags.
+      newNode.copyTagsFrom(this)
+      newNode
+    }
   }
 
   /**

@@ -25,11 +25,8 @@ object TreePattern extends Enumeration  {
   val IN: Value = Value(0)
 
   // Logical plan patterns (alphabetically ordered)
-  val LATERAL_JOIN: Value = Value
-  val LEFT_SEMI_OR_ANTI_JOIN: Value = Value
-  val CROSS_JOIN: Value = Value
   val INNER_LIKE_JOIN: Value = Value
   val JOIN: Value = Value
+  val LEFT_SEMI_OR_ANTI_JOIN: Value = Value
   val OUTER_JOIN: Value = Value
-  val NATURAL_LIKE_JOIN: Value = Value
 }

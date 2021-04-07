@@ -22,9 +22,13 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.collection.BitSet
 
 /**
  * An abstraction of the Spark SQL query plan tree, which can be logical or physical. This class
@@ -47,6 +51,28 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   @transient
   lazy val outputSet: AttributeSet = AttributeSet(output)
+
+  // Override `treePatternBits` to propagate bits for its expressions.
+  override lazy val treePatternBits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    // Propagate node type bits
+    val nodeTypeIterator = nodePatterns.iterator
+    while (nodeTypeIterator.hasNext) {
+      bits.set(nodeTypeIterator.next().id)
+    }
+    // Propagate children bits
+    val childIterator = children.iterator
+    while (childIterator.hasNext) {
+      bits.union(childIterator.next().treePatternBits)
+    }
+
+    // Propagate expression bits
+    val exprIterator = expressions.iterator
+    while (exprIterator.hasNext) {
+      bits.union(exprIterator.next.treePatternBits)
+    }
+    bits
+  }
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -80,28 +106,57 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * transformExpressionsDown or transformExpressionsUp should be used.
    *
    * @param rule the rule to be applied to every expression in this operator.
+   * @param cond  a Lambda expression to stop transform early on. If `cond.apply` returns false
+   *              on an expression T, skips processing T and its subtree; otherwise, processes
+   *              T and its subtree recursively.
+   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   *        marked as in effective on an expression T, skips processing T and its subtree. Do not
+   *        pass it if the rule is not purely functional not purely functional and reads a
+   *        varying initial state for every invocation.
    */
-  def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
-    transformExpressionsDown(rule)
+  def transformExpressions(rule: PartialFunction[Expression, Expression],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): this.type = {
+    transformExpressionsDown(rule, cond, ruleId)
   }
 
   /**
    * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
    *
    * @param rule the rule to be applied to every expression in this operator.
+   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   *             on an expression T, skips processing T and its subtree; otherwise, processes
+   *             T and its subtree recursively.
+   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   *        marked as in effective on an expression T, skips processing T and its subtree. Do not
+   *        pass it if the rule is not purely functional not purely functional and reads a
+   *        varying initial state for every invocation.
    */
-  def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
-    mapExpressions(_.transformDown(rule))
+  def transformExpressionsDown(rule: PartialFunction[Expression, Expression],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): this.type = {
+    mapExpressions(_.transformDown(rule, cond, ruleId))
   }
 
   /**
    * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @return
+   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   *             on an expression T, skips processing T and its subtree; otherwise, processes
+   *             T and its subtree recursively.
+   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   *        marked as in effective on an expression T, skips processing T and its subtree. Do not
+   *        pass it if the rule is not purely functional and reads a varying inital state for
+   *        every invocation.
    */
-  def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
-    mapExpressions(_.transformUp(rule))
+  def transformExpressionsUp(rule: PartialFunction[Expression, Expression],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): this.type = {
+    mapExpressions(_.transformUp(rule, cond, ruleId))
   }
 
   /**
@@ -143,10 +198,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Returns the result of running [[transformExpressions]] on this node
    * and all its children. Note that this method skips expressions inside subqueries.
    */
-  def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
-    transform {
-      case q: QueryPlan[_] => q.transformExpressions(rule).asInstanceOf[PlanType]
-    }.asInstanceOf[this.type]
+  def transformAllExpressions(rule: PartialFunction[Expression, Expression],
+    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId): this.type = {
+    transform ({
+      case q: QueryPlan[_] => q.transformExpressions(rule, cond, ruleId).asInstanceOf[PlanType]
+    }, cond, ruleId).asInstanceOf[this.type]
   }
 
   /** Returns all of the expressions present in this query plan operator. */

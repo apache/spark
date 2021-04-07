@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 
 /**
  * This rule is a variant of [[PushPredicateThroughNonJoin]] which can handle
@@ -34,7 +35,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
   with PredicateHelper
   with JoinSelectionHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform ({
     // LeftSemi/LeftAnti over Project
     case Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
         if pList.forall(_.deterministic) &&
@@ -100,7 +101,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       val validAttrs = u.child.outputSet ++ rightOp.outputSet
       pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
-  }
+  }, _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId)
 
   /**
    * Check if we can safely push a join through a project or union by making sure that attributes

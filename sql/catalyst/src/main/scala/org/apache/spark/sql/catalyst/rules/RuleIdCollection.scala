@@ -25,11 +25,13 @@ import org.apache.spark.internal.Logging
 object RuleIdCollection extends Logging {
 
   // The rules listed here need a rule id. Rules are in alphabetical order.
-  private val rulesWithIds: Seq[String] = {
+  private val rulesNeedingIds: Seq[String] = {
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.OptimizeIn" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushLeftSemiLeftAntiThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" :: Nil
   }
@@ -47,7 +49,7 @@ object RuleIdCollection extends Logging {
   // The total number of rules with ids.
   val NumRules: Int = {
     var ruleId = 0
-    rulesWithIds.foreach(ruleName => {
+    rulesNeedingIds.foreach(ruleName => {
       ruleToId.put(ruleName, ruleId)
       ruleIdToName.put(ruleId, ruleName)
       ruleId = ruleId + 1
@@ -60,7 +62,7 @@ object RuleIdCollection extends Logging {
   def getRuleId(ruleName: String): Int = {
     val ruleIdOpt = ruleToId.get(ruleName)
     // Please add the rule name to `rulesWithIds` if this assert fails.
-    assert(ruleIdOpt.isDefined)
+    assert(ruleIdOpt.isDefined, s"add $ruleName into `rulesNeedingIds`")
     ruleIdOpt.get
   }
 

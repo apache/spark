@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, 
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -38,7 +39,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
     } else {
-      val result = plan transformDown {
+      val result = plan transformDown ({
         // Start reordering with a joinable item, which is an InnerLike join with conditions.
         // Avoid reordering if a join hint is present.
         case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE) =>
@@ -46,7 +47,8 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
         case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
           if projectList.forall(_.isInstanceOf[Attribute]) =>
           reorder(p, p.output)
-      }
+      }, _.containsPattern(INNER_LIKE_JOIN), ruleId)
+
       // After reordering is finished, convert OrderedJoin back to Join.
       result transform {
         case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond, JoinHint.NONE)
