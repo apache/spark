@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
@@ -61,6 +62,7 @@ object Subquery {
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = child.maxRows
 
   override lazy val resolved: Boolean = {
@@ -187,6 +189,8 @@ case class Intersect(
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
+  override def metadataOutput: Seq[Attribute] = Nil
+
   override protected lazy val validConstraints: ExpressionSet =
     leftConstraints.union(rightConstraints)
 
@@ -206,6 +210,8 @@ case class Except(
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
+
+  override def metadataOutput: Seq[Attribute] = Nil
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
 }
@@ -269,6 +275,8 @@ case class Union(
       }
     }
   }
+
+  override def metadataOutput: Seq[Attribute] = Nil
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -364,6 +372,17 @@ case class Join(
     }
   }
 
+  override def metadataOutput: Seq[Attribute] = {
+    joinType match {
+      case ExistenceJoin(_) =>
+        left.metadataOutput
+      case LeftExistence(_) =>
+        left.metadataOutput
+      case _ =>
+        children.flatMap(_.metadataOutput)
+    }
+  }
+
   override protected lazy val validConstraints: ExpressionSet = {
     joinType match {
       case _: InnerLike if condition.isDefined =>
@@ -440,6 +459,7 @@ case class InsertIntoDir(
   extends UnaryNode {
 
   override def output: Seq[Attribute] = Seq.empty
+  override def metadataOutput: Seq[Attribute] = Nil
   override lazy val resolved: Boolean = false
 }
 
@@ -465,6 +485,8 @@ case class View(
   require(!isTempViewStoringAnalyzedPlan || child.resolved)
 
   override def output: Seq[Attribute] = child.output
+
+  override def metadataOutput: Seq[Attribute] = Nil
 
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
@@ -551,26 +573,83 @@ case class Sort(
 
 /** Factory for constructing new `Range` nodes. */
 object Range {
-  def apply(start: Long, end: Long, step: Long,
-            numSlices: Option[Int], isStreaming: Boolean = false): Range = {
-    val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
-    new Range(start, end, step, numSlices, output, isStreaming)
-  }
   def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
     Range(start, end, step, Some(numSlices))
   }
+
+  def getOutputAttrs: Seq[Attribute] = {
+    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+  }
+
+  private def typeCoercion: TypeCoercionBase = {
+    if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
+  }
+
+  private def castAndEval[T](expression: Expression, dataType: DataType): T = {
+    typeCoercion.implicitCast(expression, dataType)
+      .map(_.eval())
+      .filter(_ != null)
+      .getOrElse {
+        throw QueryCompilationErrors.incompatibleRangeInputDataTypeError(expression, dataType)
+      }.asInstanceOf[T]
+  }
+
+  def toLong(expression: Expression): Long = castAndEval[Long](expression, LongType)
+
+  def toInt(expression: Expression): Int = castAndEval[Int](expression, IntegerType)
 }
 
+@ExpressionDescription(
+  usage = """
+    _FUNC_(start: long, end: long, step: long, numSlices: integer)
+    _FUNC_(start: long, end: long, step: long)
+    _FUNC_(start: long, end: long)
+    _FUNC_(end: long)""",
+  examples = """
+    Examples:
+      > SELECT * FROM _FUNC_(1);
+        +---+
+        | id|
+        +---+
+        |  0|
+        +---+
+      > SELECT * FROM _FUNC_(0, 2);
+        +---+
+        |id |
+        +---+
+        |0  |
+        |1  |
+        +---+
+      > SELECT * FROM _FUNC_(0, 4, 2);
+        +---+
+        |id |
+        +---+
+        |0  |
+        |2  |
+        +---+
+  """,
+  since = "2.0.0",
+  group = "table_funcs")
 case class Range(
     start: Long,
     end: Long,
     step: Long,
     numSlices: Option[Int],
-    output: Seq[Attribute],
-    override val isStreaming: Boolean)
+    override val output: Seq[Attribute] = Range.getOutputAttrs,
+    override val isStreaming: Boolean = false)
   extends LeafNode with MultiInstanceRelation {
 
   require(step != 0, s"step ($step) cannot be 0")
+
+  def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) =
+    this(Range.toLong(start), Range.toLong(end), Range.toLong(step), Some(Range.toInt(numSlices)))
+
+  def this(start: Expression, end: Expression, step: Expression) =
+    this(Range.toLong(start), Range.toLong(end), Range.toLong(step), None)
+
+  def this(start: Expression, end: Expression) = this(start, end, Literal.create(1L, LongType))
+
+  def this(end: Expression) = this(Literal.create(0L, LongType), end)
 
   val numElements: BigInt = {
     val safeStart = BigInt(start)
@@ -647,6 +726,7 @@ case class Aggregate(
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = {
     if (groupingExpressions.isEmpty) {
       Some(1L)
@@ -782,6 +862,8 @@ case class Expand(
   override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
+  override def metadataOutput: Seq[Attribute] = Nil
+
   override def producedAttributes: AttributeSet = AttributeSet(output diff child.output)
 
   // This operator can reuse attributes (for example making them null when doing a roll up) so
@@ -818,6 +900,7 @@ case class Pivot(
     }
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
+  override def metadataOutput: Seq[Attribute] = Nil
 }
 
 /**
