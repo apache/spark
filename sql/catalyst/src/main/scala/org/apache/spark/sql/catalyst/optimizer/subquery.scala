@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /*
@@ -272,22 +273,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     val baseConditions = predicateMap.values.flatten.toSeq
     val (newPlan, newCond) = if (outer.nonEmpty) {
       val outputSet = outer.map(_.outputSet).reduce(_ ++ _)
-      val duplicates = transformed.outputSet.intersect(outputSet)
-      val (plan, deDuplicatedConditions) = if (duplicates.nonEmpty) {
-        val aliasMap = AttributeMap(duplicates.map { dup =>
-          dup -> Alias(dup, dup.toString)()
-        }.toSeq)
-        val aliasedExpressions = transformed.output.map { ref =>
-          aliasMap.getOrElse(ref, ref)
-        }
-        val aliasedProjection = Project(aliasedExpressions, transformed)
-        val aliasedConditions = baseConditions.map(_.transform {
-          case ref: Attribute => aliasMap.getOrElse(ref, ref).toAttribute
-        })
-        (aliasedProjection, aliasedConditions)
-      } else {
-        (transformed, baseConditions)
-      }
+      val (plan, deDuplicatedConditions) =
+        DecorrelateInnerQuery.deduplicate(transformed, baseConditions, outputSet)
       (plan, stripOuterReferences(deDuplicatedConditions))
     } else {
       (transformed, stripOuterReferences(baseConditions))
@@ -308,9 +295,17 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       if (newCond.isEmpty) oldCond else newCond
     }
 
+    def rewrite(sub: LogicalPlan, outer: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
+      if (SQLConf.get.decorrelateInnerQueryEnabled) {
+        DecorrelateInnerQuery(sub, outer)
+      } else {
+        pullOutCorrelatedPredicates(sub, outer)
+      }
+    }
+
     plan transformExpressions {
       case ScalarSubquery(sub, children, exprId) if children.nonEmpty =>
-        val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
+        val (newPlan, newCond) = rewrite(sub, outerPlans)
         ScalarSubquery(newPlan, getJoinCondition(newCond, children), exprId)
       case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
@@ -379,7 +374,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       bindings: Map[ExprId, Expression]): Expression = {
     val rewrittenExpr = expr transform {
       case r: AttributeReference =>
-        bindings.getOrElse(r.exprId, Literal.default(NullType))
+        bindings.getOrElse(r.exprId, Literal.create(null, r.dataType))
     }
 
     tryEvalExpr(rewrittenExpr)
@@ -394,9 +389,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     // Also replace attribute refs (for example, for grouping columns) with NULL.
     val rewrittenExpr = expr transform {
       case a @ AggregateExpression(aggFunc, _, _, resultId, _) =>
-        aggFunc.defaultResult.getOrElse(Literal.default(NullType))
+        aggFunc.defaultResult.getOrElse(Literal.create(null, aggFunc.dataType))
 
-      case _: AttributeReference => Literal.default(NullType)
+      case a: AttributeReference => Literal.create(null, a.dataType)
     }
 
     tryEvalExpr(rewrittenExpr)
@@ -515,6 +510,56 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   val ALWAYS_TRUE_COLNAME = "alwaysTrue"
 
   /**
+   * Build a mapping between domain attributes and corresponding outer query expressions
+   * using the join conditions.
+   */
+  private def buildDomainAttrMap(
+      conditions: Seq[Expression],
+      domainAttrs: Seq[Attribute]): Map[Attribute, Expression] = {
+    val outputSet = AttributeSet(domainAttrs)
+    conditions.collect {
+      // When we build the equality conditions, the left side is always the
+      // domain attributes used in the inner plan, and the right side is the
+      // attribute from outer plan. Note the right hand side is not necessarily
+      // an attribute, for example it can be a literal (if foldable) or a cast expression.
+      case EqualNullSafe(left: Attribute, right: Expression) if outputSet.contains(left) =>
+        left -> right
+    }.toMap
+  }
+
+  /**
+   * Rewrite domain join placeholder to actual inner joins.
+   */
+  private def rewriteDomainJoins(
+      outerPlan: LogicalPlan,
+      innerPlan: LogicalPlan,
+      conditions: Seq[Expression]): LogicalPlan = {
+    innerPlan transform {
+      case d @ DomainJoin(domainAttrs, child) =>
+        val domainAttrMap = buildDomainAttrMap(conditions, domainAttrs)
+        // We should only rewrite a domain join when all corresponding outer plan attributes
+        // can be found from the join condition.
+        if (domainAttrMap.size == domainAttrs.size) {
+          val groupingExprs = domainAttrs.map(domainAttrMap)
+          val aggregateExprs = groupingExprs.zip(domainAttrs).map {
+            // Rebuild the aliases.
+            case (inputAttr, outputAttr) => Alias(inputAttr, outputAttr.name)(outputAttr.exprId)
+          }
+          val domain = Aggregate(groupingExprs, aggregateExprs, outerPlan)
+          child match {
+            // A special optimization for OneRowRelation.
+            // TODO: add a more general rule to optimize join with OneRowRelation.
+            case _: OneRowRelation => domain
+            case _ => Join(child, domain, Inner, None, JoinHint.NONE)
+          }
+        } else {
+          throw new UnsupportedOperationException(
+            s"Unable to rewrite domain join with conditions: $conditions\n$d")
+        }
+    }
+  }
+
+  /**
    * Construct a new child plan by left joining the given subqueries to a base plan.
    * This method returns the child plan and an attribute mapping
    * for the updated `ExprId`s of subqueries. If the non-empty mapping returned,
@@ -525,7 +570,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       subqueries: ArrayBuffer[ScalarSubquery]): (LogicalPlan, AttributeMap[Attribute]) = {
     val subqueryAttrMapping = ArrayBuffer[(Attribute, Attribute)]()
     val newChild = subqueries.foldLeft(child) {
-      case (currentChild, ScalarSubquery(query, conditions, _)) =>
+      case (currentChild, ScalarSubquery(sub, conditions, _)) =>
+        val query = rewriteDomainJoins(currentChild, sub, conditions)
         val origOutput = query.output.head
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
@@ -676,5 +722,303 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       } else {
         f -> Nil
       }
+  }
+}
+
+/**
+ * Decorrelate the inner query by eliminating outer references and create domain joins.
+ * The implementation is based on the paper: Unnesting Arbitrary Queries by Thomas Neumann
+ * and Alfons Kemper. https://dl.gi.de/handle/20.500.12116/2418.
+ * (1) Recursively collects outer references from the inner query until it reaches a node
+ *     that does not contain correlated value.
+ * (2) Inserts an optional [[DomainJoin]] node to indicate whether a domain (inner) join is
+ *     needed between the outer query and the specific subtree of the inner query.
+ * (3) Returns a list of join conditions with the outer query and a mapping between outer
+ *     references with references inside the inner query. The parent nodes need to preserve
+ *     the references inside the join conditions and substitute all outer references using
+ *     the mapping.
+ *
+ * E.g. decorrelate an inner query with equality predicates:
+ *
+ * Aggregate [] [min(c2)]            Aggregate [c1] [min(c2), c1]
+ * +- Filter [outer(c3) = c1]   =>   +- Relation [t]
+ *    +- Relation [t]
+ *
+ * Join conditions: [c3 = c1]
+ *
+ * E.g. decorrelate an inner query with non-equality predicates:
+ *
+ * Aggregate [] [min(c2)]            Aggregate [c3'] [min(c2), c3']
+ * +- Filter [outer(c3) > c1]   =>   +- Filter [c3' > c1]
+ *    +- Relation [t]                   +- DomainJoin [c3']
+ *                                         +- Relation [t]
+ *
+ * Join conditions: [c3 <=> c3']
+ */
+object DecorrelateInnerQuery extends PredicateHelper {
+
+  /**
+   * Check if the given expression is an equality condition.
+   */
+  private def isEquality(expression: Expression): Boolean = expression match {
+    case Equality(_, _) => true
+    case _ => false
+  }
+
+  /**
+   * Collect outer references in an expressions that are in the output attributes of the outer plan.
+   */
+  private def collectOuterReferences(expression: Expression): AttributeSet = {
+    AttributeSet(expression.collect { case o: OuterReference => o.toAttribute })
+  }
+
+  /**
+   * Collect outer references in a sequence of expressions that are in the output attributes
+   * of the outer plan.
+   */
+  private def collectOuterReferences(expressions: Seq[Expression]): AttributeSet = {
+    AttributeSet.fromAttributeSets(expressions.map(collectOuterReferences))
+  }
+
+  /**
+   * Build a mapping between outer references with equivalent inner query attributes.
+   * E.g. [outer(a) = x, y = outer(b), outer(c) = z + 1] => {a -> x, b -> y}
+   */
+  private def collectEquivalentOuterReferences(
+      expressions: Seq[Expression]): Map[Attribute, Attribute] = {
+    expressions.collect {
+      case Equality(o: OuterReference, a: Attribute) => (o.toAttribute, a.toAttribute)
+      case Equality(a: Attribute, o: OuterReference) => (o.toAttribute, a.toAttribute)
+    }.toMap
+  }
+
+  /**
+   * Replace all outer references using the expressions in the given outer reference map.
+   */
+  private def replaceOuterReference[E <: Expression](
+      expression: E,
+      outerReferenceMap: Map[Attribute, Attribute]): E = {
+    expression.transform {
+      case o: OuterReference => outerReferenceMap.getOrElse(o.toAttribute, o)
+    }.asInstanceOf[E]
+  }
+
+  /**
+   * Replace all outer references in the given expressions using the expressions in the
+   * outer reference map.
+   */
+  private def replaceOuterReferences[E <: Expression](
+      expressions: Seq[E],
+      outerReferenceMap: Map[Attribute, Attribute]): Seq[E] = {
+    expressions.map(replaceOuterReference(_, outerReferenceMap))
+  }
+
+  /**
+   * Return all missing references of the attribute set from the required attributes
+   * in the join condition.
+   */
+  private def missingReferences(
+      expressions: Seq[Expression],
+      joinCond: Seq[Expression]): AttributeSet = {
+    val outputSet = AttributeSet(expressions)
+    AttributeSet(joinCond.flatMap(_.references)) -- outputSet
+  }
+
+  /**
+   * Deduplicate the inner and the outer query attributes and return an aliased
+   * subquery plan and join conditions if duplicates are found. Duplicated attributes
+   * can break the structural integrity when joining the inner and outer plan together.
+   */
+  def deduplicate(
+      innerPlan: LogicalPlan,
+      conditions: Seq[Expression],
+      outerOutputSet: AttributeSet): (LogicalPlan, Seq[Expression]) = {
+    val duplicates = innerPlan.outputSet.intersect(outerOutputSet)
+    if (duplicates.nonEmpty) {
+      val aliasMap = AttributeMap(duplicates.map { dup =>
+        dup -> Alias(dup, dup.toString)()
+      }.toSeq)
+      val aliasedExpressions = innerPlan.output.map { ref =>
+        aliasMap.getOrElse(ref, ref)
+      }
+      val aliasedProjection = Project(aliasedExpressions, innerPlan)
+      val aliasedConditions = conditions.map(_.transform {
+        case ref: Attribute => aliasMap.getOrElse(ref, ref).toAttribute
+      })
+      (aliasedProjection, aliasedConditions)
+    } else {
+      (innerPlan, conditions)
+    }
+  }
+
+  def apply(
+      innerPlan: LogicalPlan,
+      outerPlan: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
+    apply(innerPlan, Seq(outerPlan))
+  }
+
+  def apply(
+      innerPlan: LogicalPlan,
+      outerPlans: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
+    val outputSet = AttributeSet(outerPlans.flatMap(_.outputSet))
+
+    // The return type of the recursion.
+    // The first parameter is a new logical plan with correlation eliminated.
+    // The second parameter is a list of join conditions with the outer query.
+    // The third parameter is a mapping between the outer references and equivalent
+    // expressions from the inner query that is used to replace outer references.
+    type ReturnType = (LogicalPlan, Seq[Expression], Map[Attribute, Attribute])
+
+    // Recursively decorrelate the input plan with a set of parent outer references and
+    // a boolean flag indicating whether the result of the plan will be aggregated.
+    def decorrelate(
+        plan: LogicalPlan,
+        parentOuterReferences: AttributeSet,
+        aggregated: Boolean = false): ReturnType = {
+      val isCorrelated = hasOuterReferences(plan)
+      if (!isCorrelated) {
+        // We have reached a plan without correlation to the outer plan.
+        if (parentOuterReferences.isEmpty) {
+          // If there is no outer references from the parent nodes, it means all outer
+          // attributes can be substituted by attributes from the inner plan. So no
+          // domain join is needed.
+          (plan, Nil, Map.empty[Attribute, Attribute])
+        } else {
+          // Build the domain join with the parent outer references.
+          val attributes = parentOuterReferences.toSeq
+          val domains = attributes.map(_.newInstance())
+          // A placeholder to be rewritten into domain join.
+          val domainJoin = DomainJoin(domains, plan)
+          val outerReferenceMap = attributes.zip(domains).toMap
+          // Build join conditions between domain attributes and outer references.
+          // EqualNullSafe is used to make sure null key can be joined together. Note
+          // outer referenced attributes can be changed during the outer query optimization.
+          // The equality conditions will also serve as an attribute mapping between new
+          // outer references and domain attributes when rewriting the domain joins.
+          // E.g. if the attribute a is changed to a1, the join condition a' <=> outer(a)
+          // will become a' <=> a1, and we can construct the aliases based on the condition:
+          // DomainJoin [a']        Join Inner
+          // +- InnerQuery     =>   :- InnerQuery
+          //                        +- Aggregate [a1] [a1 AS a']
+          //                           +- OuterQuery
+          val conditions = outerReferenceMap.map {
+            case (o, a) => EqualNullSafe(a, OuterReference(o))
+          }
+          (domainJoin, conditions.toSeq, outerReferenceMap)
+        }
+      } else {
+        // Collect outer references from the current node.
+        val outerReferences = collectOuterReferences(plan.expressions)
+        plan match {
+          case Filter(condition, child) =>
+            val (correlated, uncorrelated) =
+              splitConjunctivePredicates(condition)
+              .partition(containsOuter)
+            val (equality, nonEquality) = correlated.partition(isEquality)
+            // Find equivalent outer reference relations and remove equivalent attributes from
+            // parentOuterReferences since they can be replaced directly by expressions
+            // inside the inner plan.
+            val equivalences = collectEquivalentOuterReferences(equality)
+            // When the results are aggregated, outer references inside the non-equality
+            // predicates cannot be used directly as join conditions with the outer query.
+            val outerReferences = if (aggregated) {
+              collectOuterReferences(nonEquality)
+            } else {
+              AttributeSet.empty
+            }
+            val newOuterReferences = parentOuterReferences ++ outerReferences -- equivalences.keySet
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(child, newOuterReferences, aggregated)
+            // Add the mapping from the current node.
+            val newOuterReferenceMap = outerReferenceMap ++ equivalences
+            // Replace all outer references in non-equality filter conditions using the domain
+            // attributes produced for inner query with aggregates. This step is necessary
+            // for pushing down the non-equality filters into the domain join as join conditions.
+            val (newFilterCond, newJoinCond) = if (aggregated) {
+              val nonEqualityCond = replaceOuterReferences(nonEquality, newOuterReferenceMap)
+              (nonEqualityCond ++ uncorrelated, equality)
+            } else {
+              (uncorrelated, correlated)
+            }
+            val newFilter = newFilterCond match {
+              case Nil => newChild
+              case xs => Filter(xs.reduce(And), newChild)
+            }
+            (newFilter, joinCond ++ newJoinCond, newOuterReferenceMap)
+
+          case Project(projectList, child) =>
+            val newOuterReferences = parentOuterReferences ++ outerReferences
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(child, newOuterReferences, aggregated)
+            // Replace all outer references in the original project list.
+            val newProjectList = replaceOuterReferences(projectList, outerReferenceMap)
+            // Preserve required domain attributes in the join condition by adding the missing
+            // references to the new project list.
+            val referencesToAdd = missingReferences(newProjectList.map(_.toAttribute), joinCond)
+            val newProject = Project(newProjectList ++ referencesToAdd, newChild)
+            (newProject, joinCond, outerReferenceMap)
+
+          case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
+            val newOuterReferences = parentOuterReferences ++ outerReferences
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(child, newOuterReferences, aggregated = true)
+            // Replace all outer references in grouping and aggregate expressions.
+            val newGroupingExpr = replaceOuterReferences(groupingExpressions, outerReferenceMap)
+            val newAggExpr = replaceOuterReferences(aggregateExpressions, outerReferenceMap)
+            // Add all required domain attributes to both grouping and aggregate expressions.
+            val groupingExprToAdd = missingReferences(newGroupingExpr, joinCond)
+            val aggExprToAdd = missingReferences(newAggExpr.map(_.toAttribute), joinCond)
+            val newAggregate = a.copy(
+              groupingExpressions = newGroupingExpr ++ groupingExprToAdd,
+              aggregateExpressions = newAggExpr ++ aggExprToAdd,
+              child = newChild)
+            (newAggregate, joinCond, outerReferenceMap)
+
+          case j @ Join(left, right, joinType, condition, _) =>
+            // Join condition containing outer references is not supported.
+            assert(outerReferences.isEmpty, s"Correlated column is not allowed in join: $j")
+            val newOuterReferences = parentOuterReferences ++ outerReferences
+            val shouldPushToLeft = joinType match {
+              case LeftOuter | LeftSemiOrAnti(_) | FullOuter => true
+              case _ => hasOuterReferences(left)
+            }
+            val shouldPushToRight = joinType match {
+              case RightOuter | FullOuter => true
+              case _ => hasOuterReferences(right)
+            }
+            val (newLeft, leftJoinCond, leftOuterReferenceMap) = if (shouldPushToLeft) {
+              decorrelate(left, newOuterReferences, aggregated)
+            } else {
+              (left, Nil, Map.empty[Attribute, Attribute])
+            }
+            val (newRight, rightJoinCond, rightOuterReferenceMap) = if (shouldPushToRight) {
+              decorrelate(right, newOuterReferences, aggregated)
+            } else {
+              (right, Nil, Map.empty[Attribute, Attribute])
+            }
+            val newOuterReferenceMap = leftOuterReferenceMap ++ rightOuterReferenceMap
+            val newJoinCond = leftJoinCond ++ rightJoinCond
+            // If we push the dependent join to both sides, we will need to augment the join
+            // condition such that both sides are matched on the domain attributes.
+            val augmentedConditions = leftOuterReferenceMap.flatMap {
+              case (outer, inner) => rightOuterReferenceMap.get(outer).map(EqualNullSafe(inner, _))
+            }
+            val newCondition = (condition ++ augmentedConditions).reduceOption(And)
+            val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
+            (newJoin, newJoinCond, newOuterReferenceMap)
+
+          case s: UnaryNode =>
+            assert(outerReferences.isEmpty, s"Correlated column is not allowed in $s")
+            decorrelate(s.child, parentOuterReferences, aggregated)
+
+          case o =>
+            throw new UnsupportedOperationException(
+              s"Push down dependent joins through $o is not supported.")
+        }
+      }
+    }
+    val (newChild, joinCond, _) = decorrelate(BooleanSimplification(innerPlan), AttributeSet.empty)
+    val (plan, conditions) = deduplicate(newChild, joinCond, outputSet)
+    (plan, stripOuterReferences(conditions))
   }
 }
