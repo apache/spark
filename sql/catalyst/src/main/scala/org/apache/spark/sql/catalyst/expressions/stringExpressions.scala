@@ -655,13 +655,9 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   override def third: Expression = pos
   override def fourth: Expression = len
 
-  override protected def withNewChildrenInternal(
+  override protected def withNewChildren(
       first: Expression, second: Expression, third: Expression, fourth: Expression): Overlay =
-    copy(
-      input = first),
-      replace = second,
-      pos = third,
-      len = fourth)
+    copy(input = first, replace = second, pos = third, len = fourth)
 }
 
 object StringTranslate {

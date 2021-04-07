@@ -637,7 +637,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def third: Expression = rep
   override def fourth: Expression = pos
 
-  override protected def withNewChildrenInternal(
+  override protected def withNewChildren(
       first: Expression, second: Expression, third: Expression, fourth: Expression): RegExpReplace =
     copy(subject = first, regexp = second, rep = third, pos = fourth)
 }

@@ -970,4 +970,11 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def third: T
   def fourth: T
   @transient override final lazy val children: Seq[T] = first :: second :: third :: fourth :: Nil
+
+  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
+    assert(newChildren.size == 4, "Incorrect number of children")
+    withNewChildren(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+  }
+
+  protected def withNewChildren(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
 }

@@ -792,8 +792,8 @@ case class ArrayAggregate(
   override def third: Expression = merge
   override def fourth: Expression = finish
 
-  override protected def withNewChildrenInternal(
-      first: Expression, second: Expression, third: Expression, fourth: Expression): ArrayAggregate =
+  override protected def withNewChildren(first: Expression, second: Expression, third: Expression,
+      fourth: Expression): ArrayAggregate =
     copy(argument = first, zero = second, merge = third, finish = fourth)
 }
 

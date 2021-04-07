@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  * }}}
  */
 case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)

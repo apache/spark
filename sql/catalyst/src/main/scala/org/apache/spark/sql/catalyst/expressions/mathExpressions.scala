@@ -1591,11 +1591,7 @@ case class WidthBucket(
   override def third: Expression = maxValue
   override def fourth: Expression = numBucket
 
-  override protected def withNewChildrenInternal(
+  override protected def withNewChildren(
       first: Expression, second: Expression, third: Expression, fourth: Expression): WidthBucket =
-    copy(
-      value = first,
-      minValue = second,
-      maxValue = third,
-      numBucket = fourth)
+    copy(value = first, minValue = second, maxValue = third, numBucket = fourth)
 }
