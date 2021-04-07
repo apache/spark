@@ -282,6 +282,9 @@ jobs:
   lint:
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
     container:
       image: dongjoon/apache-spark-github-action-image:20201025
     steps:
@@ -327,7 +330,7 @@ jobs:
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
         Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
-        Rscript -e "devtools::install_github('jimhester/lintr@v2.0.0')"
+        Rscript -e "devtools::install_github('jimhester/lintr@v2.0.1')"
         ./R/install-dev.sh
     - name: Install dependencies for documentation generation
       run: |
@@ -357,8 +360,6 @@ jobs:
     - name: Run documentation build
       run: |
         cd docs
-        export LC_ALL=C.UTF-8
-        export LANG=C.UTF-8
         bundle exec jekyll build
 
   java-11:
@@ -367,6 +368,17 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Maven local repository
       uses: actions/cache@v2
       with:
@@ -392,6 +404,17 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
@@ -414,6 +437,17 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
@@ -450,6 +484,17 @@ jobs:
         repository: maropu/spark-tpcds-sf-1
         ref: 6b660a53091bd6d23cbe58b0f09aae08e71cc667
         path: ./tpcds-sf-1
+    - name: Cache Scala, SBT and Maven
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:

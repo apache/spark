@@ -2352,25 +2352,60 @@ case class Extract(field: Expression, source: Expression, child: Expression)
 }
 
 /**
- * Returns the interval from startTimestamp to endTimestamp in which the `months` and `day` field
- * is set to 0 and the `microseconds` field is initialized to the microsecond difference
- * between the given timestamps.
+ * Returns the interval from `right` to `left` timestamps.
+ *   - When the SQL config `spark.sql.legacy.interval.enabled` is `true`,
+ *     it returns `CalendarIntervalType` in which the months` and `day` field is set to 0 and
+ *     the `microseconds` field is initialized to the microsecond difference between
+ *     the given timestamps.
+ *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in microseconds
+ *     between given timestamps.
  */
-case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expression)
-  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
+case class SubtractTimestamps(
+    left: Expression,
+    right: Expression,
+    legacyInterval: Boolean,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression
+  with TimeZoneAwareExpression
+  with ExpectsInputTypes
+  with NullIntolerant {
 
-  override def left: Expression = endTimestamp
-  override def right: Expression = startTimestamp
+  def this(endTimestamp: Expression, startTimestamp: Expression) =
+    this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
-  override def dataType: DataType = CalendarIntervalType
+  override def dataType: DataType =
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
 
-  override def nullSafeEval(end: Any, start: Any): Any = {
-    new CalendarInterval(0, 0, end.asInstanceOf[Long] - start.asInstanceOf[Long])
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  @transient
+  private lazy val evalFunc: (Long, Long) => Any = legacyInterval match {
+    case false => (leftMicros, rightMicros) =>
+      subtractTimestamps(leftMicros, rightMicros, zoneId)
+    case true => (leftMicros, rightMicros) =>
+      new CalendarInterval(0, 0, leftMicros - rightMicros)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (end, start) =>
-      s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
+  override def nullSafeEval(leftMicros: Any, rightMicros: Any): Any = {
+    evalFunc(leftMicros.asInstanceOf[Long], rightMicros.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = legacyInterval match {
+    case false =>
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      defineCodeGen(ctx, ev, (l, r) => s"""$dtu.subtractTimestamps($l, $r, $zid)""")
+    case true =>
+      defineCodeGen(ctx, ev, (end, start) =>
+        s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
+  }
+}
+
+object SubtractTimestamps {
+  def apply(left: Expression, right: Expression): SubtractTimestamps = {
+    new SubtractTimestamps(left, right)
   }
 }
 
