@@ -82,7 +82,7 @@ case class TreeNodeTag[T](name: String)
 
 // A wrapper of Bitset for pattern enums.
 trait TreePatternBits {
-  val treePatternBits: BitSet
+  protected val treePatternBits: BitSet
 
   /**
    * @param t, the tree pattern enum to be tested.
