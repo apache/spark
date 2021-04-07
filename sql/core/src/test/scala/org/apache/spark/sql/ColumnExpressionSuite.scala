@@ -30,6 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2528,7 +2529,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-34761: add/subtract a day-time interval to/from a timestamp") {
+  test("SPARK-34761, SPARK-34903: add/subtract a day-time interval to/from a timestamp") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       outstandingZoneIds.foreach { zid =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
@@ -2553,8 +2554,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             val result = expected.atZone(zid).toInstant
             val df = Seq((ts, duration, result)).toDF("ts", "interval", "result")
             checkAnswer(
-              df.select($"ts" + $"interval", $"interval" + $"ts", $"result" - $"interval"),
-              Row(result, result, ts))
+              df.select($"ts" + $"interval", $"interval" + $"ts", $"result" - $"interval",
+                $"result" - $"ts"),
+              Row(result, result, ts, duration))
           }
         }
       }
@@ -2746,6 +2748,31 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
       assert(e.getMessage.contains("long overflow"))
+    }
+  }
+
+  test("SPARK-34903: Return day-time interval from timestamps subtraction") {
+    outstandingTimezonesIds.foreach { tz =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+        checkAnswer(
+          sql("select timestamp '2021-03-31 19:11:10' - timestamp '2021-03-01 19:11:10'"),
+          Row(Duration.ofDays(30)))
+        checkAnswer(
+          Seq((Instant.parse("2021-03-31T00:01:02Z"), Instant.parse("2021-04-01T00:00:00Z")))
+            .toDF("start", "end").select($"end" - $"start" < Duration.ofDays(1)),
+          Row(true))
+        checkAnswer(
+          Seq((Instant.parse("2021-03-31T00:01:02.777Z"), Duration.ofMillis(333)))
+            .toDF("ts", "i")
+            .select(($"ts" + $"i") - $"ts"),
+          Row(Duration.ofMillis(333)))
+        checkAnswer(
+          Seq((LocalDateTime.of(2021, 3, 31, 10, 0, 0)
+              .atZone(DateTimeUtils.getZoneId(tz)).toInstant, LocalDate.of(2020, 3, 31)))
+            .toDF("ts", "d")
+          .select($"ts" - $"d"),
+          Row(Duration.ofDays(365).plusHours(10)))
+      }
     }
   }
 }

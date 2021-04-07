@@ -30,7 +30,21 @@ trait GroupingAnalytic extends Expression with CodegenFallback {
 
   def groupingSets: Seq[Seq[Expression]]
   def selectedGroupByExprs: Seq[Seq[Expression]]
-  def groupByExprs: Seq[Expression]
+
+  def groupByExprs: Seq[Expression] = {
+    assert(children.forall(_.resolved),
+      "Cannot call GroupingSet.groupByExprs before the children expressions are all resolved.")
+    children.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
+      // Only unique expressions are included in the group by expressions and is determined
+      // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
+      // in grouping expression (a * b)
+      if (result.exists(_.semanticEquals(currentExpr))) {
+        result
+      } else {
+        result :+ currentExpr
+      }
+    }
+  }
 
   // this should be replaced first
   override lazy val resolved: Boolean = false
@@ -43,11 +57,9 @@ trait GroupingAnalytic extends Expression with CodegenFallback {
 
 object GroupingAnalytic {
   /**
-   * GROUP BY a, b, c WITH ROLLUP
+   * 'GROUP BY a, b, c WITH ROLLUP'
    * is equivalent to
-   * GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
-   * or
-   * GROUP BY GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
+   * 'GROUP BY GROUPING SETS ( (a, b, c), (a, b), (a), ( ) )'.
    * Group Count: N + 1 (N is the number of group expressions)
    *
    * We need to get all of its subsets for the rule described above, the subset is
@@ -57,11 +69,9 @@ object GroupingAnalytic {
     exprs.inits.map(_.flatten).toIndexedSeq
 
   /**
-   * GROUP BY a, b, c WITH CUBE
+   * 'GROUP BY a, b, c WITH CUBE'
    * is equivalent to
-   * GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
-   * or
-   * GROUP BY GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
+   * 'GROUP BY GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) )'.
    * Group Count: 2 ^ N (N is the number of group expressions)
    *
    * We need to get all of its subsets for a given GROUPBY expression, the subsets are
@@ -100,7 +110,6 @@ case class Cube(
     groupingSetIndexes: Seq[Seq[Int]],
     children: Seq[Expression]) extends GroupingAnalytic {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def groupByExprs: Seq[Expression] = children.distinct
   override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingAnalytic.cubeExprs(groupingSets)
 }
 
@@ -114,9 +123,7 @@ case class Rollup(
     groupingSetIndexes: Seq[Seq[Int]],
     children: Seq[Expression]) extends GroupingAnalytic {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def groupByExprs: Seq[Expression] = children.distinct
-  override def selectedGroupByExprs: Seq[Seq[Expression]] =
-    GroupingAnalytic.rollupExprs(groupingSets)
+  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingAnalytic.rollupExprs(groupingSets)
 }
 
 object Rollup {
@@ -128,16 +135,24 @@ object Rollup {
 case class GroupingSets(
     groupingSetIndexes: Seq[Seq[Int]],
     flatGroupingSets: Seq[Expression],
-    groupByExprs: Seq[Expression]) extends GroupingAnalytic {
+    userGivenGroupByExprs: Seq[Expression]) extends GroupingAnalytic {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(flatGroupingSets))
   override def selectedGroupByExprs: Seq[Seq[Expression]] = groupingSets
-  override def children: Seq[Expression] = groupingSets.flatten ++ groupByExprs
+  // Includes the `userGivenGroupByExprs` in the children, which will be included in the final
+  // GROUP BY expressions, so that `SELECT c ... GROUP BY (a, b, c) GROUPING SETS (a, b)` works.
+  override def children: Seq[Expression] = flatGroupingSets ++ userGivenGroupByExprs
 }
 
 object GroupingSets {
-  def apply(groupingSets: Seq[Seq[Expression]], groupByExprs: Seq[Expression]): GroupingSets = {
+  def apply(
+      groupingSets: Seq[Seq[Expression]],
+      userGivenGroupByExprs: Seq[Expression]): GroupingAnalytic = {
     val groupingSetIndexes = GroupingAnalytic.computeGroupingSetIndexes(groupingSets)
-    GroupingSets(groupingSetIndexes, groupingSets.flatten, groupByExprs)
+    GroupingSets(groupingSetIndexes, groupingSets.flatten, userGivenGroupByExprs)
+  }
+
+  def apply(groupingSets: Seq[Seq[Expression]]): GroupingAnalytic = {
+    apply(groupingSets, userGivenGroupByExprs = Nil)
   }
 }
 

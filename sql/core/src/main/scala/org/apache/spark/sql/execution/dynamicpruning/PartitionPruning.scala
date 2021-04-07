@@ -160,7 +160,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       // We can't reuse the broadcast because the join type doesn't support broadcast,
       // and doing DPP means running an extra query that may have significant overhead.
       // We need to make sure the pruning side is very big so that DPP is still worthy.
-      estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
+      canBroadcastBySize(otherPlan, conf) &&
+        estimatePruningSideSize * conf.dynamicPartitionPruningPruningSideExtraFilterRatio > overhead
     }
   }
 
@@ -246,15 +247,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // otherwise the pruning will not trigger
             var partScan = getPartitionTableScan(l, left)
             if (partScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(right) &&
-                (canBroadcastBySize(right, conf) || hintToBroadcastRight(hint))) {
+                hasPartitionPruningFilter(right)) {
               newLeft = insertPredicate(l, newLeft, r, right, rightKeys, partScan.get,
                 canBuildBroadcastRight(joinType))
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(left) &&
-                  (canBroadcastBySize(left, conf) || hintToBroadcastLeft(hint))) {
+                  hasPartitionPruningFilter(left) ) {
                 newRight = insertPredicate(r, newRight, l, left, leftKeys, partScan.get,
                   canBuildBroadcastLeft(joinType))
               }
