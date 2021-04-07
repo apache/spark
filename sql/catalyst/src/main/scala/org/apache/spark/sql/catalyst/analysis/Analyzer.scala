@@ -635,8 +635,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(gs: GroupingSet), aggExprs, _))
-        if agg.childrenResolved && (gs.children ++ aggExprs).forall(_.resolved) =>
+      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(gs: GroupingSet), aggregateExpressions, _))
+        if agg.childrenResolved && (gs.children ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
