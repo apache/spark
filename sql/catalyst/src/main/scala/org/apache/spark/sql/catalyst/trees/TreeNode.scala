@@ -880,7 +880,7 @@ trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def child: T
   @transient override final lazy val children: Seq[T] = child :: Nil
 
-  override def mapChildren(f: T => T): T = {
+  override final def mapChildren(f: T => T): T = {
     val newChild = f(child)
     if (newChild fastEquals child) {
       this.asInstanceOf[T]
@@ -893,8 +893,10 @@ trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
     }
   }
 
-  override final def withNewChildrenInternal(newChildren: Seq[T]): T =
+  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
+    assert(newChildren.size == 1, "Incorrect number of children")
     withNewChild(newChildren.head)
+  }
 
   protected def withNewChild(newChild: T): T
 }
@@ -904,7 +906,7 @@ trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def right: T
   @transient override final lazy val children: Seq[T] = left :: right :: Nil
 
-  override def mapChildren(f: T => T): T = {
+  override final def mapChildren(f: T => T): T = {
     var newLeft = f(left)
     newLeft = if (newLeft fastEquals left) left else newLeft
     var newRight = f(right)
@@ -921,8 +923,10 @@ trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
     }
   }
 
-  override def withNewChildrenInternal(newChildren: Seq[T]): T =
+  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
+    assert(newChildren.size == 2, "Incorrect number of children")
     withNewChildren(newChildren(0), newChildren(1))
+  }
 
   protected def withNewChildren(newLeft: T, newRight: T): T
 }
@@ -933,7 +937,7 @@ trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def third: T
   @transient override final lazy val children: Seq[T] = first :: second :: third :: Nil
 
-  override def mapChildren(f: T => T): T = {
+  override final def mapChildren(f: T => T): T = {
     var newFirst = f(first)
     newFirst = if (newFirst fastEquals first) first else newFirst
     var newSecond = f(second)
@@ -952,8 +956,10 @@ trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
     }
   }
 
-  override def withNewChildrenInternal(newChildren: Seq[T]): T =
+  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
+    assert(newChildren.size == 3, "Incorrect number of children")
     withNewChildren(newChildren(0), newChildren(1), newChildren(2))
+  }
 
   protected def withNewChildren(newFirst: T, newSecond: T, newThird: T): T
 }
