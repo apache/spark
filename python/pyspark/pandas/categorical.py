@@ -162,3 +162,33 @@ class CategoricalAccessor(object):
         self, new_categories, ordered: bool = None, rename: bool = False, inplace: bool = False
     ):
         raise NotImplementedError()
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.categorical
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.categorical.__dict__.copy()
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.categorical tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.categorical,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

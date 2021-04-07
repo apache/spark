@@ -340,3 +340,35 @@ def register_index_accessor(name):
     from pyspark.pandas import Index
 
     return _register_accessor(name, Index)
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    import numpy
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.extensions
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.extensions.__dict__.copy()
+    globs["np"] = numpy
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.extensions tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.extensions,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
