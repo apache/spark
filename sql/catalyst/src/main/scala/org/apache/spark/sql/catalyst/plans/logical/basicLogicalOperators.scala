@@ -79,7 +79,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     getAllValidConstraints(projectList)
 
   override def metadataOutput: Seq[Attribute] =
-    getTagValue(Project.hiddenOutputTag).getOrElse(Seq.empty[Attribute])
+    child.metadataOutput.filter(_.isHiddenCol) ++
+      getTagValue(Project.hiddenOutputTag).getOrElse(Seq.empty[Attribute])
 }
 
 object Project {
