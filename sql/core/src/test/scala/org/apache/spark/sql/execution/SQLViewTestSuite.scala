@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -31,6 +33,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 
   protected def viewTypeString: String
   protected def formattedViewName(viewName: String): String
+  protected def tableIdentifier(viewName: String): TableIdentifier
 
   def createView(
       viewName: String,
@@ -249,22 +252,155 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-34260: replace existing view using CREATE OR REPLACE") {
+    val viewName = createView("testView", "SELECT * FROM (SELECT 1)")
+    withView(viewName) {
+      checkViewOutput(viewName, Seq(Row(1)))
+      createView("testView", "SELECT * FROM (SELECT 2)", replace = true)
+      checkViewOutput(viewName, Seq(Row(2)))
+    }
+  }
+
+  test("SPARK-34490 - query should fail if the view refers a dropped table") {
+    withTable("t") {
+      Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+      val viewName = createView("testView", "SELECT * FROM t")
+      withView(viewName) {
+        // Always create a temp view in this case, not use `createView` on purpose
+        sql("CREATE TEMP VIEW t AS SELECT 1 AS c1")
+        withTempView("t") {
+          checkViewOutput(viewName, Seq(Row(2), Row(3), Row(1)))
+          // Manually drop table `t` to see if the query will fail
+          sql("DROP TABLE IF EXISTS default.t")
+          val e = intercept[AnalysisException] {
+            sql(s"SELECT * FROM $viewName").collect()
+          }.getMessage
+          assert(e.contains("Table or view not found: t"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-34613: Fix view does not capture disable hint config") {
+    withSQLConf(DISABLE_HINTS.key -> "true") {
+      val viewName = createView("v1", "SELECT /*+ repartition(1) */ 1")
+      withView(viewName) {
+        assert(
+          sql(s"SELECT * FROM $viewName").queryExecution.analyzed.collect {
+            case e: Repartition => e
+          }.isEmpty
+        )
+        checkViewOutput(viewName, Seq(Row(1)))
+      }
+    }
+  }
+
+  test("SPARK-34152: view's identifier should be correctly stored") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        val viewName = createView("v", "SELECT 1")
+        withView(viewName) {
+          val tblIdent = tableIdentifier("v")
+          val metadata = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(tblIdent)
+          assert(metadata.identifier == tblIdent)
+        }
+      }
+    }
+  }
+
+  test("SPARK-34504: drop an invalid view") {
+    withTable("t") {
+      sql("CREATE TABLE t(s STRUCT<i: INT, j: INT>) USING json")
+      val viewName = createView("v", "SELECT s.i FROM t")
+      withView(viewName) {
+        assert(spark.table(viewName).collect().isEmpty)
+
+        // re-create the table without nested field `i` which is referred by the view.
+        sql("DROP TABLE t")
+        sql("CREATE TABLE t(s STRUCT<j: INT>) USING json")
+        val e = intercept[AnalysisException](spark.table(viewName))
+        assert(e.message.contains("No such struct field i in j"))
+
+        // drop invalid view should be fine
+        sql(s"DROP VIEW $viewName")
+      }
+    }
+  }
+
+  test("SPARK-34719: view query with duplicated output column names") {
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withView("v1", "v2") {
+          sql("CREATE VIEW v1 AS SELECT 1 a, 2 b")
+          sql("CREATE VIEW v2 AS SELECT 1 col")
+
+          val viewName = createView(
+            viewName = "testView",
+            sqlText = "SELECT *, 1 col, 2 col FROM v1",
+            columnNames = Seq("c1", "c2", "c3", "c4"))
+          withView(viewName) {
+            checkViewOutput(viewName, Seq(Row(1, 2, 1, 2)))
+
+            // One more duplicated column `COL` if caseSensitive=false.
+            sql("CREATE OR REPLACE VIEW v1 AS SELECT 1 a, 2 b, 3 COL")
+            if (caseSensitive) {
+              checkViewOutput(viewName, Seq(Row(1, 2, 1, 2)))
+            } else {
+              val e = intercept[AnalysisException](spark.table(viewName).collect())
+              assert(e.message.contains("incompatible schema change"))
+            }
+          }
+
+          // v1 has 3 columns [a, b, COL], v2 has one column [col], so `testView2` has duplicated
+          // output column names if caseSensitive=false.
+          val viewName2 = createView(
+            viewName = "testView2",
+            sqlText = "SELECT * FROM v1, v2",
+            columnNames = Seq("c1", "c2", "c3", "c4"))
+          withView(viewName2) {
+            checkViewOutput(viewName2, Seq(Row(1, 2, 3, 1)))
+
+            // One less duplicated column if caseSensitive=false.
+            sql("CREATE OR REPLACE VIEW v1 AS SELECT 1 a, 2 b")
+            if (caseSensitive) {
+              val e = intercept[AnalysisException](spark.table(viewName2).collect())
+              assert(e.message.contains("cannot resolve 'COL'"))
+            } else {
+              val e = intercept[AnalysisException](spark.table(viewName2).collect())
+              assert(e.message.contains("incompatible schema change"))
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = viewName
+  override protected def tableIdentifier(viewName: String): TableIdentifier = {
+    TableIdentifier(viewName)
+  }
 }
 
 class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
+  private def db: String = spark.sharedState.globalTempViewManager.database
   override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = {
-    val globalTempDB = spark.sharedState.globalTempViewManager.database
-    s"$globalTempDB.$viewName"
+    s"$db.$viewName"
+  }
+  override protected def tableIdentifier(viewName: String): TableIdentifier = {
+    TableIdentifier(viewName, Some(db))
   }
 }
 
 class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
+  private def db: String = "default"
   override protected def viewTypeString: String = "VIEW"
-  override protected def formattedViewName(viewName: String): String = s"default.$viewName"
+  override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
+  override protected def tableIdentifier(viewName: String): TableIdentifier = {
+    TableIdentifier(viewName, Some(db))
+  }
 }

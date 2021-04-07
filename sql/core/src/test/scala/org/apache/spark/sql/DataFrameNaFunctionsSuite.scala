@@ -460,4 +460,66 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
       Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
   }
+
+  test("SPARK-34417: test fillMap() for column with a dot in the name") {
+    val na = "n/a"
+    checkAnswer(
+      Seq(("abc", 23L), ("def", 44L), (null, 0L)).toDF("ColWith.Dot", "Col")
+        .na.fill(Map("`ColWith.Dot`" -> na)),
+      Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
+  }
+
+  test("SPARK-34417: test fillMap() for qualified-column with a dot in the name") {
+    val na = "n/a"
+    checkAnswer(
+      Seq(("abc", 23L), ("def", 44L), (null, 0L)).toDF("ColWith.Dot", "Col").as("testDF")
+        .na.fill(Map("testDF.`ColWith.Dot`" -> na)),
+      Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
+  }
+
+  test("SPARK-34417: test fillMap() for column without a dot in the name" +
+    " and dataframe with another column having a dot in the name") {
+    val na = "n/a"
+    checkAnswer(
+      Seq(("abc", 23L), ("def", 44L), (null, 0L)).toDF("Col", "ColWith.Dot")
+        .na.fill(Map("Col" -> na)),
+      Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
+  }
+
+  test("SPARK-34649: replace value of a column with dot in the name") {
+    checkAnswer(
+      Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2")
+        .na.replace("`Col.1`", Map( "n/a" -> "unknown")),
+      Row("abc", 23) :: Row("def", 44L) :: Row("unknown", 0L) :: Nil)
+  }
+
+  test("SPARK-34649: replace value of a qualified-column with dot in the name") {
+    checkAnswer(
+      Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2").as("testDf")
+        .na.replace("testDf.`Col.1`", Map( "n/a" -> "unknown")),
+      Row("abc", 23) :: Row("def", 44L) :: Row("unknown", 0L) :: Nil)
+  }
+
+  test("SPARK-34649: replace value of a dataframe having dot in the all column names") {
+    checkAnswer(
+      Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2")
+        .na.replace("*", Map( "n/a" -> "unknown")),
+      Row("abc", 23) :: Row("def", 44L) :: Row("unknown", 0L) :: Nil)
+  }
+
+  test("SPARK-34649: replace value of a column not present in the dataframe") {
+    val df = Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2")
+    val exception = intercept[AnalysisException] {
+      df.na.replace("aa", Map( "n/a" -> "unknown"))
+    }
+    assert(exception.getMessage.equals("Cannot resolve column name \"aa\" among (Col.1, Col.2)"))
+  }
+
+  test("SPARK-34649: replace value of a nested column") {
+    val df = createDFWithNestedColumns
+    val exception = intercept[UnsupportedOperationException] {
+      df.na.replace("c1.c1-1", Map("b1" ->"a1"))
+    }
+    assert(exception.getMessage.equals("Nested field c1.c1-1 is not supported."))
+  }
 }

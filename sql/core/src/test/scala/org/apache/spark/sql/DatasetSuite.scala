@@ -864,7 +864,7 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"), e.getMessage)
+    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
   }
 
   test("runtime nullability check") {
@@ -1693,6 +1693,33 @@ class DatasetSuite extends QueryTest
     checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
   }
 
+  test("SPARK-23862: Spark ExpressionEncoder should support Java Enum type from Scala") {
+    val saveModeSeq =
+      Seq(SaveMode.Append, SaveMode.Overwrite, SaveMode.ErrorIfExists, SaveMode.Ignore, null)
+    assert(saveModeSeq.toDS().collect().toSeq === saveModeSeq)
+    assert(saveModeSeq.toDS().schema === new StructType().add("value", StringType, nullable = true))
+
+    val saveModeCaseSeq = saveModeSeq.map(SaveModeCase.apply)
+    assert(saveModeCaseSeq.toDS().collect().toSet === saveModeCaseSeq.toSet)
+    assert(saveModeCaseSeq.toDS().schema ===
+      new StructType().add("mode", StringType, nullable = true))
+
+    val saveModeArrayCaseSeq =
+      Seq(SaveModeArrayCase(Array()), SaveModeArrayCase(saveModeSeq.toArray))
+    val collected = saveModeArrayCaseSeq.toDS().collect()
+    assert(collected.length === 2)
+    val sortedByLength = collected.sortBy(_.modes.length)
+    assert(sortedByLength(0).modes === Array())
+    assert(sortedByLength(1).modes === saveModeSeq.toArray)
+    assert(saveModeArrayCaseSeq.toDS().schema ===
+      new StructType().add("modes", ArrayType(StringType, containsNull = true), nullable = true))
+
+    // Enum is stored as string, so it is possible to convert to/from string
+    val stringSeq = saveModeSeq.map(Option.apply).map(_.map(_.toString).orNull)
+    assert(stringSeq.toDS().as[SaveMode].collect().toSet === saveModeSeq.toSet)
+    assert(saveModeSeq.toDS().as[String].collect().toSet === stringSeq.toSet)
+  }
+
   test("SPARK-24571: filtering of string values by char literal") {
     val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
     checkAnswer(df.where($"city" === 'X'), Seq(Row("X")))
@@ -1826,7 +1853,7 @@ class DatasetSuite extends QueryTest
         .map(b => b - 1)
         .collect()
     }
-    assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
+    assert(thrownException.message.contains("Cannot up cast id from bigint to tinyint"))
   }
 
   test("SPARK-26690: checkpoints should be executed with an execution id") {
@@ -1955,7 +1982,44 @@ class DatasetSuite extends QueryTest
       assert(timezone == "Asia/Shanghai")
     }
   }
+
+  test("SPARK-34002: Fix broken Option input/output in UDF") {
+    def f1(bar: Bar): Option[Bar] = {
+      None
+    }
+
+    def f2(bar: Option[Bar]): Option[Bar] = {
+      bar
+    }
+
+    val udf1 = udf(f1 _).withName("f1")
+    val udf2 = udf(f2 _).withName("f2")
+
+    val df = (1 to 2).map(i => Tuple1(Bar(1))).toDF("c0")
+    val withUDF = df
+      .withColumn("c1", udf1(col("c0")))
+      .withColumn("c2", udf2(col("c1")))
+
+    assert(withUDF.schema == StructType(
+      StructField("c0", StructType(StructField("a", IntegerType, false) :: Nil)) ::
+        StructField("c1", StructType(StructField("a", IntegerType, false) :: Nil)) ::
+        StructField("c2", StructType(StructField("a", IntegerType, false) :: Nil)) :: Nil))
+
+    checkAnswer(withUDF, Row(Row(1), null, null) :: Row(Row(1), null, null) :: Nil)
+  }
+
+  test("SPARK-34605: implicit encoder for java.time.Duration") {
+    val duration = java.time.Duration.ofMinutes(10)
+    assert(spark.range(1).map { _ => duration }.head === duration)
+  }
+
+  test("SPARK-34615: implicit encoder for java.time.Period") {
+    val period = java.time.Period.ofYears(9999).withMonths(11)
+    assert(spark.range(1).map { _ => period }.head === period)
+  }
 }
+
+case class Bar(a: Int)
 
 object AssertExecutionId {
   def apply(id: Long): Long = {
@@ -2053,3 +2117,7 @@ case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
 
 case class SpecialCharClass(`field.1`: String, `field 2`: String)
+
+/** Used to test Java Enums from Scala code */
+case class SaveModeCase(mode: SaveMode)
+case class SaveModeArrayCase(modes: Array[SaveMode])

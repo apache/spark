@@ -32,12 +32,15 @@ import org.apache.spark.sql.types.StructType;
  * <p>
  * These APIs are used to modify table partition identifier or partition metadata.
  * In some cases, they will change the table data as well.
- * ${@link #createPartition}:
- *     add a partition and any data it contains to the table
- * ${@link #dropPartition}:
- *     remove a partition and any data it contains from the table
- * ${@link #replacePartitionMetadata}:
- *     point a partition to a new location, which will swap one location's data for the other
+ * <ul>
+ *   <li>{@link #createPartition}: add a partition and any data it contains to the table</li>
+ *   <li>{@link #dropPartition}: remove a partition and any data it contains from the table</li>
+ *   <li>{@link #purgePartition}: remove a partition and any data it contains from the table by
+ *   skipping a trash even if it is supported.</li>
+ *   <li>{@link #replacePartitionMetadata}: point a partition to a new location, which will swap
+ *   one location's data for the other</li>
+ *   <li>{@link #truncatePartition}: remove partition data from the table</li>
+ * </ul>
  *
  * @since 3.1.0
  */
@@ -71,6 +74,22 @@ public interface SupportsPartitionManagement extends Table {
      * @return true if a partition was deleted, false if no partition exists for the identifier
      */
     boolean dropPartition(InternalRow ident);
+
+    /**
+     * Drop a partition from the table and completely remove partition data by skipping a trash
+     * even if it is supported.
+     *
+     * @param ident a partition identifier
+     * @return true if a partition was deleted, false if no partition exists for the identifier
+     * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
+     * @throws UnsupportedOperationException If partition purging is not supported
+     *
+     * @since 3.2.0
+     */
+    default boolean purgePartition(InternalRow ident)
+      throws NoSuchPartitionException, UnsupportedOperationException {
+      throw new UnsupportedOperationException("Partition purge is not supported");
+    }
 
     /**
      * Test whether a partition exists using an {@link InternalRow ident} from the table.
@@ -120,4 +139,38 @@ public interface SupportsPartitionManagement extends Table {
      * @return an array of Identifiers for the partitions
      */
     InternalRow[] listPartitionIdentifiers(String[] names, InternalRow ident);
+
+    /**
+     * Rename an existing partition of the table.
+     *
+     * @param from an existing partition identifier to rename
+     * @param to new partition identifier
+     * @return true if renaming completes successfully otherwise false
+     * @throws UnsupportedOperationException If partition renaming is not supported
+     * @throws PartitionAlreadyExistsException If the `to` partition exists already
+     * @throws NoSuchPartitionException If the `from` partition does not exist
+     *
+     * @since 3.2.0
+     */
+    default boolean renamePartition(InternalRow from, InternalRow to)
+        throws UnsupportedOperationException,
+               PartitionAlreadyExistsException,
+               NoSuchPartitionException {
+      throw new UnsupportedOperationException("Partition renaming is not supported");
+    }
+
+    /**
+     * Truncate a partition in the table by completely removing partition data.
+     *
+     * @param ident a partition identifier
+     * @return true if the partition was truncated successfully otherwise false
+     * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
+     * @throws UnsupportedOperationException If partition truncation is not supported
+     *
+     * @since 3.2.0
+     */
+    default boolean truncatePartition(InternalRow ident)
+        throws NoSuchPartitionException, UnsupportedOperationException {
+      throw new UnsupportedOperationException("Partition truncate is not supported");
+    }
 }

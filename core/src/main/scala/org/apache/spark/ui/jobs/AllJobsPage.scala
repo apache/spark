@@ -19,7 +19,7 @@ package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.Date
+import java.util.{Date, Locale}
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.ListBuffer
@@ -277,15 +277,17 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       s"${appSummary.numCompletedJobs}, only showing ${completedJobs.size}"
     }
 
+    // SPARK-33991 Avoid enumeration conversion error.
     val schedulingMode = store.environmentInfo().sparkProperties.toMap
       .get(SCHEDULER_MODE.key)
-      .map { mode => SchedulingMode.withName(mode).toString }
+      .map { mode => SchedulingMode.withName(mode.toUpperCase(Locale.ROOT)).toString }
       .getOrElse("Unknown")
 
     val summary: NodeSeq =
       <div>
         <ul class="list-unstyled">
           <li>
+
             <strong>User:</strong>
             {parent.getSparkUser}
           </li>

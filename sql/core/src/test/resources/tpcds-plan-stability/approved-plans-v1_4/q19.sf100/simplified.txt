@@ -17,14 +17,16 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
                                   Project [ss_customer_sk,ss_store_sk,ss_ext_sales_price,i_brand_id,i_brand,i_manufact_id,i_manufact]
                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                      Project [ss_sold_date_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price,i_brand_id,i_brand,i_manufact_id,i_manufact]
+                                      Project [ss_customer_sk,ss_store_sk,ss_ext_sales_price,ss_sold_date_sk,i_brand_id,i_brand,i_manufact_id,i_manufact]
                                         BroadcastHashJoin [ss_item_sk,i_item_sk]
-                                          Filter [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk]
+                                          Filter [ss_item_sk,ss_customer_sk,ss_store_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price]
+                                                Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price,ss_sold_date_sk]
+                                                  SubqueryBroadcast [d_date_sk] #1
+                                                    ReusedExchange [d_date_sk] #3
                                           InputAdapter
-                                            BroadcastExchange #3
+                                            BroadcastExchange #4
                                               WholeStageCodegen (1)
                                                 Project [i_item_sk,i_brand_id,i_brand,i_manufact_id,i_manufact]
                                                   Filter [i_manager_id,i_item_sk]
@@ -32,7 +34,7 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                                       InputAdapter
                                                         Scan parquet default.item [i_item_sk,i_brand_id,i_brand,i_manufact_id,i_manufact,i_manager_id]
                                       InputAdapter
-                                        BroadcastExchange #4
+                                        BroadcastExchange #3
                                           WholeStageCodegen (2)
                                             Project [d_date_sk]
                                               Filter [d_moy,d_year,d_date_sk]

@@ -647,10 +647,9 @@ SELECT repeat('Pg', 4);
 SELECT repeat('Pg', -4);
 
 SELECT trim(binary('\\000') from binary('\\000Tom\\000'));
--- [SPARK-28123] Add support btrim
--- SELECT btrim(E'\\000trim\\000'::bytea, E'\\000'::bytea);
--- SELECT btrim(''::bytea, E'\\000'::bytea);
--- SELECT btrim(E'\\000trim\\000'::bytea, ''::bytea);
+SELECT btrim(binary('\\000trim\\000'), binary('\\000'));
+SELECT btrim(binary(''), binary('\\000'));
+SELECT btrim(binary('\\000trim\\000'), binary(''));
 -- [SPARK-28121] decode can not accept 'escape' as charset
 -- [SPARK-28412][SQL] ANSI SQL: OVERLAY function support byte array
 -- SELECT encode(overlay(E'Th\\000omas'::bytea placing E'Th\\001omas'::bytea from 2),'escape');

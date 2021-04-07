@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution.command
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
@@ -38,6 +38,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * wrapped in `ExecutedCommand` during execution.
  */
 trait RunnableCommand extends Command {
+
+  override def children: Seq[LogicalPlan] = Nil
 
   // The map used to record the metrics of running the command. This will be passed to
   // `ExecutedCommand` during query planning.
@@ -157,7 +159,7 @@ case class ExplainCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = try {
     val outputString = sparkSession.sessionState.executePlan(logicalPlan).explainString(mode)
     Seq(Row(outputString))
-  } catch { case cause: TreeNodeException[_] =>
+  } catch { case NonFatal(cause) =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
 }
@@ -179,7 +181,7 @@ case class StreamingExplainCommand(
         queryExecution.simpleString
       }
     Seq(Row(outputString))
-  } catch { case cause: TreeNodeException[_] =>
+  } catch { case NonFatal(cause) =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
 }

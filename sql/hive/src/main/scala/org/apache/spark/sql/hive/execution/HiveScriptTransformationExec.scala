@@ -45,8 +45,10 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
+ * @param child logical plan whose output is transformed.
+ * @param ioschema the class set that defines how to handle input/output data.
  */
-case class HiveScriptTransformationExec(
+private[hive] case class HiveScriptTransformationExec(
     input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
@@ -184,7 +186,7 @@ case class HiveScriptTransformationExec(
   }
 }
 
-case class HiveScriptTransformationWriterThread(
+private[hive] case class HiveScriptTransformationWriterThread(
     iter: Iterator[InternalRow],
     inputSchema: Seq[DataType],
     inputSerde: AbstractSerDe,

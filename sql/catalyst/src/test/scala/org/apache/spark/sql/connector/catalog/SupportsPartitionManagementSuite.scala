@@ -23,7 +23,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.{InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
+import org.apache.spark.sql.connector.{BufferedRows, InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -83,6 +84,16 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
     partTable.dropPartition(partIdent1)
     assert(!hasPartitions(partTable))
+  }
+
+  test("purgePartition") {
+    val table = catalog.loadTable(ident)
+    val partTable = new InMemoryPartitionTable(
+      table.name(), table.schema(), table.partitioning(), table.properties())
+    val errMsg = intercept[UnsupportedOperationException] {
+      partTable.purgePartition(InternalRow.apply("3"))
+    }.getMessage
+    assert(errMsg.contains("purge is not supported"))
   }
 
   test("replacePartitionMetadata") {
@@ -203,5 +214,45 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       partTable.partitionExists(InternalRow(0))
     }.getMessage
     assert(errMsg.contains("The identifier might not refer to one partition"))
+  }
+
+  test("renamePartition") {
+    val partTable = createMultiPartTable()
+
+    val errMsg1 = intercept[PartitionAlreadyExistsException] {
+      partTable.renamePartition(InternalRow(0, "abc"), InternalRow(1, "abc"))
+    }.getMessage
+    assert(errMsg1.contains("Partition already exists"))
+
+    val newPart = InternalRow(2, "xyz")
+    val errMsg2 = intercept[NoSuchPartitionException] {
+      partTable.renamePartition(newPart, InternalRow(3, "abc"))
+    }.getMessage
+    assert(errMsg2.contains("Partition not found"))
+
+    assert(partTable.renamePartition(InternalRow(0, "abc"), newPart))
+    assert(partTable.partitionExists(newPart))
+  }
+
+  test("truncatePartition") {
+    val table = catalog.loadTable(ident)
+    val partTable = new InMemoryPartitionTable(
+      table.name(), table.schema(), table.partitioning(), table.properties())
+    assert(!hasPartitions(partTable))
+
+    val partIdent = InternalRow.apply("3")
+    val partIdent1 = InternalRow.apply("4")
+    partTable.createPartition(partIdent, new util.HashMap[String, String]())
+    partTable.createPartition(partIdent1, new util.HashMap[String, String]())
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
+
+    partTable.withData(Array(
+      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
+      new BufferedRows("4").withRow(InternalRow(1, "def", "4"))
+    ))
+
+    partTable.truncatePartition(partIdent)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
+    assert(partTable.rows === InternalRow(1, "def", "4") :: Nil)
   }
 }

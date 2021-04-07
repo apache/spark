@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -943,6 +943,8 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
 
   def this(child: Expression) = this(child, None)
 
+  override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
+
   override def withNewSeed(seed: Long): Shuffle = copy(randomSeed = Some(seed))
 
   override lazy val resolved: Boolean =
@@ -1426,7 +1428,9 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, IntegerType)
 
-  @transient override lazy val children: Seq[Expression] = Seq(x, start, length) // called from eval
+  override def first: Expression = x
+  override def second: Expression = start
+  override def third: Expression = length
 
   @transient private lazy val elementType: DataType = x.dataType.asInstanceOf[ArrayType].elementType
 

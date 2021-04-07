@@ -16,11 +16,12 @@
  */
 package org.apache.spark.storage
 
-import java.io.{DataOutputStream, FileOutputStream, IOException}
+import java.io.{DataOutputStream, File, FileOutputStream, IOException}
 import java.nio.file.Files
 
 import scala.concurrent.duration._
 
+import org.apache.hadoop.conf.Configuration
 import org.mockito.{ArgumentMatchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
@@ -59,6 +60,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
   test("fallback storage APIs - copy/exists") {
     val conf = new SparkConf(false)
       .set("spark.app.id", "testId")
+      .set(SHUFFLE_COMPRESS, false)
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
@@ -103,6 +105,24 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       FallbackStorage.read(conf, ShuffleBlockId(1, 1L, 0))
     }
     FallbackStorage.read(conf, ShuffleBlockId(1, 2L, 0))
+  }
+
+  test("SPARK-34142: fallback storage API - cleanUp") {
+    withTempDir { dir =>
+      Seq(true, false).foreach { cleanUp =>
+        val appId = s"test$cleanUp"
+        val conf = new SparkConf(false)
+          .set("spark.app.id", appId)
+          .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH, dir.getAbsolutePath + "/")
+          .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, cleanUp)
+
+        val location = new File(dir, appId)
+        assert(location.mkdir())
+        assert(location.exists())
+        FallbackStorage.cleanUp(conf, new Configuration())
+        assert(location.exists() != cleanUp)
+      }
+    }
   }
 
   test("migrate shuffle data to fallback storage") {
@@ -227,43 +247,45 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("Newly added executors should access old data from remote storage") {
-    sc = new SparkContext(getSparkConf(2, 0))
-    withSpark(sc) { sc =>
-      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
-      val rdd1 = sc.parallelize(1 to 10, 2)
-      val rdd2 = rdd1.map(x => (x % 2, 1))
-      val rdd3 = rdd2.reduceByKey(_ + _)
-      assert(rdd3.collect() === Array((0, 5), (1, 5)))
+  Seq("lz4", "lzf", "snappy", "zstd").foreach { codec =>
+    test(s"$codec - Newly added executors should access old data from remote storage") {
+      sc = new SparkContext(getSparkConf(2, 0).set(IO_COMPRESSION_CODEC, codec))
+      withSpark(sc) { sc =>
+        TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+        val rdd1 = sc.parallelize(1 to 10, 2)
+        val rdd2 = rdd1.map(x => (x % 2, 1))
+        val rdd3 = rdd2.reduceByKey(_ + _)
+        assert(rdd3.collect() === Array((0, 5), (1, 5)))
 
-      // Decommission all
-      val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
-      sc.getExecutorIds().foreach {
-        sched.decommissionExecutor(_, ExecutorDecommissionInfo(""), false)
-      }
-
-      // Make it sure that fallback storage are ready
-      val fallbackStorage = new FallbackStorage(sc.getConf)
-      eventually(timeout(10.seconds), interval(1.seconds)) {
-        Seq(
-          "shuffle_0_0_0.index", "shuffle_0_0_0.data",
-          "shuffle_0_1_0.index", "shuffle_0_1_0.data").foreach { file =>
-          assert(fallbackStorage.exists(0, file))
+        // Decommission all
+        val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
+        sc.getExecutorIds().foreach {
+          sched.decommissionExecutor(_, ExecutorDecommissionInfo(""), false)
         }
-      }
 
-      // Since the data is safe, force to shrink down to zero executor
-      sc.getExecutorIds().foreach { id =>
-        sched.killExecutor(id)
-      }
-      eventually(timeout(20.seconds), interval(1.seconds)) {
-        assert(sc.getExecutorIds().isEmpty)
-      }
+        // Make it sure that fallback storage are ready
+        val fallbackStorage = new FallbackStorage(sc.getConf)
+        eventually(timeout(10.seconds), interval(1.seconds)) {
+          Seq(
+            "shuffle_0_0_0.index", "shuffle_0_0_0.data",
+            "shuffle_0_1_0.index", "shuffle_0_1_0.data").foreach { file =>
+            assert(fallbackStorage.exists(0, file))
+          }
+        }
 
-      // Dynamic allocation will start new executors
-      assert(rdd3.collect() === Array((0, 5), (1, 5)))
-      assert(rdd3.sortByKey().count() == 2)
-      assert(sc.getExecutorIds().nonEmpty)
+        // Since the data is safe, force to shrink down to zero executor
+        sc.getExecutorIds().foreach { id =>
+          sched.killExecutor(id)
+        }
+        eventually(timeout(20.seconds), interval(1.seconds)) {
+          assert(sc.getExecutorIds().isEmpty)
+        }
+
+        // Dynamic allocation will start new executors
+        assert(rdd3.collect() === Array((0, 5), (1, 5)))
+        assert(rdd3.sortByKey().count() == 2)
+        assert(sc.getExecutorIds().nonEmpty)
+      }
     }
   }
 }
