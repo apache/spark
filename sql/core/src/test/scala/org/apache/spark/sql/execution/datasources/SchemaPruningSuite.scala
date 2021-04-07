@@ -775,7 +775,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("extract case-insensitive struct field from array") {
+  testSchemaPruning("SPARK-34963: extract case-insensitive struct field from array") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val query = spark.table("contacts")
         .select("friends.First", "friends.MiDDle")
@@ -785,6 +785,19 @@ abstract class SchemaPruningSuite
           Row(Array("Susan"), Array("Z.")) ::
           Row(null, null) ::
           Row(null, null) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-34963: extract case-insensitive struct field from struct") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query = spark.table("contacts")
+        .select("Name.First", "NAME.MiDDle")
+      checkScan(query, "struct<name:struct<first:string,middle:string>>")
+      checkAnswer(query,
+        Row("Jane", "X.") ::
+          Row("Janet", null) ::
+          Row("Jim", null) ::
+          Row("John", "Y.") :: Nil)
     }
   }
 }

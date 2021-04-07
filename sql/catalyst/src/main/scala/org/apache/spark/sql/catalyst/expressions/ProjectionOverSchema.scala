@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -28,7 +27,6 @@ import org.apache.spark.sql.types._
  */
 case class ProjectionOverSchema(schema: StructType) {
   private val fieldNames = schema.fieldNames.toSet
-  private val resolver = SQLConf.get.resolver
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)
 
@@ -43,7 +41,10 @@ case class ProjectionOverSchema(schema: StructType) {
       case a: GetArrayStructFields =>
         getProjection(a.child).map(p => (p, p.dataType)).map {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>
-            val selectedField = projSchema.find(f => resolver(f.name, a.field.name)).get
+            // For case-sensitivity aware field resolution, we should take `ordinal` which
+            // points to correct struct field.
+            val selectedField = a.child.dataType.asInstanceOf[ArrayType]
+              .elementType.asInstanceOf[StructType](a.ordinal)
             GetArrayStructFields(projection,
               selectedField,
               projSchema.fieldIndex(selectedField.name),

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 object SchemaPruning {
@@ -50,7 +49,6 @@ object SchemaPruning {
    * fields.
    */
   private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType = {
-    val resolver = SQLConf.get.resolver
     (left, right) match {
       case (ArrayType(leftElementType, containsNull), ArrayType(rightElementType, _)) =>
         ArrayType(
@@ -63,18 +61,12 @@ object SchemaPruning {
           sortLeftFieldsByRight(leftValueType, rightValueType),
           containsNull)
       case (leftStruct: StructType, rightStruct: StructType) =>
-        val filteredRightFieldNames = rightStruct.fieldNames.filter { rightField =>
-          leftStruct.fieldNames.exists(resolver(_, rightField))
-        }
-        val matchedFields = filteredRightFieldNames.map { rightField =>
-          (leftStruct.fieldNames.find(resolver(_, rightField)).get, rightField)
-        }
-        val sortedLeftFields = matchedFields.map { case (leftFieldName, rightFieldName) =>
-          val leftFieldType = leftStruct(leftFieldName).dataType
-          val rightFieldType = rightStruct(rightFieldName).dataType
+        val filteredRightFieldNames = rightStruct.fieldNames.filter(leftStruct.fieldNames.contains)
+        val sortedLeftFields = filteredRightFieldNames.map { fieldName =>
+          val leftFieldType = leftStruct(fieldName).dataType
+          val rightFieldType = rightStruct(fieldName).dataType
           val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
-          StructField(rightFieldName, sortedLeftFieldType,
-            nullable = leftStruct(leftFieldName).nullable)
+          StructField(fieldName, sortedLeftFieldType, nullable = leftStruct(fieldName).nullable)
         }
         StructType(sortedLeftFields)
       case _ => left
