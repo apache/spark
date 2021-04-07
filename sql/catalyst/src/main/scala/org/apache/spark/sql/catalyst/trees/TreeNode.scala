@@ -876,14 +876,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
 trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   override final def children: Seq[T] = Nil
-  override final def mapChildren(f: T => T): this.type = this
-  override final def withNewChildren(newChildren: Seq[T]): this.type = this
-  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): this.type = this
+  override final def mapChildren(f: T => T): T = this.asInstanceOf[T]
+  override final def withNewChildren(newChildren: Seq[T]): T = this.asInstanceOf[T]
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
 }
 
 trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def child: T
-  @transient override final lazy val children: Seq[T] = child :: Nil
+  @transient override final lazy val children: Seq[T] = IndexedSeq(child)
 
   override final def mapChildren(f: T => T): T = {
     val newChild = f(child)
@@ -909,7 +909,7 @@ trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
 trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def left: T
   def right: T
-  @transient override final lazy val children: Seq[T] = left :: right :: Nil
+  @transient override final lazy val children: Seq[T] = IndexedSeq(left, right)
 
   override final def mapChildren(f: T => T): T = {
     var newLeft = f(left)
@@ -940,7 +940,7 @@ trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def first: T
   def second: T
   def third: T
-  @transient override final lazy val children: Seq[T] = first :: second :: third :: Nil
+  @transient override final lazy val children: Seq[T] = IndexedSeq(first, second, third)
 
   override final def mapChildren(f: T => T): T = {
     var newFirst = f(first)
@@ -974,7 +974,7 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def second: T
   def third: T
   def fourth: T
-  @transient override final lazy val children: Seq[T] = first :: second :: third :: fourth :: Nil
+  @transient override final lazy val children: Seq[T] = IndexedSeq(first, second, third, fourth)
 
   override final def mapChildren(f: T => T): T = {
     var newFirst = f(first)
