@@ -2344,8 +2344,7 @@ case class MakeTimestamp(
       hour = newChildren(3),
       min = newChildren(4),
       sec = newChildren(5),
-      timezone = timezoneOpt
-    )
+      timezone = timezoneOpt)
   }
 }
 

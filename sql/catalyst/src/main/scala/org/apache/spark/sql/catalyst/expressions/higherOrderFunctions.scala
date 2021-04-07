@@ -837,7 +837,7 @@ case class TransformKeys(
   }
 
   @transient lazy val LambdaFunction(
-    _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
+    _, Seq(keyVar: NamedLambdaVariable, valueVar: NamedLambdaVariable), _) = function
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
@@ -891,7 +891,7 @@ case class TransformValues(
   }
 
   @transient lazy val LambdaFunction(
-    _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
+    _, Seq(keyVar: NamedLambdaVariable, valueVar: NamedLambdaVariable), _) = function
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
