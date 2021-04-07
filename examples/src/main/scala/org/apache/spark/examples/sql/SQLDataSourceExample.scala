@@ -327,7 +327,7 @@ object SQLDataSourceExample {
     // +-----------+
 
     // You can use 'lineSep' option to define the line separator.
-    // If None is set, the line separator handles all `\r`, `\r\n` and `\n` by default.
+    // The line separator handles all `\r`, `\r\n` and `\n` by default.
     val df2 = spark.read.option("lineSep", ",").text(path)
     df2.show()
     // +-----------+
