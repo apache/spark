@@ -37,7 +37,8 @@ case class KnownNotNull(child: Expression) extends TaggingExpression {
     child.genCode(ctx).copy(isNull = FalseLiteral)
   }
 
-  override protected def withNewChildInternal(newChild: Expression): KnownNotNull = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): KnownNotNull =
+    copy(child = newChild)
 }
 
 case class KnownFloatingPointNormalized(child: Expression) extends TaggingExpression {

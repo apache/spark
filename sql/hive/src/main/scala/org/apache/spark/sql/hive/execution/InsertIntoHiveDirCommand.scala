@@ -138,6 +138,7 @@ case class InsertIntoHiveDirCommand(
     Seq.empty[Row]
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(query = newChild)
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): InsertIntoHiveDirCommand = copy(query = newChild)
 }
 

@@ -553,7 +553,8 @@ case class UnwrapOption(
     ev.copy(code = code)
   }
 
-  override protected def withNewChildInternal(newChild: Expression): UnwrapOption = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): UnwrapOption =
+    copy(child = newChild)
 }
 
 /**
@@ -585,7 +586,8 @@ case class WrapOption(child: Expression, optType: DataType)
     ev.copy(code = code, isNull = FalseLiteral)
   }
 
-  override protected def withNewChildInternal(newChild: Expression): WrapOption = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): WrapOption =
+    copy(child = newChild)
 }
 
 object LambdaVariable {
@@ -1068,8 +1070,8 @@ case class UnresolvedCatalystToExternalMap(
 
   override def dataType: DataType = ObjectType(collClass)
 
-  override protected def withNewChildInternal(newChild: Expression): UnresolvedCatalystToExternalMap =
-    copy(child = newChild)
+  override protected def withNewChildInternal(
+    newChild: Expression): UnresolvedCatalystToExternalMap = copy(child = newChild)
 }
 
 object CatalystToExternalMap {

@@ -271,12 +271,14 @@ sealed abstract class LikeAllBase extends MultiLikeBase {
 
 case class LikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotSpecified: Boolean = false
-  override protected def withNewChildInternal(newChild: Expression): LikeAll = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): LikeAll =
+    copy(child = newChild)
 }
 
 case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotSpecified: Boolean = true
-  override protected def withNewChildInternal(newChild: Expression): NotLikeAll = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): NotLikeAll =
+    copy(child = newChild)
 }
 
 /**
@@ -329,12 +331,14 @@ sealed abstract class LikeAnyBase extends MultiLikeBase {
 
 case class LikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
   override def isNotSpecified: Boolean = false
-  override protected def withNewChildInternal(newChild: Expression): LikeAny = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): LikeAny =
+    copy(child = newChild)
 }
 
 case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
   override def isNotSpecified: Boolean = true
-  override protected def withNewChildInternal(newChild: Expression): NotLikeAny = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): NotLikeAny =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.contains.tab

@@ -453,7 +453,8 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def toString: String = s"$child AS $names"
 
-  override protected def withNewChildInternal(newChild: Expression): MultiAlias = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): MultiAlias =
+    copy(child = newChild)
 }
 
 /**
@@ -542,8 +543,8 @@ case class UnresolvedSubqueryColumnAliases(
 
   override lazy val resolved = false
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedSubqueryColumnAliases =
-    copy(child = newChild)
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): UnresolvedSubqueryColumnAliases = copy(child = newChild)
 }
 
 /**

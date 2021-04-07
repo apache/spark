@@ -65,5 +65,6 @@ private[avro] case class CatalystDataToAvro(
       s"(byte[]) $expr.nullSafeEval($input)")
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Expression = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): CatalystDataToAvro =
+    copy(child = newChild)
 }

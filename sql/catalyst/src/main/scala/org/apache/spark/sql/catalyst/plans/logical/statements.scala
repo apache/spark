@@ -225,8 +225,8 @@ case class ReplaceTableAsSelectStatement(
     orCreate: Boolean) extends UnaryParsedStatement {
 
   override def child: LogicalPlan = asSelect
-  override protected def withNewChildInternal(newChild: LogicalPlan): ReplaceTableAsSelectStatement =
-    copy(asSelect = newChild)
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): ReplaceTableAsSelectStatement = copy(asSelect = newChild)
 }
 
 

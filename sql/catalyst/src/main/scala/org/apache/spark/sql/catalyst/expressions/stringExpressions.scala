@@ -464,8 +464,8 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Contains =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -476,8 +476,8 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): StartsWith =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -488,8 +488,8 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): EndsWith =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -798,8 +798,8 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 
   override def prettyName: String = "find_in_set"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): FindInSet =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): FindInSet = copy(left = newLeft, right = newRight)
 }
 
 trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
@@ -1012,7 +1012,8 @@ case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], child
 
   override def prettyName: String = "btrim"
 
-  override protected def withNewChildInternal(newChild: Expression): StringTrimBoth = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): StringTrimBoth =
+    copy(child = newChild)
 }
 
 object StringTrimLeft {
@@ -1170,8 +1171,8 @@ case class StringInstr(str: Expression, substr: Expression)
       s"($l).indexOf($r, 0) + 1")
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): StringInstr =
-    copy(str = newLeft, substr = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): StringInstr = copy(str = newLeft, substr = newRight)
 }
 
 /**
@@ -1714,7 +1715,8 @@ case class InitCap(child: Expression)
     defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")
   }
 
-  override protected def withNewChildInternal(newChild: Expression): InitCap = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): InitCap =
+    copy(child = newChild)
 }
 
 /**
@@ -1747,8 +1749,8 @@ case class StringRepeat(str: Expression, times: Expression)
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): StringRepeat =
-    copy(str = newLeft, times = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): StringRepeat = copy(str = newLeft, times = newRight)
 }
 
 /**
@@ -1781,7 +1783,8 @@ case class StringSpace(child: Expression)
 
   override def prettyName: String = "space"
 
-  override protected def withNewChildInternal(newChild: Expression): StringSpace = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): StringSpace =
+    copy(child = newChild)
 }
 
 /**
@@ -1976,7 +1979,8 @@ case class BitLength(child: Expression)
 
   override def prettyName: String = "bit_length"
 
-  override protected def withNewChildInternal(newChild: Expression): BitLength = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): BitLength =
+    copy(child = newChild)
 }
 
 /**
@@ -2011,7 +2015,8 @@ case class OctetLength(child: Expression)
 
   override def prettyName: String = "octet_length"
 
-  override protected def withNewChildInternal(newChild: Expression): OctetLength = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): OctetLength =
+    copy(child = newChild)
 }
 
 /**
@@ -2040,8 +2045,8 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
       s"${ev.value} = $left.levenshteinDistance($right);")
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Levenshtein =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Levenshtein = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -2069,7 +2074,8 @@ case class SoundEx(child: Expression)
     defineCodeGen(ctx, ev, c => s"$c.soundex()")
   }
 
-  override protected def withNewChildInternal(newChild: Expression): SoundEx = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): SoundEx =
+    copy(child = newChild)
 }
 
 /**
@@ -2227,7 +2233,8 @@ case class UnBase64(child: Expression)
        """})
   }
 
-  override protected def withNewChildInternal(newChild: Expression): UnBase64 = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): UnBase64 =
+    copy(child = newChild)
 }
 
 object Decode {
@@ -2331,7 +2338,8 @@ case class StringDecode(bin: Expression, charset: Expression)
       """)
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): StringDecode =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): StringDecode =
     copy(bin = newLeft, charset = newRight)
 }
 
@@ -2374,8 +2382,8 @@ case class Encode(value: Expression, charset: Expression)
         }""")
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Encode =
-    copy(value = newLeft, charset = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Encode = copy(value = newLeft, charset = newRight)
 }
 
 /**
@@ -2557,8 +2565,8 @@ case class FormatNumber(x: Expression, d: Expression)
 
   override def prettyName: String = "format_number"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): FormatNumber =
-    copy(x = newLeft, d = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): FormatNumber = copy(x = newLeft, d = newRight)
 }
 
 /**

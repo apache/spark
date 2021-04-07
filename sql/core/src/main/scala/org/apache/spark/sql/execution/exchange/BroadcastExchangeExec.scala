@@ -206,7 +206,8 @@ case class BroadcastExchangeExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): BroadcastExchangeExec =
+    copy(child = newChild)
 }
 
 object BroadcastExchangeExec {

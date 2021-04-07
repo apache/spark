@@ -118,7 +118,8 @@ case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
-  override protected def withNewChildInternal(newChild: LogicalPlan): MapPartitions = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapPartitions =
+    copy(child = newChild)
 }
 
 object MapPartitionsInR {
@@ -222,7 +223,8 @@ case class MapElements(
     argumentSchema: StructType,
     outputObjAttr: Attribute,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
-  override protected def withNewChildInternal(newChild: LogicalPlan): MapElements = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapElements =
+    copy(child = newChild)
 }
 
 object TypedFilter {
@@ -268,7 +270,8 @@ case class TypedFilter(
     Invoke(funcObj, funcMethod._2, BooleanType, input :: Nil)
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): TypedFilter = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): TypedFilter =
+    copy(child = newChild)
 }
 
 object FunctionUtils {
@@ -353,7 +356,8 @@ case class AppendColumns(
 
   def newColumns: Seq[Attribute] = serializer.map(_.toAttribute)
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): AppendColumns = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): AppendColumns =
+    copy(child = newChild)
 }
 
 /**
@@ -406,7 +410,8 @@ case class MapGroups(
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
-  override protected def withNewChildInternal(newChild: LogicalPlan): MapGroups = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapGroups =
+    copy(child = newChild)
 }
 
 /** Internal class representing State */

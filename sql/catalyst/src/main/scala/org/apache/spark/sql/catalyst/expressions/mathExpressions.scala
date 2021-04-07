@@ -538,7 +538,8 @@ case class Factorial(child: Expression)
     })
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Factorial = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Factorial =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -810,7 +811,8 @@ case class Atanh(child: Expression)
   group = "math_funcs")
 case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES") {
   override def funcName: String = "toDegrees"
-  override protected def withNewChildInternal(newChild: Expression): ToDegrees = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): ToDegrees =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -828,7 +830,8 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
   group = "math_funcs")
 case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
   override def funcName: String = "toRadians"
-  override protected def withNewChildInternal(newChild: Expression): ToRadians = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): ToRadians =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -1051,8 +1054,8 @@ case class Atan2(left: Expression, right: Expression)
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -1069,8 +1072,8 @@ case class Pow(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.StrictMath.pow($c1, $c2)")
   }
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 
@@ -1108,8 +1111,8 @@ case class ShiftLeft(left: Expression, right: Expression)
     defineCodeGen(ctx, ev, (left, right) => s"$left << $right")
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ShiftLeft =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ShiftLeft = copy(left = newLeft, right = newRight)
 }
 
 
@@ -1147,8 +1150,8 @@ case class ShiftRight(left: Expression, right: Expression)
     defineCodeGen(ctx, ev, (left, right) => s"$left >> $right")
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ShiftRight =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ShiftRight = copy(left = newLeft, right = newRight)
 }
 
 
@@ -1263,8 +1266,8 @@ case class Logarithm(left: Expression, right: Expression)
     }
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Logarithm =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Logarithm = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1486,8 +1489,8 @@ case class BRound(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): BRound =
-    copy(child = newLeft, scale = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
 }
 
 object WidthBucket {

@@ -393,7 +393,8 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def sql: String = s"(${child.sql} IS NOT NULL)"
 
-  override protected def withNewChildInternal(newChild: Expression): IsNotNull = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): IsNotNull =
+    copy(child = newChild)
 }
 
 

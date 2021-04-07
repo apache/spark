@@ -725,7 +725,8 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
   override def sql: String =
     s"$prettyName(${input.sql}, ${offset.sql})${if (ignoreNulls) " ignore nulls" else ""}"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): NthValue =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): NthValue =
     copy(input = newLeft, offset = newRight)
 }
 
@@ -830,7 +831,8 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
 
   override val evaluateExpression = bucket
 
-  override protected def withNewChildInternal(newChild: Expression): NTile = copy(buckets = newChild)
+  override protected def withNewChildInternal(
+    newChild: Expression): NTile = copy(buckets = newChild)
 }
 
 /**

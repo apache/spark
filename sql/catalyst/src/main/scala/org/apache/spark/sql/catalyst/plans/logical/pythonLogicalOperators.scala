@@ -53,7 +53,8 @@ case class MapInPandas(
 
   override val producedAttributes = AttributeSet(output)
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): MapInPandas = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapInPandas =
+    copy(child = newChild)
 }
 
 /**

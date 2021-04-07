@@ -60,5 +60,6 @@ case class Product(child: Expression)
 
   override lazy val evaluateExpression: Expression = product
 
-  override protected def withNewChildInternal(newChild: Expression): Product = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Product =
+    copy(child = newChild)
 }

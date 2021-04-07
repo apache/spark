@@ -131,7 +131,8 @@ case class CreateHiveTableAsSelectCommand(
   override def writingCommandClassName: String =
     Utils.getSimpleName(classOf[InsertIntoHiveTable])
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(query = newChild)
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): CreateHiveTableAsSelectCommand = copy(query = newChild)
 }
 
 /**
@@ -180,5 +181,6 @@ case class OptimizedCreateHiveTableAsSelectCommand(
   override def writingCommandClassName: String =
     Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand])
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(query = newChild)
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): OptimizedCreateHiveTableAsSelectCommand = copy(query = newChild)
 }

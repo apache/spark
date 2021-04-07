@@ -555,7 +555,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
 
   override def needCopyResult: Boolean = false
 
-  override protected def withNewChildInternal(newChild: SparkPlan): InputAdapter = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): InputAdapter =
+    copy(child = newChild)
 }
 
 object WholeStageCodegenExec {

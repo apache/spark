@@ -190,7 +190,8 @@ case class Grouping(child: Expression) extends Expression with Unevaluable
     AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
   override def dataType: DataType = ByteType
   override def nullable: Boolean = false
-  override protected def withNewChildInternal(newChild: Expression): Grouping = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Grouping =
+    copy(child = newChild)
 }
 
 /**

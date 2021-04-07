@@ -47,7 +47,8 @@ case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): ResolvedHint = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): ResolvedHint =
+    copy(child = newChild)
 }
 
 /**

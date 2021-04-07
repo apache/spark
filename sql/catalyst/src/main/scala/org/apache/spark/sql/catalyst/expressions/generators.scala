@@ -381,7 +381,8 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 // scalastyle:on line.size.limit
 case class Explode(child: Expression) extends ExplodeBase {
   override val position: Boolean = false
-  override protected def withNewChildInternal(newChild: Expression): Explode = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Explode =
+    copy(child = newChild)
 }
 
 /**
@@ -407,7 +408,8 @@ case class Explode(child: Expression) extends ExplodeBase {
 // scalastyle:on line.size.limit line.contains.tab
 case class PosExplode(child: Expression) extends ExplodeBase {
   override val position = true
-  override protected def withNewChildInternal(newChild: Expression): PosExplode = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): PosExplode =
+    copy(child = newChild)
 }
 
 /**

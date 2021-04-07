@@ -228,5 +228,6 @@ case class CreateDataSourceTableAsSelectCommand(
     }
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(query = newChild)
 }

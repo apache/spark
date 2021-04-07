@@ -52,7 +52,8 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
        """.stripMargin)
   }
 
-  override protected def withNewChildInternal(newChild: Expression): PrintToStderr = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): PrintToStderr =
+    copy(child = newChild)
 }
 
 /**
@@ -103,7 +104,8 @@ case class RaiseError(child: Expression, dataType: DataType)
     )
   }
 
-  override protected def withNewChildInternal(newChild: Expression): RaiseError = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): RaiseError =
+    copy(child = newChild)
 }
 
 object RaiseError {
@@ -138,7 +140,8 @@ case class AssertTrue(left: Expression, right: Expression, child: Expression)
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
 
-  override protected def withNewChildInternal(newChild: Expression): AssertTrue = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): AssertTrue =
+    copy(child = newChild)
 }
 
 object AssertTrue {

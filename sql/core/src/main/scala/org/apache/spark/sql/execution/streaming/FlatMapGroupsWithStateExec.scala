@@ -247,5 +247,6 @@ case class FlatMapGroupsWithStateExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsWithStateExec =
+    copy(child = newChild)
 }

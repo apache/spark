@@ -168,7 +168,8 @@ case class StddevPop(
 
   override def prettyName: String = "stddev_pop"
 
-  override protected def withNewChildInternal(newChild: Expression): StddevPop = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): StddevPop =
+    copy(child = newChild)
 }
 
 // Compute the sample standard deviation of a column
@@ -200,7 +201,8 @@ case class StddevSamp(
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("stddev_samp")
 
-  override protected def withNewChildInternal(newChild: Expression): StddevSamp = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): StddevSamp =
+    copy(child = newChild)
 }
 
 // Compute the population variance of a column
@@ -228,7 +230,8 @@ case class VariancePop(
 
   override def prettyName: String = "var_pop"
 
-  override protected def withNewChildInternal(newChild: Expression): VariancePop = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): VariancePop =
+    copy(child = newChild)
 }
 
 // Compute the sample variance of a column

@@ -106,7 +106,8 @@ case class UnaryMinus(
     }
   }
 
-  override protected def withNewChildInternal(newChild: Expression): UnaryMinus = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): UnaryMinus =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -134,7 +135,8 @@ case class UnaryPositive(child: Expression)
 
   override def sql: String = s"(+ ${child.sql})"
 
-  override protected def withNewChildInternal(newChild: Expression): UnaryPositive = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): UnaryPositive =
+    copy(child = newChild)
 }
 
 /**

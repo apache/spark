@@ -296,7 +296,8 @@ case class ArrayTransform(
 
   override def prettyName: String = "transform"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -388,7 +389,8 @@ case class ArraySort(
 
   override def prettyName: String = "array_sort"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -461,7 +463,8 @@ case class MapFilter(
 
   override def prettyName: String = "map_filter"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -529,7 +532,8 @@ case class ArrayFilter(
 
   override def prettyName: String = "filter"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -613,7 +617,8 @@ case class ArrayExists(
 
   override def prettyName: String = "exists"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -692,7 +697,8 @@ case class ArrayForAll(
 
   override def prettyName: String = "forall"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -792,8 +798,8 @@ case class ArrayAggregate(
   override def third: Expression = merge
   override def fourth: Expression = finish
 
-  override protected def withNewChildrenInternal(first: Expression, second: Expression, third: Expression,
-      fourth: Expression): ArrayAggregate =
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+      third: Expression, fourth: Expression): ArrayAggregate =
     copy(argument = first, zero = second, merge = third, finish = fourth)
 }
 
@@ -850,7 +856,8 @@ case class TransformKeys(
 
   override def prettyName: String = "transform_keys"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -901,7 +908,8 @@ case class TransformValues(
 
   override def prettyName: String = "transform_values"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
     copy(argument = newLeft, function = newRight)
 }
 

@@ -185,7 +185,8 @@ private[hive] case class HiveScriptTransformationExec(
     outputIterator
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): HiveScriptTransformationExec =
+    copy(child = newChild)
 }
 
 private[hive] case class HiveScriptTransformationWriterThread(
