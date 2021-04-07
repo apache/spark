@@ -484,7 +484,7 @@ case class Assignment(key: Expression, value: Expression) extends Expression
   override def left: Expression = key
   override def right: Expression = value
   override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): Assignment = copy(key = left, value = right)
+    newLeft: Expression, newRight: Expression): Assignment = copy(key = newLeft, value = newRight)
 }
 
 /**
