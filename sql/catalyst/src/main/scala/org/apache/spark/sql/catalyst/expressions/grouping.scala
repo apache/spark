@@ -123,7 +123,8 @@ case class Rollup(
     groupingSetIndexes: Seq[Seq[Int]],
     children: Seq[Expression]) extends GroupingAnalytic {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingAnalytic.rollupExprs(groupingSets)
+  override def selectedGroupByExprs: Seq[Seq[Expression]] =
+    GroupingAnalytic.rollupExprs(groupingSets)
 }
 
 object Rollup {
