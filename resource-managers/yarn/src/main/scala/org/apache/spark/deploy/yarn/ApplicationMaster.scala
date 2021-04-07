@@ -50,6 +50,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
+import org.apache.spark.scheduler.MiscellaneousProcessDetails
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
@@ -786,8 +787,9 @@ private[spark] class ApplicationMaster(
       if (!isClusterMode) {
         val hostPort = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
         val yarnAMID = "yarn-am"
-        driver.send(MiscellaneousProcessInfo(yarnAMID, System.currentTimeMillis(),
-          sparkConf.get(AM_CORES), Runtime.getRuntime().maxMemory(), hostPort, extractLogUrls))
+        val info = new MiscellaneousProcessDetails(yarnAMID, hostPort,
+          sparkConf.get(AM_CORES), Runtime.getRuntime().maxMemory(), extractLogUrls)
+        driver.send(MiscellaneousProcessInfo(System.currentTimeMillis(), info))
       }
     }
 

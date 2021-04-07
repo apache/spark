@@ -214,14 +214,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
         makeOffers(executorId)
 
-      case MiscellaneousProcessInfo(processName: String,
-          time: Long,
-          cores: Int,
-          memory: Long,
-          hostPort: String,
-          logUrlInfo: Map[String, String]) =>
-        val info = new MiscellaneousProcessDetails(processName, hostPort,
-          cores, memory, logUrlInfo)
+      case MiscellaneousProcessInfo(time: Long, info: MiscellaneousProcessDetails) =>
         listenerBus.post(
           MiscellaneousProcessInfoEvent(time, info))
 

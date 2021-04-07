@@ -336,9 +336,9 @@ private[spark] abstract class YarnSchedulerBackend(
 
       // In case of yarn Miscellaneous Process is Spark AM Container
       // Launched for the deploy mode client
-      case amInfo @ MiscellaneousProcessInfo(_, _, _, _, _, _) =>
+      case processInfo @ MiscellaneousProcessInfo(_, _) =>
         logInfo(s"Sending the Spark AM info for yarn client mode")
-        driverEndpoint.send(amInfo)
+        driverEndpoint.send(processInfo)
 
     }
 
