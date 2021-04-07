@@ -205,7 +205,7 @@ package object util extends Logging {
   val METADATA_COL_ATTR_KEY = "__metadata_col"
 
   /**
-   * Hidden columns are a type of metadata column that are not propagated through subquery aliases,
+   * Hidden columns are a type of metadata column that are propagated through Project
    * and are candidates during qualified star expansions.
    */
   val HIDDEN_COL_ATTR_KEY = "__hidden_col"

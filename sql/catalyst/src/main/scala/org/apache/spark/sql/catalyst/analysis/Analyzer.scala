@@ -961,6 +961,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
       val hasMetaCol = plan.expressions.exists(_.find {
         case a: Attribute =>
+          // If an attribute is resolved before being labeled as metadata
+          // (i.e. from the originating Dataset), we check with expression ID
           a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
         case _ => false
       }.isDefined)
