@@ -967,7 +967,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             }
           })
       val (groupingSet, expressions) =
-        groupByExpressions.partition(_.isInstanceOf[GroupingAnalytic])
+        groupByExpressions.partition(_.isInstanceOf[BaseGroupingSets])
       if (expressions.nonEmpty && groupingSet.nonEmpty) {
         throw new ParseException("Partial CUBE/ROLLUP/GROUPING SETS like " +
           "`GROUP BY a, b, CUBE(a, b)` is not supported.",
