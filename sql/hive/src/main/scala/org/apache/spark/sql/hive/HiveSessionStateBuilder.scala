@@ -62,6 +62,7 @@ class HiveSessionStateBuilder(
       () => session.sharedState.globalTempViewManager,
       new HiveMetastoreCatalog(session),
       functionRegistry,
+      tableFunctionRegistry,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader)

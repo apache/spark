@@ -54,16 +54,17 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
- * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
- * Used for testing when all relations are already filled in and the analyzer needs only
- * to resolve attribute references.
+ * A trivial [[Analyzer]] with a dummy [[SessionCatalog]], [[EmptyFunctionRegistry]] and
+ * [[EmptyTableFunctionRegistry]]. Used for testing when all relations are already filled
+ * in and the analyzer needs only to resolve attribute references.
  */
 object SimpleAnalyzer extends Analyzer(
   new CatalogManager(
     FakeV2SessionCatalog,
     new SessionCatalog(
       new InMemoryCatalog,
-      EmptyFunctionRegistry) {
+      EmptyFunctionRegistry,
+      EmptyTableFunctionRegistry) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
     })) {
   override def resolver: Resolver = caseSensitiveResolution
@@ -244,7 +245,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Resolution", fixedPoint,
-      ResolveTableValuedFunctions ::
+      ResolveTableValuedFunctions(v1SessionCatalog) ::
       ResolveNamespace(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
       ResolveUserSpecifiedColumns ::
