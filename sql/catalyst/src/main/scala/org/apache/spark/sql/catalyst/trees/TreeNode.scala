@@ -246,8 +246,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     arr
   }
 
-  protected def childrenTheSame(
-      originalChildren: Seq[BaseType], newChildren: Seq[BaseType]): Boolean = {
+  private def childrenTheSame(
+      originalChildren: IndexedSeq[BaseType], newChildren: IndexedSeq[BaseType]): Boolean = {
     val size = originalChildren.size
     var i = 0
     var childrenTheSame = true
@@ -258,18 +258,25 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     childrenTheSame
   }
 
+  // This is a temporary solution, we will change the type of children to IndexedSeq in a
+  // followup PR
+  private def asIndexedSeq(seq: Seq[BaseType]): IndexedSeq[BaseType] = {
+    if (seq.isInstanceOf[IndexedSeq[BaseType]]) {
+      seq.asInstanceOf[IndexedSeq[BaseType]]
+    } else {
+      seq.toIndexedSeq
+    }
+  }
+
   def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
-    assert(newChildren.size == children.size, "Incorrect number of children")
-    if (children.isEmpty || childrenTheSame(newChildren, children)) {
+    val childrenIndexedSeq = asIndexedSeq(children)
+    val newChildrenIndexedSeq = asIndexedSeq(newChildren)
+    assert(newChildrenIndexedSeq.size == childrenIndexedSeq.size, "Incorrect number of children")
+    if (childrenIndexedSeq.isEmpty || childrenTheSame(newChildrenIndexedSeq, childrenIndexedSeq)) {
       this
     } else {
       CurrentOrigin.withOrigin(origin) {
-        val newChildrenIndexSeq = if (newChildren.isInstanceOf[IndexedSeq[BaseType]]) {
-          newChildren.asInstanceOf[IndexedSeq[BaseType]]
-        } else {
-          newChildren.toIndexedSeq
-        }
-        val res = withNewChildrenInternal(newChildrenIndexSeq)
+        val res = withNewChildrenInternal(newChildrenIndexedSeq)
         res.copyTagsFrom(this)
         res
       }
