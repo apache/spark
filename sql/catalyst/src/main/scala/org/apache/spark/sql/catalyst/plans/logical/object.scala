@@ -624,6 +624,6 @@ case class CoGroup(
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer {
-  override protected def withNewChildrenInternal(newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
 }

@@ -215,8 +215,8 @@ case class Intersect(
     }
   }
 
-  override protected def withNewChildrenInternal(newLeft: LogicalPlan, newRight: LogicalPlan): Intersect =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: LogicalPlan, newRight: LogicalPlan): Intersect = copy(left = newLeft, right = newRight)
 }
 
 case class Except(
@@ -231,8 +231,8 @@ case class Except(
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
 
-  override protected def withNewChildrenInternal(newLeft: LogicalPlan, newRight: LogicalPlan): Except =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: LogicalPlan, newRight: LogicalPlan): Except = copy(left = newLeft, right = newRight)
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -459,8 +459,8 @@ case class Join(
       || e.asInstanceOf[JoinHint].rightHint.isDefined)
   }
 
-  override protected def withNewChildrenInternal(newLeft: LogicalPlan, newRight: LogicalPlan): Join =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: LogicalPlan, newRight: LogicalPlan): Join = copy(left = newLeft, right = newRight)
 }
 
 /**

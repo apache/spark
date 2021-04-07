@@ -71,5 +71,6 @@ case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPl
     sparkContext.emptyRDD
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(query = newChild)
+  override protected def withNewChildInternal(
+    newChild: SparkPlan): WriteToContinuousDataSourceExec = copy(query = newChild)
 }

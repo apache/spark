@@ -203,5 +203,6 @@ case class SortExec(
     super.cleanupResources()
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SortExec = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): SortExec =
+    copy(child = newChild)
 }

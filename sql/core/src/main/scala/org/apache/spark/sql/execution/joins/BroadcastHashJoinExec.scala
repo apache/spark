@@ -255,6 +255,7 @@ case class BroadcastHashJoinExec(
     }
   }
 
-  override protected def withNewChildrenInternal(newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): BroadcastHashJoinExec =
     copy(left = newLeft, right = newRight)
 }

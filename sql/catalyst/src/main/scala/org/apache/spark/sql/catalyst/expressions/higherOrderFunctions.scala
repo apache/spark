@@ -297,7 +297,7 @@ case class ArrayTransform(
   override def prettyName: String = "transform"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): ArrayTransform =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -390,7 +390,7 @@ case class ArraySort(
   override def prettyName: String = "array_sort"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): ArraySort =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -464,7 +464,7 @@ case class MapFilter(
   override def prettyName: String = "map_filter"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): MapFilter =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -533,7 +533,7 @@ case class ArrayFilter(
   override def prettyName: String = "filter"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): ArrayFilter =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -618,7 +618,7 @@ case class ArrayExists(
   override def prettyName: String = "exists"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): ArrayExists =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -698,7 +698,7 @@ case class ArrayForAll(
   override def prettyName: String = "forall"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): ArrayForAll =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -857,7 +857,7 @@ case class TransformKeys(
   override def prettyName: String = "transform_keys"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): TransformKeys =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -909,7 +909,7 @@ case class TransformValues(
   override def prettyName: String = "transform_values"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression =
+      newLeft: Expression, newRight: Expression): TransformValues =
     copy(argument = newLeft, function = newRight)
 }
 
@@ -1100,7 +1100,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   override def third: Expression = function
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+      newFirst: Expression, newSecond: Expression, newThird: Expression): MapZipWith =
     copy(
       left = newFirst,
       right = newSecond,
@@ -1187,6 +1187,6 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
   override def third: Expression = function
   
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+      newFirst: Expression, newSecond: Expression, newThird: Expression): ZipWith =
     copy(left = newFirst, right = newSecond, function = newThird)
 }

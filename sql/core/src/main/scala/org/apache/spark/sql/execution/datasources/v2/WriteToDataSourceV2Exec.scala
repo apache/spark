@@ -47,7 +47,8 @@ case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
   extends UnaryNode {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: LogicalPlan): WriteToDataSourceV2 =
+    copy(query = newChild)
 }
 
 /**
@@ -84,7 +85,8 @@ case class CreateTableAsSelectExec(
     writeToTable(catalog, table, writeOptions, ident)
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): CreateTableAsSelectExec =
+    copy(query = newChild)
 }
 
 /**
@@ -120,7 +122,8 @@ case class AtomicCreateTableAsSelectExec(
     writeToTable(catalog, stagedTable, writeOptions, ident)
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): AtomicCreateTableAsSelectExec =
+    copy(query = newChild)
 }
 
 /**
@@ -166,7 +169,8 @@ case class ReplaceTableAsSelectExec(
     writeToTable(catalog, table, writeOptions, ident)
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): ReplaceTableAsSelectExec =
+    copy(query = newChild)
 }
 
 /**
@@ -215,7 +219,8 @@ case class AtomicReplaceTableAsSelectExec(
     writeToTable(catalog, staged, writeOptions, ident)
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): AtomicReplaceTableAsSelectExec =
+    copy(query = newChild)
 }
 
 /**
@@ -227,7 +232,8 @@ case class AppendDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     write: Write) extends V2ExistingTableWriteExec {
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): AppendDataExec =
+    copy(query = newChild)
 }
 
 /**
@@ -244,7 +250,8 @@ case class OverwriteByExpressionExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     write: Write) extends V2ExistingTableWriteExec {
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): OverwriteByExpressionExec =
+    copy(query = newChild)
 }
 
 /**
@@ -260,7 +267,8 @@ case class OverwritePartitionsDynamicExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     write: Write) extends V2ExistingTableWriteExec {
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): OverwritePartitionsDynamicExec =
+    copy(query = newChild)
 }
 
 case class WriteToDataSourceV2Exec(
@@ -271,7 +279,8 @@ case class WriteToDataSourceV2Exec(
     writeWithV2(batchWrite)
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(query = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): WriteToDataSourceV2Exec =
+    copy(query = newChild)
 }
 
 trait V2ExistingTableWriteExec extends V2TableWriteExec {

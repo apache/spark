@@ -336,7 +336,8 @@ case class GetJsonObject(json: Expression, path: Expression)
     }
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): GetJsonObject =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetJsonObject =
     copy(json = newLeft, path = newRight)
 }
 

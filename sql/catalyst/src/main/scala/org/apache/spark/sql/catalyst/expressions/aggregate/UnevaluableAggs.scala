@@ -56,7 +56,8 @@ abstract class UnevaluableBooleanAggBase(arg: Expression)
   since = "3.0.0")
 case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_and")
-  override protected def withNewChildInternal(newChild: Expression): Expression = copy(arg = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(arg = newChild)
 }
 
 @ExpressionDescription(
@@ -74,5 +75,6 @@ case class BoolAnd(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   since = "3.0.0")
 case class BoolOr(arg: Expression) extends UnevaluableBooleanAggBase(arg) {
   override def nodeName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bool_or")
-  override protected def withNewChildInternal(newChild: Expression): Expression = copy(arg = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(arg = newChild)
 }

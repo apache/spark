@@ -364,8 +364,8 @@ case class Subtract(
 
   override def exactMathMethod: Option[String] = Some("subtractExact")
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Subtract =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Subtract = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -395,8 +395,8 @@ case class Multiply(
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Multiply =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
@@ -524,8 +524,8 @@ case class Divide(
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Divide =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Divide = copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -632,8 +632,8 @@ case class Remainder(
 
   override def evalOperation(left: Any, right: Any): Any = mod(left, right)
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Remainder =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Remainder = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(

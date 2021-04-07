@@ -1551,11 +1551,8 @@ case class Slice(x: Expression, start: Expression, length: Expression)
   }
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Slice = copy(
-    x = newFirst,
-    start = newSecond,
-    length = newThird
-  )
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Slice =
+    copy(x = newFirst, start = newSecond, length = newThird)
 }
 
 /**

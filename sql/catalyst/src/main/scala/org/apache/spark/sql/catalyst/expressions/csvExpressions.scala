@@ -141,7 +141,8 @@ case class CsvToStructs(
 
   override def prettyName: String = "from_csv"
 
-  override protected def withNewChildInternal(newChild: Expression): CsvToStructs = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): CsvToStructs =
+    copy(child = newChild)
 }
 
 /**
@@ -200,7 +201,8 @@ case class SchemaOfCsv(
 
   override def prettyName: String = "schema_of_csv"
 
-  override protected def withNewChildInternal(newChild: Expression): SchemaOfCsv = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): SchemaOfCsv =
+    copy(child = newChild)
 }
 
 /**
@@ -269,5 +271,6 @@ case class StructsToCsv(
 
   override def prettyName: String = "to_csv"
 
-  override protected def withNewChildInternal(newChild: Expression): StructsToCsv = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): StructsToCsv =
+    copy(child = newChild)
 }

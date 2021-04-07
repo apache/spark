@@ -321,7 +321,8 @@ case class MapFromArrays(left: Expression, right: Expression)
 
   override def prettyName: String = "map_from_arrays"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MapFromArrays =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MapFromArrays =
     copy(left = newLeft, right = newRight)
 }
 

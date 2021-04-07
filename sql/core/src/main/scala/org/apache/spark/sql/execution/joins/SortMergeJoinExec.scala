@@ -634,7 +634,8 @@ case class SortMergeJoinExec(
      """.stripMargin
   }
 
-  override protected def withNewChildrenInternal(newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): SortMergeJoinExec =
     copy(left = newLeft, right = newRight)
 }
 

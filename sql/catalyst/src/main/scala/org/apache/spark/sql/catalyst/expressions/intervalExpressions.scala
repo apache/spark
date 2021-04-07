@@ -138,7 +138,8 @@ case class MultiplyInterval(
 
   override protected def operationName: String = if (failOnError) "multiplyExact" else "multiply"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MultiplyInterval =
     copy(interval = newLeft, num = newRight)
 }
 

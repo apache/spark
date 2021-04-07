@@ -100,7 +100,8 @@ case class DeserializeToObjectExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): DeserializeToObjectExec =
+    copy(child = newChild)
 }
 
 /**
@@ -138,7 +139,8 @@ case class SerializeFromObjectExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): SerializeFromObjectExec =
+    copy(child = newChild)
 }
 
 /**
@@ -200,7 +202,8 @@ case class MapPartitionsExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): MapPartitionsExec =
+    copy(child = newChild)
 }
 
 /**
@@ -259,7 +262,8 @@ case class MapPartitionsInRWithArrowExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): MapPartitionsInRWithArrowExec =
+    copy(child = newChild)
 }
 
 /**
@@ -313,7 +317,8 @@ case class MapElementsExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): MapElementsExec =
+    copy(child = newChild)
 }
 
 /**
@@ -344,7 +349,8 @@ case class AppendColumnsExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): AppendColumnsExec =
+    copy(child = newChild)
 }
 
 /**
@@ -379,7 +385,8 @@ case class AppendColumnsWithObjectExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): AppendColumnsWithObjectExec =
+    copy(child = newChild)
 }
 
 /**
@@ -420,7 +427,8 @@ case class MapGroupsExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): MapGroupsExec =
+    copy(child = newChild)
 }
 
 object MapGroupsExec {
@@ -512,7 +520,8 @@ case class FlatMapGroupsInRExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInRExec =
+    copy(child = newChild)
 }
 
 /**
@@ -596,7 +605,8 @@ case class FlatMapGroupsInRWithArrowExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInRWithArrowExec =
+    copy(child = newChild)
 }
 
 /**
@@ -644,6 +654,6 @@ case class CoGroupExec(
     }
   }
 
-  override protected def withNewChildrenInternal(newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: SparkPlan, newRight: SparkPlan): CoGroupExec = copy(left = newLeft, right = newRight)
 }

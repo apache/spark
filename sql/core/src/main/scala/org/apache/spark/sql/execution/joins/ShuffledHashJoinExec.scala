@@ -319,6 +319,7 @@ case class ShuffledHashJoinExec(
     HashedRelationInfo(relationTerm, keyIsUnique = false, isEmpty = false)
   }
 
-  override protected def withNewChildrenInternal(newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): ShuffledHashJoinExec =
     copy(left = newLeft, right = newRight)
 }

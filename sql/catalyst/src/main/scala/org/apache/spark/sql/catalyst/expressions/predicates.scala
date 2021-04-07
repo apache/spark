@@ -894,8 +894,8 @@ case class EqualTo(left: Expression, right: Expression)
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): EqualTo =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): EqualTo = copy(left = newLeft, right = newRight)
 }
 
 // TODO: although map type is not orderable, technically map type should be able to be used
@@ -958,7 +958,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
            (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = FalseLiteral)
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): EqualNullSafe =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): EqualNullSafe =
     copy(left = newLeft, right = newRight)
 }
 
@@ -993,8 +994,8 @@ case class LessThan(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -1028,8 +1029,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -1063,8 +1064,8 @@ case class GreaterThan(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Expression =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(

@@ -289,6 +289,7 @@ package object debug {
 
     override def supportsColumnar: Boolean = child.supportsColumnar
 
-    override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = copy(child = newChild)
+    override protected def withNewChildInternal(newChild: SparkPlan): DebugExec =
+      copy(child = newChild)
   }
 }

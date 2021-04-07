@@ -69,7 +69,8 @@ object FileFormatWriter extends Logging {
       })
     }
 
-    override protected def withNewChildInternal(newChild: Expression): Empty2Null = copy(child = newChild)
+    override protected def withNewChildInternal(newChild: Expression): Empty2Null =
+      copy(child = newChild)
   }
 
   /**
