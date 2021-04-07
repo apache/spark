@@ -299,7 +299,7 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
     buf.toString
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Block]): Block =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Block]): Block =
     super.legacyWithNewChildren(newChildren)
 }
 

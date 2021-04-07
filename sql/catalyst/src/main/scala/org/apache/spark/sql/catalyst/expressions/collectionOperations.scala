@@ -327,7 +327,7 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
 
   override def prettyName: String = "arrays_zip"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ArraysZip =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ArraysZip =
     copy(children = newChildren)
 }
 
@@ -656,7 +656,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
 
   override def prettyName: String = "map_concat"
 
-  override def withNewChildrenInternal(newChildren: Seq[Expression]): MapConcat =
+  override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): MapConcat =
     copy(children = newChildren)
 }
 
@@ -1599,7 +1599,7 @@ case class ArrayJoin(
     Seq(array, delimiter)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     if (nullReplacement.isDefined) {
       copy(
         array = newChildren(0),
@@ -2355,7 +2355,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
   override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Concat =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Concat =
     copy(children = newChildren)
 }
 
@@ -2529,12 +2529,14 @@ case class Sequence(
 
   override def children: Seq[Expression] = Seq(start, stop) ++ stepOpt
 
-  override def withNewChildrenInternal(newChildren: Seq[Expression]): TimeZoneAwareExpression =
+  override def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): TimeZoneAwareExpression = {
     if (stepOpt.isDefined) {
       copy(start = newChildren(0), stop = newChildren(1), stepOpt = Some(newChildren(2)))
     } else {
       copy(start = newChildren(0), stop = newChildren(1))
     }
+  }
 
   override def foldable: Boolean = children.forall(_.foldable)
 

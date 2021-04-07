@@ -503,7 +503,7 @@ case class JsonTuple(children: Seq[Expression])
     }
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): JsonTuple =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): JsonTuple =
     copy(children = newChildren)
 }
 

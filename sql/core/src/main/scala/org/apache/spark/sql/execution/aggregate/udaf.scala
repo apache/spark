@@ -455,7 +455,7 @@ case class ScalaUDAF(
 
   override def name: String = udafName.getOrElse(udaf.getClass.getSimpleName)
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ScalaUDAF =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ScalaUDAF =
     copy(children = newChildren)
 }
 
@@ -525,7 +525,8 @@ case class ScalaAggregator[IN, BUF, OUT](
   override def name: String = aggregatorName.getOrElse(agg.getClass.getSimpleName)
 
   override protected def withNewChildrenInternal(
-    newChildren: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = copy(children = newChildren)
+      newChildren: IndexedSeq[Expression]): ScalaAggregator[IN, BUF, OUT] =
+    copy(children = newChildren)
 }
 
 /**

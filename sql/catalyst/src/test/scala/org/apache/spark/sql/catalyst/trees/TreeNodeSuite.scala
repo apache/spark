@@ -47,7 +47,7 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
   override def dataType: NullType = NullType
   override lazy val resolved = true
   override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(optKey = if (optKey.isDefined) Some(newChildren(0)) else None)
 }
 
@@ -61,7 +61,7 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     super.legacyWithNewChildren(newChildren)
 }
 
@@ -72,7 +72,7 @@ case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
   override def dataType: NullType = NullType
   override lazy val resolved = true
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     super.legacyWithNewChildren(newChildren)
 }
 

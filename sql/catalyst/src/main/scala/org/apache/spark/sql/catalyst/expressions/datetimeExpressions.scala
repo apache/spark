@@ -2334,7 +2334,8 @@ case class MakeTimestamp(
   override def prettyName: String = "make_timestamp"
 
 //  override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): MakeTimestamp = {
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): MakeTimestamp = {
     val timezoneOpt = if (timezone.isDefined) Some(newChildren(6)) else None
     copy(
       year = newChildren(0),

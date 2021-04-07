@@ -48,7 +48,7 @@ case class WindowSpecDefinition(
   override def children: Seq[Expression] = partitionSpec ++ orderSpec :+ frameSpecification
 
   override protected def withNewChildrenInternal(
-      newChildren: Seq[Expression]): WindowSpecDefinition =
+      newChildren: IndexedSeq[Expression]): WindowSpecDefinition =
     copy(
       partitionSpec = newChildren.take(partitionSpec.size),
       orderSpec = newChildren.drop(partitionSpec.size).dropRight(1).asInstanceOf[Seq[SortOrder]],
@@ -917,7 +917,7 @@ abstract class RankLike extends AggregateWindowFunction {
 case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Rank =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Rank =
     copy(children = newChildren)
 }
 
@@ -960,7 +960,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
   override def prettyName: String = "dense_rank"
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): DenseRank =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): DenseRank =
     copy(children = newChildren)
 }
 
@@ -1003,6 +1003,6 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   override val evaluateExpression =
     If(n > one, (rank - one).cast(DoubleType) / (n - one).cast(DoubleType), 0.0d)
   override def prettyName: String = "percent_rank"
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): PercentRank =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PercentRank =
     copy(children = newChildren)
 }

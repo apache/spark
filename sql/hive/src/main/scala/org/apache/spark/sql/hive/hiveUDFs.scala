@@ -111,7 +111,7 @@ private[hive] case class HiveSimpleUDF(
 
   override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }
 
@@ -190,7 +190,7 @@ private[hive] case class HiveGenericUDF(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }
 
@@ -286,7 +286,7 @@ private[hive] case class HiveGenericUDTF(
 
   override def prettyName: String = name
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }
 
@@ -538,7 +538,7 @@ private[hive] case class HiveUDAFFunction(
     }
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }
 

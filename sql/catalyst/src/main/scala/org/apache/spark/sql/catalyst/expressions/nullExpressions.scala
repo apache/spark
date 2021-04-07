@@ -121,7 +121,7 @@ case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpress
        """.stripMargin)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Coalesce =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Coalesce =
     copy(children = newChildren)
 }
 
@@ -488,6 +488,6 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
        """.stripMargin, isNull = FalseLiteral)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): AtLeastNNonNulls =
-    copy(children = newChildren)
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): AtLeastNNonNulls = copy(children = newChildren)
 }

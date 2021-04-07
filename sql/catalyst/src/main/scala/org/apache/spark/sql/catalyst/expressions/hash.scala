@@ -608,7 +608,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpress
     Murmur3HashFunction.hash(value, dataType, seed).toInt
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Murmur3Hash =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Murmur3Hash =
     copy(children = newChildren)
 }
 
@@ -651,7 +651,7 @@ case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpressio
     XxHash64Function.hash(value, dataType, seed)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): XxHash64 =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): XxHash64 =
     copy(children = newChildren)
 }
 
@@ -858,7 +858,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
      """.stripMargin
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): HiveHash =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): HiveHash =
     copy(children = newChildren)
 }
 

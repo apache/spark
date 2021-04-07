@@ -236,8 +236,8 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
    */
   def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): HashPartitioning =
-    copy(expressions = newChildren)
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
 }
 
 /**
@@ -288,7 +288,8 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     }
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): RangePartitioning =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): RangePartitioning =
     copy(ordering = newChildren.asInstanceOf[Seq[SortOrder]])
 }
 
@@ -334,7 +335,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: Seq[Expression]): PartitioningCollection =
+      newChildren: IndexedSeq[Expression]): PartitioningCollection =
     super.legacyWithNewChildren(newChildren).asInstanceOf[PartitioningCollection]
 }
 

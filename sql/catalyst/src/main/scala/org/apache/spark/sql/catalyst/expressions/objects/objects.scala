@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 import java.lang.reflect.{Method, Modifier}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{Builder, IndexedSeq, WrappedArray}
+import scala.collection.mutable.{Builder, WrappedArray}
 import scala.reflect.ClassTag
 import scala.util.{Properties, Try}
 
@@ -280,7 +280,7 @@ case class StaticInvoke(
     ev.copy(code = code)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(arguments = newChildren)
 }
 
@@ -404,7 +404,7 @@ case class Invoke(
 
   override def toString: String = s"$targetObject.$functionName"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Invoke =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Invoke =
     copy(targetObject = newChildren.head, arguments = newChildren.tail)
 }
 
@@ -513,7 +513,7 @@ case class NewInstance(
 
   override def toString: String = s"newInstance($cls)"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): NewInstance =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): NewInstance =
     copy(arguments = newChildren)
 }
 
@@ -1244,7 +1244,7 @@ case class CatalystToExternalMap private(
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: Seq[Expression]): CatalystToExternalMap =
+      newChildren: IndexedSeq[Expression]): CatalystToExternalMap =
     copy(
       keyLoopVar = newChildren(0).asInstanceOf[LambdaVariable],
       keyLambdaFunction = newChildren(1),
@@ -1476,7 +1476,7 @@ case class ExternalMapToCatalyst private(
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: Seq[Expression]): ExternalMapToCatalyst =
+      newChildren: IndexedSeq[Expression]): ExternalMapToCatalyst =
     copy(
       keyLoopVar = newChildren(0).asInstanceOf[LambdaVariable],
       keyConverter = newChildren(1),
@@ -1534,8 +1534,8 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
     ev.copy(code = code, isNull = FalseLiteral)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): CreateExternalRow =
-    copy(children = newChildren)
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): CreateExternalRow = copy(children = newChildren)
 }
 
 /**
@@ -1685,7 +1685,8 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
     ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): InitializeJavaBean =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): InitializeJavaBean =
     super.legacyWithNewChildren(newChildren).asInstanceOf[InitializeJavaBean]
 }
 

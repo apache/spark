@@ -265,7 +265,7 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
     throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
 
   override protected def withNewChildrenInternal(
-    newChildren: Seq[Expression]): UnresolvedGenerator = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): UnresolvedGenerator = copy(children = newChildren)
 }
 
 case class UnresolvedFunction(
@@ -289,7 +289,7 @@ case class UnresolvedFunction(
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: Seq[Expression]): UnresolvedFunction = {
+      newChildren: IndexedSeq[Expression]): UnresolvedFunction = {
     if (filter.isDefined) {
       copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
     } else {

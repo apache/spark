@@ -103,7 +103,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   override def prettyName: String = "array"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): CreateArray =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CreateArray =
     copy(children = newChildren)
 }
 
@@ -258,7 +258,7 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override def prettyName: String = "map"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): CreateMap =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CreateMap =
     copy(children = newChildren)
 }
 
@@ -504,8 +504,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
     s"$alias($childrenSQL)"
   }.getOrElse(super.sql)
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): CreateNamedStruct =
-    copy(children = newChildren)
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): CreateNamedStruct = copy(children = newChildren)
 }
 
 /**
@@ -682,7 +682,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
     case e: Expression => e
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     super.legacyWithNewChildren(newChildren)
 
   override def dataType: StructType = StructType(newFields)

@@ -264,14 +264,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       this
     } else {
       CurrentOrigin.withOrigin(origin) {
-        val res = withNewChildrenInternal(newChildren)
+        val newChildrenIndexSeq = if (newChildren.isInstanceOf[IndexedSeq[BaseType]]) {
+          newChildren.asInstanceOf[IndexedSeq[BaseType]]
+        } else {
+          newChildren.toIndexedSeq
+        }
+        val res = withNewChildrenInternal(newChildrenIndexSeq)
         res.copyTagsFrom(this)
         res
       }
     }
   }
 
-  protected def withNewChildrenInternal(newChildren: Seq[BaseType]): BaseType
+  protected def withNewChildrenInternal(newChildren: IndexedSeq[BaseType]): BaseType
 
   /**
    * Returns a copy of this node with the children replaced.
@@ -873,7 +878,7 @@ trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   override final def children: Seq[T] = Nil
   override final def mapChildren(f: T => T): this.type = this
   override final def withNewChildren(newChildren: Seq[T]): this.type = this
-  override final def withNewChildrenInternal(newChildren: Seq[T]): this.type = this
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): this.type = this
 }
 
 trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
@@ -893,7 +898,7 @@ trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
     }
   }
 
-  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
     assert(newChildren.size == 1, "Incorrect number of children")
     withNewChildInternal(newChildren.head)
   }
@@ -923,7 +928,7 @@ trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
     }
   }
 
-  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
     assert(newChildren.size == 2, "Incorrect number of children")
     withNewChildrenInternal(newChildren(0), newChildren(1))
   }
@@ -956,7 +961,7 @@ trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
     }
   }
 
-  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
     assert(newChildren.size == 3, "Incorrect number of children")
     withNewChildrenInternal(newChildren(0), newChildren(1), newChildren(2))
   }
@@ -992,7 +997,7 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
     }
   }
 
-  override final def withNewChildrenInternal(newChildren: Seq[T]): T = {
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
     assert(newChildren.size == 4, "Incorrect number of children")
     withNewChildrenInternal(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
   }

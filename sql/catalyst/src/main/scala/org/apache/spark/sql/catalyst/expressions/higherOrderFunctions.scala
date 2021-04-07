@@ -104,7 +104,8 @@ case class LambdaFunction(
 
   override def eval(input: InternalRow): Any = function.eval(input)
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): LambdaFunction =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): LambdaFunction =
     copy(
       function = newChildren.head,
       arguments = newChildren.tail.asInstanceOf[Seq[NamedExpression]])

@@ -205,7 +205,7 @@ case class SimpleTypedAggregateExpression(
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: Seq[Expression]): SimpleTypedAggregateExpression =
+      newChildren: IndexedSeq[Expression]): SimpleTypedAggregateExpression =
     super.legacyWithNewChildren(newChildren).asInstanceOf[SimpleTypedAggregateExpression]
 }
 
@@ -291,6 +291,6 @@ case class ComplexTypedAggregateExpression(
   }
 
   override protected def withNewChildrenInternal(
-      newChildren: Seq[Expression]): ComplexTypedAggregateExpression =
+      newChildren: IndexedSeq[Expression]): ComplexTypedAggregateExpression =
     super.legacyWithNewChildren(newChildren).asInstanceOf[ComplexTypedAggregateExpression]
 }

@@ -88,7 +88,7 @@ case class TestFunction(
   extends Expression with ImplicitCastInputTypes with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = StringType
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }
 

@@ -89,7 +89,7 @@ case class SortOrder(
       direction == required.direction && nullOrdering == required.nullOrdering
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): SortOrder =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): SortOrder =
     copy(child = newChildren.head, sameOrderExpressions = newChildren.tail)
 }
 

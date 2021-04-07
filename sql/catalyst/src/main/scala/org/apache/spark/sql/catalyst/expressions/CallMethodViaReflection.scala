@@ -116,7 +116,7 @@ case class CallMethodViaReflection(children: Seq[Expression])
   @transient private lazy val buffer = new Array[Object](argExprs.length)
 
   override protected def withNewChildrenInternal(
-    newChildren: Seq[Expression]): CallMethodViaReflection = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)
 }
 
 object CallMethodViaReflection {

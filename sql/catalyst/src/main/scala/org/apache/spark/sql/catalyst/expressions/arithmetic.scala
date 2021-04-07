@@ -897,7 +897,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
       """.stripMargin)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Least =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Least =
     copy(children = newChildren)
 }
 
@@ -975,6 +975,6 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
       """.stripMargin)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Greatest =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
     copy(children = newChildren)
 }

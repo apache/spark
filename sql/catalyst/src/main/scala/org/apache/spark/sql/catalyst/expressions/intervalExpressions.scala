@@ -279,7 +279,8 @@ case class MakeInterval(
   override def prettyName: String = "make_interval"
 
   // Seq(years, months, weeks, days, hours, mins, secs)
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): MakeInterval =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): MakeInterval =
     copy(
       years = newChildren(0),
       months = newChildren(1),

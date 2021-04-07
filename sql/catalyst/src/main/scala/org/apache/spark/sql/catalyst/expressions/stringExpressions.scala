@@ -228,7 +228,7 @@ case class ConcatWs(children: Seq[Expression])
     }
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ConcatWs =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ConcatWs =
     copy(children = newChildren)
 }
 
@@ -370,7 +370,7 @@ case class Elt(
        """.stripMargin)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Elt =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
     copy(children = newChildren)
 }
 
@@ -958,11 +958,10 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
 
   override val trimMethod: String = "trim"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression = {
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(
       srcStr = newChildren.head,
       trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
-  }
 }
 
 /**
@@ -1068,7 +1067,8 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
 
   override val trimMethod: String = "trimLeft"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): StringTrimLeft =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): StringTrimLeft =
     copy(
       srcStr = newChildren.head,
       trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
@@ -1128,7 +1128,8 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
 
   override val trimMethod: String = "trimRight"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): StringTrimRight =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): StringTrimRight =
     copy(
       srcStr = newChildren.head,
       trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
@@ -1590,7 +1591,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
     }
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ParseUrl =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ParseUrl =
     copy(children = newChildren)
 }
 
@@ -1680,8 +1681,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   override def prettyName: String = getTagValue(
     FunctionRegistry.FUNC_ALIAS).getOrElse("format_string")
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): FormatString =
-    FormatString(newChildren: _*)
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): FormatString = FormatString(newChildren: _*)
 }
 
 /**

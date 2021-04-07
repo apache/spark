@@ -111,7 +111,7 @@ case class Cube(
     children: Seq[Expression]) extends BaseGroupingSets {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
   override def selectedGroupByExprs: Seq[Seq[Expression]] = BaseGroupingSets.cubeExprs(groupingSets)
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Cube =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Cube =
     copy(children = newChildren)
 }
 
@@ -127,7 +127,7 @@ case class Rollup(
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
   override def selectedGroupByExprs: Seq[Seq[Expression]] =
     BaseGroupingSets.rollupExprs(groupingSets)
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Rollup =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Rollup =
     copy(children = newChildren)
 }
 
@@ -146,7 +146,8 @@ case class GroupingSets(
   // Includes the `userGivenGroupByExprs` in the children, which will be included in the final
   // GROUP BY expressions, so that `SELECT c ... GROUP BY (a, b, c) GROUPING SETS (a, b)` works.
   override def children: Seq[Expression] = flatGroupingSets ++ userGivenGroupByExprs
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): GroupingSets =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): GroupingSets =
     super.legacyWithNewChildren(newChildren).asInstanceOf[GroupingSets]
 }
 
@@ -231,7 +232,7 @@ case class GroupingID(groupByExprs: Seq[Expression]) extends Expression with Une
   override def dataType: DataType = GroupingID.dataType
   override def nullable: Boolean = false
   override def prettyName: String = "grouping_id"
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): GroupingID =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): GroupingID =
     copy(groupByExprs = newChildren)
 }
 

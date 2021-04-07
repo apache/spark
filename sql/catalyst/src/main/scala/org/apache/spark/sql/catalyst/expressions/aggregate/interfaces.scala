@@ -165,7 +165,7 @@ case class AggregateExpression(
     }
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Expression =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     super.legacyWithNewChildren(newChildren)
 }
 

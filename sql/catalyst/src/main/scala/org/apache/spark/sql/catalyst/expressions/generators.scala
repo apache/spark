@@ -120,7 +120,7 @@ case class UserDefinedGenerator(
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
 
   override protected def withNewChildrenInternal(
-    newChildren: Seq[Expression]): UserDefinedGenerator = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): UserDefinedGenerator = copy(children = newChildren)
 }
 
 /**
@@ -231,7 +231,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
        """.stripMargin, isNull = FalseLiteral)
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Stack =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Stack =
     copy(children = newChildren)
 }
 
@@ -260,8 +260,8 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
     }
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ReplicateRows =
-    copy(children = newChildren)
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): ReplicateRows = copy(children = newChildren)
 }
 
 /**

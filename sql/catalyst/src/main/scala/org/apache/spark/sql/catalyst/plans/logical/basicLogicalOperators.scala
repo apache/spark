@@ -346,7 +346,7 @@ case class Union(
       .reduce(merge(_, _))
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[LogicalPlan]): Union =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
     copy(children = newChildren)
 }
 

@@ -382,7 +382,7 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   override def toString: String = s"$value IN ($query)"
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): InSubquery =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): InSubquery =
     copy(values = newChildren.dropRight(1), query = newChildren.last.asInstanceOf[ListQuery])
 }
 
@@ -526,7 +526,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     s"($valueSQL IN ($listSQL))"
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): In =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): In =
     copy(value = newChildren.head, list = newChildren.tail)
 }
 

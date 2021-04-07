@@ -239,8 +239,8 @@ case class ScalarSubquery(
       ExprId(0))
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ScalarSubquery =
-    copy(children = newChildren)
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): ScalarSubquery = copy(children = newChildren)
 }
 
 object ScalarSubquery {
@@ -287,7 +287,7 @@ case class ListQuery(
       childOutputs.map(_.canonicalized.asInstanceOf[Attribute]))
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): ListQuery =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ListQuery =
     copy(children = newChildren)
 }
 
@@ -332,6 +332,6 @@ case class Exists(
       ExprId(0))
   }
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): Exists =
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Exists =
     copy(children = newChildren)
 }

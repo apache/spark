@@ -452,7 +452,8 @@ sealed abstract class MergeAction extends Expression with Unevaluable {
 }
 
 case class DeleteAction(condition: Option[Expression]) extends MergeAction {
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): DeleteAction =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): DeleteAction =
     copy(condition = if (condition.isDefined) Some(newChildren(0)) else None)
 }
 
@@ -461,7 +462,8 @@ case class UpdateAction(
     assignments: Seq[Assignment]) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): UpdateAction =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UpdateAction =
     copy(
       condition = if (condition.isDefined) Some(newChildren.head) else None,
       assignments = newChildren.tail.asInstanceOf[Seq[Assignment]])
@@ -471,7 +473,8 @@ case class InsertAction(
     condition: Option[Expression],
     assignments: Seq[Assignment]) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
-  override protected def withNewChildrenInternal(newChildren: Seq[Expression]): InsertAction =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): InsertAction =
     copy(
       condition = if (condition.isDefined) Some(newChildren.head) else None,
       assignments = newChildren.tail.asInstanceOf[Seq[Assignment]])
@@ -728,7 +731,8 @@ case class ShowFunctions(
     pattern: Option[String],
     override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = child.toSeq
-  override protected def withNewChildrenInternal(newChildren: Seq[LogicalPlan]): ShowFunctions =
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): ShowFunctions =
     copy(child = if (child.isDefined) Some(newChildren.head) else None)
 }
 
