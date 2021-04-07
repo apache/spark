@@ -1370,14 +1370,15 @@ private[spark] class AppStatusListener(
    */
   private def onMiscellaneousProcessAdded(
       processInfoEvent: MiscellaneousProcessInfoEvent): Unit = {
-    val info = processInfoEvent.info
-    val process = getOrCreateOtherProcess(info.processName, processInfoEvent.time)
-    process.processLogs = info.logUrlInfo
-    process.hostPort = info.hostPort
-    process.isActive = true
-    process.totalCores = info.cores
-    process.maxMemory = info.memory
-    update(process, System.nanoTime())
+    val processInfo = processInfoEvent.info
+    val miscellaneousProcess =
+      getOrCreateOtherProcess(processInfo.processName, processInfoEvent.time)
+    miscellaneousProcess.processLogs = processInfo.logUrlInfo
+    miscellaneousProcess.hostPort = processInfo.hostPort
+    miscellaneousProcess.isActive = true
+    miscellaneousProcess.totalCores = processInfo.cores
+    miscellaneousProcess.maxMemory = processInfo.memory
+    update(miscellaneousProcess, System.nanoTime())
   }
 
 }
