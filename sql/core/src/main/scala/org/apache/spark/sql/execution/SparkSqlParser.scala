@@ -60,6 +60,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
   private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
   private val configValueDef = """([^;]*);*""".r
+  private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -354,8 +355,10 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val maybePaths = ctx.STRING.asScala.map(string) ++
-      ctx.GRAPHICAL.asScala.map(s => s.getText.trim)
+    val maybePaths = strLiteralDef.findAllIn(remainder(ctx.identifier).trim).toSeq.map {
+      case p if p.startsWith("\"") || p.startsWith("'") => unescapeSQLString(p)
+      case p => p
+    }
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {

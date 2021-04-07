@@ -69,7 +69,7 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Runn
         files.map { f =>
           val uri = Utils.resolveURI(f)
           uri.getScheme match {
-            case null | "local" | "file" => new File(f).getCanonicalFile.toURI.toString
+            case null | "local" | "file" => new File(uri).getCanonicalFile.toURI.toString
             case _ => f
           }
         }.collect {
