@@ -409,7 +409,7 @@ public class JavaSQLDataSourceExample {
     // +-----------+
 
     // You can use 'lineSep' option to define the line separator.
-    // If None is set, it covers all `\r`, `\r\n` and `\n` (default).
+    // If None is set, the line separator handles all `\r`, `\r\n` and `\n` by default.
     Dataset<Row> df2 = spark.read().option("lineSep", ",").text(path);
     df2.show();
     // +-----------+

@@ -318,7 +318,7 @@ def text_dataset_example(spark):
     # +-----------+
 
     # You can use 'lineSep' option to define the line separator.
-    # If None is set, it covers all `\r`, `\r\n` and `\n` (default).
+    # If None is set, the line separator handles all `\r`, `\r\n` and `\n` by default
     df2 = spark.read.text(path, lineSep=",")
     df2.show()
     # +-----------+
