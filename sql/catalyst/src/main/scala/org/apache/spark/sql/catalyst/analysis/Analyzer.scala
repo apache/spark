@@ -305,8 +305,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
-    Batch("TransformAfterAnalysis", Once,
-      TransformAfterAnalysis)
+    Batch("HandleAnalysisOnlyCommand", Once,
+      HandleAnalysisOnlyCommand)
   )
 
   /**
@@ -3641,14 +3641,15 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
-   * A rule that calls `TransformationAfterAnalysis.transform` for a plan that needs to be
-   * transformed after all the analysis rules are run.
+   * A rule that marks a command as analyzed so that its children are removed to avoid
+   * being optimized. This rule should run after all other analysis rules are run.
    */
-  object TransformAfterAnalysis extends Rule[LogicalPlan] {
+  object HandleAnalysisOnlyCommand extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case t: TransformationAfterAnalysis if t.resolved =>
-        checkAnalysis(t)
-        t.transform
+      case c: AnalysisOnlyCommand if c.resolved =>
+        checkAnalysis(c)
+        c.markAsAnalyzed()
+        c
     }
   }
 }

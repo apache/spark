@@ -499,8 +499,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         plan = child,
         allowExisting = allowExisting,
         replace = replace,
-        viewType = viewType,
-        isPlanAnalyzed = false)
+        viewType = viewType)
 
     case ShowViews(resolved: ResolvedNamespace, pattern, output) =>
       resolved match {

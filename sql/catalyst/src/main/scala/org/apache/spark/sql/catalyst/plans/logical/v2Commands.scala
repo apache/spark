@@ -866,13 +866,8 @@ case class CacheTableAsSelect(
     plan: LogicalPlan,
     originalText: String,
     isLazy: Boolean,
-    options: Map[String, String],
-    isPlanAnalyzed: Boolean = false) extends LeafCommand with TransformationAfterAnalysis {
-  // `plan` needs to be analyzed, but shouldn't be optimized. Thus, remove `plan` from
-  // children once the analysis phase is finished.
-  override def children: Seq[LogicalPlan] = if (!isPlanAnalyzed) plan :: Nil else Nil
-
-  override def transform: LogicalPlan = copy(isPlanAnalyzed = true)
+    options: Map[String, String]) extends AnalysisOnlyCommand {
+  override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
 }
 
 /**

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Pe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, TransformationAfterAnalysis, View}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -48,8 +48,8 @@ import org.apache.spark.sql.util.SchemaUtils
  * @param properties the properties of this view.
  * @param originalText the original SQL text of this view, can be None if this view is created via
  *                     Dataset API.
- * @param child the logical plan that represents the view; this is used to generate the logical
- *              plan for temporary view and the view schema.
+ * @param plan the logical plan that represents the view; this is used to generate the logical
+ *             plan for temporary view and the view schema.
  * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
  *                already exists, throws analysis exception.
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
@@ -65,19 +65,14 @@ case class CreateViewCommand(
     plan: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewType: ViewType,
-    isPlanAnalyzed: Boolean)
-  extends RunnableCommand with TransformationAfterAnalysis {
+    viewType: ViewType) extends BaseRunnableCommand with AnalysisOnlyCommand {
 
   import ViewHelper._
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(plan)
 
-  // `plan` needs to be analyzed, but shouldn't be optimized. Thus, remove `plan` from
-  // children once the analysis phase is finished.
-  override def children: Seq[LogicalPlan] = if (!isPlanAnalyzed) plan :: Nil else Nil
-
-  override def transform: LogicalPlan = copy(isPlanAnalyzed = true)
+  // `plan` needs to be analyzed, but shouldn't be optimized so that caching works correctly.
+  override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
 
   if (viewType == PersistedView) {
     require(originalText.isDefined, "'originalText' must be provided to create permanent view")
@@ -103,7 +98,9 @@ case class CreateViewCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    assert(isPlanAnalyzed)
+    if (children.nonEmpty) {
+      throw new AnalysisException("The logical plan to represent the view is not analyzed.")
+    }
     val analyzedPlan = plan
 
     if (userSpecifiedColumns.nonEmpty &&

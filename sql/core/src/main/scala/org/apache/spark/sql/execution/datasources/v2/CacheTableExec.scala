@@ -104,8 +104,7 @@ case class CacheTableAsSelectExec(
         plan = query,
         allowExisting = false,
         replace = false,
-        viewType = LocalTempView,
-        isPlanAnalyzed = true
+        viewType = LocalTempView
       )
     )
     dataFrameForCachedPlan.logicalPlan
