@@ -165,8 +165,15 @@ case class AggregateExpression(
     }
   }
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    super.legacyWithNewChildren(newChildren)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): AggregateExpression =
+    if (filter.isDefined) {
+      copy(
+        aggregateFunction = newChildren(0).asInstanceOf[AggregateFunction],
+        filter = Some(newChildren(1)))
+    } else {
+      copy(aggregateFunction = newChildren(0).asInstanceOf[AggregateFunction])
+    }
 }
 
 /**
