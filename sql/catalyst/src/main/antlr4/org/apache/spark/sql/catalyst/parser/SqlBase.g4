@@ -233,7 +233,7 @@ statement
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
-    | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
+    | op=(ADD | LIST) identifier (STRING | GRAPHICAL)*?                #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
@@ -1832,6 +1832,10 @@ SIMPLE_COMMENT
 
 BRACKETED_COMMENT
     : '/*' {!isHint()}? (BRACKETED_COMMENT|.)*? '*/' -> channel(HIDDEN)
+    ;
+
+GRAPHICAL
+    : (~[ \r\n\t])+
     ;
 
 WS

@@ -354,32 +354,33 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val maybePaths = if (ctx.STRING != null) string(ctx.STRING) else remainder(ctx.identifier).trim
+    val maybePaths = ctx.STRING.asScala.map(string) ++
+      ctx.GRAPHICAL.asScala.map(s => s.getText.trim)
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
-          case "file" => AddFileCommand(maybePaths)
-          case "jar" => AddJarCommand(maybePaths)
-          case "archive" => AddArchiveCommand(maybePaths)
+          case "file" => AddFileCommand(maybePaths.headOption.getOrElse(""))
+          case "jar" => AddJarCommand(maybePaths.headOption.getOrElse(""))
+          case "archive" => AddArchiveCommand(maybePaths.headOption.getOrElse(""))
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" =>
             if (maybePaths.length > 0) {
-              ListFilesCommand(maybePaths.split("\\s+"))
+              ListFilesCommand(maybePaths)
             } else {
               ListFilesCommand()
             }
           case "jars" | "jar" =>
             if (maybePaths.length > 0) {
-              ListJarsCommand(maybePaths.split("\\s+"))
+              ListJarsCommand(maybePaths)
             } else {
               ListJarsCommand()
             }
           case "archives" | "archive" =>
             if (maybePaths.length > 0) {
-              ListArchivesCommand(maybePaths.split("\\s+"))
+              ListArchivesCommand(maybePaths)
             } else {
               ListArchivesCommand()
             }
