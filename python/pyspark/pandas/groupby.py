@@ -1894,12 +1894,12 @@ class GroupBy(object, metaclass=ABCMeta):
         ...                    'b': [2, 3, 1, 4, 6, 9, 8, 10, 7, 5],
         ...                    'c': [3, 5, 2, 5, 1, 2, 6, 4, 3, 6]},
         ...                   columns=['a', 'b', 'c'],
-        ...                   index=[7, 2, 4, 1, 3, 4, 9, 10, 5, 6])
+        ...                   index=[7, 2, 3, 1, 3, 4, 9, 10, 5, 6])
         >>> df
             a   b  c
         7   1   2  3
         2   1   3  5
-        4   1   1  2
+        3   1   1  2
         1   1   4  5
         3   2   6  1
         4   2   9  2
@@ -1911,16 +1911,16 @@ class GroupBy(object, metaclass=ABCMeta):
         >>> df.groupby('a').tail(2).sort_index()
            a  b  c
         1  1  4  5
+        3  1  1  2
         4  2  9  2
-        4  1  1  2
         5  3  7  3
         6  3  5  6
         9  2  8  6
 
         >>> df.groupby('a')['b'].tail(2).sort_index()
         1    4
+        3    1
         4    9
-        4    1
         5    7
         6    5
         9    8
@@ -3184,3 +3184,35 @@ def normalize_keyword_aggregation(kwargs):
     if isinstance(order[0][0], tuple):
         order = [(*levs, method) for levs, method in order]
     return aggspec, columns, order
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    import numpy
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.groupby
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.groupby.__dict__.copy()
+    globs["np"] = numpy
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.groupby tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.groupby,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

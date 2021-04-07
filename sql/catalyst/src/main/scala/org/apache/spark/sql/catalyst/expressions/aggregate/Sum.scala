@@ -39,7 +39,7 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "1.0.0")
 case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
 
   override def nullable: Boolean = true
 

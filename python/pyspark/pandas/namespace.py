@@ -512,13 +512,14 @@ def read_delta(
 
     Examples
     --------
-    >>> pp.range(1).to_delta('%s/read_delta/foo' % path)
-    >>> pp.read_delta('%s/read_delta/foo' % path)
+    >>> pp.range(1).to_delta('%s/read_delta/foo' % path)  # doctest: +SKIP
+    >>> pp.read_delta('%s/read_delta/foo' % path)  # doctest: +SKIP
        id
     0   0
 
-    >>> pp.range(10, 15, num_partitions=1).to_delta('%s/read_delta/foo' % path, mode='overwrite')
-    >>> pp.read_delta('%s/read_delta/foo' % path)
+    >>> pp.range(10, 15, num_partitions=1).to_delta('%s/read_delta/foo' % path,
+    ...                                             mode='overwrite')  # doctest: +SKIP
+    >>> pp.read_delta('%s/read_delta/foo' % path)  # doctest: +SKIP
        id
     0  10
     1  11
@@ -526,16 +527,15 @@ def read_delta(
     3  13
     4  14
 
-    >>> pp.read_delta('%s/read_delta/foo' % path, version=0)
+    >>> pp.read_delta('%s/read_delta/foo' % path, version=0)  # doctest: +SKIP
        id
     0   0
 
     You can preserve the index in the roundtrip as below.
 
     >>> pp.range(10, 15, num_partitions=1).to_delta(
-    ...     '%s/read_delta/bar' % path, index_col="index")
-    >>> pp.read_delta('%s/read_delta/bar' % path, index_col="index")
-    ... # doctest: +NORMALIZE_WHITESPACE
+    ...     '%s/read_delta/bar' % path, index_col="index")  # doctest: +SKIP
+    >>> pp.read_delta('%s/read_delta/bar' % path, index_col="index")  # doctest: +SKIP
            id
     index
     0      10
@@ -2875,3 +2875,47 @@ _get_dummies_acceptable_types = _get_dummies_default_accept_types + (
     BooleanType,
     TimestampType,
 )
+
+
+def _test():
+    import os
+    import doctest
+    import shutil
+    import sys
+    import tempfile
+    import uuid
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.namespace
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.namespace.__dict__.copy()
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.namespace tests")
+        .getOrCreate()
+    )
+
+    db_name = "db%s" % str(uuid.uuid4()).replace("-", "")
+    spark.sql("CREATE DATABASE %s" % db_name)
+    globs["db"] = db_name
+
+    path = tempfile.mkdtemp()
+    globs["path"] = path
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.namespace,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+
+    shutil.rmtree(path, ignore_errors=True)
+    spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db_name)
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
