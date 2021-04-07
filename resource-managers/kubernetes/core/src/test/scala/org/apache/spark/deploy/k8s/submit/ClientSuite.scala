@@ -19,7 +19,9 @@ package org.apache.spark.deploy.k8s.submit
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+
 import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
@@ -27,6 +29,7 @@ import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
