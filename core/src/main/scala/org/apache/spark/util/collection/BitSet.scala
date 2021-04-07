@@ -237,7 +237,7 @@ class BitSet(numBits: Int) extends Serializable {
   }
 
   /**
-   * Bit-wise OR with another bit set.
+   * Compute bit-wise union with another bit set and overwrite bits in this BitSet with the result.
    */
   def union(other: BitSet): Unit = {
     var ind = 0

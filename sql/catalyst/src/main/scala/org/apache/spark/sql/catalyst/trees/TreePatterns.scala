@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-// Enums for tree patterns.
+// Enums for commonly encountered tree patterns.
 object TreePattern extends Enumeration  {
   type TreePattern = Value
 
+  // Enum Ids start from 0.
   // Expression patterns (alphabetically ordered)
   val IN: Value = Value(0)
 

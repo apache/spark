@@ -55,18 +55,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   // Override `treePatternBits` to propagate bits for its expressions.
   override lazy val treePatternBits: BitSet = {
     val bits: BitSet = new BitSet(TreePattern.maxId)
-    // Propagate node type bits
+    // Propagate node pattern bits
     val nodeTypeIterator = nodePatterns.iterator
     while (nodeTypeIterator.hasNext) {
       bits.set(nodeTypeIterator.next().id)
     }
-    // Propagate children bits
+    // Propagate children's pattern bits
     val childIterator = children.iterator
     while (childIterator.hasNext) {
       bits.union(childIterator.next().treePatternBits)
     }
-
-    // Propagate expression bits
+    // Propagate expressions' pattern bits
     val exprIterator = expressions.iterator
     while (exprIterator.hasNext) {
       bits.union(exprIterator.next.treePatternBits)
@@ -106,11 +105,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * transformExpressionsDown or transformExpressionsUp should be used.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @param cond  a Lambda expression to stop transform early on. If `cond.apply` returns false
+   * @param cond  a Lambda expression to stop traversals early on. If `cond.apply` returns false
    *              on an expression T, skips processing T and its subtree; otherwise, processes
    *              T and its subtree recursively.
-   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
-   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on an expression T, skips processing T and its subtree. Do not
    *        pass it if the rule is not purely functional not purely functional and reads a
    *        varying initial state for every invocation.
@@ -125,11 +124,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
    *             on an expression T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
-   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
-   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on an expression T, skips processing T and its subtree. Do not
    *        pass it if the rule is not purely functional not purely functional and reads a
    *        varying initial state for every invocation.
@@ -144,11 +143,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
    *             on an expression T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
-   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
-   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on an expression T, skips processing T and its subtree. Do not
    *        pass it if the rule is not purely functional and reads a varying inital state for
    *        every invocation.

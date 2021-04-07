@@ -126,14 +126,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    */
   private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
 
+  /**
+   * A bit set of tree patterns for this TreeNode and its subtree. If this TreeNode node and its
+   * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this bitset.
+   */
   override lazy val treePatternBits: BitSet = {
     val bits: BitSet = new BitSet(TreePattern.maxId)
-    // Propagate node type bits
+    // Propagate node pattern bits
     val nodePatternIterator = nodePatterns.iterator
     while (nodePatternIterator.hasNext) {
       bits.set(nodePatternIterator.next().id)
     }
-    // Propagate children bits
+    // Propagate children's pattern bits
     val childIterator = children.iterator
     while (childIterator.hasNext) {
       bits.union(childIterator.next().treePatternBits)
@@ -141,6 +145,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     bits
   }
 
+  /**
+   * @return a sequence of tree pattern enums in a TreeNode T. It does not include propagated
+   *         patterns in the subtree of T.
+   */
   protected val nodePatterns: Seq[TreePattern] = Seq()
 
   /**
@@ -387,11 +395,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * transformDown or transformUp should be used.
    *
    * @param rule the function use to transform this nodes children
-   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
    *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
-   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
-   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
    *        pass it if the rule is not purely functional and reads a varying initial state for
    *        every invocation.
@@ -407,11 +415,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
    *
    * @param rule the function use to transform this nodes children
-   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
    *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
-   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
-   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
    *        pass it if the rule is not purely functional and reads a varying initial state for
    *        every invocation.
@@ -448,11 +456,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * unchanged.
    *
    * @param rule the function use to transform this nodes children
-   * @param cond a Lambda expression to stop transform early on. If `cond.apply` returns false
+   * @param cond a Lambda expression to stop traversals early on. If `cond.apply` returns false
    *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *             T and its subtree recursively.
-   * @param ruleId is a unique Id for the rule to prune unnecessary tree traversals. When it is
-   *        RuleId.UnknownId, no pruning happens. Otherwise, if a rule with id `ruleId` has been
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
    *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
    *        pass it if the rule is not purely functional and reads a varying initial state for
    *        every invocation.

@@ -34,18 +34,17 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
   // Override `treePatternBits` to propagate bits for its internal plan.
   override lazy val treePatternBits: BitSet = {
     val bits: BitSet = new BitSet(TreePattern.maxId)
-    // Propagate node type bits
+    // Propagate node pattern bits
     val nodeTypeIterator = nodePatterns.iterator
     while (nodeTypeIterator.hasNext) {
       bits.set(nodeTypeIterator.next().id)
     }
-    // Propagate children bits
+    // Propagate children's bits
     val childIterator = children.iterator
     while (childIterator.hasNext) {
       bits.union(childIterator.next().treePatternBits)
     }
-
-    // Propagate plan bits
+    // Propagate its query plan's pattern bits
     bits.union(plan.treePatternBits)
     bits
   }
