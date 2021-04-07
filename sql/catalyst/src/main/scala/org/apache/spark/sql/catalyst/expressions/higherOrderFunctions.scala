@@ -1185,7 +1185,7 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
   override def first: Expression = left
   override def second: Expression = right
   override def third: Expression = function
-  
+
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): ZipWith =
     copy(left = newFirst, right = newSecond, function = newThird)

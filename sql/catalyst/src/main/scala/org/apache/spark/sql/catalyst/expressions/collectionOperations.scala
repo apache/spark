@@ -939,7 +939,8 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 
   override def prettyName: String = "sort_array"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): SortArray =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): SortArray =
     copy(base = newLeft, ascendingOrder = newRight)
 }
 
@@ -1208,7 +1209,8 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def prettyName: String = "array_contains"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayContains =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayContains =
     copy(left = newLeft, right = newRight)
 }
 
@@ -1434,7 +1436,8 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   override def prettyName: String = "arrays_overlap"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArraysOverlap =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArraysOverlap =
     copy(left = newLeft, right = newRight)
 }
 
@@ -1957,7 +1960,8 @@ case class ArrayPosition(left: Expression, right: Expression)
     })
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayPosition =
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayPosition =
     copy(left = newLeft, right = newRight)
 }
 
@@ -2142,8 +2146,8 @@ case class ElementAt(
 
   override def prettyName: String = "element_at"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ElementAt =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ElementAt = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -3021,8 +3025,8 @@ case class ArrayRepeat(left: Expression, right: Expression)
      """.stripMargin
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayRepeat =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ArrayRepeat = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -3138,8 +3142,8 @@ case class ArrayRemove(left: Expression, right: Expression)
 
   override def prettyName: String = "array_remove"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayRemove =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ArrayRemove = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -3578,8 +3582,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 
   override def prettyName: String = "array_union"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayUnion =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ArrayUnion = copy(left = newLeft, right = newRight)
 }
 
 object ArrayUnion {
@@ -4092,6 +4096,6 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 
   override def prettyName: String = "array_except"
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): ArrayExcept =
-    copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ArrayExcept = copy(left = newLeft, right = newRight)
 }
