@@ -143,7 +143,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * A bit set of tree patterns for this TreeNode and its subtree. If this TreeNode node and its
    * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
    */
-  lazy val treePatternBits: BitSet = {
+  override lazy val treePatternBits: BitSet = {
     val bits: BitSet = new BitSet(TreePattern.maxId)
     // Propagate node pattern bits
     val nodePatternIterator = nodePatterns.iterator
