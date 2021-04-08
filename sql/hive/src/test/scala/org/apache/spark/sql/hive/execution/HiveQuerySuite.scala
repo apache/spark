@@ -978,7 +978,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD FILE ${file2.getAbsolutePath}")
       sql(s"ADD FILE '${file3.getAbsolutePath}'")
       val listFiles = sql("LIST FILES " +
-        s"'${file1.getAbsolutePath}' ${file2.getAbsolutePath} '${file3.getAbsolutePath}'")
+        s"""'${file1.getAbsolutePath}' ${file2.getAbsolutePath} "${file3.getAbsolutePath}"""")
       assert(listFiles.count === 3)
       assert(listFiles.filter(_.getString(0).contains(file1.getName)).count() === 1)
       assert(listFiles.filter(_.getString(0).contains(file2.getName)).count() === 1)
@@ -1002,8 +1002,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD ARCHIVE ${jarFile1.getAbsolutePath}")
       sql(s"ADD ARCHIVE ${jarFile2.getAbsolutePath}#foo")
       sql(s"ADD ARCHIVE '${jarFile3.getAbsolutePath}'")
-      val listArchives = sql("LIST ARCHIVES " +
-        s"'${jarFile1.getAbsolutePath}' ${jarFile2.getAbsolutePath} '${jarFile3.getAbsolutePath}'")
+      val listArchives = sql(s"LIST ARCHIVES '${jarFile1.getAbsolutePath}' " +
+        s"""${jarFile2.getAbsolutePath} "${jarFile3.getAbsolutePath}"""")
       assert(listArchives.count === 3)
       assert(listArchives.filter(_.getString(0).contains(jarFile1.getName)).count() === 1)
       assert(listArchives.filter(_.getString(0).contains(jarFile2.getName)).count() === 1)
@@ -1012,21 +1012,28 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
       val file7 = File.createTempFile("someprefix7", "somesuffix7", dir)
       val file8 = File.createTempFile("someprefix8", "somesuffix8", dir)
+      val file9 = File.createTempFile("someprefix9", "somesuffix9", dir)
       Files.write(file4.toPath, "file7".getBytes)
       Files.write(file5.toPath, "file8".getBytes)
+      Files.write(file6.toPath, "file9".getBytes)
 
       val jarFile4 = new File(dir, "test4.jar")
       val jarFile5 = new File(dir, "test5.jar")
+      val jarFile6 = new File(dir, "test 6.jar")
       TestUtils.createJar(Seq(file7), jarFile4)
       TestUtils.createJar(Seq(file8), jarFile5)
+      TestUtils.createJar(Seq(file9), jarFile6)
 
       sql(s"ADD JAR ${jarFile4.getAbsolutePath}")
       sql(s"ADD JAR ${jarFile5.getAbsolutePath}")
-      val listJars = sql("LIST JARS " +
-        s"'${jarFile4.getAbsolutePath}' ${jarFile5.getAbsolutePath}")
-      assert(listJars.count === 2)
+      sql(s"ADD JAR ${jarFile6.getAbsolutePath}")
+      val listJars = sql(s"LIST JARS '${jarFile4.getAbsolutePath}' " +
+        s"""${jarFile5.getAbsolutePath} "${jarFile6.getAbsolutePath}"""")
+      assert(listJars.count === 3)
       assert(listJars.filter(_.getString(0).contains(jarFile4.getName)).count() === 1)
       assert(listJars.filter(_.getString(0).contains(jarFile5.getName)).count() === 1)
+      assert(listJars.filter(
+        _.getString(0).contains(jarFile6.getName.replace(" ", "%20"))).count() === 1)
     }
   }
 

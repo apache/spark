@@ -355,16 +355,21 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val maybePaths = strLiteralDef.findAllIn(remainder(ctx.identifier).trim).toSeq.map {
+    val rawArg = remainder(ctx.identifier).trim
+    val maybePaths = strLiteralDef.findAllIn(rawArg).toSeq.map {
       case p if p.startsWith("\"") || p.startsWith("'") => unescapeSQLString(p)
       case p => p
     }
+
+    // The implementation of pathForAdd is to keep the compatibility with before SPARK-34977.
+    val pathForAdd = strLiteralDef.findFirstIn(rawArg)
+      .find(p => p.startsWith("\"") || p.startsWith("'")).map(unescapeSQLString).getOrElse(rawArg)
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
-          case "file" => AddFileCommand(maybePaths.headOption.getOrElse(""))
-          case "jar" => AddJarCommand(maybePaths.headOption.getOrElse(""))
-          case "archive" => AddArchiveCommand(maybePaths.headOption.getOrElse(""))
+          case "file" => AddFileCommand(pathForAdd)
+          case "jar" => AddJarCommand(pathForAdd)
+          case "archive" => AddArchiveCommand(pathForAdd)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
