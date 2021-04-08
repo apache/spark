@@ -268,7 +268,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
   }
 
-  def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
+  final def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
     val childrenIndexedSeq = asIndexedSeq(children)
     val newChildrenIndexedSeq = asIndexedSeq(newChildren)
     assert(newChildrenIndexedSeq.size == childrenIndexedSeq.size, "Incorrect number of children")
@@ -884,7 +884,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   override final def children: Seq[T] = Nil
   override final def mapChildren(f: T => T): T = this.asInstanceOf[T]
-  override final def withNewChildren(newChildren: Seq[T]): T = this.asInstanceOf[T]
   override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
 }
 
