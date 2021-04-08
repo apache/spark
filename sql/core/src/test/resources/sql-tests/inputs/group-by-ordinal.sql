@@ -80,6 +80,15 @@ select a, b, count(1) from data group by grouping sets((1), (b), (a, 2));
 
 select a, b, count(1) from data group by a, 2 grouping sets((1), (b), (a, 2));
 
+-- range error
+select a, b, count(1) from data group by a, -1;
+
+select a, b, count(1) from data group by a, 3;
+
+select a, b, count(1) from data group by cube(-1, 2);
+
+select a, b, count(1) from data group by cube(1, 3);
+
 -- turn off group by ordinal
 set spark.sql.groupByOrdinal=false;
 

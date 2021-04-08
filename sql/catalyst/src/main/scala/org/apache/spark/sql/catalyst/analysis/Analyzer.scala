@@ -1789,7 +1789,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
       case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
         groups.exists(containUnresolvedOrdinal) =>
-        val newGroups = groups.map((resolveGroupByExpressionOrdinal(_, aggs)))
+        val newGroups = groups.map(resolveGroupByExpressionOrdinal(_, aggs))
         Aggregate(newGroups, aggs, child)
     }
 
