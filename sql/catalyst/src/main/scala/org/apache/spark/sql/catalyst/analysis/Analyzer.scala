@@ -1791,7 +1791,13 @@ class Analyzer(override val catalogManager: CatalogManager)
         groups.exists(_.isInstanceOf[UnresolvedOrdinal]) =>
         val newGroups = groups.map {
           case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
-            aggs(index - 1)
+            val ordinalExpr = aggs(index - 1)
+            if(ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
+              throw QueryCompilationErrors.groupByPositionIsAggregateExpressionError(
+                index, ordinalExpr, u)
+            } else {
+              ordinalExpr
+            }
           case ordinal @ UnresolvedOrdinal(index) =>
             throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
           case o => o
