@@ -85,8 +85,8 @@ public class JavaAverage implements UnboundFunction {
   public static class State implements Serializable {
     int sum, count;
 
-    State(int left, int count) {
-      this.sum = left;
+    State(int sum, int count) {
+      this.sum = sum;
       this.count = count;
     }
   }

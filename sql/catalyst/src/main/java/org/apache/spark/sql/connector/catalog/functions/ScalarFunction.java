@@ -42,18 +42,16 @@ import org.apache.spark.sql.types.DataType;
  * method approach:
  *
  * <pre>
- *   {@code
- *     public class IntegerAdd implements ScalarFunction<Integer> {
- *       public int invoke(int left, int right) {
- *         return left + right;
- *       }
+ *   public class IntegerAdd implements{@code ScalarFunction<Integer>} {
+ *     public int invoke(int left, int right) {
+ *       return left + right;
+ *     }
  *
- *       @Overrides
- *       public produceResult(InternalRow input) {
- *         int left = input.getInt(0);
- *         int right = input.getInt(1);
- *         return left + right;
- *       }
+ *    {@literal @}Override
+ *     public produceResult(InternalRow input) {
+ *       int left = input.getInt(0);
+ *       int right = input.getInt(1);
+ *       return left + right;
  *     }
  *   }
  * </pre>
