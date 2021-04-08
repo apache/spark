@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NullType, StructType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * A special version of [[AnsiCast]]. It performs the same operation (i.e. converts a value of
@@ -89,9 +89,5 @@ case class TryCast(child: Expression, dataType: DataType, timeZoneId: Option[Str
     s"try_cast($child as ${dataType.simpleString})"
   }
 
-  override def sql: String = dataType match {
-    case _: ArrayType | _: MapType | _: StructType => child.sql
-    case _: NullType => s"TRY_CAST(${child.sql} AS void)"
-    case _ => s"TRY_CAST(${child.sql} AS ${dataType.sql})"
-  }
+  override def sql: String = s"TRY_CAST(${child.sql} AS ${dataType.sql})"
 }
