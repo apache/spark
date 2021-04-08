@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit
 
 import com.esotericsoftware.kryo.io.Input
 import net.jpountz.lz4.{LZ4Factory, LZ4FastDecompressor}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.clients.{ShuffleDataReader, TaskDataBlock}
 import org.apache.spark.remoteshuffle.exceptions.{RssInvalidDataException, RssInvalidStateException}
@@ -31,6 +32,7 @@ class BlockDownloaderPartitionRecordIterator[K, C](
                                                     shuffleId: Int,
                                                     partition: Int,
                                                     serializer: Serializer,
+                                                    context: TaskContext,
                                                     downloader: ShuffleDataReader,
                                                     shuffleReadMetrics: ShuffleReadMetricsReporter)
   extends Iterator[Product2[K, C]]
@@ -94,6 +96,7 @@ class BlockDownloaderPartitionRecordIterator[K, C](
       shuffleReadMetrics.incRemoteBytesRead(numRemoteBytesRead)
       shuffleReadMetrics.incFetchWaitTime(TimeUnit.NANOSECONDS.toMillis(fetchNanoTime))
       logShuffleFetchInfo(true)
+      context.taskMetrics().mergeShuffleReadMetrics()
     }
 
     executeNanoTime += (System.nanoTime() - methodStartTime)

@@ -15,6 +15,7 @@
 
 package org.apache.spark.shuffle.internal
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.clients.{ClientRetryOptions, MultiServerSocketReadClient, ReadClientDataOptions, ShuffleDataReader}
 import org.apache.spark.remoteshuffle.common.{AppShufflePartitionId, ServerList}
@@ -36,6 +37,7 @@ class BlockDownloaderPartitionRangeRecordIterator[K, C](
     startPartition: Int,
     endPartition: Int,
     serializer: Serializer,
+    context: TaskContext,
     rssServers: ServerList,
     partitionFanout: Int,
     timeoutMillis: Int,
@@ -132,6 +134,7 @@ class BlockDownloaderPartitionRangeRecordIterator[K, C](
           shuffleId,
           partition,
           serializer,
+          context,
           downloader,
           shuffleReadMetrics)
       } else {

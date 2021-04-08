@@ -59,6 +59,7 @@ class RssShuffleReader[K, C](
       startPartition = startPartition,
       endPartition = endPartition,
       serializer = serializer,
+      context = context,
       rssServers = rssServers,
       partitionFanout = partitionFanout,
       timeoutMillis = timeoutMillis,
