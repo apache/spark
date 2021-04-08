@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.time.{Duration, Period}
+
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.HiveResult._
@@ -106,5 +108,21 @@ class HiveResultSuite extends SharedSparkSession {
           }
       }
     }
+  }
+
+  test("SPARK-34984: year-month interval formatting in hive result") {
+    val df = Seq(Period.ofYears(-10).minusMonths(1)).toDF("i")
+    val plan1 = df.queryExecution.executedPlan
+    assert(hiveResultString(plan1) === Seq("INTERVAL '-10-1' YEAR TO MONTH"))
+    val plan2 = df.selectExpr("array(i)").queryExecution.executedPlan
+    assert(hiveResultString(plan2) === Seq("[INTERVAL '-10-1' YEAR TO MONTH]"))
+  }
+
+  test("SPARK-34984: day-time interval formatting in hive result") {
+    val df = Seq(Duration.ofDays(5).plusMillis(10)).toDF("i")
+    val plan1 = df.queryExecution.executedPlan
+    assert(hiveResultString(plan1) === Seq("INTERVAL '5 00:00:00.01' DAY TO SECOND"))
+    val plan2 = df.selectExpr("array(i)").queryExecution.executedPlan
+    assert(hiveResultString(plan2) === Seq("[INTERVAL '5 00:00:00.01' DAY TO SECOND]"))
   }
 }

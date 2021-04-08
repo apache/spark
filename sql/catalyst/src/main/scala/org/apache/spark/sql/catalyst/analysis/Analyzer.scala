@@ -1470,7 +1470,11 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // The update value can access columns from both target and source tables.
                 UpdateAction(
                   resolvedUpdateCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
+                  resolveAssignments(Some(assignments), m, resolveValuesWithSourceOnly = false))
+              case UpdateStarAction(updateCondition) =>
+                UpdateAction(
+                  updateCondition.map(resolveExpressionByPlanChildren(_, m)),
+                  resolveAssignments(assignments = None, m, resolveValuesWithSourceOnly = false))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1481,7 +1485,15 @@ class Analyzer(override val catalogManager: CatalogManager)
                   resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
+                  resolveAssignments(Some(assignments), m, resolveValuesWithSourceOnly = true))
+              case InsertStarAction(insertCondition) =>
+                // The insert action is used when not matched, so its condition and value can only
+                // access columns from the source table.
+                val resolvedInsertCondition = insertCondition.map(
+                  resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
+                InsertAction(
+                  resolvedInsertCondition,
+                  resolveAssignments(assignments = None, m, resolveValuesWithSourceOnly = true))
               case o => o
             }
             val resolvedMergeCondition = resolveExpressionByPlanChildren(m.mergeCondition, m)
@@ -1499,7 +1511,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def resolveAssignments(
-        assignments: Seq[Assignment],
+        assignments: Option[Seq[Assignment]],
         mergeInto: MergeIntoTable,
         resolveValuesWithSourceOnly: Boolean): Seq[Assignment] = {
       if (assignments.isEmpty) {
@@ -1507,7 +1519,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         val expandedValues = mergeInto.sourceTable.output
         expandedColumns.zip(expandedValues).map(kv => Assignment(kv._1, kv._2))
       } else {
-        assignments.map { assign =>
+        assignments.get.map { assign =>
           val resolvedKey = assign.key match {
             case c if !c.resolved =>
               resolveExpressionByPlanChildren(c, Project(Nil, mergeInto.targetTable))
@@ -1788,15 +1800,29 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
       case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
-        groups.exists(_.isInstanceOf[UnresolvedOrdinal]) =>
-        val newGroups = groups.map {
-          case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
-            aggs(index - 1)
-          case ordinal @ UnresolvedOrdinal(index) =>
-            throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
-          case o => o
-        }
+        groups.exists(containUnresolvedOrdinal) =>
+        val newGroups = groups.map(resolveGroupByExpressionOrdinal(_, aggs))
         Aggregate(newGroups, aggs, child)
+    }
+
+    private def containUnresolvedOrdinal(e: Expression): Boolean = e match {
+      case _: UnresolvedOrdinal => true
+      case gs: BaseGroupingSets => gs.children.exists(containUnresolvedOrdinal)
+      case _ => false
+    }
+
+    private def resolveGroupByExpressionOrdinal(
+        expr: Expression,
+        aggs: Seq[Expression]): Expression = expr match {
+      case ordinal @ UnresolvedOrdinal(index) =>
+        if (index > 0 && index <= aggs.size) {
+          aggs(index - 1)
+        } else {
+          throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
+        }
+      case gs: BaseGroupingSets =>
+        gs.withNewChildren(gs.children.map(resolveGroupByExpressionOrdinal(_, aggs)))
+      case others => others
     }
   }
 
