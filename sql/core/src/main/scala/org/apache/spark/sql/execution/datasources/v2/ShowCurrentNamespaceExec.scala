@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 case class ShowCurrentNamespaceExec(
     output: Seq[Attribute],
     catalogManager: CatalogManager)
-  extends V2CommandExec {
+  extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     Seq(toCatalystRow(catalogManager.currentCatalog.name, catalogManager.currentNamespace.quoted))
   }

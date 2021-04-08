@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  * }}}
  */
 abstract class PartitionTransformExpression extends Expression with Unevaluable
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
   override def nullable: Boolean = true
 }
 
