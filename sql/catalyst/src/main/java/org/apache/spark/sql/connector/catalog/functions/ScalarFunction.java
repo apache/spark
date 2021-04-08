@@ -57,8 +57,8 @@ import org.apache.spark.sql.types.DataType;
  *     }
  *   }
  * </pre>
- * In this case, both {@link #MAGIC_METHOD_NAME} and {@link #produceResult} are defined, and Spark will
- * first lookup the {@code invoke} method during query analysis. It checks whether the method
+ * In this case, both {@link #MAGIC_METHOD_NAME} and {@link #produceResult} are defined, and Spark
+ * will first lookup the {@code invoke} method during query analysis. It checks whether the method
  * parameters have the valid types that are supported by Spark. If the check fails it falls back
  * to use {@link #produceResult}.
  *
