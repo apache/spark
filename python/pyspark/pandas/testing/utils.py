@@ -36,7 +36,7 @@ from pyspark.pandas.utils import default_session, sql_conf as sqlc, SPARK_CONF_A
 
 tabulate_requirement_message = None
 try:
-    from tabulate import tabulate
+    from tabulate import tabulate  # noqa: F401
 except ImportError as e:
     # If tabulate requirement is not satisfied, skip related tests.
     tabulate_requirement_message = str(e)
