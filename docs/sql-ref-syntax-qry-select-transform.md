@@ -124,13 +124,13 @@ ROW FORMAT DELIMITED
 
 ### SERDE behavior
 
-In default format we use Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe`, columns will be transformed to `STRING` and delimited by tabs before feeding
-to the user script. Similarly, all `NULL` values will be converted to the literal string `"\N"` in order to
-differentiate `NULL` values from empty strings. The standard output of the user script will be treated as
-TAB-separated STRING columns, any cell containing only `"\N"` will be re-interpreted as a `NULL`, and then the
-resulting STRING column will be cast to the data type specified in the table declaration in the usual way.
-User scripts can output debug information to standard error which will be shown on the task detail page on Spark.
-These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`.
+In default format we use Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe`, columns will be transformed
+to `STRING` and delimited by tabs before feeding to the user script. Similarly, all `NULL` values will be converted
+to the literal string `"\N"` in order to differentiate `NULL` values from empty strings. The standard output of the
+user script will be treated as TAB-separated STRING columns, any cell containing only `"\N"` will be re-interpreted
+as a `NULL`, and then the resulting STRING column will be cast to the data type specified in the table declaration
+in the usual way. User scripts can output debug information to standard error which will be shown on the task detail
+page on Spark. These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`.
 
 ### Schema-less Script Transforms
 
