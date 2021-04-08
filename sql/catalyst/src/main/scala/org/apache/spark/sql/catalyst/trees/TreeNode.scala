@@ -271,7 +271,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val childrenIndexedSeq = asIndexedSeq(children)
     val newChildrenIndexedSeq = asIndexedSeq(newChildren)
     assert(newChildrenIndexedSeq.size == childrenIndexedSeq.size, "Incorrect number of children")
-    if (childrenIndexedSeq.isEmpty || childrenFastEquals(newChildrenIndexedSeq, childrenIndexedSeq)) {
+    if (childrenIndexedSeq.isEmpty ||
+        childrenFastEquals(newChildrenIndexedSeq, childrenIndexedSeq)) {
       this
     } else {
       CurrentOrigin.withOrigin(origin) {
