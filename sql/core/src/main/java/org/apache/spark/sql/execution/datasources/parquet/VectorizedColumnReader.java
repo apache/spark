@@ -275,6 +275,13 @@ public class VectorizedColumnReader {
       for (int i = 0; i < total; i++) {
         rowIndexes[i] = rowIndexesIterator.next();
       }
+
+      // if row indexes is exactly matching the range we are going to read
+      // there is no need to do additional row index synchronization
+      boolean continuousRange = (rowIndexes[total - 1] - rowIndexes[0] + 1) == total;
+      if (continuousRange && rowIndexes[0] == currentRow) {
+        column = resultColumn;
+      }
     } else {
       // write to result column directly if no row indexes if present
       column = resultColumn;
@@ -368,7 +375,7 @@ public class VectorizedColumnReader {
         }
       }
 
-      if (rowIndexesIterator != null) {
+      if (resultColumn != column) {
         // copy values from temp column to result column
         boolean continuousRange = (rowIndexes[total - 1] - rowIndexes[0] + 1) == total;
         if (continuousRange) {
@@ -376,93 +383,71 @@ public class VectorizedColumnReader {
           int offset = (int) (rowIndexes[rowId] - currentRow);
           if (offset < num) {
             int validValueNum = num - offset;
-            switch (typeName) {
-              case BOOLEAN:
-                for (int i = 0; i < validValueNum; i++) {
-                  resultColumn.putBoolean(rowId + i, column.getBoolean(offset + i));
-                }
-                break;
-              case INT32:
-                resultColumn.putInts(rowId, validValueNum, column.getInts(offset, validValueNum), 0);
-                if (column.dataType() == DataTypes.IntegerType || canReadAsIntDecimal(column.dataType())) {
-                  resultColumn.putInts(rowId, validValueNum, column.getInts(offset, validValueNum), 0);
-                } else if (column.dataType() == DataTypes.LongType) {
-                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
-                } else if (column.dataType() == DataTypes.ByteType) {
-                  resultColumn.putBytes(rowId, num - offset, column.getBytes(offset, validValueNum), 0);
-                } else if (column.dataType() == DataTypes.ShortType) {
-                  resultColumn.putShorts(rowId, num - offset, column.getShorts(offset, validValueNum), 0);
-                } else if (column.dataType() == DataTypes.DateType ) {
-                  resultColumn.putInts(rowId, validValueNum, column.getInts(offset, validValueNum), 0);
-                } else {
-                  throw constructConvertNotSupportedException(descriptor, column);
-                }
-                break;
-              case INT64:
-                if (column.dataType() == DataTypes.LongType || canReadAsLongDecimal(column.dataType())) {
-                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
-                } else if (originalType == OriginalType.UINT_64) {
-                  for (int i = 0; i < num - offset; i++) {
-                    resultColumn.putByteArray(rowId + i, column.getBinary(offset + i));
-                  }
-                } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
-                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
-                } else if (originalType == OriginalType.TIMESTAMP_MILLIS) {
-                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
-                } else {
-                  throw constructConvertNotSupportedException(descriptor, column);
-                }
-                break;
-              case FLOAT:
-                resultColumn.putFloats(rowId, validValueNum, column.getFloats(offset, validValueNum), 0);
-                break;
-              case DOUBLE:
-                resultColumn.putDoubles(rowId, validValueNum, column.getDoubles(offset, validValueNum), 0);
-                break;
-              case INT96:
-              case BINARY:
-                if (column.dataType() == DataTypes.TimestampType) {
-                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
-                } else {
-                  for (int i = 0; i < num - offset; i++) {
-                    resultColumn.putByteArray(rowId + i, column.getBinary(offset + i));
-                  }
-                }
-                break;
-              case FIXED_LEN_BYTE_ARRAY:
-                if (canReadAsIntDecimal(column.dataType())) {
-                  resultColumn.putInts(rowId, validValueNum, column.getInts(offset, validValueNum), 0);
-                } else if (canReadAsLongDecimal(column.dataType())) {
-                  resultColumn.putLongs(rowId, num - offset, column.getLongs(offset, validValueNum), 0);
-                } else if (canReadAsBinaryDecimal(column.dataType())) {
-                  for (int i = 0; i < num - offset; i++) {
-                    resultColumn.putByteArray(rowId + i, column.getBinary(offset + i));
-                  }
-                } else {
-                  throw constructConvertNotSupportedException(descriptor, column);
-                }
-                break;
-              default:
-                throw new IOException("Unsupported type: " + typeName);
+            if (resultColumn.dataType() == DataTypes.ByteType) {
+              resultColumn.putBytes(rowId, validValueNum, column.getBytes(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.ShortType) {
+              resultColumn.putShorts(rowId, validValueNum, column.getShorts(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.IntegerType) {
+              resultColumn.putInts(rowId, validValueNum, column.getInts(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.LongType) {
+              resultColumn.putLongs(rowId, validValueNum, column.getLongs(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.DateType) {
+              resultColumn.putInts(rowId, validValueNum, column.getInts(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.FloatType) {
+              resultColumn.putFloats(rowId, validValueNum, column.getFloats(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.DoubleType) {
+              resultColumn.putDoubles(rowId, validValueNum, column.getDoubles(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.TimestampType) {
+              resultColumn.putLongs(rowId, validValueNum, column.getLongs(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.DayTimeIntervalType) {
+              resultColumn.putLongs(rowId, validValueNum, column.getLongs(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.YearMonthIntervalType) {
+              resultColumn.putInts(rowId, validValueNum, column.getInts(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.BooleanType) {
+              for (int i = 0; i < validValueNum; i++) {
+                resultColumn.putBoolean(rowId + i, column.getBoolean(rowId + offset + i));
+              }
+            } else {
+              for (int i = 0; i < validValueNum; i++) {
+                resultColumn.putByteArray(rowId + i, column.getBinary(rowId + offset + i));
+              }
             }
-            rowId += (num - offset);
-            total -= (num - offset);
+            rowId += validValueNum;
+            total -= validValueNum;
           }
         } else {
           // need to check every row
-          for (int i = 0; i < num && total > 0; ) {
+          for (int i = 0, startingRowId = rowId; i < num && total > 0; ) {
             while (currentRow + i < rowIndexes[rowId] && i < num) {
               i++;
             }
             if (i >= num) {
               break;
             }
-            switch (typeName) {
-              case INT64:
-                resultColumn.putLong(rowId, column.getLong(i));
-                break;
-              case BINARY:
-                resultColumn.putByteArray(rowId, column.getBinary(i));
+            if (resultColumn.dataType() == DataTypes.ByteType) {
+              resultColumn.putByte(rowId, column.getByte(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.ShortType) {
+              resultColumn.putShort(rowId, column.getShort(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.IntegerType) {
+              resultColumn.putInt(rowId, column.getInt(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.LongType) {
+              resultColumn.putLong(rowId, column.getLong(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.DateType) {
+              resultColumn.putInt(rowId, column.getInt(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.FloatType) {
+              resultColumn.putFloat(rowId, column.getFloat(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.DoubleType) {
+              resultColumn.putDouble(rowId, column.getDouble(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.TimestampType) {
+              resultColumn.putLong(rowId, column.getLong(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.DayTimeIntervalType) {
+              resultColumn.putLong(rowId, column.getLong(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.YearMonthIntervalType) {
+              resultColumn.putInt(rowId, column.getInt(startingRowId + i));
+            } else if (resultColumn.dataType() == DataTypes.BooleanType) {
+              resultColumn.putBoolean(rowId, column.getBoolean(startingRowId + i));
+            } else {
+              resultColumn.putByteArray(rowId, column.getBinary(startingRowId + i));
             }
             rowId++;
             total--;
