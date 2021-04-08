@@ -67,7 +67,7 @@ case class CreateViewCommand(
     allowExisting: Boolean,
     replace: Boolean,
     viewType: ViewType,
-    isAnalyzed: Boolean = false) extends BaseRunnableCommand with AnalysisOnlyCommand {
+    isAnalyzed: Boolean = false) extends RunnableCommand with AnalysisOnlyCommand {
 
   import ViewHelper._
 
