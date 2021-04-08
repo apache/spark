@@ -38,7 +38,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
 
     if (shouldApplyChildren(plan)) {
       plan.transformUp {
-        case p => p.withNewChildren(p.children.map(child => applyInternal(child)))
+        case p if shouldApplyChildrenFunc(p) &&
+          !p.children.exists(child => shouldApplyChildren(child)) =>
+          p.withNewChildren(p.children.map(child => applyInternal(child)))
       }
     } else {
       applyInternal(plan)
@@ -105,10 +107,12 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
   }
 
   private def shouldApplyChildren(plan: SparkPlan): Boolean = {
-    plan.find {
-      case _: UnionExec => true
-      case _ => false
-    }.isDefined
+    plan.find(p => shouldApplyChildrenFunc(p)).isDefined
+  }
+
+  private def shouldApplyChildrenFunc(plan: SparkPlan): Boolean = plan match {
+    case _: UnionExec => true
+    case _ => false
   }
 
   private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
