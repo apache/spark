@@ -34,7 +34,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
 
 /** A dummy command for testing unsupported operations. */
-case class DummyCommand() extends Command
+case class DummyCommand() extends LeafCommand
 
 class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 

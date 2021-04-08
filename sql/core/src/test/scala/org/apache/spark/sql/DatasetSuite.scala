@@ -326,7 +326,7 @@ class DatasetSuite extends QueryTest
       e = intercept[AnalysisException] {
         ds.select(expr("`(_1|_2)`").as[Int])
       }.getMessage
-      assert(e.contains("cannot resolve '(_1|_2)'"))
+      assert(e.contains("cannot resolve '`(_1|_2)`'"))
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))

@@ -624,7 +624,7 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 java.lang.ArithmeticException
-Casting 4567890123456789 to short causes overflow
+Casting 4567890123456789 to smallint causes overflow
 
 
 -- !query
@@ -698,8 +698,13 @@ SELECT * FROM range(bigint('+4567890123456789'), bigint('+4567890123456799'), 0)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-requirement failed: step (0) cannot be 0
+org.apache.spark.sql.AnalysisException
+Table-valued function range with alternatives: 
+    range(start: long, end: long, step: long, numSlices: integer)
+    range(start: long, end: long, step: long)
+    range(start: long, end: long)
+    range(end: long)
+cannot be applied to (long, long, integer): requirement failed: step (0) cannot be 0; line 1 pos 14
 
 
 -- !query

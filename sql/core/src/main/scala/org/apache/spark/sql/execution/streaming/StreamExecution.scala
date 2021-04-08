@@ -68,7 +68,7 @@ case object RECONFIGURING extends State
 abstract class StreamExecution(
     override val sparkSession: SparkSession,
     override val name: String,
-    private val checkpointRoot: String,
+    val resolvedCheckpointRoot: String,
     val analyzedPlan: LogicalPlan,
     val sink: Table,
     val trigger: Trigger,
@@ -93,51 +93,6 @@ abstract class StreamExecution(
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
-
-  val resolvedCheckpointRoot = {
-    val checkpointPath = new Path(checkpointRoot)
-    val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
-        && StreamExecution.containsSpecialCharsInPath(checkpointPath)) {
-      // In Spark 2.4 and earlier, the checkpoint path is escaped 3 times (3 `Path.toUri.toString`
-      // calls). If this legacy checkpoint path exists, we will throw an error to tell the user how
-      // to migrate.
-      val legacyCheckpointDir =
-        new Path(new Path(checkpointPath.toUri.toString).toUri.toString).toUri.toString
-      val legacyCheckpointDirExists =
-        try {
-          fs.exists(new Path(legacyCheckpointDir))
-        } catch {
-          case NonFatal(e) =>
-            // We may not have access to this directory. Don't fail the query if that happens.
-            logWarning(e.getMessage, e)
-            false
-        }
-      if (legacyCheckpointDirExists) {
-        throw new SparkException(
-          s"""Error: we detected a possible problem with the location of your checkpoint and you
-             |likely need to move it before restarting this query.
-             |
-             |Earlier version of Spark incorrectly escaped paths when writing out checkpoints for
-             |structured streaming. While this was corrected in Spark 3.0, it appears that your
-             |query was started using an earlier version that incorrectly handled the checkpoint
-             |path.
-             |
-             |Correct Checkpoint Directory: $checkpointPath
-             |Incorrect Checkpoint Directory: $legacyCheckpointDir
-             |
-             |Please move the data from the incorrect directory to the correct one, delete the
-             |incorrect directory, and then restart this query. If you believe you are receiving
-             |this message in error, you can disable it with the SQL conf
-             |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}."""
-            .stripMargin)
-      }
-    }
-    val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    fs.mkdirs(checkpointDir)
-    checkpointDir.toString
-  }
-  logInfo(s"Checkpoint root $checkpointRoot resolved to $resolvedCheckpointRoot.")
 
   def logicalPlan: LogicalPlan
 

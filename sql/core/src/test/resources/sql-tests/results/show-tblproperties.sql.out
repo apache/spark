@@ -66,6 +66,7 @@ view.query.out.col.0	c1
 view.query.out.numCols	1
 view.referredTempFunctionsNames	[]
 view.referredTempViewNames	[]
+view.sqlConfig.spark.sql.legacy.interval.enabled	true
 
 
 -- !query

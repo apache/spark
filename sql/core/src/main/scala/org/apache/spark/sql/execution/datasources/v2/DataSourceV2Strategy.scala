@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
+import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -89,10 +89,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         relation @ DataSourceV2ScanRelation(_, V1ScanWrapper(scan, translated, pushed), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
-        throw new IllegalArgumentException(
-          "The fallback v1 relation reports inconsistent schema:\n" +
-            "Schema of v2 scan:     " + scan.readSchema() + "\n" +
-            "Schema of v1 relation: " + v1Relation.schema)
+        throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
+          scan.readSchema(), v1Relation.schema)
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
@@ -209,9 +207,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case v1Write: V1Write =>
           AppendDataExecV1(v1, query, refreshCache(r), v1Write) :: Nil
         case v2Write =>
-          throw new AnalysisException(
-            s"Table ${v1.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
-            s"${v2Write.getClass.getName} is not an instance of ${classOf[V1Write].getName}")
+          throw QueryCompilationErrors.batchWriteCapabilityError(
+            v1, v2Write.getClass.getName, classOf[V1Write].getName)
       }
 
     case AppendData(r: DataSourceV2Relation, query, _, _, Some(write)) =>
@@ -223,9 +220,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case v1Write: V1Write =>
           OverwriteByExpressionExecV1(v1, query, refreshCache(r), v1Write) :: Nil
         case v2Write =>
-          throw new AnalysisException(
-            s"Table ${v1.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
-            s"${v2Write.getClass.getName} is not an instance of ${classOf[V1Write].getName}")
+          throw QueryCompilationErrors.batchWriteCapabilityError(
+            v1, v2Write.getClass.getName, classOf[V1Write].getName)
       }
 
     case OverwriteByExpression(r: DataSourceV2Relation, _, query, _, _, Some(write)) =>
@@ -239,26 +235,23 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case DataSourceV2ScanRelation(r, _, output) =>
           val table = r.table
           if (condition.exists(SubqueryExpression.hasSubquery)) {
-            throw new AnalysisException(
-              s"Delete by condition with subquery is not supported: $condition")
+            throw QueryCompilationErrors.unsupportedDeleteByConditionWithSubqueryError(condition)
           }
           // fail if any filter cannot be converted.
           // correctness depends on removing all matching data.
           val filters = DataSourceStrategy.normalizeExprs(condition.toSeq, output)
               .flatMap(splitConjunctivePredicates(_).map {
                 f => DataSourceStrategy.translateFilter(f, true).getOrElse(
-                  throw new AnalysisException(s"Exec update failed:" +
-                      s" cannot translate expression to source filter: $f"))
+                  throw QueryCompilationErrors.cannotTranslateExpressionToSourceFilterError(f))
               }).toArray
 
           if (!table.asDeletable.canDeleteWhere(filters)) {
-            throw new AnalysisException(
-              s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
+            throw QueryCompilationErrors.cannotDeleteTableWhereFiltersError(table, filters)
           }
 
           DeleteFromTableExec(table.asDeletable, filters, refreshCache(r)) :: Nil
         case _ =>
-          throw new AnalysisException("DELETE is only supported with v2 tables.")
+          throw QueryCompilationErrors.deleteOnlySupportedWithV2TablesError()
       }
 
     case WriteToContinuousDataSource(writer, query) =>
@@ -269,7 +262,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case DescribeRelation(r: ResolvedTable, partitionSpec, isExtended, output) =>
       if (partitionSpec.nonEmpty) {
-        throw new AnalysisException("DESCRIBE does not support partition for v2 tables.")
+        throw QueryCompilationErrors.describeDoesNotSupportPartitionForV2TablesError()
       }
       DescribeTableExec(output, r.table, isExtended) :: Nil
 
@@ -293,8 +286,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), newIdent, isView) =>
       if (isView) {
-        throw new AnalysisException(
-          "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
+        throw QueryCompilationErrors.cannotRenameTableWithAlterViewError()
       }
       RenameTableExec(
         catalog,
@@ -344,7 +336,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ShowTablePropertiesExec(output, rt.table, propertyKey) :: Nil
 
     case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
-      throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
+      throw QueryCompilationErrors.analyzeTableNotSupportedForV2TablesError()
 
     case AddPartitions(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
@@ -375,18 +367,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         recacheTable(r)) :: Nil
 
     case RecoverPartitions(_: ResolvedTable) =>
-      throw new AnalysisException(
-        "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables.")
+      throw QueryCompilationErrors.alterTableRecoverPartitionsNotSupportedForV2TablesError()
 
     case SetTableSerDeProperties(_: ResolvedTable, _, _, _) =>
-      throw new AnalysisException(
-        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables.")
+      throw QueryCompilationErrors.alterTableSerDePropertiesNotSupportedForV2TablesError()
 
     case LoadData(_: ResolvedTable, _, _, _, _) =>
-      throw new AnalysisException("LOAD DATA is not supported for v2 tables.")
+      throw QueryCompilationErrors.loadDataNotSupportedForV2TablesError()
 
     case ShowCreateTable(_: ResolvedTable, _, _) =>
-      throw new AnalysisException("SHOW CREATE TABLE is not supported for v2 tables.")
+      throw QueryCompilationErrors.showCreateTableNotSupportedForV2TablesError()
 
     case TruncateTable(r: ResolvedTable) =>
       TruncateTableExec(
@@ -400,7 +390,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         recacheTable(r)) :: Nil
 
     case ShowColumns(_: ResolvedTable, _, _) =>
-      throw new AnalysisException("SHOW COLUMNS is not supported for v2 tables.")
+      throw QueryCompilationErrors.showColumnsNotSupportedForV2TablesError()
 
     case r @ ShowPartitions(
         ResolvedTable(catalog, _, table: SupportsPartitionManagement, _),
@@ -412,7 +402,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         pattern.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil
 
     case RepairTable(_: ResolvedTable, _, _) =>
-      throw new AnalysisException("MSCK REPAIR TABLE is not supported for v2 tables.")
+      throw QueryCompilationErrors.repairTableNotSupportedForV2TablesError()
 
     case r: CacheTable =>
       CacheTableExec(r.table, r.multipartIdentifier, r.isLazy, r.options) :: Nil
@@ -425,7 +415,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case SetTableLocation(table: ResolvedTable, partitionSpec, location) =>
       if (partitionSpec.nonEmpty) {
-        throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
+        throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError()
       }
       val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, location))
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
