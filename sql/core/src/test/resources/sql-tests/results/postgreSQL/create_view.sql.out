@@ -257,7 +257,7 @@ View Text           	SELECT * FROM base_table
 View Original Text  	SELECT * FROM base_table	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -313,7 +313,7 @@ View Text           	SELECT * FROM base_table
 View Original Text  	SELECT * FROM base_table	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -359,7 +359,7 @@ View Original Text  	SELECT t1.a AS t1_a, t2.a AS t2_a
     WHERE t1.id = t2.id	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[t1_a, t2_a]        	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=t1_a, view.query.out.col.1=t2_a, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=t1_a, view.query.out.col.1=t2_a, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -413,7 +413,7 @@ View Text           	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_t
 View Original Text  	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -443,7 +443,7 @@ View Text           	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_
 View Original Text  	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[id, a]             	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=id, view.query.out.col.1=a, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=id, view.query.out.col.1=a, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -473,7 +473,7 @@ View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_t
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -503,7 +503,7 @@ View Text           	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM ba
 View Original Text  	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -533,7 +533,7 @@ View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1)
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1)	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]             	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=temp_view_test, view.query.out.col.0=a, view.query.out.col.1=id, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -669,7 +669,7 @@ View Text           	SELECT * FROM t1 CROSS JOIN t2
 View Original Text  	SELECT * FROM t1 CROSS JOIN t2	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=num, view.query.out.col.1=name, view.query.out.col.2=num2, view.query.out.col.3=value, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=num, view.query.out.col.1=name, view.query.out.col.2=num2, view.query.out.col.3=value, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -710,7 +710,7 @@ View Text           	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2
 View Original Text  	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=num, view.query.out.col.1=name, view.query.out.col.2=num2, view.query.out.col.3=value, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=num, view.query.out.col.1=name, view.query.out.col.2=num2, view.query.out.col.3=value, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -751,7 +751,7 @@ View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=num, view.query.out.col.1=name, view.query.out.col.2=num2, view.query.out.col.3=value, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=num, view.query.out.col.1=name, view.query.out.col.2=num2, view.query.out.col.3=value, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -792,7 +792,7 @@ View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.va
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=num, view.query.out.col.1=name, view.query.out.col.2=num2, view.query.out.col.3=value, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=num, view.query.out.col.1=name, view.query.out.col.2=num2, view.query.out.col.3=value, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -894,7 +894,7 @@ BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[a, b]              	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=a, view.query.out.col.1=b, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=a, view.query.out.col.1=b, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
@@ -933,7 +933,7 @@ AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[a, b]              	                    
-Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=a, view.query.out.col.1=b, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true, view.sqlConfig.spark.sql.legacy.interval.enabled=true]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=testviewschm2, view.query.out.col.0=a, view.query.out.col.1=b, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], view.sqlConfig.spark.sql.ansi.enabled=true]
 
 
 -- !query
