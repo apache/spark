@@ -246,16 +246,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     arr
   }
 
-  private def childrenTheSame(
+  private def childrenFastEquals(
       originalChildren: IndexedSeq[BaseType], newChildren: IndexedSeq[BaseType]): Boolean = {
     val size = originalChildren.size
     var i = 0
-    var childrenTheSame = true
-    while (i < size && childrenTheSame) {
-      childrenTheSame &&= originalChildren(i) fastEquals newChildren(i)
+    while (i < size) {
+      if (!originalChildren(i).fastEquals(newChildren(i))) return false
       i += 1
     }
-    childrenTheSame
+    true
   }
 
   // This is a temporary solution, we will change the type of children to IndexedSeq in a
@@ -272,7 +271,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val childrenIndexedSeq = asIndexedSeq(children)
     val newChildrenIndexedSeq = asIndexedSeq(newChildren)
     assert(newChildrenIndexedSeq.size == childrenIndexedSeq.size, "Incorrect number of children")
-    if (childrenIndexedSeq.isEmpty || childrenTheSame(newChildrenIndexedSeq, childrenIndexedSeq)) {
+    if (childrenIndexedSeq.isEmpty || childrenFastEquals(newChildrenIndexedSeq, childrenIndexedSeq)) {
       this
     } else {
       CurrentOrigin.withOrigin(origin) {
