@@ -45,8 +45,9 @@ case class ProjectionOverSchema(schema: StructType) {
             // points to correct struct field.
             val selectedField = a.child.dataType.asInstanceOf[ArrayType]
               .elementType.asInstanceOf[StructType](a.ordinal)
+            val prunedField = projSchema(selectedField.name)
             GetArrayStructFields(projection,
-              selectedField,
+              prunedField.copy(name = a.field.name),
               projSchema.fieldIndex(selectedField.name),
               projSchema.size,
               a.containsNull)
