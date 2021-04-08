@@ -2358,6 +2358,7 @@ private[spark] object Utils extends Logging {
             logWarning(s"Service$serviceString could not bind on port $tryPort. " +
               s"Attempting port ${tryPort + 1}.")
           }
+          if (sys.env.contains("GITHUB_ACTIONS")) Thread.sleep(1)
       }
     }
     // Should never happen
