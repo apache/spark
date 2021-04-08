@@ -34,7 +34,7 @@ clause to embed the mapper or the reducer scripts.
 SELECT { TRANSFORM ( named_expression [ , ... ] ) | MAP named_expression [ , ... ] | REDUCE named_expression [ , ... ] }
     [ rowFormat ]
     [ RECORDWRITER recordWriter_class ]
-    USING script [ AS ( [ col_name [ col_type ]] [ , ... ] ) ]
+    USING script [ AS ( [ col_name [ col_type ] ] [ , ... ] ) ]
     [ rowFormat ]
     [ RECORDREADER recordReader_class ]
 ```
@@ -42,12 +42,12 @@ SELECT { TRANSFORM ( named_expression [ , ... ] ) | MAP named_expression [ , ...
 While `rowFormat` are defined as
 ```sql
 { ROW FORMAT SERDE serde_class [ WITH SERDEPROPERTIES serde_props ] | 
-ROW FORMAT DELIMITED
-    [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
-    [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
-    [ MAP KEYS TERMINATED BY keysTerminatedBy ]
-    [ LINES TERMINATED BY linesSeparatedBy ]
-    [ NULL DEFINED AS nullDefinedAs ] }
+    ROW FORMAT DELIMITED
+        [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
+        [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
+        [ MAP KEYS TERMINATED BY keysTerminatedBy ]
+        [ LINES TERMINATED BY linesSeparatedBy ]
+        [ NULL DEFINED AS nullDefinedAs ] }
 ```
 
 ### Parameters
@@ -60,7 +60,7 @@ ROW FORMAT DELIMITED
 
 * **row_format**    
 
-    Use the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
+    Spark uses the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
 
 * **SERDE**
 
@@ -122,9 +122,9 @@ ROW FORMAT DELIMITED
 
     Specifies a command to process data.
 
-### SERDE behavior
+### Serde behavior
 
-In default format we use Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe`, columns will be transformed
+Spark uses Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, columns will be transformed
 to `STRING` and delimited by tabs before feeding to the user script. Similarly, all `NULL` values will be converted
 to the literal string `"\N"` in order to differentiate `NULL` values from empty strings. The standard output of the
 user script will be treated as TAB-separated STRING columns, any cell containing only `"\N"` will be re-interpreted
