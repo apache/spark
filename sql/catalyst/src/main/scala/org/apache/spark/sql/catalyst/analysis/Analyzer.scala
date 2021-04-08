@@ -1788,15 +1788,29 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
       case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
-        groups.exists(_.isInstanceOf[UnresolvedOrdinal]) =>
-        val newGroups = groups.map {
-          case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
-            aggs(index - 1)
-          case ordinal @ UnresolvedOrdinal(index) =>
-            throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
-          case o => o
-        }
+        groups.exists(containUnresolvedOrdinal) =>
+        val newGroups = groups.map(resolveGroupByExpressionOrdinal(_, aggs))
         Aggregate(newGroups, aggs, child)
+    }
+
+    private def containUnresolvedOrdinal(e: Expression): Boolean = e match {
+      case _: UnresolvedOrdinal => true
+      case gs: BaseGroupingSets => gs.children.exists(containUnresolvedOrdinal)
+      case _ => false
+    }
+
+    private def resolveGroupByExpressionOrdinal(
+        expr: Expression,
+        aggs: Seq[Expression]): Expression = expr match {
+      case ordinal @ UnresolvedOrdinal(index) =>
+        if (index > 0 && index <= aggs.size) {
+          aggs(index - 1)
+        } else {
+          throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
+        }
+      case gs: BaseGroupingSets =>
+        gs.withNewChildren(gs.children.map(resolveGroupByExpressionOrdinal(_, aggs)))
+      case others => others
     }
   }
 
