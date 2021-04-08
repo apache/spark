@@ -3944,6 +3944,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
     }
+
+    // scala is 0
+    withTempPath { path =>
+      val df = sql("SELECT 11 a, 22L b")
+      df.write.parquet(path.toString)
+      val schema1 = "a DECIMAL(9, 0), b DECIMAL(18, 0)"
+      val schema2 = "a DECIMAL(38, 0), b DECIMAL(38, 0)"
+      Seq(true, false).foreach { vectorized =>
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          checkAnswer(readParquet(schema1, path), df)
+        }
+        val e = intercept[SparkException] {
+          readParquet(schema2, path).collect()
+        }.getCause.getCause
+        assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+      }
+    }
   }
 
   test("SPARK-34421: Resolve temporary objects in temporary views with CTEs") {

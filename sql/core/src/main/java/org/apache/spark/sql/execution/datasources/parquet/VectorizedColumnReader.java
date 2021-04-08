@@ -111,8 +111,7 @@ public class VectorizedColumnReader {
   private final String datetimeRebaseMode;
   private final String int96RebaseMode;
 
-  private boolean isDecimalTypeMatched(DataType dt) {
-    DecimalType d = (DecimalType) dt;
+  private boolean isDecimalTypeMatched(DecimalType d) {
     DecimalMetadata dm = descriptor.getPrimitiveType().getDecimalMetadata();
     // It's OK if the required decimal precision is larger than or equal to the physical decimal
     // precision in the Parquet metadata, as long as the decimal scale is the same.
@@ -121,17 +120,19 @@ public class VectorizedColumnReader {
 
   private boolean canReadAsIntDecimal(DataType dt) {
     if (!DecimalType.is32BitDecimalType(dt)) return false;
-    return isDecimalTypeMatched(dt);
+    DecimalType d = (DecimalType) dt;
+    return isDecimalTypeMatched(d) || d.scale() == 0;
   }
 
   private boolean canReadAsLongDecimal(DataType dt) {
     if (!DecimalType.is64BitDecimalType(dt)) return false;
-    return isDecimalTypeMatched(dt);
+    DecimalType d = (DecimalType) dt;
+    return isDecimalTypeMatched(d) || d.scale() == 0;
   }
 
   private boolean canReadAsBinaryDecimal(DataType dt) {
     if (!DecimalType.isByteArrayDecimalType(dt)) return false;
-    return isDecimalTypeMatched(dt);
+    return isDecimalTypeMatched((DecimalType) dt);
   }
 
   public VectorizedColumnReader(
