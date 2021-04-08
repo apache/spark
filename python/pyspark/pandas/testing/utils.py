@@ -34,6 +34,15 @@ from pyspark.pandas.series import Series
 from pyspark.pandas.utils import default_session, sql_conf as sqlc, SPARK_CONF_ARROW_ENABLED
 
 
+tabulate_requirement_message = None
+try:
+    from tabulate import tabulate
+except ImportError as e:
+    # If tabulate requirement is not satisfied, skip related tests.
+    tabulate_requirement_message = str(e)
+have_tabulate = tabulate_requirement_message is None
+
+
 class SQLTestUtils(object):
     """
     This util assumes the instance of this to have 'spark' attribute, having a spark session.
