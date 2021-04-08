@@ -472,6 +472,9 @@ case class UpdateAction(
 case class UpdateStarAction(condition: Option[Expression]) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq
   override lazy val resolved = false
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): UpdateStarAction =
+  copy(condition = if (condition.isDefined) Some(newChildren(0)) else None)
 }
 
 case class InsertAction(
@@ -488,6 +491,9 @@ case class InsertAction(
 case class InsertStarAction(condition: Option[Expression]) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq
   override lazy val resolved = false
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): InsertStarAction =
+    copy(condition = if (condition.isDefined) Some(newChildren(0)) else None)
 }
 
 case class Assignment(key: Expression, value: Expression) extends Expression
