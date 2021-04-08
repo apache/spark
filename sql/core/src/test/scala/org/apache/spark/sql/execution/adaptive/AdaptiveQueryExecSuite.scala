@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION, REPARTITION_WITH_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -105,6 +105,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelSortMergeJoin(plan: SparkPlan): Seq[SortMergeJoinExec] = {
     collect(plan) {
       case j: SortMergeJoinExec => j
+    }
+  }
+
+  private def findTopLevelShuffledHashJoin(plan: SparkPlan): Seq[ShuffledHashJoinExec] = {
+    collect(plan) {
+      case j: ShuffledHashJoinExec => j
     }
   }
 
@@ -680,6 +686,38 @@ class AdaptiveQueryExecSuite
         // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
         checkSkewJoin(
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", false)
+      }
+    }
+  }
+
+  test("SPARK-34987: Change shuffle hash join to sort merge join when skewed join exists") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 10000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+
+        def checkSkewJoin(query: String, optimizeSkewJoin: Boolean): Unit = {
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          val smj = findTopLevelSortMergeJoin(adaptivePlan)
+          val shj = findTopLevelShuffledHashJoin(plan)
+          assert(shj.size == 1)
+          assert(smj.size == 1 && smj.head.isSkewJoin == optimizeSkewJoin)
+        }
+
+        checkSkewJoin(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2", true)
       }
     }
   }
