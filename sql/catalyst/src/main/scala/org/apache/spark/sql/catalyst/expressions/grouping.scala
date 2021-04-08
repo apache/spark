@@ -233,11 +233,11 @@ object GroupingID {
 object GroupingAnalytics {
   def unapply(exprs: Seq[Expression])
   : Option[(Seq[Seq[Expression]], Seq[Seq[Expression]], Seq[Expression])] = {
-    val (groupingSetExprs, others) = exprs.partition(_.isInstanceOf[GroupingSet])
+    val (groupingSetExprs, others) = exprs.partition(_.isInstanceOf[BaseGroupingSets])
     if (groupingSetExprs.isEmpty) {
       None
     } else {
-      val groupingSets = groupingSetExprs.map(_.asInstanceOf[GroupingSet])
+      val groupingSets = groupingSetExprs.map(_.asInstanceOf[BaseGroupingSets])
       val groups = groupingSets.flatMap(_.groupByExprs) ++ others
       val unmergedSelectedGroupByExprs = groupingSets.map(_.selectedGroupByExprs)
       val selectedGroupByExprs = unmergedSelectedGroupByExprs.init
