@@ -308,9 +308,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               case s: ScalarSubquery
                   if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
                 failAnalysis(s"Correlated scalar subquery '${s.sql}' is neither " +
-                  s"present in the group by, nor in an aggregate function. Add it to group by " +
-                  s"using ordinal position or wrap it in first() (or first_value) if you don't " +
-                  s"care which value you get.")
+                  "present in the group by, nor in an aggregate function. Add it to group by " +
+                  "using ordinal position or wrap it in first() (or first_value) if you don't " +
+                  "care which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
@@ -773,7 +773,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // it must also be in the aggregate expressions to be rewritten in the optimization
               // phase.
               if (containsExpr(a.groupingExpressions) && !containsExpr(a.aggregateExpressions)) {
-                failAnalysis(s"Correlated scalar subqueries in the group by clause " +
+                failAnalysis("Correlated scalar subqueries in the group by clause " +
                   s"must also be in the aggregate expressions:\n$a")
               }
             case other => failAnalysis(
