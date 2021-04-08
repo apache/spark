@@ -21,44 +21,33 @@ license: |
 
 ### Description
 
-The `TRANSFORM` clause is used to specifies a Hive-style transform (SELECT TRANSFORM/MAP/REDUCE)
+The `TRANSFORM` clause is used to specify a Hive-style transform (`SELECT TRANSFORM`/`MAP`/`REDUCE`)
 query specification to transform the input by running a specified script. Users can
-plug in their own custom mappers and reducers in the data stream by using features natively supported
-in the Spark SQL. e.g. in order to run a custom mapper script `map_script` and a custom
-reducer script `reduce_script` the user can issue the following command which uses the TRANSFORM
-clause to embed the mapper and the reducer scripts.
-
-In default format, columns will be transformed to `STRING` and delimited by tabs before feeding
-to the user script, Similarly, all `NULL` values will be converted to the literal string `\N` in order to
-differentiate `NULL` values from empty strings. The standard output of the user script will be treated as
-TAB-separated STRING columns, any cell containing only `\N` will be re-interpreted as a `NULL`, and then the
-resulting STRING column will be cast to the data type specified in the table declaration in the usual way.
-User scripts can output debug information to standard error which will be shown on the task detail page on hadoop.
-These defaults can be overridden with `ROW FORMAT DELIMITED`.
+plug in their own custom mappers or reducers in the data stream by using features natively supported
+in the Spark SQL. In order to run a custom mapper script `map_script` or a custom
+reducer script `reduce_script` the user can issue the command which uses the `TRANSFORM`
+clause to embed the mapper or the reducer scripts.
 
 ### Syntax
 
 ```sql
-SELECT [ TRANSFORM ( namedExpressionSeq ) | MAP namedExpressionSeq | REDUCE namedExpressionSeq ]
-    [ inRowFormat ]
+SELECT { TRANSFORM ( named_expression [ , ... ] ) | MAP named_expression [ , ... ] | REDUCE named_expression [ , ... ] }
+    [ rowFormat ]
     [ RECORDWRITER recordWriter_class ]
     USING script [ AS ( [ col_name [ col_type ]] [ , ... ] ) ]
-    [ outRowFormat ]
+    [ rowFormat ]
     [ RECORDREADER recordReader_class ]
-    FROM { from_item [ , ... ] }
+```
 
-rowFormat
-    : ROW FORMAT SERDE serde_class [ WITH SERDEPROPERTIES serde_props ]
-    | ROW FORMAT DELIMITED
-          [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
-          [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
-          [ MAP KEYS TERMINATED BY keysTerminatedBy ]
-          [ LINES TERMINATED BY linesSeparatedBy ]
-          [ NULL DEFINED AS nullDefinedAs ]  
-
-inRowFormat=rowFormat
-outRowFormat=rowFormat
-namedExpressionSeq = named_expression [ , ... ]
+While `rowFormat` are defined as
+```sql
+{ ROW FORMAT SERDE serde_class [ WITH SERDEPROPERTIES serde_props ] | 
+ROW FORMAT DELIMITED
+    [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
+    [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
+    [ MAP KEYS TERMINATED BY keysTerminatedBy ]
+    [ LINES TERMINATED BY linesSeparatedBy ]
+    [ NULL DEFINED AS nullDefinedAs ] }
 ```
 
 ### Parameters
@@ -133,14 +122,24 @@ namedExpressionSeq = named_expression [ , ... ]
 
     Specifies a command to process data.
 
+### SERDE behavior
+
+In default format we use Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe`, columns will be transformed to `STRING` and delimited by tabs before feeding
+to the user script. Similarly, all `NULL` values will be converted to the literal string `"\N"` in order to
+differentiate `NULL` values from empty strings. The standard output of the user script will be treated as
+TAB-separated STRING columns, any cell containing only `"\N"` will be re-interpreted as a `NULL`, and then the
+resulting STRING column will be cast to the data type specified in the table declaration in the usual way.
+User scripts can output debug information to standard error which will be shown on the task detail page on Spark.
+These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`.
+
 ### Schema-less Script Transforms
 
-If there is no AS clause after USING my_script, Spark assumes that the output of the script contains 2 parts:
+If there is no `AS` clause after `USING my_script`, Spark assumes that the output of the script contains 2 parts:
 
-   1. key: which is before the first tab, 
+   1. key: which is before the first tab.
    2. value: which is the rest after the first tab.
 
-Note that this is different from specifying an AS `key, value` because in that case, the value will only contain the portion
+Note that this is different from specifying an `AS key, value` because in that case, the value will only contain the portion
 between the first tab and the second tab if there are multiple tabs. 
 
 ### Examples
