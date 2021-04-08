@@ -81,6 +81,7 @@ fi
 
 if should_build "tag" && [ $SKIP_TAG = 0 ]; then
   # Push the tag after success
+  cd spark
   git push origin "$RELEASE_TAG"
   git push origin "HEAD:$GIT_BRANCH"
 fi
