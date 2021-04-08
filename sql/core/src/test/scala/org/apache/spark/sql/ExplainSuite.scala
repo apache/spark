@@ -377,7 +377,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         .option("token", token)
         .table(tableName)
 
-      checkKeywordsExistsInExplain(df2, ExtendedMode, value)
       Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode).foreach { mode =>
         checkKeywordsNotExistsInExplain(df2, mode, password)
         checkKeywordsNotExistsInExplain(df2, mode, token)
