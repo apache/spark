@@ -2022,7 +2022,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               }
             }
           case UnresolvedFunction(NonSessionCatalogAndIdentifier(v2Catalog, ident), arguments,
-            isDistinct, filter, ignoreNulls) if v2Catalog.isFunctionCatalog =>
+            isDistinct, filter, _) if v2Catalog.isFunctionCatalog =>
             val unbound = v2Catalog.asFunctionCatalog.loadFunction(ident)
 
             val inputType = StructType(arguments.zipWithIndex.map {
@@ -2033,7 +2033,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               unbound.bind(inputType)
             } catch {
               case unsupported: UnsupportedOperationException =>
-                failAnalysis(s"Function ${unbound.name} cannot process input: " +
+                failAnalysis(s"Function '${unbound.name}' cannot process input: " +
                   s"(${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
                   unsupported.getMessage)
             }
@@ -2047,6 +2047,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                   throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
                     scalarFunc.name(), "FILTER clause")
                 } else {
+                  // TODO: implement type coercion by looking at input type from the UDF. We may
+                  //  also want to check if the parameter types from the magic method match the
+                  //  input type through `BoundFunction.inputTypes`.
                   val argClasses = inputType.fields.map(_.dataType)
                   findMethod(scalarFunc, ScalarFunction.MAGIC_METHOD_NAME, Some(argClasses)) match {
                     case Some(_) =>
@@ -2079,7 +2082,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                       s"method nor override 'update'")
                 }
               case _ =>
-                failAnalysis(s"Function ${bound.name()} does not implement ScalarFunction or " +
+                failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction or " +
                   s"AggregateFunction")
             }
 

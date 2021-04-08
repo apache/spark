@@ -58,9 +58,40 @@ import org.apache.spark.sql.types.DataType;
  *   }
  * </pre>
  * In this case, both {@link #MAGIC_METHOD_NAME} and {@link #produceResult} are defined, and Spark
- * will first lookup the {@code invoke} method during query analysis. It checks whether the method
- * parameters have the valid types that are supported by Spark. If the check fails it falls back
- * to use {@link #produceResult}.
+ * will first lookup the {@link #MAGIC_METHOD_NAME} method during query analysis. This is done by
+ * first converting the actual input SQL data types to their corresponding Java types following the
+ * mapping defined below, and then checking if there is a matching method from all the declared
+ * methods in the UDF class, using method name (i.e., {@link #MAGIC_METHOD_NAME}) and the Java
+ * types. If no magic method is found, Spark will falls back to use {@link #produceResult}.
+ * <p>
+ * The following are the mapping from {@link DataType SQL data type} to Java type through
+ * the magic method approach:
+ * <ul>
+ *   <li>{@link org.apache.spark.sql.types.BooleanType}: {@code boolean}</li>
+ *   <li>{@link org.apache.spark.sql.types.ByteType}: {@code byte}</li>
+ *   <li>{@link org.apache.spark.sql.types.ShortType}: {@code short}</li>
+ *   <li>{@link org.apache.spark.sql.types.IntegerType}: {@code int}</li>
+ *   <li>{@link org.apache.spark.sql.types.LongType}: {@code long}</li>
+ *   <li>{@link org.apache.spark.sql.types.FloatType}: {@code float}</li>
+ *   <li>{@link org.apache.spark.sql.types.DoubleType}: {@code double}</li>
+ *   <li>{@link org.apache.spark.sql.types.StringType}:
+ *       {@link org.apache.spark.unsafe.types.UTF8String}</li>
+ *   <li>{@link org.apache.spark.sql.types.DateType}: {@code int}</li>
+ *   <li>{@link org.apache.spark.sql.types.TimestampType}: {@code long}</li>
+ *   <li>{@link org.apache.spark.sql.types.BinaryType}: {@code byte[]}</li>
+ *   <li>{@link org.apache.spark.sql.types.CalendarIntervalType}:
+ *       {@link org.apache.spark.unsafe.types.CalendarInterval}</li>
+ *   <li>{@link org.apache.spark.sql.types.DayTimeIntervalType}: {@code long}</li>
+ *   <li>{@link org.apache.spark.sql.types.YearMonthIntervalType}: {@code int}</li>
+ *   <li>{@link org.apache.spark.sql.types.DecimalType}:
+ *       {@link org.apache.spark.sql.types.Decimal}</li>
+ *   <li>{@link org.apache.spark.sql.types.StructType}: {@link InternalRow}</li>
+ *   <li>{@link org.apache.spark.sql.types.ArrayType}:
+ *       {@link org.apache.spark.sql.catalyst.util.ArrayData}</li>
+ *   <li>{@link org.apache.spark.sql.types.MapType}:
+ *       {@link org.apache.spark.sql.catalyst.util.MapData}</li>
+ *   <li>any other type: {@code Object}</li>
+ * </ul>
  *
  * @param <R> the JVM type of result values
  */
