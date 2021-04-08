@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, GroupingSet, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{BaseGroupingSets, Expression, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.IntegerType
 object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
   private def containIntLiteral(e: Expression): Boolean = e match {
     case Literal(_, IntegerType) => true
-    case gs: GroupingSet => gs.children.exists(containIntLiteral)
+    case gs: BaseGroupingSets => gs.children.exists(containIntLiteral)
     case _ => false
   }
 
@@ -53,7 +53,7 @@ object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
       val newGroups = a.groupingExpressions.map {
         case ordinal @ Literal(index: Int, IntegerType) =>
           withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
-        case gs: GroupingSet =>
+        case gs: BaseGroupingSets =>
           withOrigin(gs.origin)(gs.withNewChildren(gs.children.map(substituteUnresolvedOrdinal)))
         case other => other
       }

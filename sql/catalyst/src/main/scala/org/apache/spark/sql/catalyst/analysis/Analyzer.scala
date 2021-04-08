@@ -1795,7 +1795,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def containUnresolvedOrdinal(e: Expression): Boolean = e match {
       case _: UnresolvedOrdinal => true
-      case gs: GroupingSet => gs.children.exists(containUnresolvedOrdinal)
+      case gs: BaseGroupingSets => gs.children.exists(containUnresolvedOrdinal)
       case _ => false
     }
 
@@ -1808,7 +1808,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
         }
-      case gs: GroupingSet =>
+      case gs: BaseGroupingSets =>
         gs.withNewChildren(gs.children.map(resolveGroupByExpressionOrdinal(_, aggs)))
       case others => others
     }
