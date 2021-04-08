@@ -98,11 +98,10 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 * **Partial Grouping Analytics**
 
     Partial grouping analytics means there are both `group_expression` and `CUBE|ROLLUP|GROUPING SETS`
-    in GROUP BY clause. For example:
-    `GROUP BY warehouse, CUBE(product, location)` is equivalent to
+    in GROUP BY clause. `CUBE` and `ROLLUP` are just syntax sugar for GROUPING SETS, for how to use
+    `CUBE` and `ROLLUP` can refer to the section above about `CUBE` and `ROLLUP`. For example:
+    `GROUP BY warehouse, GROUPING SETS((product, location), (product), (location), ())` is equivalent to
     `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse, location), (warehouse))`.
-    `GROUP BY warehouse, ROLLUP(product, location)` is equivalent to
-    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse))`.
     `GROUP BY warehouse, GROUPING SETS((product, location), (producet), ())` is equivalent to
     `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, location), (warehouse))`.
 
