@@ -1819,7 +1819,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           val ordinalExpr = aggs(index - 1)
             if(ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
               throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
-                index, ordinalExpr, u)
+                index, ordinalExpr, ordinal)
             } else {
               ordinalExpr
             }
