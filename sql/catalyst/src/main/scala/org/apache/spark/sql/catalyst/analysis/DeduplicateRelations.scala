@@ -95,9 +95,9 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
               .flatMap(_.output).zip(newChildren.flatMap(_.output))
               .filter { case (a1, a2) => a1.exprId != a2.exprId }
           )
-          plan.withNewChildren(newChildren.toList).rewriteAttrs(attrMap)
+          plan.withNewChildren(newChildren.toSeq).rewriteAttrs(attrMap)
         } else {
-          plan.withNewChildren(newChildren.toList)
+          plan.withNewChildren(newChildren.toSeq)
         }
       } else {
         plan
