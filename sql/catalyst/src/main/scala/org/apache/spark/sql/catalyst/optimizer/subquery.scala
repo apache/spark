@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
@@ -608,6 +609,19 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   }
 
   /**
+   * Check if an [[Aggregate]] has no correlated subquery in aggregate expressions but
+   * still has correlated scalar subqueries in its grouping expressions, which will not
+   * be rewritten.
+   */
+  private def checkScalarSubqueryInAgg(a: Aggregate): Unit = {
+    if (a.groupingExpressions.exists(hasCorrelatedScalarSubquery) &&
+        !a.aggregateExpressions.exists(hasCorrelatedScalarSubquery)) {
+      throw new IllegalStateException(
+        s"Fail to rewrite correlated scalar subqueries in Aggregate:\n$a")
+    }
+  }
+
+  /**
    * Rewrite [[Filter]], [[Project]] and [[Aggregate]] plans containing correlated scalar
    * subqueries.
    */
@@ -626,6 +640,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val newExprs = updateAttrs(rewriteExprs, subqueryAttrMapping)
         val newAgg = Aggregate(newGrouping, newExprs, newChild)
         val attrMapping = a.output.zip(newAgg.output)
+        checkScalarSubqueryInAgg(newAgg)
         newAgg -> attrMapping
       } else {
         a -> Nil

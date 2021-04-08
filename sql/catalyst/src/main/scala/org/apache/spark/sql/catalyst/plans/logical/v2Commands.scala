@@ -424,10 +424,20 @@ case class UpdateAction(
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 }
 
+case class UpdateStarAction(condition: Option[Expression]) extends MergeAction {
+  override def children: Seq[Expression] = condition.toSeq
+  override lazy val resolved = false
+}
+
 case class InsertAction(
     condition: Option[Expression],
     assignments: Seq[Assignment]) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
+}
+
+case class InsertStarAction(condition: Option[Expression]) extends MergeAction {
+  override def children: Seq[Expression] = condition.toSeq
+  override lazy val resolved = false
 }
 
 case class Assignment(key: Expression, value: Expression) extends Expression
