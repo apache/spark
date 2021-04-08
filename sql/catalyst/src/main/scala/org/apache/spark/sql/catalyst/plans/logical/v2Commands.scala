@@ -431,7 +431,7 @@ case class InsertAction(
 }
 
 case class Assignment(key: Expression, value: Expression) extends Expression
-    with Unevaluable with BinaryLike[Expression] {
+  with Unevaluable with BinaryLike[Expression] {
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException("nullable")
   override def left: Expression = key

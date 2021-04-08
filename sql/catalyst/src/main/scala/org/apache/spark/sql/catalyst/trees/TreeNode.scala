@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.{mutable, Map}
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -534,6 +535,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
+  private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
+    // For security reason, redact the map value if the key is in centain patterns
+    val redactedMap = SQLConf.get.redactOptions(map.toMap)
+    // construct the redacted map as strings of the format "key=value"
+    val keyValuePairs = redactedMap.toSeq.map { item =>
+      item._1 + "=" + item._2
+    }
+    truncatedString(keyValuePairs, "[", ", ", "]", maxFields) :: Nil
+  }
+
   /** Returns a string representing the arguments to this node, minus any children */
   def argString(maxFields: Int): String = stringArgs.flatMap {
     case tn: TreeNode[_] if allChildren.contains(tn) => Nil
@@ -550,8 +561,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case None => Nil
     case Some(null) => Nil
     case Some(any) => any :: Nil
-    case map: CaseInsensitiveStringMap => truncatedString(
-      map.asCaseSensitiveMap().entrySet().toArray(), "[", ", ", "]", maxFields) :: Nil
+    case map: CaseInsensitiveStringMap =>
+      redactMapString(map.asCaseSensitiveMap().asScala, maxFields)
+    case map: Map[_, _] =>
+      redactMapString(map, maxFields)
     case table: CatalogTable =>
       table.storage.serde match {
         case Some(serde) => table.identifier :: serde :: Nil
@@ -849,4 +862,12 @@ trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def second: T
   def third: T
   @transient override final lazy val children: Seq[T] = first :: second :: third :: Nil
+}
+
+trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def first: T
+  def second: T
+  def third: T
+  def fourth: T
+  @transient override final lazy val children: Seq[T] = first :: second :: third :: fourth :: Nil
 }

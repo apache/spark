@@ -161,6 +161,8 @@ jobs:
             pyspark-sql, pyspark-mllib, pyspark-resource
           - >-
             pyspark-core, pyspark-streaming, pyspark-ml
+          - >-
+            pyspark-pandas
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: hadoop3.2
@@ -282,6 +284,9 @@ jobs:
   lint:
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
     container:
       image: dongjoon/apache-spark-github-action-image:20201025
     steps:
@@ -357,8 +362,6 @@ jobs:
     - name: Run documentation build
       run: |
         cd docs
-        export LC_ALL=C.UTF-8
-        export LANG=C.UTF-8
         bundle exec jekyll build
 
   java-11:

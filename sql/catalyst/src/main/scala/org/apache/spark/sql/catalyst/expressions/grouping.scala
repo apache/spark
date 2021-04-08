@@ -26,11 +26,25 @@ import org.apache.spark.sql.types._
 /**
  * A placeholder expression for cube/rollup, which will be replaced by analyzer
  */
-trait GroupingSet extends Expression with CodegenFallback {
+trait BaseGroupingSets extends Expression with CodegenFallback {
 
   def groupingSets: Seq[Seq[Expression]]
   def selectedGroupByExprs: Seq[Seq[Expression]]
-  def groupByExprs: Seq[Expression]
+
+  def groupByExprs: Seq[Expression] = {
+    assert(children.forall(_.resolved),
+      "Cannot call BaseGroupingSets.groupByExprs before the children expressions are all resolved.")
+    children.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
+      // Only unique expressions are included in the group by expressions and is determined
+      // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
+      // in grouping expression (a * b)
+      if (result.exists(_.semanticEquals(currentExpr))) {
+        result
+      } else {
+        result :+ currentExpr
+      }
+    }
+  }
 
   // this should be replaced first
   override lazy val resolved: Boolean = false
@@ -41,13 +55,11 @@ trait GroupingSet extends Expression with CodegenFallback {
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 }
 
-object GroupingSet {
+object BaseGroupingSets {
   /**
-   * GROUP BY a, b, c WITH ROLLUP
+   * 'GROUP BY a, b, c WITH ROLLUP'
    * is equivalent to
-   * GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
-   * or
-   * GROUP BY GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
+   * 'GROUP BY GROUPING SETS ( (a, b, c), (a, b), (a), ( ) )'.
    * Group Count: N + 1 (N is the number of group expressions)
    *
    * We need to get all of its subsets for the rule described above, the subset is
@@ -57,11 +69,9 @@ object GroupingSet {
     exprs.inits.map(_.flatten).toIndexedSeq
 
   /**
-   * GROUP BY a, b, c WITH CUBE
+   * 'GROUP BY a, b, c WITH CUBE'
    * is equivalent to
-   * GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
-   * or
-   * GROUP BY GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
+   * 'GROUP BY GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) )'.
    * Group Count: 2 ^ N (N is the number of group expressions)
    *
    * We need to get all of its subsets for a given GROUPBY expression, the subsets are
@@ -96,45 +106,54 @@ object GroupingSet {
   }
 }
 
-case class Cube(groupingSetIndexes: Seq[Seq[Int]], children: Seq[Expression]) extends GroupingSet {
+case class Cube(
+    groupingSetIndexes: Seq[Seq[Int]],
+    children: Seq[Expression]) extends BaseGroupingSets {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def groupByExprs: Seq[Expression] = children.distinct
-  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.cubeExprs(groupingSets)
+  override def selectedGroupByExprs: Seq[Seq[Expression]] = BaseGroupingSets.cubeExprs(groupingSets)
 }
 
 object Cube {
   def apply(groupingSets: Seq[Seq[Expression]]): Cube = {
-    Cube(GroupingSet.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
+    Cube(BaseGroupingSets.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
   }
 }
 
 case class Rollup(
     groupingSetIndexes: Seq[Seq[Int]],
-    children: Seq[Expression]) extends GroupingSet {
+    children: Seq[Expression]) extends BaseGroupingSets {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def groupByExprs: Seq[Expression] = children.distinct
-  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.rollupExprs(groupingSets)
+  override def selectedGroupByExprs: Seq[Seq[Expression]] =
+    BaseGroupingSets.rollupExprs(groupingSets)
 }
 
 object Rollup {
   def apply(groupingSets: Seq[Seq[Expression]]): Rollup = {
-    Rollup(GroupingSet.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
+    Rollup(BaseGroupingSets.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
   }
 }
 
 case class GroupingSets(
     groupingSetIndexes: Seq[Seq[Int]],
     flatGroupingSets: Seq[Expression],
-    groupByExprs: Seq[Expression]) extends GroupingSet {
+    userGivenGroupByExprs: Seq[Expression]) extends BaseGroupingSets {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(flatGroupingSets))
   override def selectedGroupByExprs: Seq[Seq[Expression]] = groupingSets
-  override def children: Seq[Expression] = groupingSets.flatten ++ groupByExprs
+  // Includes the `userGivenGroupByExprs` in the children, which will be included in the final
+  // GROUP BY expressions, so that `SELECT c ... GROUP BY (a, b, c) GROUPING SETS (a, b)` works.
+  override def children: Seq[Expression] = flatGroupingSets ++ userGivenGroupByExprs
 }
 
 object GroupingSets {
-  def apply(groupingSets: Seq[Seq[Expression]], groupByExprs: Seq[Expression]): GroupingSets = {
-    val groupingSetIndexes = GroupingSet.computeGroupingSetIndexes(groupingSets)
-    GroupingSets(groupingSetIndexes, groupingSets.flatten, groupByExprs)
+  def apply(
+      groupingSets: Seq[Seq[Expression]],
+      userGivenGroupByExprs: Seq[Expression]): GroupingSets = {
+    val groupingSetIndexes = BaseGroupingSets.computeGroupingSetIndexes(groupingSets)
+    GroupingSets(groupingSetIndexes, groupingSets.flatten, userGivenGroupByExprs)
+  }
+
+  def apply(groupingSets: Seq[Seq[Expression]]): GroupingSets = {
+    apply(groupingSets, userGivenGroupByExprs = Nil)
   }
 }
 
@@ -159,7 +178,7 @@ object GroupingSets {
   group = "agg_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Grouping(child: Expression) extends Expression with Unevaluable
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
   @transient
   override lazy val references: AttributeSet =
     AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)

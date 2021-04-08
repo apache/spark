@@ -406,6 +406,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
     case udt: UserDefinedType[_] =>
       buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
+    case YearMonthIntervalType =>
+      buildCast[Int](_, i => UTF8String.fromString(IntervalUtils.toYearMonthIntervalString(i)))
+    case DayTimeIntervalType =>
+      buildCast[Long](_, i => UTF8String.fromString(IntervalUtils.toDayTimeIntervalString(i)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -1121,6 +1125,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) => {
           code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
         }
+      case YearMonthIntervalType =>
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        (c, evPrim, _) =>
+          code"""$evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c));"""
+      case DayTimeIntervalType =>
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        (c, evPrim, _) =>
+          code"""$evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c));"""
       case _ =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }

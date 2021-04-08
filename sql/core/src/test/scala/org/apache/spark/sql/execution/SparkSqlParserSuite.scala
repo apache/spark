@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -341,5 +342,12 @@ class SparkSqlParserSuite extends AnalysisTest {
 
   test("CLEAR CACHE") {
     assertEqual("CLEAR CACHE", ClearCacheCommand)
+  }
+
+  test("CREATE TABLE LIKE COMMAND should reject reserved properties") {
+    Seq(TableCatalog.PROP_OWNER, TableCatalog.PROP_PROVIDER).foreach { reserved =>
+      intercept(s"CREATE TABLE target LIKE source TBLPROPERTIES ($reserved='howdy')",
+        "reserved")
+    }
   }
 }

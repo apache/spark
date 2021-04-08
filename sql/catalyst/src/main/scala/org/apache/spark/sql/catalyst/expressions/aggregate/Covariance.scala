@@ -27,11 +27,9 @@ import org.apache.spark.sql.types._
  * Compute the covariance between two expressions.
  * When applied on empty data (i.e., count is zero), it returns NULL.
  */
-abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Boolean)
+abstract class Covariance(val left: Expression, val right: Expression, nullOnDivideByZero: Boolean)
   extends DeclarativeAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  override def left: Expression = x
-  override def right: Expression = y
   override def nullable: Boolean = true
   override def dataType: DataType = DoubleType
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
@@ -72,14 +70,14 @@ abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Bool
 
   protected def updateExpressionsDef: Seq[Expression] = {
     val newN = n + 1.0
-    val dx = x - xAvg
-    val dy = y - yAvg
+    val dx = left - xAvg
+    val dy = right - yAvg
     val dyN = dy / newN
     val newXAvg = xAvg + dx / newN
     val newYAvg = yAvg + dyN
-    val newCk = ck + dx * (y - newYAvg)
+    val newCk = ck + dx * (right - newYAvg)
 
-    val isNull = x.isNull || y.isNull
+    val isNull = left.isNull || right.isNull
     Seq(
       If(isNull, n, newN),
       If(isNull, xAvg, newXAvg),

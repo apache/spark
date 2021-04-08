@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegralType}
 
 abstract class BitAggregate extends DeclarativeAggregate with ExpectsInputTypes
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
 
   val child: Expression
 

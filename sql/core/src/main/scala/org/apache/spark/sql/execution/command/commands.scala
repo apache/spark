@@ -25,7 +25,7 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LeafCommand, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution.{ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -34,10 +34,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * A logical command that is executed for its side-effects. `BaseRunnableCommand`s are
+ * A logical command that is executed for its side-effects.  `RunnableCommand`s are
  * wrapped in `ExecutedCommand` during execution.
  */
-trait BaseRunnableCommand extends Command {
+trait RunnableCommand extends Command {
+
+  override def children: Seq[LogicalPlan] = Nil
 
   // The map used to record the metrics of running the command. This will be passed to
   // `ExecutedCommand` during query planning.
@@ -47,17 +49,12 @@ trait BaseRunnableCommand extends Command {
 }
 
 /**
- * A runnable command that has no children.
- */
-trait RunnableCommand extends BaseRunnableCommand with LeafCommand
-
-/**
- * A physical operator that executes the run method of a `BaseRunnableCommand` and
+ * A physical operator that executes the run method of a `RunnableCommand` and
  * saves the result to prevent multiple executions.
  *
  * @param cmd the `RunnableCommand` this operator will run.
  */
-case class ExecutedCommandExec(cmd: BaseRunnableCommand) extends LeafExecNode {
+case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 
   override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
 
