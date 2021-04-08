@@ -866,8 +866,11 @@ case class CacheTableAsSelect(
     plan: LogicalPlan,
     originalText: String,
     isLazy: Boolean,
-    options: Map[String, String]) extends AnalysisOnlyCommand {
+    options: Map[String, String],
+    isAnalyzed: Boolean = false) extends AnalysisOnlyCommand {
   override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
+
+  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
 }
 
 /**

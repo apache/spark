@@ -111,45 +111,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     tags -= tag
   }
 
-  private var cachedChildren: Seq[BaseType] = null
-
   /**
    * Returns a Seq of the children of this node.
+   * Children should not change. Immutability required for containsChild optimization
    */
   def children: Seq[BaseType]
 
-  private var cachedChildrenSet: Set[TreeNode[_]] = null
-
-  private def containsChild: Set[TreeNode[_]] = {
-    if (updateChildrenIfChanged() || cachedChildrenSet == null) {
-      cachedChildrenSet = cachedChildren.toSet
-    }
-    cachedChildrenSet
-  }
-
-  @transient private var cachedAllChildren: Set[TreeNode[_]] = null
-
-  private def allChildren: Set[TreeNode[_]] = {
-    if (updateChildrenIfChanged() || cachedAllChildren == null) {
-      cachedAllChildren = (cachedChildren ++ innerChildren).toSet[TreeNode[_]]
-    }
-    cachedAllChildren
-  }
-
-  // Returns true if children have changed after updating the cached children.
-  private def updateChildrenIfChanged(): Boolean = {
-    def fastEquals(l: Seq[BaseType], r: Seq[BaseType]): Boolean = {
-      l.length == r.length && l.zip(r).forall {
-        case (a1, a2) => a1 fastEquals a2
-      }
-    }
-    val curChildren = children
-    val changed = cachedChildren == null || !fastEquals(cachedChildren, children)
-    if (changed) {
-      cachedChildren = curChildren
-    }
-    changed
-  }
+  lazy val containsChild: Set[TreeNode[_]] = children.toSet
 
   // Copied from Scala 2.13.1
   // github.com/scala/scala/blob/v2.13.1/src/library/scala/util/hashing/MurmurHash3.scala#L56-L73
@@ -563,6 +531,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * The arguments that should be included in the arg string.  Defaults to the `productIterator`.
    */
   protected def stringArgs: Iterator[Any] = productIterator
+
+  private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
   /** Returns a string representing the arguments to this node, minus any children */
   def argString(maxFields: Int): String = stringArgs.flatMap {

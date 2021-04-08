@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
 
@@ -40,33 +39,12 @@ trait UnaryCommand extends Command with UnaryLike[LogicalPlan]
 trait BinaryCommand extends Command with BinaryLike[LogicalPlan]
 
 /**
- * A logical node that represents a command whose children are only analyzed, but not optimized.
+ * A logical node that can be used for a command that requires its children to be only analyzed,
+ * but not optimized.
  */
 trait AnalysisOnlyCommand extends Command {
-  private var _isAnalyzed: Boolean = false
-
+  val isAnalyzed: Boolean
   def childrenToAnalyze: Seq[LogicalPlan]
-
-  override def children: Seq[LogicalPlan] = if (_isAnalyzed) Nil else childrenToAnalyze
-
-  def markAsAnalyzed(): Unit = {
-    if (!_isAnalyzed) {
-      // Since children will be removed once _isAnalyzed is set, ensure that there are no
-      // unresolved children before removing them.
-      if (childrenToAnalyze.exists(!_.resolved)) {
-        throw new AnalysisException(
-          "AnalysisOnlyCommand can be marked as analyzed only after all its children " +
-            "to analyze are resolved.")
-      }
-      _isAnalyzed = true
-    }
-  }
-
-  override def clone(): LogicalPlan = {
-    val cloned = super.clone()
-    if (_isAnalyzed) {
-      cloned.asInstanceOf[AnalysisOnlyCommand].markAsAnalyzed()
-    }
-    cloned
-  }
+  override final def children: Seq[LogicalPlan] = if (isAnalyzed) Nil else childrenToAnalyze
+  def markAsAnalyzed(): LogicalPlan
 }

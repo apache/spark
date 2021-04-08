@@ -55,6 +55,7 @@ import org.apache.spark.sql.util.SchemaUtils
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
  *                already exists, throws analysis exception.
  * @param viewType the expected view type to be created with this command.
+ * @param isAnalyzed whether this command is analyzed or not.
  */
 case class CreateViewCommand(
     name: TableIdentifier,
@@ -65,7 +66,8 @@ case class CreateViewCommand(
     plan: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewType: ViewType) extends BaseRunnableCommand with AnalysisOnlyCommand {
+    viewType: ViewType,
+    isAnalyzed: Boolean = false) extends BaseRunnableCommand with AnalysisOnlyCommand {
 
   import ViewHelper._
 
@@ -73,6 +75,8 @@ case class CreateViewCommand(
 
   // `plan` needs to be analyzed, but shouldn't be optimized so that caching works correctly.
   override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
+
+  def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
 
   if (viewType == PersistedView) {
     require(originalText.isDefined, "'originalText' must be provided to create permanent view")
@@ -98,8 +102,8 @@ case class CreateViewCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    if (children.nonEmpty) {
-      throw new AnalysisException("The logical plan to represent the view is not analyzed.")
+    if (!isAnalyzed) {
+      throw new AnalysisException("The logical plan that represents the view is not analyzed.")
     }
     val analyzedPlan = plan
 

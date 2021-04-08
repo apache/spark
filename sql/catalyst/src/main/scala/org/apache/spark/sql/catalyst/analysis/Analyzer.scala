@@ -3649,7 +3649,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       case c: AnalysisOnlyCommand if c.resolved =>
         checkAnalysis(c)
         c.markAsAnalyzed()
-        c
     }
   }
 }
