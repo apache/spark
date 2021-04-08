@@ -733,4 +733,36 @@ class AnalysisErrorSuite extends AnalysisTest {
         s"data type mismatch: argument 1 requires (int or bigint) type" :: Nil)
     }
   }
+
+  test("SPARK-34946: correlated scalar subquery in grouping expressions only") {
+    val c1 = AttributeReference("c1", IntegerType)()
+    val c2 = AttributeReference("c2", IntegerType)()
+    val t = LocalRelation(c1, c2)
+    val plan = Aggregate(
+      ScalarSubquery(
+        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
+          Filter($"t1.c1" === $"t2.c1",
+            t.as("t2")))
+      ) :: Nil,
+      sum($"c2").as("sum") :: Nil, t.as("t1"))
+    assertAnalysisError(plan, "Correlated scalar subqueries in the group by clause must also be " +
+      "in the aggregate expressions" :: Nil)
+  }
+
+  test("SPARK-34946: correlated scalar subquery in aggregate expressions only") {
+    val c1 = AttributeReference("c1", IntegerType)()
+    val c2 = AttributeReference("c2", IntegerType)()
+    val t = LocalRelation(c1, c2)
+    val plan = Aggregate(
+      $"c1" :: Nil,
+      ScalarSubquery(
+        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
+          Filter($"t1.c1" === $"t2.c1",
+            t.as("t2")))
+      ).as("sub") :: Nil, t.as("t1"))
+    assertAnalysisError(plan, "Correlated scalar subquery 'scalarsubquery(t1.c1)' is " +
+      "neither present in the group by, nor in an aggregate function. Add it to group by " +
+      "using ordinal position or wrap it in first() (or first_value) if you don't care " +
+      "which value you get." :: Nil)
+  }
 }
