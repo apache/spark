@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NullType, StructType}
 
 /**
  * A special version of [[AnsiCast]]. It performs the same operation (i.e. converts a value of
@@ -84,4 +84,17 @@ case class TryCast(child: Expression, dataType: DataType, timeZoneId: Option[Str
 
   override def typeCheckFailureMessage: String =
     AnsiCast.typeCheckFailureMessage(child.dataType, dataType, None, None)
+
+  override def toString: String = {
+    s"try_cast($child as ${dataType.simpleString})"
+  }
+
+  override def sql: String = dataType match {
+    // HiveQL doesn't allow casting to complex types. For logical plans translated from HiveQL, this
+    // type of casting can only be introduced by the analyzer, and can be omitted when converting
+    // back to SQL query string.
+    case _: ArrayType | _: MapType | _: StructType => child.sql
+    case _: NullType => s"TRY_CAST(${child.sql} AS void)"
+    case _ => s"TRY_CAST(${child.sql} AS ${dataType.sql})"
+  }
 }
