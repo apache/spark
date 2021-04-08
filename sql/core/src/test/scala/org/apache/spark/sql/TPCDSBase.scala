@@ -44,7 +44,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  *    |     Date      |     Date      |
  *    |---------------|---------------|
  *
- *
  * Remarks:
  * The TPC-DS spec requires benchmark implementer may employ any internal representation or SQL
  * datatype that meets the following requirements:
@@ -62,7 +61,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  *    be implemented as "char(N)".
  * 6. Date means that the column shall be able to express any calendar day
  *    between January 1, 1900 and December 31, 2199.
- *
  */
 trait TPCDSBase extends SharedSparkSession {
 
