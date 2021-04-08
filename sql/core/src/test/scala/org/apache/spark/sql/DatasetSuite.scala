@@ -864,7 +864,7 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"), e.getMessage)
+    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
   }
 
   test("runtime nullability check") {
@@ -1853,7 +1853,7 @@ class DatasetSuite extends QueryTest
         .map(b => b - 1)
         .collect()
     }
-    assert(thrownException.message.contains("Cannot up cast `id` from bigint to tinyint"))
+    assert(thrownException.message.contains("Cannot up cast id from bigint to tinyint"))
   }
 
   test("SPARK-26690: checkpoints should be executed with an execution id") {

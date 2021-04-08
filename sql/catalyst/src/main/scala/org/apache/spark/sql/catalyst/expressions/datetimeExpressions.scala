@@ -502,7 +502,7 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
       input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
     case _: FloatType => input =>
       val f = input.asInstanceOf[Float]
-      if (f.isNaN || f.isInfinite) null else (f * MICROS_PER_SECOND).toLong
+      if (f.isNaN || f.isInfinite) null else (f.toDouble * MICROS_PER_SECOND).toLong
     case _: DoubleType => input =>
       val d = input.asInstanceOf[Double]
       if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
@@ -517,13 +517,14 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
       val operand = s"new java.math.BigDecimal($MICROS_PER_SECOND)"
       defineCodeGen(ctx, ev, c => s"$c.toJavaBigDecimal().multiply($operand).longValueExact()")
     case other =>
+      val castToDouble = if (other.isInstanceOf[FloatType]) "(double)" else ""
       nullSafeCodeGen(ctx, ev, c => {
         val typeStr = CodeGenerator.boxedType(other)
         s"""
            |if ($typeStr.isNaN($c) || $typeStr.isInfinite($c)) {
            |  ${ev.isNull} = true;
            |} else {
-           |  ${ev.value} = (long)($c * $MICROS_PER_SECOND);
+           |  ${ev.value} = (long)($castToDouble$c * $MICROS_PER_SECOND);
            |}
            |""".stripMargin
       })
@@ -1263,25 +1264,33 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, CalendarIntervalType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TimestampType, TypeCollection(CalendarIntervalType, DayTimeIntervalType))
 
   override def dataType: DataType = TimestampType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(start: Any, interval: Any): Any = {
-    val itvl = interval.asInstanceOf[CalendarInterval]
-    DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], itvl.months, itvl.days, itvl.microseconds, zoneId)
+  override def nullSafeEval(start: Any, interval: Any): Any = right.dataType match {
+    case DayTimeIntervalType =>
+      timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneId)
+    case CalendarIntervalType =>
+      val i = interval.asInstanceOf[CalendarInterval]
+      timestampAddInterval(start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, $i.months, $i.days, $i.microseconds, $zid)"""
-    })
+    interval.dataType match {
+      case DayTimeIntervalType =>
+        defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampAddDayTime($sd, $dt, $zid)""")
+      case CalendarIntervalType =>
+        defineCodeGen(ctx, ev, (sd, i) => {
+          s"""$dtu.timestampAddInterval($sd, $i.months, $i.days, $i.microseconds, $zid)"""
+        })
+    }
   }
 }
 
@@ -1471,6 +1480,22 @@ case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimest
   override val prettyName: String = "to_utc_timestamp"
 }
 
+abstract class AddMonthsBase extends BinaryExpression with ImplicitCastInputTypes
+  with NullIntolerant {
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, months: Any): Any = {
+    DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (sd, m) => {
+      s"""$dtu.dateAddMonths($sd, $m)"""
+    })
+  }
+}
+
 /**
  * Returns the date that is num_months after start_date.
  */
@@ -1485,28 +1510,58 @@ case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimest
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class AddMonths(startDate: Expression, numMonths: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+case class AddMonths(startDate: Expression, numMonths: Expression) extends AddMonthsBase {
   override def left: Expression = startDate
   override def right: Expression = numMonths
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
 
-  override def dataType: DataType = DateType
+  override def prettyName: String = "add_months"
+}
 
-  override def nullSafeEval(start: Any, months: Any): Any = {
-    DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
+// Adds the year-month interval to the date
+case class DateAddYMInterval(date: Expression, interval: Expression) extends AddMonthsBase {
+  override def left: Expression = date
+  override def right: Expression = interval
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, YearMonthIntervalType)
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+}
+
+// Adds the year-month interval to the timestamp
+case class TimestampAddYMInterval(
+    timestamp: Expression,
+    interval: Expression,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
+
+  def this(timestamp: Expression, interval: Expression) = this(timestamp, interval, None)
+
+  override def left: Expression = timestamp
+  override def right: Expression = interval
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, YearMonthIntervalType)
+
+  override def dataType: DataType = TimestampType
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nullSafeEval(micros: Any, months: Any): Any = {
+    timestampAddMonths(micros.asInstanceOf[Long], months.asInstanceOf[Int], zoneId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, m) => {
-      s"""$dtu.dateAddMonths($sd, $m)"""
+    defineCodeGen(ctx, ev, (micros, months) => {
+      s"""$dtu.timestampAddMonths($micros, $months, $zid)"""
     })
   }
-
-  override def prettyName: String = "add_months"
 }
 
 /**
@@ -1548,7 +1603,9 @@ case class MonthsBetween(
   def this(date1: Expression, date2: Expression, roundOff: Expression) =
     this(date1, date2, roundOff, None)
 
-  override def children: Seq[Expression] = Seq(date1, date2, roundOff)
+  override def first: Expression = date1
+  override def second: Expression = date2
+  override def third: Expression = roundOff
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType, BooleanType)
 
@@ -1945,7 +2002,9 @@ case class MakeDate(
   def this(year: Expression, month: Expression, day: Expression) =
     this(year, month, day, SQLConf.get.ansiEnabled)
 
-  override def children: Seq[Expression] = Seq(year, month, day)
+  override def first: Expression = year
+  override def second: Expression = month
+  override def third: Expression = day
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
   override def dataType: DataType = DateType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
@@ -2293,45 +2352,108 @@ case class Extract(field: Expression, source: Expression, child: Expression)
 }
 
 /**
- * Returns the interval from startTimestamp to endTimestamp in which the `months` and `day` field
- * is set to 0 and the `microseconds` field is initialized to the microsecond difference
- * between the given timestamps.
+ * Returns the interval from `right` to `left` timestamps.
+ *   - When the SQL config `spark.sql.legacy.interval.enabled` is `true`,
+ *     it returns `CalendarIntervalType` in which the months` and `day` field is set to 0 and
+ *     the `microseconds` field is initialized to the microsecond difference between
+ *     the given timestamps.
+ *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in microseconds
+ *     between given timestamps.
  */
-case class SubtractTimestamps(endTimestamp: Expression, startTimestamp: Expression)
-  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
+case class SubtractTimestamps(
+    left: Expression,
+    right: Expression,
+    legacyInterval: Boolean,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression
+  with TimeZoneAwareExpression
+  with ExpectsInputTypes
+  with NullIntolerant {
 
-  override def left: Expression = endTimestamp
-  override def right: Expression = startTimestamp
+  def this(endTimestamp: Expression, startTimestamp: Expression) =
+    this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
-  override def dataType: DataType = CalendarIntervalType
+  override def dataType: DataType =
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
 
-  override def nullSafeEval(end: Any, start: Any): Any = {
-    new CalendarInterval(0, 0, end.asInstanceOf[Long] - start.asInstanceOf[Long])
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  @transient
+  private lazy val evalFunc: (Long, Long) => Any = legacyInterval match {
+    case false => (leftMicros, rightMicros) =>
+      subtractTimestamps(leftMicros, rightMicros, zoneId)
+    case true => (leftMicros, rightMicros) =>
+      new CalendarInterval(0, 0, leftMicros - rightMicros)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (end, start) =>
-      s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
+  override def nullSafeEval(leftMicros: Any, rightMicros: Any): Any = {
+    evalFunc(leftMicros.asInstanceOf[Long], rightMicros.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = legacyInterval match {
+    case false =>
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      defineCodeGen(ctx, ev, (l, r) => s"""$dtu.subtractTimestamps($l, $r, $zid)""")
+    case true =>
+      defineCodeGen(ctx, ev, (end, start) =>
+        s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
+  }
+}
+
+object SubtractTimestamps {
+  def apply(left: Expression, right: Expression): SubtractTimestamps = {
+    new SubtractTimestamps(left, right)
   }
 }
 
 /**
  * Returns the interval from the `left` date (inclusive) to the `right` date (exclusive).
+ *   - When the SQL config `spark.sql.legacy.interval.enabled` is `true`,
+ *     it returns `CalendarIntervalType` in which the `microseconds` field is set to 0 and
+ *     the `months` and `days` fields are initialized to the difference between the given dates.
+ *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in days
+ *     between the given dates.
  */
-case class SubtractDates(left: Expression, right: Expression)
+case class SubtractDates(
+    left: Expression,
+    right: Expression,
+    legacyInterval: Boolean)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  def this(left: Expression, right: Expression) =
+    this(left, right, SQLConf.get.legacyIntervalEnabled)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
-  override def dataType: DataType = CalendarIntervalType
+  override def dataType: DataType =
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
+
+  @transient
+  private lazy val evalFunc: (Int, Int) => Any = legacyInterval match {
+    case false => (leftDays: Int, rightDays: Int) =>
+      Math.multiplyExact(Math.subtractExact(leftDays, rightDays), MICROS_PER_DAY)
+    case true => (leftDays: Int, rightDays: Int) => subtractDates(leftDays, rightDays)
+  }
 
   override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
-    DateTimeUtils.subtractDates(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
+    evalFunc(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (leftDays, rightDays) => {
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      s"$dtu.subtractDates($leftDays, $rightDays)"
-    })
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = legacyInterval match {
+    case false =>
+      val m = classOf[Math].getName
+      defineCodeGen(ctx, ev, (leftDays, rightDays) =>
+        s"$m.multiplyExact($m.subtractExact($leftDays, $rightDays), ${MICROS_PER_DAY}L)")
+    case true =>
+      defineCodeGen(ctx, ev, (leftDays, rightDays) => {
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        s"$dtu.subtractDates($leftDays, $rightDays)"
+      })
   }
+}
+
+object SubtractDates {
+  def apply(left: Expression, right: Expression): SubtractDates = new SubtractDates(left, right)
 }

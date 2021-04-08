@@ -164,21 +164,16 @@ object LiteralGenerator {
     for { i <- Gen.choose(-100, 100) } yield Literal.create(i, IntegerType)
 
   lazy val dayTimeIntervalLiteralGen: Gen[Literal] = {
-    for {
-      seconds <- Gen.choose(
-        Duration.ofDays(-106751990).getSeconds,
-        Duration.ofDays(106751990).getSeconds)
-      nanoAdjustment <- Gen.choose(-999999000, 999999000)
-    } yield {
-      Literal.create(Duration.ofSeconds(seconds, nanoAdjustment), DayTimeIntervalType)
+    calendarIntervalLiterGen.map { calendarIntervalLiteral =>
+      Literal.create(
+        calendarIntervalLiteral.value.asInstanceOf[CalendarInterval].extractAsDuration(),
+        DayTimeIntervalType)
     }
   }
 
   lazy val yearMonthIntervalLiteralGen: Gen[Literal] = {
-    for {
-      years <- Gen.choose(-178956969, 178956969)
-      months <- Gen.choose(-11, 11)
-    } yield Literal.create(Period.of(years, months, 0), YearMonthIntervalType)
+    for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) }
+      yield Literal.create(Period.ofMonths(months), YearMonthIntervalType)
   }
 
   def randomGen(dt: DataType): Gen[Literal] = {

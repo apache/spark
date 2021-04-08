@@ -765,6 +765,9 @@ object IntervalUtils {
     new CalendarInterval(totalMonths, totalDays, micros)
   }
 
+  // The amount of seconds that can cause overflow in the conversion to microseconds
+  private final val minDurationSeconds = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
+
   /**
    * Converts this duration to the total length in microseconds.
    * <p>
@@ -779,9 +782,18 @@ object IntervalUtils {
    * @throws ArithmeticException If numeric overflow occurs
    */
   def durationToMicros(duration: Duration): Long = {
-    val us = Math.multiplyExact(duration.getSeconds, MICROS_PER_SECOND)
-    val result = Math.addExact(us, duration.getNano / NANOS_PER_MICROS)
-    result
+    val seconds = duration.getSeconds
+    if (seconds == minDurationSeconds) {
+      val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
+      val nanoAdjustment = duration.getNano
+      assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
+        "Duration.getNano() must return the adjustment to the seconds field " +
+        "in the range from 0 to 999999999 nanoseconds, inclusive.")
+      Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
+    } else {
+      val microsInSeconds = Math.multiplyExact(seconds, MICROS_PER_SECOND)
+      Math.addExact(microsInSeconds, duration.getNano / NANOS_PER_MICROS)
+    }
   }
 
   /**
@@ -822,4 +834,53 @@ object IntervalUtils {
    * @return The period of months, not null
    */
   def monthsToPeriod(months: Int): Period = Period.ofMonths(months).normalized()
+
+  /**
+   * Converts an year-month interval as a number of months to its textual representation
+   * which conforms to the ANSI SQL standard.
+   *
+   * @param months The number of months, positive or negative
+   * @return Year-month interval string
+   */
+  def toYearMonthIntervalString(months: Int): String = {
+    var sign = ""
+    var absMonths: Long = months
+    if (months < 0) {
+      sign = "-"
+      absMonths = -absMonths
+    }
+    s"INTERVAL '$sign${absMonths / MONTHS_PER_YEAR}-${absMonths % MONTHS_PER_YEAR}' YEAR TO MONTH"
+  }
+
+  /**
+   * Converts a day-time interval as a number of microseconds to its textual representation
+   * which conforms to the ANSI SQL standard.
+   *
+   * @param micros The number of microseconds, positive or negative
+   * @return Day-time interval string
+   */
+  def toDayTimeIntervalString(micros: Long): String = {
+    var sign = ""
+    var rest = micros
+    if (micros < 0) {
+      if (micros == Long.MinValue) {
+        // Especial handling of minimum `Long` value because negate op overflows `Long`.
+        // seconds = 106751991 * (24 * 60 * 60) + 4 * 60 * 60 + 54 = 9223372036854
+        // microseconds = -9223372036854000000L-775808 == Long.MinValue
+        return "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND"
+      } else {
+        sign = "-"
+        rest = -rest
+      }
+    }
+    val seconds = rest % MICROS_PER_MINUTE
+    rest /= MICROS_PER_MINUTE
+    val minutes = rest % MINUTES_PER_HOUR
+    rest /= MINUTES_PER_HOUR
+    val hours = rest % HOURS_PER_DAY
+    val days = rest / HOURS_PER_DAY
+    val leadSecZero = if (seconds < 10 * MICROS_PER_SECOND) "0" else ""
+    val secStr = java.math.BigDecimal.valueOf(seconds, 6).stripTrailingZeros().toPlainString()
+    f"INTERVAL '$sign$days $hours%02d:$minutes%02d:$leadSecZero$secStr' DAY TO SECOND"
+  }
 }

@@ -493,7 +493,9 @@ private class LiveStage extends LiveEntity {
       executorSummary = None,
       killedTasksSummary = killedSummary,
       resourceProfileId = info.resourceProfileId,
-      Some(peakExecutorMetrics).filter(_.isSet))
+      peakExecutorMetrics = Some(peakExecutorMetrics).filter(_.isSet),
+      taskMetricsDistributions = None,
+      executorMetricsDistributions = None)
   }
 
   override protected def doUpdate(): Any = {

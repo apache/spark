@@ -47,10 +47,20 @@ When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric
 SELECT 2147483647 + 1;
 java.lang.ArithmeticException: integer overflow
 
+SELECT abs(-2147483648);
+java.lang.ArithmeticException: integer overflow
+
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
 +----------------+
 |(2147483647 + 1)|
++----------------+
+|     -2147483648|
++----------------+
+
+SELECT abs(-2147483648);
++----------------+
+|abs(-2147483648)|
 +----------------+
 |     -2147483648|
 +----------------+
@@ -66,6 +76,9 @@ The type conversion of Spark ANSI mode follows the syntax rules of section 6.13 
  straightforward type conversions which are disallowed as per the ANSI standard:
 * NumericType <=> BooleanType
 * StringType <=> BinaryType
+* ArrayType => String
+* MapType => String
+* StructType => String
 
  The valid combinations of target data type and source data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
@@ -79,9 +92,9 @@ The type conversion of Spark ANSI mode follows the syntax rules of section 6.13 
 | Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
 | Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
 | Binary    | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
-| Array     | N       | N      | N    | N         | N        | N       | N      | <span style="color:red">**Y**</span> | N   | N      |
-| Map       | N       | N      | N    | N         | N        | N       | N      | N     | <span style="color:red">**Y**</span> | N      |
-| Struct    | N       | N      | N    | N         | N        | N       | N      | N     | N   | <span style="color:red">**Y**</span> |
+| Array     | N       | Y      | N    | N         | N        | N       | N      | <span style="color:red">**Y**</span> | N   | N      |
+| Map       | N       | Y      | N    | N         | N        | N       | N      | N     | <span style="color:red">**Y**</span> | N      |
+| Struct    | N       | Y      | N    | N         | N        | N       | N      | N     | N   | <span style="color:red">**Y**</span> |
 
 In the table above, all the `CAST`s that can cause runtime exceptions are marked as red <span style="color:red">**Y**</span>:
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
@@ -421,6 +434,7 @@ Below is a list of all the keywords in Spark SQL.
 |TRIM|non-reserved|non-reserved|non-reserved|
 |TRUE|non-reserved|non-reserved|reserved|
 |TRUNCATE|non-reserved|non-reserved|reserved|
+|TRY_CAST|non-reserved|non-reserved|non-reserved|
 |TYPE|non-reserved|non-reserved|non-reserved|
 |UNARCHIVE|non-reserved|non-reserved|non-reserved|
 |UNBOUNDED|non-reserved|non-reserved|non-reserved|

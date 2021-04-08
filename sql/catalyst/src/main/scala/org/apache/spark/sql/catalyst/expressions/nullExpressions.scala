@@ -383,7 +383,6 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = false
   override def foldable: Boolean = children.forall(_.foldable)
-  override def toString: String = s"AtLeastNNulls(n, ${children.mkString(",")})"
 
   private[this] val childrenArray = children.toArray
 

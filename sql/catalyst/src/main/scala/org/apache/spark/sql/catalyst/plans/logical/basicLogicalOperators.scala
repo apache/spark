@@ -18,14 +18,15 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
-import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_CREATED_FROM_DATAFRAME
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
@@ -61,6 +62,7 @@ object Subquery {
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = child.maxRows
 
   override lazy val resolved: Boolean = {
@@ -187,6 +189,8 @@ case class Intersect(
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
+  override def metadataOutput: Seq[Attribute] = Nil
+
   override protected lazy val validConstraints: ExpressionSet =
     leftConstraints.union(rightConstraints)
 
@@ -206,6 +210,8 @@ case class Except(
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
+
+  override def metadataOutput: Seq[Attribute] = Nil
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
 }
@@ -269,6 +275,8 @@ case class Union(
       }
     }
   }
+
+  override def metadataOutput: Seq[Attribute] = Nil
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -364,6 +372,17 @@ case class Join(
     }
   }
 
+  override def metadataOutput: Seq[Attribute] = {
+    joinType match {
+      case ExistenceJoin(_) =>
+        left.metadataOutput
+      case LeftExistence(_) =>
+        left.metadataOutput
+      case _ =>
+        children.flatMap(_.metadataOutput)
+    }
+  }
+
   override protected lazy val validConstraints: ExpressionSet = {
     joinType match {
       case _: InnerLike if condition.isDefined =>
@@ -440,6 +459,7 @@ case class InsertIntoDir(
   extends UnaryNode {
 
   override def output: Seq[Attribute] = Seq.empty
+  override def metadataOutput: Seq[Attribute] = Nil
   override lazy val resolved: Boolean = false
 }
 
@@ -462,9 +482,11 @@ case class View(
     desc: CatalogTable,
     isTempView: Boolean,
     child: LogicalPlan) extends UnaryNode {
-  require(!isDataFrameTempView || child.resolved)
+  require(!isTempViewStoringAnalyzedPlan || child.resolved)
 
   override def output: Seq[Attribute] = child.output
+
+  override def metadataOutput: Seq[Attribute] = Nil
 
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
@@ -475,8 +497,8 @@ case class View(
     case _ => child.canonicalized
   }
 
-  def isDataFrameTempView: Boolean =
-    isTempView && desc.properties.contains(VIEW_CREATED_FROM_DATAFRAME)
+  def isTempViewStoringAnalyzedPlan: Boolean =
+    isTempView && desc.properties.contains(VIEW_STORING_ANALYZED_PLAN)
 
   // When resolving a SQL view, we use an extra Project to add cast and alias to make sure the view
   // output schema doesn't change even if the table referenced by the view is changed after view
@@ -551,26 +573,83 @@ case class Sort(
 
 /** Factory for constructing new `Range` nodes. */
 object Range {
-  def apply(start: Long, end: Long, step: Long,
-            numSlices: Option[Int], isStreaming: Boolean = false): Range = {
-    val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
-    new Range(start, end, step, numSlices, output, isStreaming)
-  }
   def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
     Range(start, end, step, Some(numSlices))
   }
+
+  def getOutputAttrs: Seq[Attribute] = {
+    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+  }
+
+  private def typeCoercion: TypeCoercionBase = {
+    if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
+  }
+
+  private def castAndEval[T](expression: Expression, dataType: DataType): T = {
+    typeCoercion.implicitCast(expression, dataType)
+      .map(_.eval())
+      .filter(_ != null)
+      .getOrElse {
+        throw QueryCompilationErrors.incompatibleRangeInputDataTypeError(expression, dataType)
+      }.asInstanceOf[T]
+  }
+
+  def toLong(expression: Expression): Long = castAndEval[Long](expression, LongType)
+
+  def toInt(expression: Expression): Int = castAndEval[Int](expression, IntegerType)
 }
 
+@ExpressionDescription(
+  usage = """
+    _FUNC_(start: long, end: long, step: long, numSlices: integer)
+    _FUNC_(start: long, end: long, step: long)
+    _FUNC_(start: long, end: long)
+    _FUNC_(end: long)""",
+  examples = """
+    Examples:
+      > SELECT * FROM _FUNC_(1);
+        +---+
+        | id|
+        +---+
+        |  0|
+        +---+
+      > SELECT * FROM _FUNC_(0, 2);
+        +---+
+        |id |
+        +---+
+        |0  |
+        |1  |
+        +---+
+      > SELECT * FROM _FUNC_(0, 4, 2);
+        +---+
+        |id |
+        +---+
+        |0  |
+        |2  |
+        +---+
+  """,
+  since = "2.0.0",
+  group = "table_funcs")
 case class Range(
     start: Long,
     end: Long,
     step: Long,
     numSlices: Option[Int],
-    output: Seq[Attribute],
-    override val isStreaming: Boolean)
+    override val output: Seq[Attribute] = Range.getOutputAttrs,
+    override val isStreaming: Boolean = false)
   extends LeafNode with MultiInstanceRelation {
 
   require(step != 0, s"step ($step) cannot be 0")
+
+  def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) =
+    this(Range.toLong(start), Range.toLong(end), Range.toLong(step), Some(Range.toInt(numSlices)))
+
+  def this(start: Expression, end: Expression, step: Expression) =
+    this(Range.toLong(start), Range.toLong(end), Range.toLong(step), None)
+
+  def this(start: Expression, end: Expression) = this(start, end, Literal.create(1L, LongType))
+
+  def this(end: Expression) = this(Literal.create(0L, LongType), end)
 
   val numElements: BigInt = {
     val safeStart = BigInt(start)
@@ -624,7 +703,7 @@ case class Range(
  *
  * @param groupingExpressions expressions for grouping keys
  * @param aggregateExpressions expressions for a project list, which could contain
- *                             [[AggregateFunction]]s.
+ *                             [[AggregateExpression]]s.
  *
  * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
  * separating projection from grouping and aggregate, we should avoid expression-level optimization
@@ -647,6 +726,7 @@ case class Aggregate(
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = {
     if (groupingExpressions.isEmpty) {
       Some(1L)
@@ -669,6 +749,8 @@ case class Window(
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
+
+  override def producedAttributes: AttributeSet = windowOutputSet
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 }
@@ -780,37 +862,13 @@ case class Expand(
   override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
+  override def metadataOutput: Seq[Attribute] = Nil
+
   override def producedAttributes: AttributeSet = AttributeSet(output diff child.output)
 
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override protected lazy val validConstraints: ExpressionSet = ExpressionSet()
-}
-
-/**
- * A GROUP BY clause with GROUPING SETS can generate a result set equivalent
- * to generated by a UNION ALL of multiple simple GROUP BY clauses.
- *
- * We will transform GROUPING SETS into logical plan Aggregate(.., Expand) in Analyzer
- *
- * @param selectedGroupByExprs A sequence of selected GroupBy expressions, all exprs should
- *                     exist in groupByExprs.
- * @param groupByExprs The Group By expressions candidates.
- * @param child        Child operator
- * @param aggregations The Aggregation expressions, those non selected group by expressions
- *                     will be considered as constant null if it appears in the expressions
- */
-case class GroupingSets(
-    selectedGroupByExprs: Seq[Seq[Expression]],
-    groupByExprs: Seq[Expression],
-    child: LogicalPlan,
-    aggregations: Seq[NamedExpression]) extends UnaryNode {
-
-  override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
-
-  // Needs to be unresolved before its translated to Aggregate + Expand because output attributes
-  // will change in analysis.
-  override lazy val resolved: Boolean = false
 }
 
 /**
@@ -842,6 +900,7 @@ case class Pivot(
     }
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
+  override def metadataOutput: Seq[Attribute] = Nil
 }
 
 /**
@@ -1025,6 +1084,7 @@ abstract class RepartitionOperation extends UnaryNode {
   def numPartitions: Int
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  def partitioning: Partitioning
 }
 
 /**
@@ -1036,6 +1096,14 @@ abstract class RepartitionOperation extends UnaryNode {
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+
+  override def partitioning: Partitioning = {
+    require(shuffle, "Partitioning can only be used in shuffle.")
+    numPartitions match {
+      case 1 => SinglePartition
+      case _ => RoundRobinPartitioning(numPartitions)
+    }
+  }
 }
 
 /**
@@ -1050,10 +1118,10 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     optNumPartitions: Option[Int]) extends RepartitionOperation {
 
-  val numPartitions = optNumPartitions.getOrElse(SQLConf.get.numShufflePartitions)
+  val numPartitions = optNumPartitions.getOrElse(conf.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
-  val partitioning: Partitioning = {
+  override val partitioning: Partitioning = {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
 
     require(sortOrder.isEmpty || nonSortOrder.isEmpty,
@@ -1065,7 +1133,9 @@ case class RepartitionByExpression(
          |NonSortOrder: $nonSortOrder
        """.stripMargin)
 
-    if (sortOrder.nonEmpty) {
+    if (numPartitions == 1) {
+      SinglePartition
+    } else if (sortOrder.nonEmpty) {
       RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
     } else if (nonSortOrder.nonEmpty) {
       HashPartitioning(nonSortOrder, numPartitions)

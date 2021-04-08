@@ -28,6 +28,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -348,7 +349,9 @@ private[spark] object SummaryBuilderImpl extends Logging {
       weightExpr: Expression,
       mutableAggBufferOffset: Int,
       inputAggBufferOffset: Int)
-    extends TypedImperativeAggregate[SummarizerBuffer] with ImplicitCastInputTypes {
+    extends TypedImperativeAggregate[SummarizerBuffer]
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
     override def eval(state: SummarizerBuffer): Any = {
       val metrics = requestedMetrics.map {
@@ -368,7 +371,8 @@ private[spark] object SummaryBuilderImpl extends Logging {
 
     override def inputTypes: Seq[DataType] = vectorUDT :: DoubleType :: Nil
 
-    override def children: Seq[Expression] = featuresExpr :: weightExpr :: Nil
+    override def left: Expression = featuresExpr
+    override def right: Expression = weightExpr
 
     override def update(state: SummarizerBuffer, row: InternalRow): SummarizerBuffer = {
       val features = vectorUDT.deserialize(featuresExpr.eval(row))

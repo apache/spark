@@ -39,6 +39,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 trait RunnableCommand extends Command {
 
+  override def children: Seq[LogicalPlan] = Nil
+
   // The map used to record the metrics of running the command. This will be passed to
   // `ExecutedCommand` during query planning.
   lazy val metrics: Map[String, SQLMetric] = Map.empty

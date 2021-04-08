@@ -588,11 +588,21 @@ fromClause
     ;
 
 aggregationClause
-    : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
+    : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
+        (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
+    | GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
-    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
+    ;
+
+groupByClause
+    : groupingAnalytics
+    | expression
+    ;
+
+groupingAnalytics
+    : (ROLLUP | CUBE | GROUPING SETS)  '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupingSet
@@ -795,7 +805,7 @@ primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #currentDatetime
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
-    | CAST '(' expression AS dataType ')'                                                      #cast
+    | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
     | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
     | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
@@ -1189,6 +1199,7 @@ ansiNonReserved
     | TRIM
     | TRUE
     | TRUNCATE
+    | TRY_CAST
     | TYPE
     | UNARCHIVE
     | UNBOUNDED
@@ -1451,6 +1462,7 @@ nonReserved
     | TRIM
     | TRUE
     | TRUNCATE
+    | TRY_CAST
     | TYPE
     | UNARCHIVE
     | UNBOUNDED
@@ -1710,6 +1722,7 @@ TRANSFORM: 'TRANSFORM';
 TRIM: 'TRIM';
 TRUE: 'TRUE';
 TRUNCATE: 'TRUNCATE';
+TRY_CAST: 'TRY_CAST';
 TYPE: 'TYPE';
 UNARCHIVE: 'UNARCHIVE';
 UNBOUNDED: 'UNBOUNDED';

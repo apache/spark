@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -26,10 +27,9 @@ import org.apache.spark.sql.types._
  * Compute the covariance between two expressions.
  * When applied on empty data (i.e., count is zero), it returns NULL.
  */
-abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Boolean)
-  extends DeclarativeAggregate with ImplicitCastInputTypes {
+abstract class Covariance(val left: Expression, val right: Expression, nullOnDivideByZero: Boolean)
+  extends DeclarativeAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  override def children: Seq[Expression] = Seq(x, y)
   override def nullable: Boolean = true
   override def dataType: DataType = DoubleType
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
@@ -70,14 +70,14 @@ abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Bool
 
   protected def updateExpressionsDef: Seq[Expression] = {
     val newN = n + 1.0
-    val dx = x - xAvg
-    val dy = y - yAvg
+    val dx = left - xAvg
+    val dy = right - yAvg
     val dyN = dy / newN
     val newXAvg = xAvg + dx / newN
     val newYAvg = yAvg + dyN
-    val newCk = ck + dx * (y - newYAvg)
+    val newCk = ck + dx * (right - newYAvg)
 
-    val isNull = x.isNull || y.isNull
+    val isNull = left.isNull || right.isNull
     Seq(
       If(isNull, n, newN),
       If(isNull, xAvg, newXAvg),
@@ -97,8 +97,8 @@ abstract class Covariance(x: Expression, y: Expression, nullOnDivideByZero: Bool
   group = "agg_funcs",
   since = "2.0.0")
 case class CovPopulation(
-    left: Expression,
-    right: Expression,
+    override val left: Expression,
+    override val right: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
   extends Covariance(left, right, nullOnDivideByZero) {
 
@@ -122,8 +122,8 @@ case class CovPopulation(
   group = "agg_funcs",
   since = "2.0.0")
 case class CovSample(
-    left: Expression,
-    right: Expression,
+    override val left: Expression,
+    override val right: Expression,
     nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
   extends Covariance(left, right, nullOnDivideByZero) {
 
