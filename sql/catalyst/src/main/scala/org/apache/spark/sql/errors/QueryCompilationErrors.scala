@@ -268,12 +268,12 @@ private[spark] object QueryCompilationErrors {
       s"(valid range is [1, $size])", t.origin.line, t.origin.startPosition)
   }
 
-  def groupByPositionIsAggregateExpressionError(
+  def groupByPositionRefersToAggregateFunctionError(
       index: Int,
       expr: Expression,
       t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"GROUP BY expression in position $index is an aggregate expression, " +
-      s"aggregate expression are not allowed in GROUP BY, but got `$expr`",
+    new AnalysisException(s"GROUP BY expression in position $index is an aggregate function, " +
+      s"aggregate function are not allowed in GROUP BY, but got `${expr.sql}`",
       t.origin.line, t.origin.startPosition)
   }
 

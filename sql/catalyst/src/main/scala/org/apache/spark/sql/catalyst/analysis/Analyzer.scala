@@ -1793,7 +1793,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
             val ordinalExpr = aggs(index - 1)
             if(ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
-              throw QueryCompilationErrors.groupByPositionIsAggregateExpressionError(
+              throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
                 index, ordinalExpr, u)
             } else {
               ordinalExpr
