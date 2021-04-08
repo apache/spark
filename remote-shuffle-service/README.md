@@ -29,7 +29,7 @@ with extra `-Premote-shuffle-service` to generate remote shuffle service client 
 Following is one command example to use `dev/make-distribution.sh` under Spark repo root directory:
 
 ```
-./dev/make-distribution.sh --name spark-with-remote-shuffle-service-client --pip --tgz -Phive -Phive-thriftserver -Pkubernetes -Phadoop-3.2 -Phadoop-cloud -Dhadoop.version=3.2.2 -Premote-shuffle-service
+./dev/make-distribution.sh --name spark-with-remote-shuffle-service-client --pip --tgz -Phive -Phive-thriftserver -Pkubernetes -Phadoop-3.2 -Phadoop-cloud -Premote-shuffle-service
 ```
 
 This command creates `remote-shuffle-service_xxx.jar` file for remote shuffle service client 
