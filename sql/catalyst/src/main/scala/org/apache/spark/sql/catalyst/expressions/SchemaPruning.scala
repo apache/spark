@@ -48,7 +48,7 @@ object SchemaPruning {
    * right, recursively. That is, left is a "subschema" of right, ignoring order of
    * fields.
    */
-  private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType = {
+  private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType =
     (left, right) match {
       case (ArrayType(leftElementType, containsNull), ArrayType(rightElementType, _)) =>
         ArrayType(
@@ -71,7 +71,6 @@ object SchemaPruning {
         StructType(sortedLeftFields)
       case _ => left
     }
-  }
 
   /**
    * Returns the set of fields from projection and filtering predicates that the query plan needs.
