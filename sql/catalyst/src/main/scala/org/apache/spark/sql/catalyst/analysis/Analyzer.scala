@@ -599,7 +599,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
-        case a @ Aggregate(GroupingAnalytics(_, groupingSets, groupByExprs), _, _) =>
+        case a @ Aggregate(GroupingAnalytics(_, _, groupByExprs), _, _) =>
           a.copy(groupingExpressions = groupByExprs)
       }
       // Try resolving the condition of the filter as though it is in the aggregate clause

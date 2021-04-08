@@ -233,20 +233,26 @@ object GroupingID {
 object GroupingAnalytics {
   def unapply(exprs: Seq[Expression])
   : Option[(Seq[Seq[Expression]], Seq[Seq[Expression]], Seq[Expression])] = {
-    val (groupingSetExprs, others) = exprs.partition(_.isInstanceOf[BaseGroupingSets])
-    if (groupingSetExprs.isEmpty) {
+    if (!exprs.exists(_.find(_.isInstanceOf[BaseGroupingSets]).isDefined)) {
       None
     } else {
-      val groupingSets = groupingSetExprs.map(_.asInstanceOf[BaseGroupingSets])
-      val groups = groupingSets.flatMap(_.groupByExprs) ++ others
-      val unmergedSelectedGroupByExprs = groupingSets.map(_.selectedGroupByExprs)
+      val groups = exprs.flatMap {
+        case gs: BaseGroupingSets => gs.groupByExprs
+        case others: Expression => others :: Nil
+      }
+      val groupingSets = exprs.flatMap {
+        case gs: BaseGroupingSets => gs.groupingSets
+        case _ => Nil
+      }
+      val unmergedSelectedGroupByExprs = exprs.map {
+        case gs: BaseGroupingSets => gs.selectedGroupByExprs
+        case others: Expression => Seq(Seq(others))
+      }
       val selectedGroupByExprs = unmergedSelectedGroupByExprs.init
         .foldLeft(unmergedSelectedGroupByExprs.last) { (x, y) =>
           for (a <- x; b <- y) yield a ++ b
-        }.map { groupByExprs =>
-          (others ++ groupByExprs).distinct
         }
-      Some(selectedGroupByExprs, groupingSets.flatMap(_.groupingSets), groups.distinct)
+      Some(selectedGroupByExprs, groupingSets, groups.distinct)
     }
   }
 }
