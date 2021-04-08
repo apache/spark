@@ -1298,4 +1298,16 @@ private[spark] object QueryCompilationErrors {
     throw new AnalysisException("The number of partitions can't be specified with unspecified" +
       " distribution. Invalid writer requirements detected.")
   }
+
+  def cannotApplyTableValuedFunctionError(
+      name: String, arguments: String, usage: String, details: String = ""): Throwable = {
+    new AnalysisException(s"Table-valued function $name with alternatives: $usage\n" +
+      s"cannot be applied to ($arguments): $details")
+  }
+
+  def incompatibleRangeInputDataTypeError(
+      expression: Expression, dataType: DataType): Throwable = {
+    new AnalysisException(s"Incompatible input data type. " +
+      s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
+  }
 }

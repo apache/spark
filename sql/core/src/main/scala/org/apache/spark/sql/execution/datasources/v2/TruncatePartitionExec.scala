@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement
 case class TruncatePartitionExec(
     table: SupportsPartitionManagement,
     partSpec: ResolvedPartitionSpec,
-    refreshCache: () => Unit) extends V2CommandExec {
+    refreshCache: () => Unit) extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 

@@ -17,13 +17,24 @@
 import os
 import sys
 from distutils.version import LooseVersion
+import warnings
+
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+
+try:
+    require_minimum_pandas_version()
+    require_minimum_pyarrow_version()
+except ImportError as e:
+    if os.environ.get("SPARK_TESTING"):
+        warnings.warn(str(e))
+        sys.exit()
+    else:
+        raise
 
 from pyspark.pandas.version import __version__  # noqa: F401
 
 
 def assert_python_version():
-    import warnings
-
     major = 3
     minor = 5
     deprecated_version = (major, minor)
@@ -206,4 +217,4 @@ _auto_patch_pandas()
 # Import after the usage logger is attached.
 from pyspark.pandas.config import get_option, options, option_context, reset_option, set_option
 from pyspark.pandas.namespace import *  # F405
-from pyspark.pandas.sql import sql
+from pyspark.pandas.sql_processor import sql

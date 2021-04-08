@@ -742,7 +742,7 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
 
   def this() = this(Literal(1))
 
