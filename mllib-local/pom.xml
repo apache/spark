@@ -89,9 +89,9 @@
       </dependencies>
     </profile>
     <profile>
-      <id>vectorized</id>
+      <id>jvm-vectorized</id>
       <properties>
-        <extra.source.dir>src/vectorized/java</extra.source.dir>
+        <extra.source.dir>src/jvm-vectorized/java</extra.source.dir>
       </properties>
       <build>
         <plugins>
