@@ -25,7 +25,7 @@ The `GROUP BY` clause is used to group the rows based on a set of specified grou
 the group of rows based on one or more specified aggregate functions. Spark also supports advanced aggregations to do multiple
 aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
 These grouping analytics clauses can be specified with regular grouping expressions (partial grouping analytics) and 
-the different grouping analytics clauses can be specified together (concatenated groupings).
+the grouping analytics clauses can be specified together (concatenated groupings).
 When a FILTER clause is attached to an aggregate function, only the matching.
 
 ### Syntax
@@ -106,7 +106,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     `GROUP BY warehouse, GROUPING SETS((product, location), (producet), ())` is equivalent to
     `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, location), (warehouse))`.
 
-* **Concatenated Groupings**
+* **Concatenated Grouping Analytics**
   
     Concatenated grouping analytics offer a concise way to generate useful combinations of groupings. Groupings specified
     with concatenated groupings yield the cross-product of groupings from each grouping set. The cross-product 
