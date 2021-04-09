@@ -19,7 +19,7 @@ import pandas as pd
 import numpy as np
 import re
 
-from pyspark import pandas as pp
+from pyspark import pandas as ps
 from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
@@ -45,24 +45,24 @@ class SeriesStringTest(ReusedSQLTestCase, SQLTestUtils):
         self.check_func_on_series(func, self.pser, almost=almost)
 
     def check_func_on_series(self, func, pser, almost=False):
-        self.assert_eq(func(pp.from_pandas(pser)), func(pser), almost=almost)
+        self.assert_eq(func(ps.from_pandas(pser)), func(pser), almost=almost)
 
     def test_string_add_str_num(self):
         pdf = pd.DataFrame(dict(col1=["a"], col2=[1]))
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
         with self.assertRaises(TypeError):
             kdf["col1"] + kdf["col2"]
 
     def test_string_add_assign(self):
         pdf = pd.DataFrame(dict(col1=["a", "b", "c"], col2=["1", "2", "3"]))
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
         kdf["col1"] += kdf["col2"]
         pdf["col1"] += pdf["col2"]
         self.assert_eq(kdf["col1"], pdf["col1"])
 
     def test_string_add_str_str(self):
         pdf = pd.DataFrame(dict(col1=["a", "b", "c"], col2=["1", "2", "3"]))
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         # TODO: Fix the Series names
         self.assert_eq(kdf["col1"] + kdf["col2"], pdf["col1"] + pdf["col2"])
@@ -70,7 +70,7 @@ class SeriesStringTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_string_add_str_lit(self):
         pdf = pd.DataFrame(dict(col1=["a", "b", "c"]))
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
         self.assert_eq(kdf["col1"] + "_lit", pdf["col1"] + "_lit")
         self.assert_eq("_lit" + kdf["col1"], "_lit" + pdf["col1"])
 
@@ -146,7 +146,7 @@ class SeriesStringTest(ReusedSQLTestCase, SQLTestUtils):
         self.check_func(lambda x: x.str.isdecimal())
 
     def test_string_cat(self):
-        kser = pp.from_pandas(self.pser)
+        kser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
             kser.str.cat()
 
@@ -166,22 +166,22 @@ class SeriesStringTest(ReusedSQLTestCase, SQLTestUtils):
         self.check_func(lambda x: x.str.count("WH", flags=re.IGNORECASE))
 
     def test_string_decode(self):
-        kser = pp.from_pandas(self.pser)
+        kser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
             kser.str.decode("utf-8")
 
     def test_string_encode(self):
-        kser = pp.from_pandas(self.pser)
+        kser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
             kser.str.encode("utf-8")
 
     def test_string_extract(self):
-        kser = pp.from_pandas(self.pser)
+        kser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
             kser.str.extract("pat")
 
     def test_string_extractall(self):
-        kser = pp.from_pandas(self.pser)
+        kser = ps.from_pandas(self.pser)
         with self.assertRaises(NotImplementedError):
             kser.str.extractall("pat")
 

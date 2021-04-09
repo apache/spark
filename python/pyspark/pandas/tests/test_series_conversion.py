@@ -20,7 +20,7 @@ from distutils.version import LooseVersion
 
 import pandas as pd
 
-from pyspark import pandas as pp
+from pyspark import pandas as ps
 from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
@@ -31,7 +31,7 @@ class SeriesConversionTest(ReusedSQLTestCase, SQLTestUtils):
 
     @property
     def kser(self):
-        return pp.from_pandas(self.pser)
+        return ps.from_pandas(self.pser)
 
     @unittest.skip("Pyperclip could not find a copy/paste mechanism for Linux.")
     def test_to_clipboard(self):

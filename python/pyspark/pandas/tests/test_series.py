@@ -28,7 +28,7 @@ import pyspark
 from pyspark.ml.linalg import SparseVector
 from pyspark.sql import functions as F
 
-from pyspark import pandas as pp
+from pyspark import pandas as ps
 from pyspark.pandas.testing.utils import (
     have_tabulate,
     ReusedSQLTestCase,
@@ -52,7 +52,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     @property
     def kser(self):
-        return pp.from_pandas(self.pser)
+        return ps.from_pandas(self.pser)
 
     def test_series_ops(self):
         pser = self.pser
@@ -68,7 +68,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pser = self.pser
         pser.name = ("x", "a")
 
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser, pser)
         self.assert_eq(kser.name, pser.name)
@@ -81,7 +81,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_repr_cache_invalidation(self):
         # If there is any cache, inplace operations should invalidate it.
-        s = pp.range(10)["id"]
+        s = ps.range(10)["id"]
         s.__repr__()
         s.rename("a", inplace=True)
         self.assertEqual(s.__repr__(), s.rename("a").__repr__())
@@ -101,7 +101,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             pd.Series([1, 2, None, 4], dtype="Int32"),
             pd.Series([1, 2, None, 4], dtype="Int64"),
         ]:
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
 
             self._check_extension(kser, pser)
             self._check_extension(kser + F.lit(1).cast("byte"), pser + 1)
@@ -113,13 +113,13 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_extension_object_dtypes(self):
         # string
         pser = pd.Series(["a", None, "c", "d"], dtype="string")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self._check_extension(kser, pser)
 
         # boolean
         pser = pd.Series([True, False, True, None], dtype="boolean")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self._check_extension(kser, pser)
         self._check_extension(kser & kser, pser & pser)
@@ -133,7 +133,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             pd.Series([1.0, 2.0, None, 4.0], dtype="Float32"),
             pd.Series([1.0, 2.0, None, 4.0], dtype="Float64"),
         ]:
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
 
             self._check_extension(kser, pser)
             self._check_extension(kser + 1, pser + 1)
@@ -143,9 +143,9 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pser_a = pd.Series([], dtype="i1")
         pser_b = pd.Series([], dtype="str")
 
-        self.assert_eq(pp.from_pandas(pser_a), pser_a)
+        self.assert_eq(ps.from_pandas(pser_a), pser_a)
 
-        kser_b = pp.from_pandas(pser_b)
+        kser_b = ps.from_pandas(pser_b)
         if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
             self.assert_eq(kser_b, pser_b)
         else:
@@ -153,16 +153,16 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                 self.assert_eq(kser_b, pser_b)
 
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
-            self.assert_eq(pp.from_pandas(pser_a), pser_a)
-            self.assert_eq(pp.from_pandas(pser_b), pser_b)
+            self.assert_eq(ps.from_pandas(pser_a), pser_a)
+            self.assert_eq(ps.from_pandas(pser_b), pser_b)
 
     def test_all_null_series(self):
         pser_a = pd.Series([None, None, None], dtype="float64")
         pser_b = pd.Series([None, None, None], dtype="str")
 
-        self.assert_eq(pp.from_pandas(pser_a), pser_a)
+        self.assert_eq(ps.from_pandas(pser_a), pser_a)
 
-        kser_b = pp.from_pandas(pser_b)
+        kser_b = ps.from_pandas(pser_b)
         if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
             self.assert_eq(kser_b, pser_b)
         else:
@@ -170,8 +170,8 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                 self.assert_eq(kser_b, pser_b)
 
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
-            self.assert_eq(pp.from_pandas(pser_a), pser_a)
-            self.assert_eq(pp.from_pandas(pser_b), pser_b)
+            self.assert_eq(ps.from_pandas(pser_a), pser_a)
+            self.assert_eq(ps.from_pandas(pser_b), pser_b)
 
     def test_head(self):
         kser = self.kser
@@ -188,7 +188,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         index = pd.date_range("2018-04-09", periods=4, freq="2D")
         pser = pd.Series([1, 2, 3, 4], index=index)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.last("1D"), pser.last("1D"))
 
     def test_first(self):
@@ -197,12 +197,12 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         index = pd.date_range("2018-04-09", periods=4, freq="2D")
         pser = pd.Series([1, 2, 3, 4], index=index)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.first("1D"), pser.first("1D"))
 
     def test_rename(self):
         pser = pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         pser.name = "renamed"
         kser.name = "renamed"
@@ -227,12 +227,12 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, expected_error_message):
             kser.name = ["0", "1"]
         with self.assertRaisesRegex(TypeError, expected_error_message):
-            pp.Series([1, 2, 3], name=["0", "1"])
+            ps.Series([1, 2, 3], name=["0", "1"])
 
     def test_rename_method(self):
         # Series name
         pser = pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.rename("y"), pser.rename("y"))
         self.assertEqual(kser.name, "x")  # no mutation
@@ -251,7 +251,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         # Series index
         # pser = pd.Series(['a', 'b', 'c', 'd', 'e', 'f', 'g'], name='x')
-        # kser = pp.from_pandas(s)
+        # kser = ps.from_pandas(s)
 
         # TODO: index
         # res = kser.rename(lambda x: x ** 2)
@@ -271,7 +271,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_rename_axis(self):
         index = pd.Index(["A", "B", "C"], name="index")
         pser = pd.Series([1.0, 2.0, 3.0], index=index, name="name")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(
             pser.rename_axis("index2").sort_index(), kser.rename_axis("index2").sort_index(),
@@ -317,7 +317,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
         )
         pser = pd.Series([1.0, 2.0, 3.0], index=index, name="name")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(
             pser.rename_axis(["index3", "index4"]).sort_index(),
@@ -360,7 +360,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                 "right": [True, False, False, True, True, False, np.nan, np.nan, np.nan],
             }
         )
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         self.assert_eq(kdf["left"] | kdf["right"], pdf["left"] | pdf["right"])
         self.assert_eq(kdf["left"] | True, pdf["left"] | True)
@@ -380,7 +380,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                 "right": [True, False, False, True, True, False, np.nan, np.nan, np.nan],
             }
         ).astype("boolean")
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         self._check_extension(kdf["left"] | kdf["right"], pdf["left"] | pdf["right"])
         self._check_extension(kdf["left"] | True, pdf["left"] | True)
@@ -397,7 +397,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                 "right": [True, False, False, True, True, False, np.nan, np.nan, np.nan],
             }
         )
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         self.assert_eq(kdf["left"] & kdf["right"], pdf["left"] & pdf["right"])
         self.assert_eq(kdf["left"] & True, pdf["left"] & True)
@@ -417,7 +417,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                 "right": [True, False, False, True, True, False, np.nan, np.nan, np.nan],
             }
         ).astype("boolean")
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         self._check_extension(kdf["left"] & kdf["right"], pdf["left"] & pdf["right"])
         self._check_extension(kdf["left"] & True, pdf["left"] & True)
@@ -430,13 +430,13 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_to_numpy(self):
         pser = pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
 
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.to_numpy(), pser.values)
 
     def test_isin(self):
         pser = pd.Series(["lama", "cow", "lama", "beetle", "lama", "hippo"], name="animal")
 
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.isin(["cow", "lama"]), pser.isin(["cow", "lama"]))
         self.assert_eq(kser.isin(np.array(["cow", "lama"])), pser.isin(np.array(["cow", "lama"])))
@@ -448,7 +448,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_drop_duplicates(self):
         pdf = pd.DataFrame({"animal": ["lama", "cow", "lama", "beetle", "lama", "hippo"]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.animal
         kser = kdf.animal
@@ -468,7 +468,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_reindex(self):
         index = ["A", "B", "C", "D", "E"]
         pser = pd.Series([1.0, 2.0, 3.0, 4.0, None], index=index, name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser, kser)
 
@@ -492,13 +492,13 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         data = [1.0, 2.0, None]
         index = pd.Index(["A", "B", "C"], name="index1")
         pser = pd.Series(data=data, index=index, name="name1")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         # Reindexing single Index on single Index
         data2 = [3.0, None, 4.0]
         index2 = pd.Index(["A", "C", "D"], name="index2")
         pser2 = pd.Series(data=data2, index=index2, name="name2")
-        kser2 = pp.from_pandas(pser2)
+        kser2 = ps.from_pandas(pser2)
 
         self.assert_eq(
             pser.reindex_like(pser2).sort_index(), kser.reindex_like(kser2).sort_index(),
@@ -514,7 +514,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [("A", "G"), ("C", "D"), ("I", "J")], names=["index3", "index4"]
         )
         pser2 = pd.Series(data=data2, index=index2, name="name2")
-        kser2 = pp.from_pandas(pser2)
+        kser2 = ps.from_pandas(pser2)
 
         self.assert_eq(
             pser.reindex_like(pser2).sort_index(), kser.reindex_like(kser2).sort_index(),
@@ -528,7 +528,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
         )
         pser = pd.Series(data=data, index=index, name="name1")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(
             pser.reindex_like(pser2).sort_index(), kser.reindex_like(kser2).sort_index(),
@@ -539,7 +539,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [("A", "B"), ("C", "D"), ("E", "F")], names=["name3", "name4"]
         )
         pdf = pd.DataFrame(data=data, index=index2)
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         self.assert_eq(
             pser.reindex_like(pdf).sort_index(), kser.reindex_like(kdf).sort_index(),
@@ -547,7 +547,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_fillna(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6], "y": [np.nan, 2, 3, 4, np.nan, 6]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         kser = kdf.x
@@ -572,7 +572,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kser.head(), pser.head())
 
         pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         pser.loc[3] = np.nan
         kser.loc[3] = np.nan
@@ -583,7 +583,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         # inplace fillna on non-nullable column
         pdf = pd.DataFrame({"a": [1, 2, None], "b": [1, 2, 3]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.b
         kser = kdf.b
@@ -598,7 +598,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_dropna(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         kser = kdf.x
@@ -612,7 +612,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_nunique(self):
         pser = pd.Series([1, 2, 1, np.nan])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         # Assert NaNs are dropped by default
         nunique_result = kser.nunique()
@@ -625,8 +625,8 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(nunique_result, pser.nunique(dropna=False))
 
         # Assert approximate counts
-        self.assertEqual(pp.Series(range(100)).nunique(approx=True), 103)
-        self.assertEqual(pp.Series(range(100)).nunique(approx=True, rsd=0.01), 100)
+        self.assertEqual(ps.Series(range(100)).nunique(approx=True), 103)
+        self.assertEqual(ps.Series(range(100)).nunique(approx=True, rsd=0.01), 100)
 
     def _test_value_counts(self):
         # this is also containing test for Index & MultiIndex
@@ -635,7 +635,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             index=[1, 2, 1, 3, 3, np.nan, 1, 4, 2, np.nan, 3, np.nan, 3, 1, 3],
             name="x",
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         exp = pser.value_counts()
         res = kser.value_counts()
@@ -679,7 +679,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         # Series from DataFrame
         pdf = pd.DataFrame({"a": [2, 2, 3], "b": [None, 1, None]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         self.assert_eq(kdf.a.value_counts(normalize=True), pdf.a.value_counts(normalize=True))
         self.assert_eq(kdf.a.value_counts(ascending=True), pdf.a.value_counts(ascending=True))
@@ -709,7 +709,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         # Series with NaN index
         pser = pd.Series([3, 2, 3, 1, 2, 3], index=[2.0, None, 5.0, 5.0, None, 5.0])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.value_counts(normalize=True), pser.value_counts(normalize=True))
         self.assert_eq(kser.value_counts(ascending=True), pser.value_counts(ascending=True))
@@ -741,7 +741,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pser.index = pd.MultiIndex.from_tuples(
             [("x", "a"), ("x", "b"), ("y", "c"), ("x", "a"), ("y", "c"), ("x", "a")]
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.value_counts(normalize=True), pser.value_counts(normalize=True))
         self.assert_eq(kser.value_counts(ascending=True), pser.value_counts(ascending=True))
@@ -780,7 +780,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pser.index = pd.MultiIndex.from_tuples(
             [("x", "a"), ("x", None), ("y", "c"), ("x", "a"), ("y", "c"), ("x", "a")]
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.value_counts(normalize=True), pser.value_counts(normalize=True))
         self.assert_eq(kser.value_counts(ascending=True), pser.value_counts(ascending=True))
@@ -821,7 +821,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             pser.index = pd.MultiIndex.from_tuples(
                 [("x", "a"), None, ("y", "c"), ("x", "a"), ("y", "c"), ("x", "a")]
             )
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
 
             self.assert_eq(kser.value_counts(normalize=True), pser.value_counts(normalize=True))
             self.assert_eq(kser.value_counts(ascending=True), pser.value_counts(ascending=True))
@@ -862,7 +862,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                 self._test_value_counts()
             self.assertRaises(
                 RuntimeError,
-                lambda: pp.MultiIndex.from_tuples([("x", "a"), ("x", "b")]).value_counts(),
+                lambda: ps.MultiIndex.from_tuples([("x", "a"), ("x", "b")]).value_counts(),
             )
         else:
             self._test_value_counts()
@@ -870,7 +870,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_nsmallest(self):
         sample_lst = [1, 2, 3, 4, np.nan, 6]
         pser = pd.Series(sample_lst, name="x")
-        kser = pp.Series(sample_lst, name="x")
+        kser = ps.Series(sample_lst, name="x")
         self.assert_eq(kser.nsmallest(n=3), pser.nsmallest(n=3))
         self.assert_eq(kser.nsmallest(), pser.nsmallest())
         self.assert_eq((kser + 1).nsmallest(), (pser + 1).nsmallest())
@@ -878,14 +878,14 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_nlargest(self):
         sample_lst = [1, 2, 3, 4, np.nan, 6]
         pser = pd.Series(sample_lst, name="x")
-        kser = pp.Series(sample_lst, name="x")
+        kser = ps.Series(sample_lst, name="x")
         self.assert_eq(kser.nlargest(n=3), pser.nlargest(n=3))
         self.assert_eq(kser.nlargest(), pser.nlargest())
         self.assert_eq((kser + 1).nlargest(), (pser + 1).nlargest())
 
     def test_isnull(self):
         pser = pd.Series([1, 2, 3, 4, np.nan, 6], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.notnull(), pser.notnull())
         self.assert_eq(kser.isnull(), pser.isnull())
@@ -907,11 +907,11 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             pd.Series([], name="x"),
             pd.Series([np.nan], name="x"),
         ]:
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             self.assert_eq(kser.all(), pser.all())
 
         pser = pd.Series([1, 2, 3, 4], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq((kser % 2 == 0).all(), (pser % 2 == 0).all())
 
@@ -931,11 +931,11 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             pd.Series([], name="x"),
             pd.Series([np.nan], name="x"),
         ]:
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             self.assert_eq(kser.any(), pser.any())
 
         pser = pd.Series([1, 2, 3, 4], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq((kser % 2 == 0).any(), (pser % 2 == 0).any())
 
@@ -946,7 +946,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_reset_index(self):
         pdf = pd.DataFrame({"foo": [1, 2, 3, 4]}, index=pd.Index(["a", "b", "c", "d"], name="idx"))
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.foo
         kser = kdf.foo
@@ -963,16 +963,16 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_reset_index_with_default_index_types(self):
         pser = pd.Series([1, 2, 3], name="0", index=np.random.rand(3))
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
-        with pp.option_context("compute.default_index_type", "sequence"):
+        with ps.option_context("compute.default_index_type", "sequence"):
             self.assert_eq(kser.reset_index(), pser.reset_index())
 
-        with pp.option_context("compute.default_index_type", "distributed-sequence"):
+        with ps.option_context("compute.default_index_type", "distributed-sequence"):
             # the order might be changed.
             self.assert_eq(kser.reset_index().sort_index(), pser.reset_index())
 
-        with pp.option_context("compute.default_index_type", "distributed"):
+        with ps.option_context("compute.default_index_type", "distributed"):
             # the index is different.
             self.assert_eq(
                 kser.reset_index().to_pandas().reset_index(drop=True), pser.reset_index()
@@ -991,14 +991,14 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=np.random.rand(9),
         )
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
         check(kdf.index.to_series(), pdf.index.to_series())
         check(kdf.index.to_series(name="a"), pdf.index.to_series(name="a"))
         check(kdf.index.to_series(name=("x", "a")), pdf.index.to_series(name=("x", "a")))
 
     def test_sort_values(self):
         pdf = pd.DataFrame({"x": [1, 2, 3, 4, 5, None, 7]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         kser = kdf.x
@@ -1025,7 +1025,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_sort_index(self):
         pdf = pd.DataFrame({"x": [2, 1, np.nan]}, index=["b", "a", np.nan])
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         kser = kdf.x
@@ -1059,7 +1059,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         # Assert multi-indices
         pser = pd.Series(range(4), index=[["b", "b", "a", "a"], [1, 0, 1, 0]], name="0")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.sort_index(), pser.sort_index())
         self.assert_eq(kser.sort_index(level=[1, 0]), pser.sort_index(level=[1, 0]))
 
@@ -1067,11 +1067,11 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_to_datetime(self):
         pser = pd.Series(["3/11/2000", "3/12/2000", "3/13/2000"] * 100)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(
             pd.to_datetime(pser, infer_datetime_format=True),
-            pp.to_datetime(kser, infer_datetime_format=True),
+            ps.to_datetime(kser, infer_datetime_format=True),
         )
 
     def test_missing(self):
@@ -1124,7 +1124,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_clip(self):
         pser = pd.Series([0, 2, 4], index=np.random.rand(3))
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         # Assert list-like values are not accepted for 'lower' and 'upper'
         msg = "List-like value are not supported for 'lower' and 'upper' at the moment"
@@ -1143,13 +1143,13 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kser.clip(1, 3), pser.clip(1, 3))
 
         # Assert behavior on string values
-        str_kser = pp.Series(["a", "b", "c"])
+        str_kser = ps.Series(["a", "b", "c"])
         self.assert_eq(str_kser.clip(1, 3), str_kser)
 
     def test_compare(self):
         if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             pser = pd.Series([1, 2])
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
 
             res_kdf = kser.compare(kser)
             self.assertTrue(res_kdf.empty)
@@ -1158,39 +1158,39 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             self.assert_eq(pser.compare(pser + 1).sort_index(), kser.compare(kser + 1).sort_index())
 
             pser = pd.Series([1, 2], index=["x", "y"])
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             self.assert_eq(pser.compare(pser + 1).sort_index(), kser.compare(kser + 1).sort_index())
         else:
-            kser = pp.Series([1, 2])
+            kser = ps.Series([1, 2])
             res_kdf = kser.compare(kser)
             self.assertTrue(res_kdf.empty)
             self.assert_eq(res_kdf.columns, pd.Index(["self", "other"]))
-            expected = pp.DataFrame([[1, 2], [2, 3]], columns=["self", "other"])
+            expected = ps.DataFrame([[1, 2], [2, 3]], columns=["self", "other"])
             self.assert_eq(expected, kser.compare(kser + 1).sort_index())
 
-            kser = pp.Series([1, 2], index=["x", "y"])
-            expected = pp.DataFrame([[1, 2], [2, 3]], index=["x", "y"], columns=["self", "other"])
+            kser = ps.Series([1, 2], index=["x", "y"])
+            expected = ps.DataFrame([[1, 2], [2, 3]], index=["x", "y"], columns=["self", "other"])
             self.assert_eq(expected, kser.compare(kser + 1).sort_index())
 
     def test_is_unique(self):
         # We can't use pandas' is_unique for comparison. pandas 0.23 ignores None
         pser = pd.Series([1, 2, 2, None, None])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assertEqual(False, kser.is_unique)
         self.assertEqual(False, (kser + 1).is_unique)
 
         pser = pd.Series([1, None, None])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assertEqual(False, kser.is_unique)
         self.assertEqual(False, (kser + 1).is_unique)
 
         pser = pd.Series([1])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assertEqual(pser.is_unique, kser.is_unique)
         self.assertEqual((pser + 1).is_unique, (kser + 1).is_unique)
 
         pser = pd.Series([1, 1, 1])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assertEqual(pser.is_unique, kser.is_unique)
         self.assertEqual((pser + 1).is_unique, (kser + 1).is_unique)
 
@@ -1201,9 +1201,9 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pser1 = pd.Series([1, 2, 3], name="0")
         pser2 = pd.Series([4, 5, 6], name="0")
         pser3 = pd.Series([4, 5, 6], index=[3, 4, 5], name="0")
-        kser1 = pp.from_pandas(pser1)
-        kser2 = pp.from_pandas(pser2)
-        kser3 = pp.from_pandas(pser3)
+        kser1 = ps.from_pandas(pser1)
+        kser2 = ps.from_pandas(pser2)
+        kser3 = ps.from_pandas(pser3)
 
         self.assert_eq(kser1.append(kser2), pser1.append(pser2))
         self.assert_eq(kser1.append(kser3), pser1.append(pser3))
@@ -1218,7 +1218,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_map(self):
         pser = pd.Series(["cat", "dog", None, "rabbit"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         # Currently Koalas doesn't return NaN as pandas does.
         self.assert_eq(kser.map({}), pser.map({}).replace({pd.np.nan: None}))
 
@@ -1230,12 +1230,12 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             return date + timedelta(days=1)
 
         pser = pd.Series([datetime(2019, 10, 24)])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.map(tomorrow), pser.map(tomorrow))
 
     def test_add_prefix(self):
         pser = pd.Series([1, 2, 3, 4], name="0")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.add_prefix("item_"), kser.add_prefix("item_"))
 
         pser = pd.Series(
@@ -1243,12 +1243,12 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             name="0",
             index=pd.MultiIndex.from_tuples([("A", "X"), ("A", "Y"), ("B", "X")]),
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.add_prefix("item_"), kser.add_prefix("item_"))
 
     def test_add_suffix(self):
         pser = pd.Series([1, 2, 3, 4], name="0")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.add_suffix("_item"), kser.add_suffix("_item"))
 
         pser = pd.Series(
@@ -1256,99 +1256,99 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             name="0",
             index=pd.MultiIndex.from_tuples([("A", "X"), ("A", "Y"), ("B", "X")]),
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.add_suffix("_item"), kser.add_suffix("_item"))
 
     def test_cummin(self):
         pser = pd.Series([1.0, None, 0.0, 4.0, 9.0])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cummin(), kser.cummin())
         self.assert_eq(pser.cummin(skipna=False), kser.cummin(skipna=False))
         self.assert_eq(pser.cummin().sum(), kser.cummin().sum())
 
         # with reversed index
         pser.index = [4, 3, 2, 1, 0]
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cummin(), kser.cummin())
         self.assert_eq(pser.cummin(skipna=False), kser.cummin(skipna=False))
 
     def test_cummax(self):
         pser = pd.Series([1.0, None, 0.0, 4.0, 9.0])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cummax(), kser.cummax())
         self.assert_eq(pser.cummax(skipna=False), kser.cummax(skipna=False))
         self.assert_eq(pser.cummax().sum(), kser.cummax().sum())
 
         # with reversed index
         pser.index = [4, 3, 2, 1, 0]
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cummax(), kser.cummax())
         self.assert_eq(pser.cummax(skipna=False), kser.cummax(skipna=False))
 
     def test_cumsum(self):
         pser = pd.Series([1.0, None, 0.0, 4.0, 9.0])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cumsum(), kser.cumsum())
         self.assert_eq(pser.cumsum(skipna=False), kser.cumsum(skipna=False))
         self.assert_eq(pser.cumsum().sum(), kser.cumsum().sum())
 
         # with reversed index
         pser.index = [4, 3, 2, 1, 0]
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cumsum(), kser.cumsum())
         self.assert_eq(pser.cumsum(skipna=False), kser.cumsum(skipna=False))
 
         # bool
         pser = pd.Series([True, True, False, True])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cumsum().astype(int), kser.cumsum())
         self.assert_eq(pser.cumsum(skipna=False).astype(int), kser.cumsum(skipna=False))
 
     def test_cumprod(self):
         pser = pd.Series([1.0, None, 1.0, 4.0, 9.0])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cumprod(), kser.cumprod())
         self.assert_eq(pser.cumprod(skipna=False), kser.cumprod(skipna=False))
         self.assert_eq(pser.cumprod().sum(), kser.cumprod().sum())
 
         # with integer type
         pser = pd.Series([1, 10, 1, 4, 9])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cumprod(), kser.cumprod())
         self.assert_eq(pser.cumprod(skipna=False), kser.cumprod(skipna=False))
         self.assert_eq(pser.cumprod().sum(), kser.cumprod().sum())
 
         # with reversed index
         pser.index = [4, 3, 2, 1, 0]
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cumprod(), kser.cumprod())
         self.assert_eq(pser.cumprod(skipna=False), kser.cumprod(skipna=False))
 
         # including zero
         pser = pd.Series([1, 2, 0, 3])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cumprod(), kser.cumprod())
         self.assert_eq(pser.cumprod(skipna=False), kser.cumprod(skipna=False))
 
         # including negative values
         pser = pd.Series([1, -1, -2])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cumprod(), kser.cumprod())
         self.assert_eq(pser.cumprod(skipna=False), kser.cumprod(skipna=False))
 
         # bool
         pser = pd.Series([True, True, False, True])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.cumprod(), kser.cumprod())
         self.assert_eq(pser.cumprod(skipna=False).astype(int), kser.cumprod(skipna=False))
 
     def test_median(self):
         with self.assertRaisesRegex(ValueError, "accuracy must be an integer; however"):
-            pp.Series([24.0, 21.0, 25.0, 33.0, 26.0]).median(accuracy="a")
+            ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).median(accuracy="a")
 
     def test_rank(self):
         pser = pd.Series([1, 2, 3, 1], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.rank(), kser.rank().sort_index())
         self.assert_eq(pser.rank().sum(), kser.rank().sum())
         self.assert_eq(pser.rank(ascending=False), kser.rank(ascending=False).sort_index())
@@ -1363,7 +1363,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_round(self):
         pser = pd.Series([0.028208, 0.038683, 0.877076], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.round(2), kser.round(2))
         msg = "decimals must be an integer"
         with self.assertRaisesRegex(ValueError, msg):
@@ -1371,26 +1371,26 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_quantile(self):
         pser = pd.Series([])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.quantile(0.5), pser.quantile(0.5))
         self.assert_eq(kser.quantile([0.25, 0.5, 0.75]), pser.quantile([0.25, 0.5, 0.75]))
 
         with self.assertRaisesRegex(ValueError, "accuracy must be an integer; however"):
-            pp.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(accuracy="a")
+            ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(accuracy="a")
         with self.assertRaisesRegex(ValueError, "q must be a float or an array of floats;"):
-            pp.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q="a")
+            ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q="a")
         with self.assertRaisesRegex(ValueError, "q must be a float or an array of floats;"):
-            pp.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q=["a"])
+            ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q=["a"])
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
-            pp.Series(["a", "b", "c"]).quantile()
+            ps.Series(["a", "b", "c"]).quantile()
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
-            pp.Series(["a", "b", "c"]).quantile([0.25, 0.5, 0.75])
+            ps.Series(["a", "b", "c"]).quantile([0.25, 0.5, 0.75])
 
     def test_idxmax(self):
         pser = pd.Series(data=[1, 4, 5], index=["A", "B", "C"])
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assertEqual(kser.idxmax(), pser.idxmax())
         self.assertEqual(kser.idxmax(skipna=False), pser.idxmax(skipna=False))
@@ -1399,24 +1399,24 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [["a", "a", "b", "b"], ["c", "d", "e", "f"]], names=("first", "second")
         )
         pser = pd.Series(data=[1, 2, 4, 5], index=index)
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assertEqual(kser.idxmax(), pser.idxmax())
         self.assertEqual(kser.idxmax(skipna=False), pser.idxmax(skipna=False))
 
-        kser = pp.Series([])
+        kser = ps.Series([])
         with self.assertRaisesRegex(ValueError, "an empty sequence"):
             kser.idxmax()
 
         pser = pd.Series([1, 100, None, 100, 1, 100], index=[10, 3, 5, 2, 1, 8])
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assertEqual(kser.idxmax(), pser.idxmax())
         self.assertEqual(repr(kser.idxmax(skipna=False)), repr(pser.idxmax(skipna=False)))
 
     def test_idxmin(self):
         pser = pd.Series(data=[1, 4, 5], index=["A", "B", "C"])
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assertEqual(kser.idxmin(), pser.idxmin())
         self.assertEqual(kser.idxmin(skipna=False), pser.idxmin(skipna=False))
@@ -1425,24 +1425,24 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [["a", "a", "b", "b"], ["c", "d", "e", "f"]], names=("first", "second")
         )
         pser = pd.Series(data=[1, 2, 4, 5], index=index)
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assertEqual(kser.idxmin(), pser.idxmin())
         self.assertEqual(kser.idxmin(skipna=False), pser.idxmin(skipna=False))
 
-        kser = pp.Series([])
+        kser = ps.Series([])
         with self.assertRaisesRegex(ValueError, "an empty sequence"):
             kser.idxmin()
 
         pser = pd.Series([1, 100, None, 100, 1, 100], index=[10, 3, 5, 2, 1, 8])
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assertEqual(kser.idxmin(), pser.idxmin())
         self.assertEqual(repr(kser.idxmin(skipna=False)), repr(pser.idxmin(skipna=False)))
 
     def test_shift(self):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser.shift(2), pser.shift(2))
         self.assert_eq(kser.shift().shift(-1), pser.shift().shift(-1))
@@ -1457,14 +1457,14 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_diff(self):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser.diff(2), pser.diff(2))
         self.assert_eq(kser.diff().diff(-1), pser.diff().diff(-1))
         self.assert_eq(kser.diff().sum(), pser.diff().sum())
 
     def _test_numeric_astype(self, pser):
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser.astype(int), pser.astype(int))
         self.assert_eq(kser.astype(np.int), pser.astype(np.int))
@@ -1546,13 +1546,13 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             self._test_numeric_astype(pser)
 
         pser = pd.Series([10, 20, 15, 30, 45, None, np.nan], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser.astype(bool), pser.astype(bool))
         self.assert_eq(kser.astype(str), pser.astype(str))
 
         pser = pd.Series(["hi", "hi ", " ", " \t", "", None], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser.astype(bool), pser.astype(bool))
         if LooseVersion("1.1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.1.4"):
@@ -1569,7 +1569,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             self._check_extension(kser.astype(StringDtype()), pser.astype(StringDtype()))
 
         pser = pd.Series([True, False, None], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser.astype(bool), pser.astype(bool))
         self.assert_eq(kser.astype(str), pser.astype(str))
@@ -1594,7 +1594,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                 )
 
         pser = pd.Series(["2020-10-27 00:00:01", None], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser.astype(np.datetime64), pser.astype(np.datetime64))
         self.assert_eq(kser.astype("datetime64[ns]"), pser.astype("datetime64[ns]"))
@@ -1617,7 +1617,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_aggregate(self):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
         msg = "func must be a string or list of strings"
         with self.assertRaisesRegex(ValueError, msg):
             kser.aggregate({"x": ["min", "max"]})
@@ -1629,7 +1629,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_drop(self):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser.drop(1), pser.drop(1))
         self.assert_eq(kser.drop([1, 4]), pser.drop([1, 4]))
@@ -1645,7 +1645,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
         pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.drop("lama"), pser.drop("lama"))
         self.assert_eq(kser.drop(labels="weight", level=1), pser.drop(labels="weight", level=1))
@@ -1682,7 +1682,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
         pdf = pd.DataFrame({"x": [45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3]}, index=midx)
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         kser = kdf.x
@@ -1697,7 +1697,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_replace(self):
         pser = pd.Series([10, 20, 15, 30, np.nan], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser.replace(), pser.replace())
         self.assert_eq(kser.replace({}), pser.replace({}))
@@ -1710,7 +1710,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         msg = "'to_replace' should be one of str, list, tuple, dict, int, float"
         with self.assertRaisesRegex(ValueError, msg):
-            kser.replace(pp.range(5))
+            kser.replace(ps.range(5))
         msg = "Replacement lists must match in length. Expecting 3 got 2"
         with self.assertRaisesRegex(ValueError, msg):
             kser.replace([10, 20, 30], [1, 2])
@@ -1724,7 +1724,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
         pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.xs(("a", "lama", "speed")), pser.xs(("a", "lama", "speed")))
 
@@ -1739,7 +1739,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         for (msg, pser), keep in product(psers.items(), keeps):
             with self.subTest(msg, keep=keep):
-                kser = pp.Series(pser)
+                kser = ps.Series(pser)
 
                 self.assert_eq(
                     pser.drop_duplicates(keep=keep).sort_values(),
@@ -1748,7 +1748,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_update(self):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         msg = "'other' must be a Series"
         with self.assertRaisesRegex(ValueError, msg):
@@ -1756,21 +1756,21 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_where(self):
         pser1 = pd.Series([0, 1, 2, 3, 4])
-        kser1 = pp.from_pandas(pser1)
+        kser1 = ps.from_pandas(pser1)
 
         self.assert_eq(pser1.where(pser1 > 3), kser1.where(kser1 > 3).sort_index())
 
     def test_mask(self):
         pser1 = pd.Series([0, 1, 2, 3, 4])
-        kser1 = pp.from_pandas(pser1)
+        kser1 = ps.from_pandas(pser1)
 
         self.assert_eq(pser1.mask(pser1 > 3), kser1.mask(kser1 > 3).sort_index())
 
     def test_truncate(self):
         pser1 = pd.Series([10, 20, 30, 40, 50, 60, 70], index=[1, 2, 3, 4, 5, 6, 7])
-        kser1 = pp.Series(pser1)
+        kser1 = ps.Series(pser1)
         pser2 = pd.Series([10, 20, 30, 40, 50, 60, 70], index=[7, 6, 5, 4, 3, 2, 1])
-        kser2 = pp.Series(pser2)
+        kser2 = ps.Series(pser2)
 
         self.assert_eq(kser1.truncate(), pser1.truncate())
         self.assert_eq(kser1.truncate(before=2), pser1.truncate(before=2))
@@ -1782,23 +1782,23 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             self.assert_eq(kser2.truncate(4, 6), pser2.truncate(4, 6))
             self.assert_eq(kser2.truncate(4, 6, copy=False), pser2.truncate(4, 6, copy=False))
         else:
-            expected_kser = pp.Series([20, 30, 40], index=[6, 5, 4])
+            expected_kser = ps.Series([20, 30, 40], index=[6, 5, 4])
             self.assert_eq(kser2.truncate(4, 6), expected_kser)
             self.assert_eq(kser2.truncate(4, 6, copy=False), expected_kser)
 
-        kser = pp.Series([10, 20, 30, 40, 50, 60, 70], index=[1, 2, 3, 4, 3, 2, 1])
+        kser = ps.Series([10, 20, 30, 40, 50, 60, 70], index=[1, 2, 3, 4, 3, 2, 1])
         msg = "truncate requires a sorted index"
         with self.assertRaisesRegex(ValueError, msg):
             kser.truncate()
 
-        kser = pp.Series([10, 20, 30, 40, 50, 60, 70], index=[1, 2, 3, 4, 5, 6, 7])
+        kser = ps.Series([10, 20, 30, 40, 50, 60, 70], index=[1, 2, 3, 4, 5, 6, 7])
         msg = "Truncate: 2 must be after 5"
         with self.assertRaisesRegex(ValueError, msg):
             kser.truncate(5, 2)
 
     def test_getitem(self):
         pser = pd.Series([10, 20, 15, 30, 45], ["A", "A", "B", "C", "D"])
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser["A"], pser["A"])
         self.assert_eq(kser["B"], pser["B"])
@@ -1810,7 +1810,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [[0, 0, 0, 0, 0, 0, 1, 1, 1], [0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 0, 0, 0, 1, 2, 0, 1, 2]],
         )
         pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], name="0", index=midx)
-        kser = pp.Series(pser)
+        kser = ps.Series(pser)
 
         self.assert_eq(kser["a"], pser["a"])
         self.assert_eq(kser["a", "lama"], pser["a", "lama"])
@@ -1826,7 +1826,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
         pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.keys(), pser.keys())
 
@@ -1834,7 +1834,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         # to check setting name of Index properly.
         idx = pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9])
         pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=idx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         kser.name = "koalas"
         pser.name = "koalas"
@@ -1847,7 +1847,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_pct_change(self):
         pser = pd.Series([90, 91, 85], index=[2, 4, 1])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.pct_change(), pser.pct_change(), check_exact=False)
         self.assert_eq(kser.pct_change().sum(), pser.pct_change().sum(), almost=True)
@@ -1862,7 +1862,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
         pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.pct_change(), pser.pct_change(), check_exact=False)
         self.assert_eq(kser.pct_change().sum(), pser.pct_change().sum(), almost=True)
@@ -1873,7 +1873,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_axes(self):
         pser = pd.Series([90, 91, 85], index=[2, 4, 1])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.axes, pser.axes)
 
         # for MultiIndex
@@ -1882,7 +1882,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
         pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.axes, pser.axes)
 
     def test_udt(self):
@@ -1892,15 +1892,15 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
             with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
-                kser = pp.from_pandas(pser)
+                kser = ps.from_pandas(pser)
                 self.assert_eq(kser, pser)
         else:
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             self.assert_eq(kser, pser)
 
     def test_repeat(self):
         pser = pd.Series(["a", "b", "c"], name="0", index=np.random.rand(3))
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.repeat(3).sort_index(), pser.repeat(3).sort_index())
         self.assert_eq(kser.repeat(0).sort_index(), pser.repeat(0).sort_index())
@@ -1909,7 +1909,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         self.assertRaises(ValueError, lambda: kser.repeat("abc"))
 
         pdf = pd.DataFrame({"a": ["a", "b", "c"], "rep": [10, 20, 30]}, index=np.random.rand(3))
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
             self.assertRaises(ValueError, lambda: kdf.a.repeat(kdf.rep))
@@ -1918,7 +1918,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_take(self):
         pser = pd.Series([100, 200, 300, 400, 500], name="Koalas")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.take([0, 2, 4]).sort_values(), pser.take([0, 2, 4]).sort_values())
         self.assert_eq(
@@ -1937,7 +1937,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_divmod(self):
         pser = pd.Series([100, None, 300, None, 500], name="Koalas")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
             kdiv, kmod = kser.divmod(-100)
@@ -1962,7 +1962,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_rdivmod(self):
         pser = pd.Series([100, None, 300, None, 500])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
             krdiv, krmod = kser.rdivmod(-100)
@@ -1987,19 +1987,19 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_mod(self):
         pser = pd.Series([100, None, -300, None, 500, -700], name="Koalas")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.mod(-150), pser.mod(-150))
         self.assert_eq(kser.mod(0), pser.mod(0))
         self.assert_eq(kser.mod(150), pser.mod(150))
 
         pdf = pd.DataFrame({"a": [100, None, -300, None, 500, -700], "b": [150] * 6})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
         self.assert_eq(kdf.a.mod(kdf.b), pdf.a.mod(pdf.b))
 
     def test_mode(self):
         pser = pd.Series([0, 0, 1, 1, 1, np.nan, np.nan, np.nan])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.mode(), pser.mode())
         if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
             # The `dropna` argument is added in pandas 0.24.
@@ -2009,7 +2009,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             )
 
         pser.name = "x"
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.mode(), pser.mode())
         if LooseVersion(pd.__version__) >= LooseVersion("0.24"):
             # The `dropna` argument is added in pandas 0.24.
@@ -2020,19 +2020,19 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_rmod(self):
         pser = pd.Series([100, None, -300, None, 500, -700], name="Koalas")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.rmod(-150), pser.rmod(-150))
         self.assert_eq(kser.rmod(0), pser.rmod(0))
         self.assert_eq(kser.rmod(150), pser.rmod(150))
 
         pdf = pd.DataFrame({"a": [100, None, -300, None, 500, -700], "b": [150] * 6})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
         self.assert_eq(kdf.a.rmod(kdf.b), pdf.a.rmod(pdf.b))
 
     def test_asof(self):
         pser = pd.Series([1, 2, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.asof(20), pser.asof(20))
         self.assert_eq(kser.asof([5, 20]).sort_index(), pser.asof([5, 20]).sort_index())
@@ -2041,22 +2041,22 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kser.asof([-100, 100]).sort_index(), pser.asof([-100, 100]).sort_index())
 
         # where cannot be an Index, Series or a DataFrame
-        self.assertRaises(ValueError, lambda: kser.asof(pp.Index([-100, 100])))
-        self.assertRaises(ValueError, lambda: kser.asof(pp.Series([-100, 100])))
-        self.assertRaises(ValueError, lambda: kser.asof(pp.DataFrame({"A": [1, 2, 3]})))
+        self.assertRaises(ValueError, lambda: kser.asof(ps.Index([-100, 100])))
+        self.assertRaises(ValueError, lambda: kser.asof(ps.Series([-100, 100])))
+        self.assertRaises(ValueError, lambda: kser.asof(ps.DataFrame({"A": [1, 2, 3]})))
         # asof is not supported for a MultiIndex
         pser.index = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "c"), ("y", "d")])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assertRaises(ValueError, lambda: kser.asof(20))
         # asof requires a sorted index (More precisely, should be a monotonic increasing)
-        kser = pp.Series([1, 2, np.nan, 4], index=[10, 30, 20, 40], name="Koalas")
+        kser = ps.Series([1, 2, np.nan, 4], index=[10, 30, 20, 40], name="Koalas")
         self.assertRaises(ValueError, lambda: kser.asof(20))
-        kser = pp.Series([1, 2, np.nan, 4], index=[40, 30, 20, 10], name="Koalas")
+        kser = ps.Series([1, 2, np.nan, 4], index=[40, 30, 20, 10], name="Koalas")
         self.assertRaises(ValueError, lambda: kser.asof(20))
 
         pidx = pd.DatetimeIndex(["2013-12-31", "2014-01-02", "2014-01-03"])
         pser = pd.Series([1, 2, np.nan], index=pidx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.asof("2014-01-01"), pser.asof("2014-01-01"))
         self.assert_eq(kser.asof("2014-01-02"), pser.asof("2014-01-02"))
@@ -2065,24 +2065,24 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_squeeze(self):
         # Single value
         pser = pd.Series([90])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.squeeze(), pser.squeeze())
 
         # Single value with MultiIndex
         midx = pd.MultiIndex.from_tuples([("a", "b", "c")])
         pser = pd.Series([90], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.squeeze(), pser.squeeze())
 
         # Multiple values
         pser = pd.Series([90, 91, 85])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.squeeze(), pser.squeeze())
 
         # Multiple values with MultiIndex
         midx = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
         pser = pd.Series([90, 91, 85], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(kser.squeeze(), pser.squeeze())
 
     def test_swaplevel(self):
@@ -2090,7 +2090,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"]]
         pidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
         pser = pd.Series(["a", "b", "c", "d"], index=pidx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.swaplevel(), kser.swaplevel())
         self.assert_eq(pser.swaplevel(0, 1), kser.swaplevel(0, 1))
         self.assert_eq(pser.swaplevel(1, 1), kser.swaplevel(1, 1))
@@ -2100,7 +2100,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         arrays = [[1, 1, 2, 2], ["red", "blue", "red", "blue"], ["l", "m", "s", "xs"]]
         pidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color", "size"))
         pser = pd.Series(["a", "b", "c", "d"], index=pidx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.swaplevel(), kser.swaplevel())
         self.assert_eq(pser.swaplevel(0, 1), kser.swaplevel(0, 1))
         self.assert_eq(pser.swaplevel(0, 2), kser.swaplevel(0, 2))
@@ -2112,14 +2112,14 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(pser.swaplevel("color", "size"), kser.swaplevel("color", "size"))
 
         # Error conditions
-        self.assertRaises(AssertionError, lambda: pp.Series([1, 2]).swaplevel())
+        self.assertRaises(AssertionError, lambda: ps.Series([1, 2]).swaplevel())
         self.assertRaises(IndexError, lambda: kser.swaplevel(0, 9))
         self.assertRaises(KeyError, lambda: kser.swaplevel("not_number", "color"))
         self.assertRaises(AssertionError, lambda: kser.swaplevel(copy=False))
 
     def test_swapaxes(self):
         pser = pd.Series([1, 2, 3], index=["x", "y", "z"], name="ser")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(kser.swapaxes(0, 0), pser.swapaxes(0, 0))
         self.assert_eq(kser.swapaxes("index", "index"), pser.swapaxes("index", "index"))
@@ -2131,7 +2131,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_div_zero_and_nan(self):
         pser = pd.Series([100, None, -300, None, 500, -700, np.inf, -np.inf], name="Koalas")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.div(0), kser.div(0))
         self.assert_eq(pser.truediv(0), kser.truediv(0))
@@ -2154,12 +2154,12 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_mad(self):
         pser = pd.Series([1, 2, 3, 4], name="Koalas")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.mad(), kser.mad())
 
         pser = pd.Series([None, -2, 5, 10, 50, np.nan, -20], name="Koalas")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.mad(), kser.mad())
 
@@ -2168,7 +2168,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         )
         pser = pd.Series([1, 2, 3, 4, 5], name="Koalas")
         pser.index = pmidx
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.mad(), kser.mad())
 
@@ -2177,40 +2177,40 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         )
         pser = pd.Series([None, -2, 5, 50, np.nan], name="Koalas")
         pser.index = pmidx
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.mad(), kser.mad())
 
     def test_to_frame(self):
         pser = pd.Series(["a", "b", "c"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.to_frame(name="a"), kser.to_frame(name="a"))
 
         # for MultiIndex
         midx = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
         pser = pd.Series(["a", "b", "c"], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.to_frame(name="a"), kser.to_frame(name="a"))
 
     def test_shape(self):
         pser = pd.Series(["a", "b", "c"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.shape, kser.shape)
 
         # for MultiIndex
         midx = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
         pser = pd.Series(["a", "b", "c"], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.shape, kser.shape)
 
     @unittest.skipIf(not have_tabulate, "tabulate not installed")
     def test_to_markdown(self):
         pser = pd.Series(["elk", "pig", "dog", "quetzal"], name="animal")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         # `to_markdown()` is supported in pandas >= 1.0.0 since it's newly added in pandas 1.0.0.
         if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
@@ -2226,7 +2226,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                 names=["A", "B", "C"],
             ),
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         levels = [-3, -2, -1, 0, 1, 2]
         for level in levels:
@@ -2240,7 +2240,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pser = pd.Series(
             list("abcd"), index=pd.MultiIndex.from_product([["one", "two"], ["a", "b"]])
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         levels = [-2, -1, 0, 1]
         for level in levels:
@@ -2254,16 +2254,16 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         self.assertRaises(IndexError, lambda: kser.unstack(level=3))
         self.assertRaises(IndexError, lambda: kser.unstack(level=-4))
         # Only support for MultiIndex
-        kser = pp.Series([10, -2, 4, 7])
+        kser = ps.Series([10, -2, 4, 7])
         self.assertRaises(ValueError, lambda: kser.unstack())
 
     def test_item(self):
-        kser = pp.Series([10, 20])
+        kser = ps.Series([10, 20])
         self.assertRaises(ValueError, lambda: kser.item())
 
     def test_filter(self):
         pser = pd.Series([0, 1, 2], index=["one", "two", "three"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.filter(items=["one", "three"]), kser.filter(items=["one", "three"]))
         self.assert_eq(pser.filter(regex="e$"), kser.filter(regex="e$"))
@@ -2275,7 +2275,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         # for MultiIndex
         midx = pd.MultiIndex.from_tuples([("one", "x"), ("two", "y"), ("three", "z")])
         pser = pd.Series([0, 1, 2], index=midx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(
             pser.filter(items=[("one", "x"), ("three", "z")]),
@@ -2290,14 +2290,14 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_abs(self):
         pser = pd.Series([-2, -1, 0, 1])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(abs(kser), abs(pser))
         self.assert_eq(np.abs(kser), np.abs(pser))
 
     def test_bfill(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6], "y": [np.nan, 2, 3, 4, np.nan, 6]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         kser = kdf.x
@@ -2313,7 +2313,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_ffill(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6], "y": [np.nan, 2, 3, 4, np.nan, 6]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         kser = kdf.x
@@ -2329,7 +2329,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_iteritems(self):
         pser = pd.Series(["A", "B", "C"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         for (p_name, p_items), (k_name, k_items) in zip(pser.iteritems(), kser.iteritems()):
             self.assert_eq(p_name, k_name)
@@ -2345,7 +2345,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
                     names=["level_1", "level_2", "level_3"],
                 ),
             )
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
 
             self.assert_eq(pser.droplevel(0), kser.droplevel(0))
             self.assert_eq(pser.droplevel("level_1"), kser.droplevel("level_1"))
@@ -2391,7 +2391,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
             # Tupled names
             pser.index.names = [("a", "1"), ("b", "2"), ("c", "3")]
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
 
             self.assert_eq(
                 pser.droplevel([("a", "1"), ("c", "3")]), kser.droplevel([("a", "1"), ("c", "3")])
@@ -2399,7 +2399,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_dot(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         self.assert_eq((kdf["b"] * 10).dot(kdf["a"]), (pdf["b"] * 10).dot(pdf["a"]))
         self.assert_eq((kdf["b"] * 10).dot(kdf), (pdf["b"] * 10).dot(pdf))
@@ -2411,7 +2411,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     )
     def test_tail(self):
         pser = pd.Series(range(1000), name="Koalas")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.tail(), kser.tail())
         self.assert_eq(pser.tail(10), kser.tail(10))
@@ -2430,80 +2430,80 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_product(self):
         pser = pd.Series([10, 20, 30, 40, 50])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(), kser.prod())
 
         # Containing NA values
         pser = pd.Series([10, np.nan, 30, np.nan, 50])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(), kser.prod(), almost=True)
 
         # All-NA values
         pser = pd.Series([np.nan, np.nan, np.nan])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(), kser.prod())
 
         # Empty Series
         pser = pd.Series([])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(), kser.prod())
 
         # Boolean Series
         pser = pd.Series([True, True, True])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(), kser.prod())
 
         pser = pd.Series([False, False, False])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(), kser.prod())
 
         pser = pd.Series([True, False, True])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(), kser.prod())
 
         # With `min_count` parameter
         pser = pd.Series([10, 20, 30, 40, 50])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(min_count=5), kser.prod(min_count=5))
         self.assert_eq(pser.prod(min_count=6), kser.prod(min_count=6))
 
         pser = pd.Series([10, np.nan, 30, np.nan, 50])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(min_count=3), kser.prod(min_count=3), almost=True)
         self.assert_eq(pser.prod(min_count=4), kser.prod(min_count=4))
 
         pser = pd.Series([np.nan, np.nan, np.nan])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(min_count=1), kser.prod(min_count=1))
 
         pser = pd.Series([])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.prod(min_count=1), kser.prod(min_count=1))
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
-            pp.Series(["a", "b", "c"]).prod()
+            ps.Series(["a", "b", "c"]).prod()
         with self.assertRaisesRegex(
             TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp\\) to numeric"
         ):
-            pp.Series([pd.Timestamp("2016-01-01") for _ in range(3)]).prod()
+            ps.Series([pd.Timestamp("2016-01-01") for _ in range(3)]).prod()
 
     def test_hasnans(self):
         # BooleanType
         pser = pd.Series([True, False, True, True])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, kser.hasnans)
 
         pser = pd.Series([True, False, np.nan, True])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, kser.hasnans)
 
         # TimestampType
         pser = pd.Series([pd.Timestamp("2020-07-30") for _ in range(3)])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, kser.hasnans)
 
         pser = pd.Series([pd.Timestamp("2020-07-30"), np.nan, pd.Timestamp("2020-07-30")])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, kser.hasnans)
 
     @unittest.skipIf(
@@ -2512,7 +2512,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     )
     def test_last_valid_index(self):
         pser = pd.Series([250, 1.5, 320, 1, 0.3, None, None, None, None])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.last_valid_index(), kser.last_valid_index())
 
         # MultiIndex columns
@@ -2521,37 +2521,37 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
         pser.index = midx
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.last_valid_index(), kser.last_valid_index())
 
         # Empty Series
         pser = pd.Series([])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.last_valid_index(), kser.last_valid_index())
 
     def test_first_valid_index(self):
         # Empty Series
         pser = pd.Series([])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.first_valid_index(), kser.first_valid_index())
 
     def test_factorize(self):
         pser = pd.Series(["a", "b", "a", "b"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         pcodes, puniques = pser.factorize(sort=True)
         kcodes, kuniques = kser.factorize()
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
         pser = pd.Series([5, 1, 5, 1])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         pcodes, puniques = (pser + 1).factorize(sort=True)
         kcodes, kuniques = (kser + 1).factorize()
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
         pser = pd.Series(["a", "b", "a", "b"], name="ser", index=["w", "x", "y", "z"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         pcodes, puniques = pser.factorize(sort=True)
         kcodes, kuniques = kser.factorize()
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
@@ -2560,7 +2560,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pser = pd.Series(
             ["a", "b", "a", "b"], index=pd.MultiIndex.from_arrays([[4, 3, 2, 1], [1, 2, 3, 4]])
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         pcodes, puniques = pser.factorize(sort=True)
         kcodes, kuniques = kser.factorize()
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
@@ -2570,28 +2570,28 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         # Deals with None and np.nan
         #
         pser = pd.Series(["a", "b", "a", np.nan])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         pcodes, puniques = pser.factorize(sort=True)
         kcodes, kuniques = kser.factorize()
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
         pser = pd.Series([1, None, 3, 2, 1])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         pcodes, puniques = pser.factorize(sort=True)
         kcodes, kuniques = kser.factorize()
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
         pser = pd.Series(["a", None, "a"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         pcodes, puniques = pser.factorize(sort=True)
         kcodes, kuniques = kser.factorize()
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
         pser = pd.Series([None, np.nan])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         pcodes, puniques = pser.factorize()
         kcodes, kuniques = kser.factorize()
         self.assert_eq(pcodes, kcodes.to_list())
@@ -2599,7 +2599,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(pd.Index([]), kuniques)
 
         pser = pd.Series([np.nan, np.nan])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         pcodes, puniques = pser.factorize()
         kcodes, kuniques = kser.factorize()
         self.assert_eq(pcodes, kcodes.to_list())
@@ -2616,7 +2616,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pd_below_0_24 = LooseVersion(pd.__version__) < LooseVersion("0.24")
 
         pser = pd.Series(["a", "b", "a", np.nan, None])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         pcodes, puniques = pser.factorize(sort=True, na_sentinel=-2)
         kcodes, kuniques = kser.factorize(na_sentinel=-2)
@@ -2633,9 +2633,9 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             kcodes, kuniques = kser.factorize(na_sentinel=None)
             self.assert_eq(pcodes.tolist(), kcodes.to_list())
             # puniques is Index(['a', 'b', nan], dtype='object')
-            self.assert_eq(pp.Index(["a", "b", None]), kuniques)
+            self.assert_eq(ps.Index(["a", "b", None]), kuniques)
 
-            kser = pp.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
+            kser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
             kser.loc[3] = np.nan  # Spark takes np.nan as NaN
             kcodes, kuniques = kser.factorize(na_sentinel=None)
             pcodes, puniques = kser.to_pandas().factorize(sort=True, na_sentinel=None)
@@ -2644,7 +2644,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_pad(self):
         pser = pd.Series([np.nan, 2, 3, 4, np.nan, 6], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             self.assert_eq(pser.pad(), kser.pad())
@@ -2654,7 +2654,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             kser.pad(inplace=True)
             self.assert_eq(pser, kser)
         else:
-            expected = pp.Series([np.nan, 2, 3, 4, 4, 6], name="x")
+            expected = ps.Series([np.nan, 2, 3, 4, 4, 6], name="x")
             self.assert_eq(expected, kser.pad())
 
             # Test `inplace=True`
@@ -2664,27 +2664,27 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_explode(self):
         if LooseVersion(pd.__version__) >= LooseVersion("0.25"):
             pser = pd.Series([[1, 2, 3], [], None, [3, 4]])
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             self.assert_eq(pser.explode(), kser.explode(), almost=True)
 
             # MultiIndex
             pser.index = pd.MultiIndex.from_tuples([("a", "w"), ("b", "x"), ("c", "y"), ("d", "z")])
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             self.assert_eq(pser.explode(), kser.explode(), almost=True)
 
             # non-array type Series
             pser = pd.Series([1, 2, 3, 4])
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             self.assert_eq(pser.explode(), kser.explode())
         else:
             pser = pd.Series([[1, 2, 3], [], None, [3, 4]])
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             expected = pd.Series([1.0, 2.0, 3.0, None, None, 3.0, 4.0], index=[0, 0, 0, 1, 2, 3, 3])
             self.assert_eq(kser.explode(), expected)
 
             # MultiIndex
             pser.index = pd.MultiIndex.from_tuples([("a", "w"), ("b", "x"), ("c", "y"), ("d", "z")])
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             expected = pd.Series(
                 [1.0, 2.0, 3.0, None, None, 3.0, 4.0],
                 index=pd.MultiIndex.from_tuples(
@@ -2703,14 +2703,14 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
             # non-array type Series
             pser = pd.Series([1, 2, 3, 4])
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             expected = pser
             self.assert_eq(kser.explode(), expected)
 
     def test_argsort(self):
         # Without null values
         pser = pd.Series([0, -100, 50, 100, 20], index=["A", "B", "C", "D", "E"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.argsort().sort_index(), kser.argsort().sort_index())
         self.assert_eq((-pser).argsort().sort_index(), (-kser).argsort().sort_index())
 
@@ -2718,19 +2718,19 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pser.index = pd.MultiIndex.from_tuples(
             [("a", "v"), ("b", "w"), ("c", "x"), ("d", "y"), ("e", "z")]
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.argsort().sort_index(), kser.argsort().sort_index())
         self.assert_eq((-pser).argsort().sort_index(), (-kser).argsort().sort_index())
 
         # With name
         pser.name = "Koalas"
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.argsort().sort_index(), kser.argsort().sort_index())
         self.assert_eq((-pser).argsort().sort_index(), (-kser).argsort().sort_index())
 
         # Series from Index
         pidx = pd.Index([4.0, -6.0, 2.0, -100.0, 11.0, 20.0, 1.0, -99.0])
-        kidx = pp.from_pandas(pidx)
+        kidx = ps.from_pandas(pidx)
         self.assert_eq(
             pidx.to_series().argsort().sort_index(), kidx.to_series().argsort().sort_index()
         )
@@ -2740,7 +2740,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         # Series from Index with name
         pidx.name = "Koalas"
-        kidx = pp.from_pandas(pidx)
+        kidx = ps.from_pandas(pidx)
         self.assert_eq(
             pidx.to_series().argsort().sort_index(), kidx.to_series().argsort().sort_index()
         )
@@ -2750,13 +2750,13 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         # Series from DataFrame
         pdf = pd.DataFrame({"A": [4.0, -6.0, 2.0, np.nan, -100.0, 11.0, 20.0, np.nan, 1.0, -99.0]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.A.argsort().sort_index(), kdf.A.argsort().sort_index())
         self.assert_eq((-pdf.A).argsort().sort_index(), (-kdf.A).argsort().sort_index())
 
         # With null values
         pser = pd.Series([0, -100, np.nan, 100, np.nan], index=["A", "B", "C", "D", "E"])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.argsort().sort_index(), kser.argsort().sort_index())
         self.assert_eq((-pser).argsort().sort_index(), (-kser).argsort().sort_index())
 
@@ -2764,19 +2764,19 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         pser.index = pd.MultiIndex.from_tuples(
             [("a", "v"), ("b", "w"), ("c", "x"), ("d", "y"), ("e", "z")]
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.argsort().sort_index(), kser.argsort().sort_index())
         self.assert_eq((-pser).argsort().sort_index(), (-kser).argsort().sort_index())
 
         # With name with null values
         pser.name = "Koalas"
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(pser.argsort().sort_index(), kser.argsort().sort_index())
         self.assert_eq((-pser).argsort().sort_index(), (-kser).argsort().sort_index())
 
         # Series from Index with null values
         pidx = pd.Index([4.0, -6.0, 2.0, np.nan, -100.0, 11.0, 20.0, np.nan, 1.0, -99.0])
-        kidx = pp.from_pandas(pidx)
+        kidx = ps.from_pandas(pidx)
         self.assert_eq(
             pidx.to_series().argsort().sort_index(), kidx.to_series().argsort().sort_index()
         )
@@ -2786,7 +2786,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         # Series from Index with name with null values
         pidx.name = "Koalas"
-        kidx = pp.from_pandas(pidx)
+        kidx = ps.from_pandas(pidx)
         self.assert_eq(
             pidx.to_series().argsort().sort_index(), kidx.to_series().argsort().sort_index()
         )
@@ -2796,7 +2796,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         # Series from DataFrame with null values
         pdf = pd.DataFrame({"A": [4.0, -6.0, 2.0, np.nan, -100.0, 11.0, 20.0, np.nan, 1.0, -99.0]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.A.argsort().sort_index(), kdf.A.argsort().sort_index())
         self.assert_eq((-pdf.A).argsort().sort_index(), (-kdf.A).argsort().sort_index())
 
@@ -2812,7 +2812,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             },
             name="Koalas",
         )
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.0"):
             self.assert_eq(pser.argmin(), kser.argmin())
@@ -2822,13 +2822,13 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             pser.index = pd.MultiIndex.from_tuples(
                 [("a", "t"), ("b", "u"), ("c", "v"), ("d", "w"), ("e", "x"), ("f", "u")]
             )
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             self.assert_eq(pser.argmin(), kser.argmin())
             self.assert_eq(pser.argmax(), kser.argmax())
 
             # Null Series
-            self.assert_eq(pd.Series([np.nan]).argmin(), pp.Series([np.nan]).argmin())
-            self.assert_eq(pd.Series([np.nan]).argmax(), pp.Series([np.nan]).argmax())
+            self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
+            self.assert_eq(pd.Series([np.nan]).argmax(), ps.Series([np.nan]).argmax())
         else:
             self.assert_eq(pser.values.argmin(), kser.argmin())
             self.assert_eq(pser.values.argmax(), kser.argmax())
@@ -2837,22 +2837,22 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             pser.index = pd.MultiIndex.from_tuples(
                 [("a", "t"), ("b", "u"), ("c", "v"), ("d", "w"), ("e", "x"), ("f", "u")]
             )
-            kser = pp.from_pandas(pser)
+            kser = ps.from_pandas(pser)
             self.assert_eq(pser.values.argmin(), kser.argmin())
             self.assert_eq(pser.values.argmax(), kser.argmax())
 
             # Null Series
-            self.assert_eq(-1, pp.Series([np.nan]).argmin())
-            self.assert_eq(-1, pp.Series([np.nan]).argmax())
+            self.assert_eq(-1, ps.Series([np.nan]).argmin())
+            self.assert_eq(-1, ps.Series([np.nan]).argmax())
 
         with self.assertRaisesRegex(ValueError, "attempt to get argmin of an empty sequence"):
-            pp.Series([]).argmin()
+            ps.Series([]).argmin()
         with self.assertRaisesRegex(ValueError, "attempt to get argmax of an empty sequence"):
-            pp.Series([]).argmax()
+            ps.Series([]).argmax()
 
     def test_backfill(self):
         pser = pd.Series([np.nan, 2, 3, 4, np.nan, 6], name="x")
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             self.assert_eq(pser.backfill(), kser.backfill())
@@ -2862,7 +2862,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
             kser.backfill(inplace=True)
             self.assert_eq(pser, kser)
         else:
-            expected = pp.Series([2.0, 2.0, 3.0, 4.0, 6.0, 6.0], name="x")
+            expected = ps.Series([2.0, 2.0, 3.0, 4.0, 6.0, 6.0], name="x")
             self.assert_eq(expected, kser.backfill())
 
             # Test `inplace=True`
@@ -2871,7 +2871,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_align(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         for join in ["outer", "inner", "left", "right"]:
             for axis in [None, 0]:
@@ -2889,7 +2889,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_pow_and_rpow(self):
         pser = pd.Series([1, 2, np.nan])
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
 
         self.assert_eq(pser.pow(np.nan), kser.pow(np.nan))
         self.assert_eq(pser ** np.nan, kser ** np.nan)
@@ -2899,21 +2899,21 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pser = pd.Series([1, 2, 3, 4], index=idx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(
             pser.between_time("0:15", "0:45").sort_index(),
             kser.between_time("0:15", "0:45").sort_index(),
         )
 
         pser.index.name = "ts"
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(
             pser.between_time("0:15", "0:45").sort_index(),
             kser.between_time("0:15", "0:45").sort_index(),
         )
 
         pser.index.name = "index"
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(
             pser.between_time("0:15", "0:45").sort_index(),
             kser.between_time("0:15", "0:45").sort_index(),
@@ -2922,19 +2922,19 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     def test_at_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pser = pd.Series([1, 2, 3, 4], index=idx)
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(
             pser.at_time("0:20").sort_index(), kser.at_time("0:20").sort_index(),
         )
 
         pser.index.name = "ts"
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(
             pser.at_time("0:20").sort_index(), kser.at_time("0:20").sort_index(),
         )
 
         pser.index.name = "index"
-        kser = pp.from_pandas(pser)
+        kser = ps.from_pandas(pser)
         self.assert_eq(
             pser.at_time("0:20").sort_index(), kser.at_time("0:20").sort_index(),
         )

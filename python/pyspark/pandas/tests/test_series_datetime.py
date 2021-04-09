@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from pyspark import pandas as pp
+from pyspark import pandas as ps
 from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
@@ -38,14 +38,14 @@ class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
 
     @property
     def ks_start_date(self):
-        return pp.from_pandas(self.pd_start_date)
+        return ps.from_pandas(self.pd_start_date)
 
     def check_func(self, func):
         self.assert_eq(func(self.ks_start_date), func(self.pd_start_date))
 
     def test_timestamp_subtraction(self):
         pdf = self.pdf1
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         # Those fail in certain OSs presumably due to different
         # timezone behaviours inherited from C library.
@@ -66,7 +66,7 @@ class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
         ) - 1
         # self.assert_eq(actual, expected)
 
-        kdf = pp.DataFrame(
+        kdf = ps.DataFrame(
             {"a": pd.date_range("2016-12-31", "2017-01-08", freq="D"), "b": pd.Series(range(9))}
         )
         expected_error_message = "datetime subtraction can only be applied to datetime series."
@@ -80,7 +80,7 @@ class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
     def test_arithmetic_op_exceptions(self):
         kser = self.ks_start_date
         py_datetime = self.pd_start_date.dt.to_pydatetime()
-        datetime_index = pp.Index(self.pd_start_date)
+        datetime_index = ps.Index(self.pd_start_date)
 
         for other in [1, 0.1, kser, datetime_index, py_datetime]:
             expected_err_msg = "addition can not be applied to date times."
@@ -112,7 +112,7 @@ class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_date_subtraction(self):
         pdf = self.pdf1
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         self.assert_eq(
             kdf["end_date"].dt.date - kdf["start_date"].dt.date,
@@ -129,7 +129,7 @@ class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
             (datetime.date(2013, 3, 11) - pdf["start_date"].dt.date).dt.days,
         )
 
-        kdf = pp.DataFrame(
+        kdf = ps.DataFrame(
             {"a": pd.date_range("2016-12-31", "2017-01-08", freq="D"), "b": pd.Series(range(9))}
         )
         expected_error_message = "date subtraction can only be applied to date series."
@@ -146,7 +146,7 @@ class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
     )
     def test_div(self):
         pdf = self.pdf1
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
         for u in "D", "s", "ms":
             duration = np.timedelta64(1, u)
             self.assert_eq(
@@ -272,7 +272,7 @@ class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_unsupported_type(self):
         self.assertRaisesRegex(
-            ValueError, "Cannot call DatetimeMethods on type LongType", lambda: pp.Series([0]).dt
+            ValueError, "Cannot call DatetimeMethods on type LongType", lambda: ps.Series([0]).dt
         )
 
 
