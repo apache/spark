@@ -262,10 +262,12 @@ class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
         self.check_func(lambda x: x.dt.floor(freq="min"))
         self.check_func(lambda x: x.dt.floor(freq="H"))
 
+    @unittest.skip("Unsupported locale setting")
     def test_month_name(self):
         self.check_func(lambda x: x.dt.month_name())
         self.check_func(lambda x: x.dt.month_name(locale="en_US.UTF-8"))
 
+    @unittest.skip("Unsupported locale setting")
     def test_day_name(self):
         self.check_func(lambda x: x.dt.day_name())
         self.check_func(lambda x: x.dt.day_name(locale="en_US.UTF-8"))
