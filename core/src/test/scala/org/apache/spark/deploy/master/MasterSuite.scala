@@ -418,7 +418,7 @@ class MasterSuite extends SparkFunSuite
           (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl + "/")
         }
 
-        System.getProperty("spark.ui.proxyBase") should startWith (reverseProxyUrl)
+        System.getProperty("spark.ui.proxyBase") should be (reverseProxyUrl)
         val html = Utils
           .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
         html should include ("Spark Master at spark://")
