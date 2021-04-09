@@ -5550,7 +5550,6 @@ class DataFrameTest(ReusedSQLTestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.test_dataframe import *  # noqa: F401
 
     try:
