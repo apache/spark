@@ -83,7 +83,6 @@ jobs:
       CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
-      SPARK_LOCAL_IP: 127.0.0.1
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -134,6 +133,7 @@ jobs:
     - name: Run tests
       run: |
         cat /etc/hosts
+        sudo sed -i '1s/^/127.0.0.1       localhost/' /etc/hosts
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
@@ -173,7 +173,6 @@ jobs:
       CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
-      SPARK_LOCAL_IP: 127.0.0.1
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -242,7 +241,6 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
-      SPARK_LOCAL_IP: 127.0.0.1
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -475,7 +473,6 @@ jobs:
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
     env:
-      SPARK_LOCAL_IP: 127.0.0.1
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
