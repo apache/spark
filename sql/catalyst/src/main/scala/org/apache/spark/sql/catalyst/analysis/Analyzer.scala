@@ -634,8 +634,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case h @ UnresolvedHaving(_, agg @ Aggregate(
-        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggregateExpressions, _))
-        if agg.childrenResolved && aggregateExpressions.forall(_.resolved) =>
+        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, _))
+        if agg.childrenResolved && aggExprs.forall(_.resolved) =>
         tryResolveHavingCondition(h, agg, selectedGroupByExprs, groupByExprs)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
