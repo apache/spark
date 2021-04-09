@@ -415,7 +415,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         } else if (clause.matchedAction().UPDATE() != null) {
           val condition = Option(clause.matchedCond).map(expression)
           if (clause.matchedAction().ASTERISK() != null) {
-            UpdateAction(condition, Seq())
+            UpdateStarAction(condition)
           } else {
             UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
           }
@@ -430,7 +430,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         if (clause.notMatchedAction().INSERT() != null) {
           val condition = Option(clause.notMatchedCond).map(expression)
           if (clause.notMatchedAction().ASTERISK() != null) {
-            InsertAction(condition, Seq())
+            InsertStarAction(condition)
           } else {
             val columns = clause.notMatchedAction().columns.multipartIdentifier()
                 .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
