@@ -133,6 +133,7 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
+        cat /etc/hosts
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
@@ -216,6 +217,7 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
+        cat /etc/hosts
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST"
     - name: Upload test results to report
       if: always()
@@ -273,6 +275,7 @@ jobs:
       run: |
         # The followings are also used by `r-lib/actions/setup-r` to avoid
         # R issues at docker environment
+        cat /etc/hosts
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
         ./dev/run-tests --parallelism 2 --modules sparkr
