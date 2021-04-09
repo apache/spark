@@ -219,6 +219,10 @@ class HadoopTableReader(
       val partDesc = Utilities.getPartitionDescFromTableDesc(tableDesc, partition, true)
       val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
+      val skipHeaderLineCount =
+        tableDesc.getProperties.getProperty("skip.header.line.count", "0").toInt
+      val isTextInputFormatTable =
+        classOf[TextInputFormat].isAssignableFrom(partDesc.getInputFileFormatClass)
       // Get partition field info
       val partSpec = partDesc.getPartSpec
       val partProps = partDesc.getProperties
@@ -260,8 +264,8 @@ class HadoopTableReader(
 
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
-
-      createHadoopRDD(partDesc, inputPathStr).mapPartitions { iter =>
+      val rdd = createHadoopRDD(localTableDesc, inputPathStr)
+      rdd.mapPartitionsWithIndex { (index, iter) =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.getConstructor().newInstance()
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
@@ -285,6 +289,19 @@ class HadoopTableReader(
         val tableSerDe = localTableDesc.getDeserializerClass.getConstructor().newInstance()
         DeserializerLock.synchronized {
           tableSerDe.initialize(hconf, tableProperties)
+        }
+
+        if (skipHeaderLineCount > 0 && isTextInputFormatTable) {
+          rdd.partitions(index) match {
+            case partition: HadoopPartition =>
+              if (partition.inputSplit.t.asInstanceOf[FileSplit].getStart() == 0) {
+                var i = 0
+                while (i < skipHeaderLineCount && iter.hasNext) {
+                  i += 1
+                  iter.next()
+                }
+              }
+          }
         }
 
         // fill the non partition key attributes
