@@ -619,7 +619,7 @@ private[hive] class TestHiveQueryExecution(
       }
     }
     // Proceed with analysis.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+    rumCommand(sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker))
   }
 }
 
