@@ -639,14 +639,14 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case h @ UnresolvedHaving(_, agg @ Aggregate(
         GroupingAnalytics(_, groupByExprs), aggregateExpressions, _))
-        if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
+        if agg.childrenResolved && aggregateExpressions.forall(_.resolved) =>
         tryResolveHavingCondition(h)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
       case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child)
-        if (groupByExprs ++ aggExprs).forall(_.resolved) =>
+        if aggExprs.forall(_.resolved) =>
         constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, child)
 
       // We should make sure all expressions in condition have been resolved.
