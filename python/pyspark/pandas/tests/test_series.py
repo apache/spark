@@ -2941,7 +2941,6 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.test_series import *  # noqa: F401
 
     try:

@@ -277,7 +277,6 @@ class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.test_series_datetime import *  # noqa: F401
 
     try:
