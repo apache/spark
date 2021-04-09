@@ -111,6 +111,8 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
   override def sql: String = {
     s"rand(${if (hideSeed) "" else child.sql})"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Rand = copy(child = newChild)
 }
 
 object Rand {
@@ -162,6 +164,8 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
   override def sql: String = {
     s"randn(${if (hideSeed) "" else child.sql})"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Randn = copy(child = newChild)
 }
 
 object Randn {

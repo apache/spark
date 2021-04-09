@@ -125,6 +125,9 @@ case class CollectList(
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     new GenericArrayData(buffer.toArray)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): CollectList =
+    copy(child = newChild)
 }
 
 /**
@@ -191,4 +194,7 @@ case class CollectSet(
   override def prettyName: String = "collect_set"
 
   override def createAggregationBuffer(): mutable.HashSet[Any] = mutable.HashSet.empty
+
+  override protected def withNewChildInternal(newChild: Expression): CollectSet =
+    copy(child = newChild)
 }

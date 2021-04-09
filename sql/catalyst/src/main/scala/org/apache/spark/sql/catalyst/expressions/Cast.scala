@@ -1812,6 +1812,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   } else {
     s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 }
 
 /**
@@ -1841,6 +1843,8 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
       Some(SQLConf.STORE_ASSIGNMENT_POLICY.key),
       Some(SQLConf.StoreAssignmentPolicy.LEGACY.toString))
 
+  override protected def withNewChildInternal(newChild: Expression): AnsiCast =
+    copy(child = newChild)
 }
 
 object AnsiCast {
@@ -1998,4 +2002,6 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
     case DecimalType => DecimalType.SYSTEM_DEFAULT
     case _ => target.asInstanceOf[DataType]
   }
+
+  override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
 }

@@ -41,6 +41,8 @@ import org.apache.spark.util.random.RandomSampler
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): ReturnAnswer =
+    copy(child = newChild)
 }
 
 /**
@@ -52,6 +54,8 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
  */
 case class Subquery(child: LogicalPlan, correlated: Boolean) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): Subquery =
+    copy(child = newChild)
 }
 
 object Subquery {
@@ -78,6 +82,9 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
 
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Project =
+    copy(child = newChild)
 }
 
 /**
@@ -136,6 +143,9 @@ case class Generate(
   }
 
   def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Generate =
+    copy(child = newChild)
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
@@ -149,6 +159,9 @@ case class Filter(condition: Expression, child: LogicalPlan)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(ExpressionSet(predicates))
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Filter =
+    copy(child = newChild)
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -201,6 +214,9 @@ case class Intersect(
       Some(children.flatMap(_.maxRows).min)
     }
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: LogicalPlan, newRight: LogicalPlan): Intersect = copy(left = newLeft, right = newRight)
 }
 
 case class Except(
@@ -214,6 +230,9 @@ case class Except(
   override def metadataOutput: Seq[Attribute] = Nil
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
+
+  override protected def withNewChildrenInternal(
+    newLeft: LogicalPlan, newRight: LogicalPlan): Except = copy(left = newLeft, right = newRight)
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -326,6 +345,9 @@ case class Union(
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(merge(_, _))
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
+    copy(children = newChildren)
 }
 
 case class Join(
@@ -436,6 +458,9 @@ case class Join(
       || e.asInstanceOf[JoinHint].leftHint.isDefined
       || e.asInstanceOf[JoinHint].rightHint.isDefined)
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: LogicalPlan, newRight: LogicalPlan): Join = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -461,6 +486,9 @@ case class InsertIntoDir(
   override def output: Seq[Attribute] = Seq.empty
   override def metadataOutput: Seq[Attribute] = Nil
   override lazy val resolved: Boolean = false
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoDir =
+    copy(child = newChild)
 }
 
 /**
@@ -515,6 +543,9 @@ case class View(
       case _ => false
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): View =
+    copy(child = newChild)
 }
 
 object View {
@@ -548,12 +579,16 @@ case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) 
   }
 
   override def innerChildren: Seq[LogicalPlan] = cteRelations.map(_._2)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): With = copy(child = newChild)
 }
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
+    copy(child = newChild)
 }
 
 /**
@@ -569,6 +604,7 @@ case class Sort(
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
   override def outputOrdering: Seq[SortOrder] = order
+  override protected def withNewChildInternal(newChild: LogicalPlan): Sort = copy(child = newChild)
 }
 
 /** Factory for constructing new `Range` nodes. */
@@ -739,6 +775,9 @@ case class Aggregate(
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
+    copy(child = newChild)
 }
 
 case class Window(
@@ -753,6 +792,9 @@ case class Window(
   override def producedAttributes: AttributeSet = windowOutputSet
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Window =
+    copy(child = newChild)
 }
 
 object Expand {
@@ -869,6 +911,9 @@ case class Expand(
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override protected lazy val validConstraints: ExpressionSet = ExpressionSet()
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Expand =
+    copy(child = newChild)
 }
 
 /**
@@ -901,6 +946,8 @@ case class Pivot(
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
   override def metadataOutput: Seq[Attribute] = Nil
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
 
 /**
@@ -950,6 +997,9 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderP
       case _ => None
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
+    copy(child = newChild)
 }
 
 /**
@@ -967,6 +1017,9 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
       case _ => None
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LocalLimit =
+    copy(child = newChild)
 }
 
 /**
@@ -987,6 +1040,8 @@ case class Tail(limitExpr: Expression, child: LogicalPlan) extends OrderPreservi
       case _ => None
     }
   }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Tail = copy(child = newChild)
 }
 
 /**
@@ -1013,6 +1068,9 @@ case class SubqueryAlias(
   }
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): SubqueryAlias =
+    copy(child = newChild)
 }
 
 object SubqueryAlias {
@@ -1066,6 +1124,9 @@ case class Sample(
 
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Sample =
+    copy(child = newChild)
 }
 
 /**
@@ -1074,6 +1135,8 @@ case class Sample(
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
+    copy(child = newChild)
 }
 
 /**
@@ -1104,6 +1167,8 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
       case _ => RoundRobinPartitioning(numPartitions)
     }
   }
+  override protected def withNewChildInternal(newChild: LogicalPlan): Repartition =
+    copy(child = newChild)
 }
 
 /**
@@ -1145,6 +1210,9 @@ case class RepartitionByExpression(
   }
 
   override def shuffle: Boolean = true
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): RepartitionByExpression =
+    copy(child = newChild)
 }
 
 object RepartitionByExpression {
@@ -1178,6 +1246,8 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
+    copy(child = newChild)
 }
 
 /**
@@ -1206,4 +1276,7 @@ case class CollectMetrics(
   }
 
   override def output: Seq[Attribute] = child.output
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =
+    copy(child = newChild)
 }

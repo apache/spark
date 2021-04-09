@@ -246,11 +246,50 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     arr
   }
 
+  private def childrenFastEquals(
+      originalChildren: IndexedSeq[BaseType], newChildren: IndexedSeq[BaseType]): Boolean = {
+    val size = originalChildren.size
+    var i = 0
+    while (i < size) {
+      if (!originalChildren(i).fastEquals(newChildren(i))) return false
+      i += 1
+    }
+    true
+  }
+
+  // This is a temporary solution, we will change the type of children to IndexedSeq in a
+  // followup PR
+  private def asIndexedSeq(seq: Seq[BaseType]): IndexedSeq[BaseType] = {
+    if (seq.isInstanceOf[IndexedSeq[BaseType]]) {
+      seq.asInstanceOf[IndexedSeq[BaseType]]
+    } else {
+      seq.toIndexedSeq
+    }
+  }
+
+  final def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
+    val childrenIndexedSeq = asIndexedSeq(children)
+    val newChildrenIndexedSeq = asIndexedSeq(newChildren)
+    assert(newChildrenIndexedSeq.size == childrenIndexedSeq.size, "Incorrect number of children")
+    if (childrenIndexedSeq.isEmpty ||
+        childrenFastEquals(newChildrenIndexedSeq, childrenIndexedSeq)) {
+      this
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newChildrenIndexedSeq)
+        res.copyTagsFrom(this)
+        res
+      }
+    }
+  }
+
+  protected def withNewChildrenInternal(newChildren: IndexedSeq[BaseType]): BaseType
+
   /**
    * Returns a copy of this node with the children replaced.
    * TODO: Validate somewhere (in debug mode?) that children are ordered correctly.
    */
-  def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
+  protected final def legacyWithNewChildren(newChildren: Seq[BaseType]): BaseType = {
     assert(newChildren.size == children.size, "Incorrect number of children")
     var changed = false
     val remainingNewChildren = newChildren.toBuffer
@@ -355,7 +394,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
     if (containsChild.nonEmpty) {
-      mapChildren(f, forceCopy = false)
+      withNewChildren(children.map(f))
     } else {
       this
     }
@@ -844,24 +883,96 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
 trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   override final def children: Seq[T] = Nil
+  override final def mapChildren(f: T => T): T = this.asInstanceOf[T]
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
 }
 
 trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def child: T
-  @transient override final lazy val children: Seq[T] = child :: Nil
+  @transient override final lazy val children: Seq[T] = IndexedSeq(child)
+
+  override final def mapChildren(f: T => T): T = {
+    val newChild = f(child)
+    if (newChild fastEquals child) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildInternal(newChild)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
+    assert(newChildren.size == 1, "Incorrect number of children")
+    withNewChildInternal(newChildren.head)
+  }
+
+  protected def withNewChildInternal(newChild: T): T
 }
 
 trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def left: T
   def right: T
-  @transient override final lazy val children: Seq[T] = left :: right :: Nil
+  @transient override final lazy val children: Seq[T] = IndexedSeq(left, right)
+
+  override final def mapChildren(f: T => T): T = {
+    var newLeft = f(left)
+    newLeft = if (newLeft fastEquals left) left else newLeft
+    var newRight = f(right)
+    newRight = if (newRight fastEquals right) right else newRight
+
+    if (newLeft.eq(left) && newRight.eq(right)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newLeft, newRight)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
+    assert(newChildren.size == 2, "Incorrect number of children")
+    withNewChildrenInternal(newChildren(0), newChildren(1))
+  }
+
+  protected def withNewChildrenInternal(newLeft: T, newRight: T): T
 }
 
 trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def first: T
   def second: T
   def third: T
-  @transient override final lazy val children: Seq[T] = first :: second :: third :: Nil
+  @transient override final lazy val children: Seq[T] = IndexedSeq(first, second, third)
+
+  override final def mapChildren(f: T => T): T = {
+    var newFirst = f(first)
+    newFirst = if (newFirst fastEquals first) first else newFirst
+    var newSecond = f(second)
+    newSecond = if (newSecond fastEquals second) second else newSecond
+    var newThird = f(third)
+    newThird = if (newThird fastEquals third) third else newThird
+
+    if (newFirst.eq(first) && newSecond.eq(second) && newThird.eq(third)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newFirst, newSecond, newThird)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
+    assert(newChildren.size == 3, "Incorrect number of children")
+    withNewChildrenInternal(newChildren(0), newChildren(1), newChildren(2))
+  }
+
+  protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T): T
 }
 
 trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
@@ -869,5 +980,33 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   def second: T
   def third: T
   def fourth: T
-  @transient override final lazy val children: Seq[T] = first :: second :: third :: fourth :: Nil
+  @transient override final lazy val children: Seq[T] = IndexedSeq(first, second, third, fourth)
+
+  override final def mapChildren(f: T => T): T = {
+    var newFirst = f(first)
+    newFirst = if (newFirst fastEquals first) first else newFirst
+    var newSecond = f(second)
+    newSecond = if (newSecond fastEquals second) second else newSecond
+    var newThird = f(third)
+    newThird = if (newThird fastEquals third) third else newThird
+    var newFourth = f(fourth)
+    newFourth = if (newFourth fastEquals fourth) fourth else newFourth
+
+    if (newFirst.eq(first) && newSecond.eq(second) && newThird.eq(third) && newFourth.eq(fourth)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newFirst, newSecond, newThird, newFourth)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
+    assert(newChildren.size == 4, "Incorrect number of children")
+    withNewChildrenInternal(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+  }
+
+  protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
 }

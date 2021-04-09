@@ -281,6 +281,9 @@ case class StateStoreRestoreExec(
       ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StateStoreRestoreExec =
+    copy(child = newChild)
 }
 
 /**
@@ -436,6 +439,9 @@ case class StateStoreSaveExec(
       eventTimeWatermark.isDefined &&
       newMetadata.batchWatermarkMs > eventTimeWatermark.get
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StateStoreSaveExec =
+    copy(child = newChild)
 }
 
 /** Physical operator for executing streaming Deduplicate. */
@@ -509,6 +515,9 @@ case class StreamingDeduplicateExec(
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
+    copy(child = newChild)
 }
 
 object StreamingDeduplicateExec {
