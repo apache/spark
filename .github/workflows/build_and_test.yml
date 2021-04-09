@@ -83,7 +83,7 @@ jobs:
       CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
-      SPARK_LOCAL_IP: 127.0.0.1
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -171,7 +171,7 @@ jobs:
       CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
-      SPARK_LOCAL_IP: 127.0.0.1
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -240,7 +240,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
-      SPARK_LOCAL_IP: 127.0.0.1
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
