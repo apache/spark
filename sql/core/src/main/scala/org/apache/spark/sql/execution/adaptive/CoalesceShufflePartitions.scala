@@ -36,26 +36,24 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
       return plan
     }
 
-    if (shouldApplyChildren(plan)) {
-      plan.transformUp {
-        case p if shouldApplyChildrenFunc(p) &&
-          !p.children.exists(child => shouldApplyChildren(child)) =>
-          p.withNewChildren(p.children.map(child => applyInternal(child)))
-      }
+    if (canCoalescePartitions(plan)) {
+      coalescePartitions(plan)
     } else {
-      applyInternal(plan)
+      plan.transformUp {
+        case u: UnionExec =>
+          u.withNewChildren(u.children.map { child =>
+            if (canCoalescePartitions(child) &&
+              child.find(_.isInstanceOf[UnionExec]).isEmpty) {
+              coalescePartitions(child)
+            } else {
+              child
+            }
+          })
+      }
     }
   }
 
-  private def applyInternal(plan: SparkPlan): SparkPlan = {
-    if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])
-        || plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isDefined) {
-      // If not all leaf nodes are query stages, it's not safe to reduce the number of
-      // shuffle partitions, because we may break the assumption that all children of a spark plan
-      // have same number of output partitions.
-      return plan
-    }
-
+  private def coalescePartitions(plan: SparkPlan): SparkPlan = {
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
       case stage: ShuffleQueryStageExec => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
@@ -106,13 +104,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     }
   }
 
-  private def shouldApplyChildren(plan: SparkPlan): Boolean = {
-    plan.find(p => shouldApplyChildrenFunc(p)).isDefined
-  }
-
-  private def shouldApplyChildrenFunc(plan: SparkPlan): Boolean = plan match {
-    case _: UnionExec => true
-    case _ => false
+  private def canCoalescePartitions(plan: SparkPlan): Boolean = {
+    plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec]) &&
+      plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isEmpty
   }
 
   private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
