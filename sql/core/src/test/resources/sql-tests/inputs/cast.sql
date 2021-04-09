@@ -43,3 +43,6 @@ SELECT CAST('9223372036854775808' AS long);
 DESC FUNCTION boolean;
 DESC FUNCTION EXTENDED boolean;
 -- TODO: migrate all cast tests here.
+
+-- support NUMERIC type
+select CAST( 5576666.44567  AS NUMERIC(11, 3) )
