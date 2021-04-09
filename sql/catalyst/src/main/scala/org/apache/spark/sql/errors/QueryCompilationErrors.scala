@@ -272,7 +272,7 @@ private[spark] object QueryCompilationErrors {
       index: Int,
       expr: Expression,
       t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"GROUP BY $index refer to an expression that is or contains " +
+    new AnalysisException(s"GROUP BY $index refers to an expression that is or contains " +
       "an aggregate function. Aggregate functions are not allowed in GROUP BY, " +
       s"but got ${expr.sql}", t.origin.line, t.origin.startPosition)
   }
