@@ -2372,7 +2372,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             In case when axis is 1, it requires to specify `DataFrame` or scalar value
             with type hints as below:
 
-            >>> def plus_one(x) -> pss.DataFrame[float, float]:
+            >>> def plus_one(x) -> ps.DataFrame[float, float]:
             ...     return x + 1
 
             If the return type is specified as `DataFrame`, the output column names become
