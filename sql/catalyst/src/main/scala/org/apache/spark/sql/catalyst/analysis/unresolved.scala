@@ -263,6 +263,9 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
 
   override def terminate(): TraversableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): UnresolvedGenerator = copy(children = newChildren)
 }
 
 case class UnresolvedFunction(
@@ -283,6 +286,15 @@ case class UnresolvedFunction(
   override def toString: String = {
     val distinct = if (isDistinct) "distinct " else ""
     s"'$name($distinct${children.mkString(", ")})"
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UnresolvedFunction = {
+    if (filter.isDefined) {
+      copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
+    } else {
+      copy(arguments = newChildren)
+    }
   }
 }
 
@@ -444,6 +456,8 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def toString: String = s"$child AS $names"
 
+  override protected def withNewChildInternal(newChild: Expression): MultiAlias =
+    copy(child = newChild)
 }
 
 /**
@@ -478,6 +492,11 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
 
   override def toString: String = s"$child[$extraction]"
   override def sql: String = s"${child.sql}[${extraction.sql}]"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): UnresolvedExtractValue = {
+      copy(child = newLeft, extraction = newRight)
+  }
 }
 
 /**
@@ -502,6 +521,9 @@ case class UnresolvedAlias(
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
 
   override lazy val resolved = false
+
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedAlias =
+    copy(child = newChild)
 }
 
 /**
@@ -523,6 +545,9 @@ case class UnresolvedSubqueryColumnAliases(
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): UnresolvedSubqueryColumnAliases = copy(child = newChild)
 }
 
 /**
@@ -544,6 +569,9 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedDeserializer =
+    copy(deserializer = newChild)
 }
 
 case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
@@ -590,6 +618,8 @@ case class UnresolvedHaving(
   extends UnaryNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedHaving =
+    copy(child = newChild)
 }
 
 /**

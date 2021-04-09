@@ -548,4 +548,8 @@ case class BroadcastNestedLoopJoinExec(
      """.stripMargin
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): BroadcastNestedLoopJoinExec =
+    copy(left = newLeft, right = newRight)
 }

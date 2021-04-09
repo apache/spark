@@ -59,4 +59,7 @@ case class Product(child: Expression)
     Seq(coalesce(coalesce(product.left, one) * product.right, product.left))
 
   override lazy val evaluateExpression: Expression = product
+
+  override protected def withNewChildInternal(newChild: Expression): Product =
+    copy(child = newChild)
 }
