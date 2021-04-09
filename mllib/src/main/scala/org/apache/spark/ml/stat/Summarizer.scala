@@ -349,7 +349,8 @@ private[spark] object SummaryBuilderImpl extends Logging {
       weightExpr: Expression,
       mutableAggBufferOffset: Int,
       inputAggBufferOffset: Int)
-    extends TypedImperativeAggregate[SummarizerBuffer] with ImplicitCastInputTypes
+    extends TypedImperativeAggregate[SummarizerBuffer]
+    with ImplicitCastInputTypes
     with BinaryLike[Expression] {
 
     override def eval(state: SummarizerBuffer): Any = {

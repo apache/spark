@@ -79,7 +79,7 @@ case class DynamicPruningSubquery(
       exprId = ExprId(0))
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Expression =
+  override protected def withNewChildInternal(newChild: Expression): DynamicPruningSubquery =
     copy(pruningKey = newChild)
 }
 
@@ -98,6 +98,6 @@ case class DynamicPruningExpression(child: Expression)
     child.genCode(ctx)
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Expression =
+  override protected def withNewChildInternal(newChild: Expression): DynamicPruningExpression =
     copy(child = newChild)
 }
