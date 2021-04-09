@@ -612,6 +612,9 @@ pyspark_pandas = Module(
         "pyspark.pandas.typedef.typehints",
         # unittests
         "pyspark.pandas.tests.test_dataframe",
+        "pyspark.pandas.tests.test_dataframe_conversion",
+        "pyspark.pandas.tests.test_dataframe_spark_io",
+        "pyspark.pandas.tests.test_frame_spark",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
