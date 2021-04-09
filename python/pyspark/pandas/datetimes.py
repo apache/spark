@@ -396,7 +396,7 @@ class DatetimeMethods(object):
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> dates = pp.Series(pd.date_range("2017-12-30", periods=3))
+        >>> dates = ps.Series(pd.date_range("2017-12-30", periods=3))
         >>> dates
         0   2017-12-30
         1   2017-12-31

@@ -29,7 +29,7 @@ class CategoricalAccessor(object):
 
     Examples
     --------
-    >>> s = pp.Series(list("abbccc"), dtype="category")
+    >>> s = ps.Series(list("abbccc"), dtype="category")
     >>> s  # doctest: +SKIP
     0    a
     1    b
