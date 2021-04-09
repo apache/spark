@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.time.{Duration, Period}
+
 import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
-
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -1109,6 +1110,14 @@ class DataFrameAggregateSuite extends QueryTest
     val arrayDF = Seq(Tuple1(Seq(1))).toDF("col")
     val e = intercept[AnalysisException](arrayDF.groupBy(struct($"col.a")).count())
     assert(e.message.contains("requires integral type"))
+  }
+
+  test("SPARK-34716: Support ANSI SQL intervals by the aggregate function `sum`") {
+    val df = Seq((Period.ofMonths(10), Duration.ofDays(10)),
+      (Period.ofMonths(1), Duration.ofDays(1)))
+      .toDF("year-month", "day-time")
+    val sumDF = df.select(sum($"year-month"), sum($"day-time"))
+    checkAnswer(sumDF, Row(Period.ofMonths(11), Duration.ofDays(11)))
   }
 }
 
