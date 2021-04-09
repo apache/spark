@@ -32,6 +32,8 @@ trait BaseGroupingSets extends Expression with CodegenFallback {
   def selectedGroupByExprs: Seq[Seq[Expression]]
 
   def groupByExprs: Seq[Expression] = {
+    assert(children.forall(_.resolved),
+      "Cannot call BaseGroupingSets.groupByExprs before the children expressions are all resolved.")
     children.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
       // Only unique expressions are included in the group by expressions and is determined
       // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
@@ -233,12 +235,12 @@ object GroupingID {
 object GroupingAnalytics {
   def unapply(exprs: Seq[Expression])
   : Option[(Seq[Seq[Expression]], Seq[Seq[Expression]], Seq[Expression])] = {
-    if (!exprs.exists(_.find(_.isInstanceOf[BaseGroupingSets]).isDefined)) {
+    if (!exprs.exists(e => e.find(_.isInstanceOf[BaseGroupingSets]).isDefined)) {
       None
     } else {
       val groups = exprs.flatMap {
         case gs: BaseGroupingSets => gs.groupByExprs
-        case others: Expression => others :: Nil
+        case other: Expression => other :: Nil
       }
       val groupingSets = exprs.flatMap {
         case gs: BaseGroupingSets => gs.groupingSets
@@ -246,7 +248,7 @@ object GroupingAnalytics {
       }
       val unmergedSelectedGroupByExprs = exprs.map {
         case gs: BaseGroupingSets => gs.selectedGroupByExprs
-        case others: Expression => Seq(Seq(others))
+        case other: Expression => Seq(Seq(other))
       }
       val selectedGroupByExprs = unmergedSelectedGroupByExprs.init
         .foldLeft(unmergedSelectedGroupByExprs.last) { (x, y) =>

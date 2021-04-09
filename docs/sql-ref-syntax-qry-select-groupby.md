@@ -95,38 +95,25 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
      (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
 
-* **Partial Grouping Analytics**
+* **Mixed Grouping Analytics**
 
-    Partial grouping analytics means there are both `group_expression` and `CUBE|ROLLUP|GROUPING SETS`
-    in GROUP BY clause. `CUBE` and `ROLLUP` are just syntax sugar for GROUPING SETS, for how to use
-    `CUBE` and `ROLLUP` can refer to the section above about `CUBE` and `ROLLUP`. For example:
-    `GROUP BY warehouse, GROUPING SETS((product, location), (product), (location), ())` is equivalent to
-    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse, location), (warehouse))`.
-    `GROUP BY warehouse, GROUPING SETS((product, location), (producet), ())` is equivalent to
-    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, location), (warehouse))`.
-
-* **Concatenated Grouping Analytics**
-  
-    Concatenated grouping analytics offer a concise way to generate useful combinations of groupings. Groupings specified
-    with concatenated groupings yield the cross-product of groupings from each grouping set. The cross-product 
-    operation enables even a small number of concatenated groupings to generate a large number of final groups. 
-    The concatenated groupings are specified simply by listing multiple `GROUPING SETS`, `CUBES`, and `ROLLUP`, 
-    and separating them with commas. `CUBE` and `ROLLUP` are just syntax sugar for GROUPING SETS, for how to use
-    `CUBE` and `ROLLUP` can refer to the section above about `CUBE` and `ROLLUP`. For example:
-    `GROUP BY GROUPING SETS((warehouse), (producet)), GROUPING SETS((location), (size))` is equivalent to 
+    A GROUP BY clause can include multiple  `group_expression`s and multiple `CUBE|ROLLUP|GROUPING SETS`s.
+    `CUBE|ROLLUP` is just a syntax sugar for `GROUPING SETS`, please refer to the sections above for
+    how to translate `CUBE|ROLLUP` to `GROUPING SETS`. `group_expression` can be treated as a single-group
+    `GROUPING SETS` under this context. For multiple `GROUPING SETS` in the `GROUP BY` clause, we generate
+    a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s. For example,
+    `GROUP BY warehouse, GROUPING SETS((product), ()), GROUPING SETS((location, size), (location), (size), ())`
+    and `GROUP BY warehouse, ROLLUP(warehouse), CUBE(location, size)` is equivalent to 
     `GROUP BY GROUPING SETS(
-        (warehouse, location), 
-        (warehouse, size), 
-        (product, location), 
-        (product, size))`.
-    `GROUP BY order, GROUPING SETS((warehouse, product), (warehouse), (producet), ()),
-     GROUPING SETS((location, size), (location), ())`  is equivalent to 
-    `GROUP BY GROUPING SETS(
-        (order, warehouse, product, location, size), (order, warehouse, product, location), (order, warehouse, product),
-        (order, warehouse, location, size), (order, warehouse, location), (order, warehouse),
-        (order, product, location, size), (order, product, location), (order, product),
-        (order, location, size), (order, location), (order))`.
-    
+        (warehouse, product, location, size), 
+        (warehouse, product, location),
+        (warehouse, product, size), 
+        (warehouse, product),
+        (warehouse, location, size),
+        (warehouse, location),
+        (warehouse, size),
+        (warehouse))`.
+ 
 * **aggregate_name**
 
     Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).
