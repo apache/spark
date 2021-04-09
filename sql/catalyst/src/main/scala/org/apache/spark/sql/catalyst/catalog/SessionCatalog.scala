@@ -62,6 +62,7 @@ class SessionCatalog(
     externalCatalogBuilder: () => ExternalCatalog,
     globalTempViewManagerBuilder: () => GlobalTempViewManager,
     functionRegistry: FunctionRegistry,
+    tableFunctionRegistry: TableFunctionRegistry,
     hadoopConf: Configuration,
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader,
@@ -74,16 +75,34 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
+      tableFunctionRegistry: TableFunctionRegistry,
       conf: SQLConf) = {
     this(
       () => externalCatalog,
       () => new GlobalTempViewManager(conf.getConf(GLOBAL_TEMP_DATABASE)),
       functionRegistry,
+      tableFunctionRegistry,
       new Configuration(),
       new CatalystSqlParser(),
       DummyFunctionResourceLoader,
       conf.tableRelationCacheSize,
       conf.metadataCacheTTL)
+  }
+
+  // For testing only.
+  def this(
+      externalCatalog: ExternalCatalog,
+      functionRegistry: FunctionRegistry,
+      conf: SQLConf) = {
+    this(externalCatalog, functionRegistry, new SimpleTableFunctionRegistry, conf)
+  }
+
+  // For testing only.
+  def this(
+      externalCatalog: ExternalCatalog,
+      functionRegistry: FunctionRegistry,
+      tableFunctionRegistry: TableFunctionRegistry) = {
+    this(externalCatalog, functionRegistry, tableFunctionRegistry, SQLConf.get)
   }
 
   // For testing only.
@@ -1368,7 +1387,7 @@ class SessionCatalog(
    * Check if the function with the specified name exists
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
-    functionRegistry.functionExists(name) || {
+    functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name) || {
       val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
       requireDbExists(db)
       externalCatalog.functionExists(db, name.funcName)
@@ -1466,7 +1485,9 @@ class SessionCatalog(
    * Drop a temporary function.
    */
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {
-    if (!functionRegistry.dropFunction(FunctionIdentifier(name)) && !ignoreIfNotExists) {
+    if (!functionRegistry.dropFunction(FunctionIdentifier(name)) &&
+        !tableFunctionRegistry.dropFunction(FunctionIdentifier(name)) &&
+        !ignoreIfNotExists) {
       throw new NoSuchTempFunctionException(name)
     }
   }
@@ -1481,8 +1502,9 @@ class SessionCatalog(
     // A temporary function is a function that has been registered in functionRegistry
     // without a database name, and is neither a built-in function nor a Hive function
     name.database.isEmpty &&
-      functionRegistry.functionExists(name) &&
+      (functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)) &&
       !FunctionRegistry.builtin.functionExists(name) &&
+      !TableFunctionRegistry.builtin.functionExists(name) &&
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
@@ -1495,7 +1517,7 @@ class SessionCatalog(
    * session. If not existed, return false.
    */
   def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
-    functionRegistry.functionExists(name)
+    functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
   }
 
   /**
@@ -1521,6 +1543,7 @@ class SessionCatalog(
     val qualifiedName = name.copy(database = database)
     functionRegistry.lookupFunction(name)
       .orElse(functionRegistry.lookupFunction(qualifiedName))
+      .orElse(tableFunctionRegistry.lookupFunction(name))
       .getOrElse {
         val db = qualifiedName.database.get
         requireDbExists(db)
@@ -1537,7 +1560,7 @@ class SessionCatalog(
   }
 
   /**
-   * Return an [[Expression]] that represents the specified function, assuming it exists.
+   * Look up a specific function, assuming it exists.
    *
    * For a temporary function or a permanent function that has been loaded,
    * this method will simply lookup the function through the
@@ -1549,13 +1572,14 @@ class SessionCatalog(
    * based on the function class and put the builder into the FunctionRegistry.
    * The name of this function in the FunctionRegistry will be `databaseName.functionName`.
    */
-  def lookupFunction(
+  private def lookupFunction[T](
       name: FunctionIdentifier,
-      children: Seq[Expression]): Expression = synchronized {
+      children: Seq[Expression],
+      registry: FunctionRegistryBase[T]): T = synchronized {
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
-    if (name.database.isEmpty && functionRegistry.functionExists(name)) {
+    if (name.database.isEmpty && registry.functionExists(name)) {
       val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
       val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
       // Lookup the function as a temporary or a built-in function (i.e. without database) and
@@ -1565,7 +1589,7 @@ class SessionCatalog(
           !isTemporaryFunction(name) ||
           referredTempFunctionNames.contains(name.funcName)) {
         // This function has been already loaded into the function registry.
-        return functionRegistry.lookupFunction(name, children)
+        return registry.lookupFunction(name, children)
       }
     }
 
@@ -1581,10 +1605,10 @@ class SessionCatalog(
     val database = formatDatabaseName(name.database.getOrElse(currentDatabase))
     val qualifiedName = name.copy(database = Some(database))
 
-    if (functionRegistry.functionExists(qualifiedName)) {
+    if (registry.functionExists(qualifiedName)) {
       // This function has been already loaded into the function registry.
       // Unlike the above block, we find this function by using the qualified name.
-      return functionRegistry.lookupFunction(qualifiedName, children)
+      return registry.lookupFunction(qualifiedName, children)
     }
 
     // The function has not been loaded to the function registry, which means
@@ -1604,7 +1628,21 @@ class SessionCatalog(
     // At here, we preserve the input from the user.
     registerFunction(catalogFunction.copy(identifier = qualifiedName), overrideIfExists = false)
     // Now, we need to create the Expression.
-    functionRegistry.lookupFunction(qualifiedName, children)
+    registry.lookupFunction(qualifiedName, children)
+  }
+
+  /**
+   * Return an [[Expression]] that represents the specified function, assuming it exists.
+   */
+  def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+    lookupFunction[Expression](name, children, functionRegistry)
+  }
+
+  /**
+   * Return a [[LogicalPlan]] that represents the specified function, assuming it exists.
+   */
+  def lookupTableFunction(name: FunctionIdentifier, children: Seq[Expression]): LogicalPlan = {
+    lookupFunction[LogicalPlan](name, children, tableFunctionRegistry)
   }
 
   /**
@@ -1625,7 +1663,9 @@ class SessionCatalog(
     val dbFunctions = externalCatalog.listFunctions(dbName, pattern).map { f =>
       FunctionIdentifier(f, Some(dbName)) }
     val loadedFunctions = StringUtils
-      .filterPattern(functionRegistry.listFunction().map(_.unquotedString), pattern).map { f =>
+      .filterPattern(
+        (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
+          .map(_.unquotedString), pattern).map { f =>
         // In functionRegistry, function names are stored as an unquoted format.
         Try(parser.parseFunctionIdentifier(f)) match {
           case Success(e) => e
@@ -1639,6 +1679,7 @@ class SessionCatalog(
     // so there can be duplicates.
     functions.map {
       case f if FunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
+      case f if TableFunctionRegistry.functionSet.contains(f) => (f, "SYSTEM")
       case f => (f, "USER")
     }.distinct
   }
@@ -1673,6 +1714,7 @@ class SessionCatalog(
     clearTempTables()
     globalTempViewManager.clear()
     functionRegistry.clear()
+    tableFunctionRegistry.clear()
     tableRelationCache.invalidateAll()
     // restore built-in functions
     FunctionRegistry.builtin.listFunction().foreach { f =>
@@ -1681,6 +1723,14 @@ class SessionCatalog(
       require(expressionInfo.isDefined, s"built-in function '$f' is missing expression info")
       require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
       functionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
+    }
+    // restore built-in table functions
+    TableFunctionRegistry.builtin.listFunction().foreach { f =>
+      val expressionInfo = TableFunctionRegistry.builtin.lookupFunction(f)
+      val functionBuilder = TableFunctionRegistry.builtin.lookupFunctionBuilder(f)
+      require(expressionInfo.isDefined, s"built-in function '$f' is missing expression info")
+      require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
+      tableFunctionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
     }
   }
 

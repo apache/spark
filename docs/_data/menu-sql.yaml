@@ -34,6 +34,8 @@
       url: sql-data-sources-json.html
     - text: CSV Files
       url: sql-data-sources-csv.html
+    - text: Text Files
+      url: sql-data-sources-text.html
     - text: Hive Tables
       url: sql-data-sources-hive-tables.html
     - text: JDBC To Other Databases
