@@ -238,8 +238,9 @@ object KafkaMicroBatchStream extends Logging {
    * @param latestAvailablePartitionOffsets latest available offset per partition
    * @return the generated metrics map
    */
-  def metrics(latestConsumedOffset: Optional[Offset],
-              latestAvailablePartitionOffsets: PartitionOffsetMap): ju.Map[String, String] = {
+  def metrics(
+      latestConsumedOffset: Optional[Offset],
+      latestAvailablePartitionOffsets: PartitionOffsetMap): ju.Map[String, String] = {
     val offset = Option(latestConsumedOffset.orElse(null))
 
     if (offset.nonEmpty) {
@@ -248,7 +249,7 @@ object KafkaMicroBatchStream extends Logging {
         .filter(partitionOffset => consumedPartitionOffsets.contains(partitionOffset._1))
         .map(partitionOffset =>
           partitionOffset._2 - consumedPartitionOffsets.get(partitionOffset._1).get)
-      if (offsetsBehindLatest.size > 0) {
+      if (offsetsBehindLatest.nonEmpty) {
         val avgOffsetBehindLatest = offsetsBehindLatest.sum.toDouble / offsetsBehindLatest.size
         return Map[String, String](
           "minOffsetsBehindLatest" -> offsetsBehindLatest.min.toString,
@@ -256,6 +257,6 @@ object KafkaMicroBatchStream extends Logging {
           "avgOffsetsBehindLatest" -> avgOffsetBehindLatest.toString).asJava
       }
     }
-    Map[String, String]().asJava
+    ju.Collections.emptyMap()
   }
 }
