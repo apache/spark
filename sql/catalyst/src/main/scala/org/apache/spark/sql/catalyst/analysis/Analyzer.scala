@@ -595,13 +595,14 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
     }
 
-    private def tryResolveHavingCondition(h: UnresolvedHaving): LogicalPlan = {
-      val aggForResolving = h.child match {
-        // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
-        // groupingExpressions for condition resolving.
-        case a @ Aggregate(GroupingAnalytics(_, groupByExprs), _, _) =>
-          a.copy(groupingExpressions = groupByExprs)
-      }
+    private def tryResolveHavingCondition(
+        h: UnresolvedHaving,
+        aggregate: Aggregate,
+        selectedGroupByExprs: Seq[Seq[Expression]],
+        groupByExprs: Seq[Expression]): LogicalPlan = {
+      // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
+      // groupingExpressions for condition resolving.
+      val aggForResolving = aggregate.copy(groupingExpressions = groupByExprs)
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val resolvedInfo =
         ResolveAggregateFunctions.resolveFilterCondInAggregate(h.havingCondition, aggForResolving)
@@ -609,13 +610,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Push the aggregate expressions into the aggregate (if any).
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
-        val newChild = h.child match {
-          case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs),
-              aggregateExpressions, child) =>
-            constructAggregate(
-              selectedGroupByExprs, groupByExprs,
-              aggregateExpressions ++ extraAggExprs, child)
-        }
+        val newChild = constructAggregate(selectedGroupByExprs, groupByExprs,
+          aggregate.aggregateExpressions ++ extraAggExprs, aggregate.child)
 
         // Since the exprId of extraAggExprs will be changed in the constructed aggregate, and the
         // aggregateExpressions keeps the input order. So here we build an exprMap to resolve the
@@ -638,9 +634,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case h @ UnresolvedHaving(_, agg @ Aggregate(
-        GroupingAnalytics(_, groupByExprs), aggregateExpressions, _))
+        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggregateExpressions, _))
         if agg.childrenResolved && aggregateExpressions.forall(_.resolved) =>
-        tryResolveHavingCondition(h)
+        tryResolveHavingCondition(h, agg, selectedGroupByExprs, groupByExprs)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
