@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import unittest
 from distutils.version import LooseVersion
 
 import pandas as pd
@@ -32,6 +33,7 @@ class SeriesConversionTest(ReusedSQLTestCase, SQLTestUtils):
     def kser(self):
         return pp.from_pandas(self.pser)
 
+    @unittest.skip("Pyperclip could not find a copy/paste mechanism for Linux.")
     def test_to_clipboard(self):
         pser = self.pser
         kser = self.kser
@@ -63,7 +65,6 @@ class SeriesConversionTest(ReusedSQLTestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.test_series_conversion import *  # noqa: F401
 
     try:
