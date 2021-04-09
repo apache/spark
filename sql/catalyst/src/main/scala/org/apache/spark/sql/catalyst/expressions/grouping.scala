@@ -32,6 +32,8 @@ trait BaseGroupingSets extends Expression with CodegenFallback {
   def selectedGroupByExprs: Seq[Seq[Expression]]
 
   def groupByExprs: Seq[Expression] = {
+    assert(children.forall(_.resolved),
+      "Cannot call BaseGroupingSets.groupByExprs before the children expressions are all resolved.")
     BaseGroupingSets.distinctGroupByExprs(children)
   }
 
@@ -237,7 +239,13 @@ object GroupingID {
 object GroupingAnalytics {
   def unapply(exprs: Seq[Expression])
   : Option[(Seq[Seq[Expression]], Seq[Expression])] = {
-    if (!exprs.exists(e => e.find(_.isInstanceOf[BaseGroupingSets]).isDefined)) {
+    val resolved = exprs.map {
+      case gs: BaseGroupingSets => gs.childrenResolved
+      case other => other.resolved
+    }.forall(_ == true)
+    if (!resolved) {
+      None
+    } else if (!exprs.exists(e => e.find(_.isInstanceOf[BaseGroupingSets]).isDefined)) {
       None
     } else {
       val groups = exprs.flatMap {
