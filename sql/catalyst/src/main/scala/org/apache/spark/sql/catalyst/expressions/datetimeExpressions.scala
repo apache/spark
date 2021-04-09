@@ -251,6 +251,9 @@ case class DateAdd(startDate: Expression, days: Expression)
   }
 
   override def prettyName: String = "date_add"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): DateAdd = copy(startDate = newLeft, days = newRight)
 }
 
 /**
@@ -286,6 +289,9 @@ case class DateSub(startDate: Expression, days: Expression)
   }
 
   override def prettyName: String = "date_sub"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): DateSub = copy(startDate = newLeft, days = newRight)
 }
 
 trait GetTimeField extends UnaryExpression
@@ -323,6 +329,7 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None) extends Ge
   override def withTimeZone(timeZoneId: String): Hour = copy(timeZoneId = Option(timeZoneId))
   override val func = DateTimeUtils.getHours
   override val funcName = "getHours"
+  override protected def withNewChildInternal(newChild: Expression): Hour = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -339,6 +346,7 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None) extends 
   override def withTimeZone(timeZoneId: String): Minute = copy(timeZoneId = Option(timeZoneId))
   override val func = DateTimeUtils.getMinutes
   override val funcName = "getMinutes"
+  override protected def withNewChildInternal(newChild: Expression): Minute = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -355,6 +363,8 @@ case class Second(child: Expression, timeZoneId: Option[String] = None) extends 
   override def withTimeZone(timeZoneId: String): Second = copy(timeZoneId = Option(timeZoneId))
   override val func = DateTimeUtils.getSeconds
   override val funcName = "getSeconds"
+  override protected def withNewChildInternal(newChild: Expression): Second =
+    copy(child = newChild)
 }
 
 case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = None)
@@ -366,6 +376,8 @@ case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = No
     copy(timeZoneId = Option(timeZoneId))
   override val func = DateTimeUtils.getSecondsWithFraction
   override val funcName = "getSecondsWithFraction"
+  override protected def withNewChildInternal(newChild: Expression): SecondWithFraction =
+    copy(child = newChild)
 }
 
 trait GetDateField extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -398,6 +410,8 @@ trait GetDateField extends UnaryExpression with ImplicitCastInputTypes with Null
 case class DayOfYear(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getDayInYear
   override val funcName = "getDayInYear"
+  override protected def withNewChildInternal(newChild: Expression): DayOfYear =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -421,6 +435,9 @@ case class DateFromUnixDate(child: Expression) extends UnaryExpression
     defineCodeGen(ctx, ev, c => c)
 
   override def prettyName: String = "date_from_unix_date"
+
+  override protected def withNewChildInternal(newChild: Expression): DateFromUnixDate =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -444,6 +461,9 @@ case class UnixDate(child: Expression) extends UnaryExpression
     defineCodeGen(ctx, ev, c => c)
 
   override def prettyName: String = "unix_date"
+
+  override protected def withNewChildInternal(newChild: Expression): UnixDate =
+    copy(child = newChild)
 }
 
 abstract class IntegralToTimestampBase extends UnaryExpression
@@ -531,6 +551,9 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
   }
 
   override def prettyName: String = "timestamp_seconds"
+
+  override protected def withNewChildInternal(newChild: Expression): SecondsToTimestamp =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -550,6 +573,9 @@ case class MillisToTimestamp(child: Expression)
   override def upScaleFactor: Long = MICROS_PER_MILLIS
 
   override def prettyName: String = "timestamp_millis"
+
+  override protected def withNewChildInternal(newChild: Expression): MillisToTimestamp =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -569,6 +595,9 @@ case class MicrosToTimestamp(child: Expression)
   override def upScaleFactor: Long = 1L
 
   override def prettyName: String = "timestamp_micros"
+
+  override protected def withNewChildInternal(newChild: Expression): MicrosToTimestamp =
+    copy(child = newChild)
 }
 
 abstract class TimestampToLongBase extends UnaryExpression
@@ -608,6 +637,9 @@ case class UnixSeconds(child: Expression) extends TimestampToLongBase {
   override def scaleFactor: Long = MICROS_PER_SECOND
 
   override def prettyName: String = "unix_seconds"
+
+  override protected def withNewChildInternal(newChild: Expression): UnixSeconds =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -625,6 +657,9 @@ case class UnixMillis(child: Expression) extends TimestampToLongBase {
   override def scaleFactor: Long = MICROS_PER_MILLIS
 
   override def prettyName: String = "unix_millis"
+
+  override protected def withNewChildInternal(newChild: Expression): UnixMillis =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -642,6 +677,9 @@ case class UnixMicros(child: Expression) extends TimestampToLongBase {
   override def scaleFactor: Long = 1L
 
   override def prettyName: String = "unix_micros"
+
+  override protected def withNewChildInternal(newChild: Expression): UnixMicros =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -656,11 +694,15 @@ case class UnixMicros(child: Expression) extends TimestampToLongBase {
 case class Year(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getYear
   override val funcName = "getYear"
+  override protected def withNewChildInternal(newChild: Expression): Year =
+    copy(child = newChild)
 }
 
 case class YearOfWeek(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getWeekBasedYear
   override val funcName = "getWeekBasedYear"
+  override protected def withNewChildInternal(newChild: Expression): YearOfWeek =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -675,6 +717,8 @@ case class YearOfWeek(child: Expression) extends GetDateField {
 case class Quarter(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getQuarter
   override val funcName = "getQuarter"
+  override protected def withNewChildInternal(newChild: Expression): Quarter =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -689,6 +733,7 @@ case class Quarter(child: Expression) extends GetDateField {
 case class Month(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getMonth
   override val funcName = "getMonth"
+  override protected def withNewChildInternal(newChild: Expression): Month = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -703,6 +748,8 @@ case class Month(child: Expression) extends GetDateField {
 case class DayOfMonth(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getDayOfMonth
   override val funcName = "getDayOfMonth"
+  override protected def withNewChildInternal(newChild: Expression): DayOfMonth =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -719,6 +766,8 @@ case class DayOfMonth(child: Expression) extends GetDateField {
 case class DayOfWeek(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getDayOfWeek
   override val funcName = "getDayOfWeek"
+  override protected def withNewChildInternal(newChild: Expression): DayOfWeek =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -735,6 +784,8 @@ case class DayOfWeek(child: Expression) extends GetDateField {
 case class WeekDay(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getWeekDay
   override val funcName = "getWeekDay"
+  override protected def withNewChildInternal(newChild: Expression): WeekDay =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -751,6 +802,8 @@ case class WeekDay(child: Expression) extends GetDateField {
 case class WeekOfYear(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getWeekOfYear
   override val funcName = "getWeekOfYear"
+  override protected def withNewChildInternal(newChild: Expression): WeekOfYear =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -814,6 +867,10 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   override protected def formatString: Expression = right
 
   override protected def isParsing: Boolean = false
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DateFormatClass =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -859,6 +916,10 @@ case class ToUnixTimestamp(
   }
 
   override def prettyName: String = "to_unix_timestamp"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ToUnixTimestamp =
+    copy(timeExp = newLeft, format = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -915,6 +976,10 @@ case class UnixTimestamp(
   }
 
   override def prettyName: String = "unix_timestamp"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): UnixTimestamp =
+    copy(timeExp = newLeft, format = newRight)
 }
 
 abstract class ToTimestamp
@@ -1120,6 +1185,10 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override protected def formatString: Expression = format
 
   override protected def isParsing: Boolean = false
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): FromUnixTime =
+    copy(sec = newLeft, format = newRight)
 }
 
 /**
@@ -1152,6 +1221,9 @@ case class LastDay(startDate: Expression)
   }
 
   override def prettyName: String = "last_day"
+
+  override protected def withNewChildInternal(newChild: Expression): LastDay =
+    copy(startDate = newChild)
 }
 
 /**
@@ -1249,6 +1321,10 @@ case class NextDay(
   }
 
   override def prettyName: String = "next_day"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): NextDay =
+    copy(startDate = newLeft, dayOfWeek = newRight)
 }
 
 /**
@@ -1292,6 +1368,10 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
         })
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TimeAdd =
+    copy(start = newLeft, interval = newRight)
 }
 
 /**
@@ -1305,6 +1385,8 @@ case class DatetimeSub(
   override def exprsReplaced: Seq[Expression] = Seq(start, interval)
   override def toString: String = s"$start - $interval"
   override def mkString(childrenString: Seq[String]): String = childrenString.mkString(" - ")
+  override protected def withNewChildInternal(newChild: Expression): DatetimeSub =
+    copy(child = newChild)
 }
 
 /**
@@ -1367,6 +1449,10 @@ case class DateAddInterval(
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DateAddInterval =
+    copy(start = newLeft, interval = newRight)
 }
 
 sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -1447,6 +1533,9 @@ case class FromUTCTimestamp(left: Expression, right: Expression) extends UTCTime
   override val func = DateTimeUtils.fromUTCTime
   override val funcName: String = "fromUTCTime"
   override val prettyName: String = "from_utc_timestamp"
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): FromUTCTimestamp =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1478,6 +1567,9 @@ case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimest
   override val func = DateTimeUtils.toUTCTime
   override val funcName: String = "toUTCTime"
   override val prettyName: String = "to_utc_timestamp"
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ToUTCTimestamp =
+    copy(left = newLeft, right = newRight)
 }
 
 abstract class AddMonthsBase extends BinaryExpression with ImplicitCastInputTypes
@@ -1517,6 +1609,10 @@ case class AddMonths(startDate: Expression, numMonths: Expression) extends AddMo
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
 
   override def prettyName: String = "add_months"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): AddMonths =
+    copy(startDate = newLeft, numMonths = newRight)
 }
 
 // Adds the year-month interval to the date
@@ -1528,6 +1624,10 @@ case class DateAddYMInterval(date: Expression, interval: Expression) extends Add
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DateAddYMInterval =
+    copy(date = newLeft, interval = newRight)
 }
 
 // Adds the year-month interval to the timestamp
@@ -1562,6 +1662,10 @@ case class TimestampAddYMInterval(
       s"""$dtu.timestampAddMonths($micros, $months, $zid)"""
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TimestampAddYMInterval =
+    copy(timestamp = newLeft, interval = newRight)
 }
 
 /**
@@ -1628,6 +1732,10 @@ case class MonthsBetween(
   }
 
   override def prettyName: String = "months_between"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): MonthsBetween =
+    copy(date1 = newFirst, date2 = newSecond, roundOff = newThird)
 }
 
 /**
@@ -1672,6 +1780,9 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   override def flatArguments: Iterator[Any] = Iterator(left, format)
 
   override def prettyName: String = "to_date"
+
+  override protected def withNewChildInternal(newChild: Expression): ParseToDate =
+    copy(child = newChild)
 }
 
 /**
@@ -1714,6 +1825,9 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
 
   override def prettyName: String = "to_timestamp"
   override def dataType: DataType = TimestampType
+
+  override protected def withNewChildInternal(newChild: Expression): ParseToTimestamp =
+    copy(child = newChild)
 }
 
 trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
@@ -1849,6 +1963,10 @@ case class TruncDate(date: Expression, format: Expression)
       (date: String, fmt: String) => s"truncDate($date, $fmt);"
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TruncDate =
+    copy(date = newLeft, format = newRight)
 }
 
 /**
@@ -1920,6 +2038,10 @@ case class TruncTimestamp(
         s"truncTimestamp($date, $fmt, $zid);"
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TruncTimestamp =
+    copy(format = newLeft, timestamp = newRight)
 }
 
 /**
@@ -1952,6 +2074,10 @@ case class DateDiff(endDate: Expression, startDate: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (end, start) => s"$end - $start")
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DateDiff =
+    copy(endDate = newLeft, startDate = newRight)
 }
 
 /**
@@ -1969,6 +2095,10 @@ private case class GetTimestamp(
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetTimestamp =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -2032,6 +2162,10 @@ case class MakeDate(
   }
 
   override def prettyName: String = "make_date"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): MakeDate =
+    copy(year = newFirst, month = newSecond, day = newThird)
 }
 
 // scalastyle:off line.size.limit
@@ -2198,6 +2332,20 @@ case class MakeTimestamp(
   }
 
   override def prettyName: String = "make_timestamp"
+
+//  override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): MakeTimestamp = {
+    val timezoneOpt = if (timezone.isDefined) Some(newChildren(6)) else None
+    copy(
+      year = newChildren(0),
+      month = newChildren(1),
+      day = newChildren(2),
+      hour = newChildren(3),
+      min = newChildren(4),
+      sec = newChildren(5),
+      timezone = timezoneOpt)
+  }
 }
 
 object DatePart {
@@ -2284,6 +2432,9 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   override def exprsReplaced: Seq[Expression] = Seq(field, source)
 
   override def prettyName: String = "date_part"
+
+  override protected def withNewChildInternal(newChild: Expression): DatePart =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -2349,6 +2500,9 @@ case class Extract(field: Expression, source: Expression, child: Expression)
   override def mkString(childrenString: Seq[String]): String = {
     prettyName + childrenString.mkString("(", " FROM ", ")")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Extract =
+    copy(child = newChild)
 }
 
 /**
@@ -2401,6 +2555,10 @@ case class SubtractTimestamps(
       defineCodeGen(ctx, ev, (end, start) =>
         s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): SubtractTimestamps =
+    copy(left = newLeft, right = newRight)
 }
 
 object SubtractTimestamps {
@@ -2452,6 +2610,10 @@ case class SubtractDates(
         s"$dtu.subtractDates($leftDays, $rightDays)"
       })
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): SubtractDates =
+    copy(left = newLeft, right = newRight)
 }
 
 object SubtractDates {

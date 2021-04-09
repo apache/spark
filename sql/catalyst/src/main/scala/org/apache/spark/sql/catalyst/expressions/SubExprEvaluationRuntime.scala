@@ -140,6 +140,9 @@ case class ExpressionProxy(
   }
 
   override def hashCode(): Int = this.id.hashCode()
+
+  override protected def withNewChildInternal(newChild: Expression): ExpressionProxy =
+    copy(child = newChild)
 }
 
 /**

@@ -107,6 +107,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
        |${ExplainUtils.generateFieldString("Input", child.output)}
        |""".stripMargin
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ProjectExec =
+    copy(child = newChild)
 }
 
 trait GeneratePredicateHelper extends PredicateHelper {
@@ -286,6 +289,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
        |Condition : ${condition}
        |""".stripMargin
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): FilterExec =
+    copy(child = newChild)
 }
 
 /**
@@ -392,6 +398,9 @@ case class SampleExec(
        """.stripMargin.trim
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SampleExec =
+    copy(child = newChild)
 }
 
 
@@ -687,6 +696,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
 
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
+    copy(children = newChildren)
 }
 
 /**
@@ -720,6 +732,9 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
       child.execute().coalesce(numPartitions, shuffle = false)
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): CoalesceExec =
+    copy(child = newChild)
 }
 
 object CoalesceExec {
@@ -849,6 +864,9 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
   }
 
   override def stringArgs: Iterator[Any] = Iterator(name, child) ++ Iterator(s"[id=#$id]")
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SubqueryExec =
+    copy(child = newChild)
 }
 
 object SubqueryExec {

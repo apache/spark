@@ -37,6 +37,9 @@ case class FlatMapGroupsInPandas(
    * from the input.
    */
   override val producedAttributes = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): FlatMapGroupsInPandas =
+    copy(child = newChild)
 }
 
 /**
@@ -49,6 +52,9 @@ case class MapInPandas(
     child: LogicalPlan) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapInPandas =
+    copy(child = newChild)
 }
 
 /**
@@ -70,6 +76,10 @@ case class FlatMapCoGroupsInPandas(
   def leftAttributes: Seq[Attribute] = left.output.take(leftGroupingLen)
 
   def rightAttributes: Seq[Attribute] = right.output.take(rightGroupingLen)
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapCoGroupsInPandas =
+    copy(left = newLeft, right = newRight)
 }
 
 trait BaseEvalPython extends UnaryNode {
@@ -89,7 +99,10 @@ trait BaseEvalPython extends UnaryNode {
 case class BatchEvalPython(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
-    child: LogicalPlan) extends BaseEvalPython
+    child: LogicalPlan) extends BaseEvalPython {
+  override protected def withNewChildInternal(newChild: LogicalPlan): BatchEvalPython =
+    copy(child = newChild)
+}
 
 /**
  * A logical plan that evaluates a [[PythonUDF]] with Apache Arrow.
@@ -98,4 +111,7 @@ case class ArrowEvalPython(
     udfs: Seq[PythonUDF],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan,
-    evalType: Int) extends BaseEvalPython
+    evalType: Int) extends BaseEvalPython {
+  override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPython =
+    copy(child = newChild)
+}

@@ -62,4 +62,6 @@ case class Max(child: Expression) extends DeclarativeAggregate with UnaryLike[Ex
   }
 
   override lazy val evaluateExpression: AttributeReference = max
+
+  override protected def withNewChildInternal(newChild: Expression): Max = copy(child = newChild)
 }

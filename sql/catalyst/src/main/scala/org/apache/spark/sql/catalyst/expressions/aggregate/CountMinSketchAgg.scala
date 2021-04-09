@@ -154,4 +154,12 @@ case class CountMinSketchAgg(
   override def second: Expression = epsExpression
   override def third: Expression = confidenceExpression
   override def fourth: Expression = seedExpression
+
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+      third: Expression, fourth: Expression): CountMinSketchAgg =
+    copy(
+      child = first,
+      epsExpression = second,
+      confidenceExpression = third,
+      seedExpression = fourth)
 }

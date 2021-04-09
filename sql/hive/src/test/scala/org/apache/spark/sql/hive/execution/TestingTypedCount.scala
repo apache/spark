@@ -78,6 +78,9 @@ case class TestingTypedCount(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override val prettyName: String = "typed_count"
+
+  override protected def withNewChildInternal(newChild: Expression): TestingTypedCount =
+    copy(child = newChild)
 }
 
 object TestingTypedCount {
