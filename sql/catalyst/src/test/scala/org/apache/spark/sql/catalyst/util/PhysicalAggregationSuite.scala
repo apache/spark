@@ -33,7 +33,7 @@ class PhysicalAggregationSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int)
 
-  test("SC-75347: a foldable expression should not be replaced by an AttributeReference") {
+  test("SPARK-35014: a foldable expression should not be replaced by an AttributeReference") {
     val query = testRelation
       .groupBy('a, Literal.create(1) as 'k)(
         'a, Round(Literal.create(1.2), Literal.create(1)) as 'r, count('b) as 'c)
