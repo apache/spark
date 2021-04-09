@@ -32,8 +32,6 @@ trait BaseGroupingSets extends Expression with CodegenFallback {
   def selectedGroupByExprs: Seq[Seq[Expression]]
 
   def groupByExprs: Seq[Expression] = {
-    assert(children.forall(_.resolved),
-      "Cannot call BaseGroupingSets.groupByExprs before the children expressions are all resolved.")
     children.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
       // Only unique expressions are included in the group by expressions and is determined
       // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
