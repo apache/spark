@@ -820,10 +820,7 @@ case class RepairTable(
 case class AlterViewAs(
     child: LogicalPlan,
     originalText: String,
-    query: LogicalPlan) extends BinaryCommand {
-  override def left: LogicalPlan = child
-  override def right: LogicalPlan = query
-}
+    query: LogicalPlan) extends UnaryCommand
 
 /**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.

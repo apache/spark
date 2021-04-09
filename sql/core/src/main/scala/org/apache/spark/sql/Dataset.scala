@@ -3373,7 +3373,8 @@ class Dataset[T] private[sql](
       plan = logicalPlan,
       allowExisting = false,
       replace = replace,
-      viewType = viewType)
+      viewType = viewType,
+      isAnalyzed = true)
   }
 
   /**

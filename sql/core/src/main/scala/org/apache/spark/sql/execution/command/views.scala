@@ -239,11 +239,16 @@ case class CreateViewCommand(
 case class AlterViewAsCommand(
     name: TableIdentifier,
     originalText: String,
-    query: LogicalPlan) extends RunnableCommand {
+    query: LogicalPlan,
+    isAnalyzed: Boolean = false) extends RunnableCommand with AnalysisOnlyCommand {
 
   import ViewHelper._
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = query :: Nil
+
+  def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
 
   override def run(session: SparkSession): Seq[Row] = {
     if (session.sessionState.catalog.isTempView(name)) {
