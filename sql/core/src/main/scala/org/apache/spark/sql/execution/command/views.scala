@@ -71,6 +71,10 @@ case class CreateViewCommand(
 
   import ViewHelper._
 
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): CreateViewCommand =
+    copy(plan = newChildren.head)
+
   override def innerChildren: Seq[QueryPlan[_]] = Seq(plan)
 
   // `plan` needs to be analyzed, but shouldn't be optimized so that caching works correctly.
@@ -244,6 +248,10 @@ case class AlterViewAsCommand(
 
   import ViewHelper._
 
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): AlterViewAsCommand =
+    copy(query = newChildren.head)
+
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def childrenToAnalyze: Seq[LogicalPlan] = query :: Nil
@@ -312,7 +320,7 @@ case class AlterViewAsCommand(
 case class ShowViewsCommand(
     databaseName: String,
     tableIdentifierPattern: Option[String],
-    override val output: Seq[Attribute]) extends RunnableCommand {
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

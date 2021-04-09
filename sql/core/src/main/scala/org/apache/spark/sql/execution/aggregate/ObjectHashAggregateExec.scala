@@ -138,6 +138,9 @@ case class ObjectHashAggregateExec(
       s"ObjectHashAggregate(keys=$keyString, functions=$functionString)"
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ObjectHashAggregateExec =
+    copy(child = newChild)
 }
 
 object ObjectHashAggregateExec {

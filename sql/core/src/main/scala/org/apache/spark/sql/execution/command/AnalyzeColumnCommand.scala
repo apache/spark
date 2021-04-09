@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
 case class AnalyzeColumnCommand(
     tableIdent: TableIdentifier,
     columnNames: Option[Seq[String]],
-    allColumns: Boolean) extends RunnableCommand {
+    allColumns: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +

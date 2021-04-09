@@ -93,4 +93,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
       coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
     /* count = */ If(child.isNull, count, count + 1L)
   )
+
+  override protected def withNewChildInternal(newChild: Expression): Average =
+    copy(child = newChild)
 }

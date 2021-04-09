@@ -488,7 +488,7 @@ Input [6]: [wp_web_page_sk#77, sales#86, profit#87, wp_web_page_sk#92, returns#1
 
 (85) Expand [codegen id : 23]
 Input [5]: [sales#18, returns#37, profit#38, channel#39, id#40]
-Arguments: [List(sales#18, returns#37, profit#38, channel#39, id#40, 0), List(sales#18, returns#37, profit#38, channel#39, null, 1), List(sales#18, returns#37, profit#38, null, null, 3)], [sales#18, returns#37, profit#38, channel#108, id#109, spark_grouping_id#110]
+Arguments: [ArrayBuffer(sales#18, returns#37, profit#38, channel#39, id#40, 0), ArrayBuffer(sales#18, returns#37, profit#38, channel#39, null, 1), ArrayBuffer(sales#18, returns#37, profit#38, null, null, 3)], [sales#18, returns#37, profit#38, channel#108, id#109, spark_grouping_id#110]
 
 (86) HashAggregate [codegen id : 23]
 Input [6]: [sales#18, returns#37, profit#38, channel#108, id#109, spark_grouping_id#110]
