@@ -1598,6 +1598,7 @@ class AdaptiveQueryExecSuite
       val df2 = spark.sparkContext.parallelize(
         (1 to 10).map(i => TestData(i, i.toString)), 4).toDF()
 
+      // positive test
       checkResultPartition(
         df1.groupBy("key").count().unionAll(df2),
         1,
@@ -1612,6 +1613,13 @@ class AdaptiveQueryExecSuite
         df1.groupBy("key").count().unionAll(df2).unionAll(df1.groupBy("key").count()),
         2,
         1 + 4 + 1)
+
+      // negative test
+      checkResultPartition(
+        df1.unionAll(df2),
+        0,
+        2 + 4
+      )
     }
   }
 }
