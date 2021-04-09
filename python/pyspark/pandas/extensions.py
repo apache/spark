@@ -354,7 +354,7 @@ def _test():
 
     globs = pyspark.pandas.extensions.__dict__.copy()
     globs["np"] = numpy
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.extensions tests")

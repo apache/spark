@@ -42,7 +42,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from pyspark import pandas as pp  # For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas import numpy_compat
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
@@ -727,15 +727,15 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3])
+        >>> s = ps.Series([1, 2, 3])
         >>> s.dtype
         dtype('int64')
 
-        >>> s = pp.Series(list('abc'))
+        >>> s = ps.Series(list('abc'))
         >>> s.dtype
         dtype('O')
 
-        >>> s = pp.Series(pd.date_range('20130101', periods=3))
+        >>> s = ps.Series(pd.date_range('20130101', periods=3))
         >>> s.dtype
         dtype('<M8[ns]')
 
@@ -749,13 +749,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         Returns true if the current object is empty. Otherwise, returns false.
 
-        >>> pp.range(10).id.empty
+        >>> ps.range(10).id.empty
         False
 
-        >>> pp.range(0).id.empty
+        >>> ps.range(0).id.empty
         True
 
-        >>> pp.DataFrame({}, index=list('abc')).index.empty
+        >>> ps.DataFrame({}, index=list('abc')).index.empty
         False
         """
         return self._internal.resolved_copy.spark_frame.rdd.isEmpty()
@@ -765,22 +765,22 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         Return True if it has any missing values. Otherwise, it returns False.
 
-        >>> pp.DataFrame({}, index=list('abc')).index.hasnans
+        >>> ps.DataFrame({}, index=list('abc')).index.hasnans
         False
 
-        >>> pp.Series(['a', None]).hasnans
+        >>> ps.Series(['a', None]).hasnans
         True
 
-        >>> pp.Series([1.0, 2.0, np.nan]).hasnans
+        >>> ps.Series([1.0, 2.0, np.nan]).hasnans
         True
 
-        >>> pp.Series([1, 2, 3]).hasnans
+        >>> ps.Series([1, 2, 3]).hasnans
         False
 
-        >>> (pp.Series([1.0, 2.0, np.nan]) + 1).hasnans
+        >>> (ps.Series([1.0, 2.0, np.nan]) + 1).hasnans
         True
 
-        >>> pp.Series([1, 2, 3]).rename("a").to_frame().set_index("a").index.hasnans
+        >>> ps.Series([1, 2, 3]).rename("a").to_frame().set_index("a").index.hasnans
         False
         """
         sdf = self._internal.spark_frame
@@ -810,29 +810,29 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> ser = pp.Series(['1/1/2018', '3/1/2018', '4/1/2018'])
+        >>> ser = ps.Series(['1/1/2018', '3/1/2018', '4/1/2018'])
         >>> ser.is_monotonic
         True
 
-        >>> df = pp.DataFrame({'dates': [None, '1/1/2018', '2/1/2018', '3/1/2018']})
+        >>> df = ps.DataFrame({'dates': [None, '1/1/2018', '2/1/2018', '3/1/2018']})
         >>> df.dates.is_monotonic
         False
 
         >>> df.index.is_monotonic
         True
 
-        >>> ser = pp.Series([1])
+        >>> ser = ps.Series([1])
         >>> ser.is_monotonic
         True
 
-        >>> ser = pp.Series([])
+        >>> ser = ps.Series([])
         >>> ser.is_monotonic
         True
 
         >>> ser.rename("a").to_frame().set_index("a").index.is_monotonic
         True
 
-        >>> ser = pp.Series([5, 4, 3, 2, 1], index=[1, 2, 3, 4, 5])
+        >>> ser = ps.Series([5, 4, 3, 2, 1], index=[1, 2, 3, 4, 5])
         >>> ser.is_monotonic
         False
 
@@ -841,7 +841,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Support for MultiIndex
 
-        >>> midx = pp.MultiIndex.from_tuples(
+        >>> midx = ps.MultiIndex.from_tuples(
         ... [('x', 'a'), ('x', 'b'), ('y', 'c'), ('y', 'd'), ('z', 'e')])
         >>> midx  # doctest: +SKIP
         MultiIndex([('x', 'a'),
@@ -853,7 +853,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> midx.is_monotonic
         True
 
-        >>> midx = pp.MultiIndex.from_tuples(
+        >>> midx = ps.MultiIndex.from_tuples(
         ... [('z', 'a'), ('z', 'b'), ('y', 'c'), ('y', 'd'), ('x', 'e')])
         >>> midx  # doctest: +SKIP
         MultiIndex([('z', 'a'),
@@ -888,29 +888,29 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> ser = pp.Series(['4/1/2018', '3/1/2018', '1/1/2018'])
+        >>> ser = ps.Series(['4/1/2018', '3/1/2018', '1/1/2018'])
         >>> ser.is_monotonic_decreasing
         True
 
-        >>> df = pp.DataFrame({'dates': [None, '3/1/2018', '2/1/2018', '1/1/2018']})
+        >>> df = ps.DataFrame({'dates': [None, '3/1/2018', '2/1/2018', '1/1/2018']})
         >>> df.dates.is_monotonic_decreasing
         False
 
         >>> df.index.is_monotonic_decreasing
         False
 
-        >>> ser = pp.Series([1])
+        >>> ser = ps.Series([1])
         >>> ser.is_monotonic_decreasing
         True
 
-        >>> ser = pp.Series([])
+        >>> ser = ps.Series([])
         >>> ser.is_monotonic_decreasing
         True
 
         >>> ser.rename("a").to_frame().set_index("a").index.is_monotonic_decreasing
         True
 
-        >>> ser = pp.Series([5, 4, 3, 2, 1], index=[1, 2, 3, 4, 5])
+        >>> ser = ps.Series([5, 4, 3, 2, 1], index=[1, 2, 3, 4, 5])
         >>> ser.is_monotonic_decreasing
         True
 
@@ -919,7 +919,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Support for MultiIndex
 
-        >>> midx = pp.MultiIndex.from_tuples(
+        >>> midx = ps.MultiIndex.from_tuples(
         ... [('x', 'a'), ('x', 'b'), ('y', 'c'), ('y', 'd'), ('z', 'e')])
         >>> midx  # doctest: +SKIP
         MultiIndex([('x', 'a'),
@@ -931,7 +931,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> midx.is_monotonic_decreasing
         False
 
-        >>> midx = pp.MultiIndex.from_tuples(
+        >>> midx = ps.MultiIndex.from_tuples(
         ... [('z', 'e'), ('z', 'd'), ('y', 'c'), ('y', 'b'), ('x', 'a')])
         >>> midx  # doctest: +SKIP
         MultiIndex([('z', 'a'),
@@ -1030,7 +1030,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         For Series
 
-        >>> s = pp.Series([None, 1, 2, 3, 4], index=[4, 5, 2, 1, 8])
+        >>> s = ps.Series([None, 1, 2, 3, 4], index=[4, 5, 2, 1, 8])
         >>> s.ndim
         1
 
@@ -1045,7 +1045,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         ...                       ['speed', 'weight', 'length']],
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [1, 1, 1, 1, 1, 2, 1, 2, 2]])
-        >>> s = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
+        >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
         >>> s.index.ndim
         1
         """
@@ -1071,7 +1071,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> ser = pp.Series([1, 2], dtype='int32')
+        >>> ser = ps.Series([1, 2], dtype='int32')
         >>> ser
         0    1
         1    2
@@ -1091,7 +1091,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         if isinstance(self.dtype, CategoricalDtype):
             if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
-                return cast(Union[pp.Index, pp.Series], self).copy()
+                return cast(Union[ps.Index, ps.Series], self).copy()
 
             categories = self.dtype.categories
             if len(categories) == 0:
@@ -1202,7 +1202,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> s = pp.Series(['lama', 'cow', 'lama', 'beetle', 'lama',
+        >>> s = ps.Series(['lama', 'cow', 'lama', 'beetle', 'lama',
         ...                'hippo'], name='animal')
         >>> s.isin(['cow', 'lama'])
         0     True
@@ -1254,7 +1254,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> ser = pp.Series([5, 6, np.NaN])
+        >>> ser = ps.Series([5, 6, np.NaN])
         >>> ser.isna()  # doctest: +NORMALIZE_WHITESPACE
         0    False
         1    False
@@ -1293,7 +1293,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         --------
         Show which entries in a Series are not NA.
 
-        >>> ser = pp.Series([5, 6, np.NaN])
+        >>> ser = ps.Series([5, 6, np.NaN])
         >>> ser
         0    5.0
         1    6.0
@@ -1337,31 +1337,31 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> pp.Series([True, True]).all()
+        >>> ps.Series([True, True]).all()
         True
 
-        >>> pp.Series([True, False]).all()
+        >>> ps.Series([True, False]).all()
         False
 
-        >>> pp.Series([0, 1]).all()
+        >>> ps.Series([0, 1]).all()
         False
 
-        >>> pp.Series([1, 2, 3]).all()
+        >>> ps.Series([1, 2, 3]).all()
         True
 
-        >>> pp.Series([True, True, None]).all()
+        >>> ps.Series([True, True, None]).all()
         True
 
-        >>> pp.Series([True, False, None]).all()
+        >>> ps.Series([True, False, None]).all()
         False
 
-        >>> pp.Series([]).all()
+        >>> ps.Series([]).all()
         True
 
-        >>> pp.Series([np.nan]).all()
+        >>> ps.Series([np.nan]).all()
         True
 
-        >>> df = pp.Series([True, False, None]).rename("a").to_frame()
+        >>> df = ps.Series([True, False, None]).rename("a").to_frame()
         >>> df.set_index("a").index.all()
         False
         """
@@ -1400,31 +1400,31 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> pp.Series([False, False]).any()
+        >>> ps.Series([False, False]).any()
         False
 
-        >>> pp.Series([True, False]).any()
+        >>> ps.Series([True, False]).any()
         True
 
-        >>> pp.Series([0, 0]).any()
+        >>> ps.Series([0, 0]).any()
         False
 
-        >>> pp.Series([0, 1, 2]).any()
+        >>> ps.Series([0, 1, 2]).any()
         True
 
-        >>> pp.Series([False, False, None]).any()
+        >>> ps.Series([False, False, None]).any()
         False
 
-        >>> pp.Series([True, False, None]).any()
+        >>> ps.Series([True, False, None]).any()
         True
 
-        >>> pp.Series([]).any()
+        >>> ps.Series([]).any()
         False
 
-        >>> pp.Series([np.nan]).any()
+        >>> ps.Series([np.nan]).any()
         False
 
-        >>> df = pp.Series([True, False, None]).rename("a").to_frame()
+        >>> df = ps.Series([True, False, None]).rename("a").to_frame()
         >>> df.set_index("a").index.any()
         True
         """
@@ -1469,7 +1469,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'Col1': [10, 20, 15, 30, 45],
+        >>> df = ps.DataFrame({'Col1': [10, 20, 15, 30, 45],
         ...                    'Col2': [13, 23, 18, 33, 48],
         ...                    'Col3': [17, 27, 22, 37, 52]},
         ...                   columns=['Col1', 'Col2', 'Col3'])
@@ -1544,7 +1544,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         --------
         For Series
 
-        >>> df = pp.DataFrame({'x':[0, 0, 1, 1, 1, np.nan]})
+        >>> df = ps.DataFrame({'x':[0, 0, 1, 1, 1, np.nan]})
         >>> df.x.value_counts()  # doctest: +NORMALIZE_WHITESPACE
         1.0    3
         0.0    2
@@ -1569,7 +1569,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         For Index
 
-        >>> idx = pp.Index([3, 1, 2, 3, 4, np.nan])
+        >>> idx = ps.Index([3, 1, 2, 3, 4, np.nan])
         >>> idx
         Float64Index([3.0, 1.0, 2.0, 3.0, 4.0, nan], dtype='float64')
 
@@ -1621,7 +1621,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         ...                       ['speed', 'weight', 'length']],
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [1, 1, 1, 1, 1, 2, 1, 2, 2]])
-        >>> s = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
+        >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
         >>> s.index  # doctest: +SKIP
         MultiIndex([(  'lama', 'weight'),
                     (  'lama', 'weight'),
@@ -1652,7 +1652,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         If Index has name, keep the name up.
 
-        >>> idx = pp.Index([0, 0, 0, 1, 1, 2, 3], name='koalas')
+        >>> idx = ps.Index([0, 0, 0, 1, 1, 2, 3], name='koalas')
         >>> idx.value_counts().sort_index()
         0    3
         1    2
@@ -1721,19 +1721,19 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> pp.Series([1, 2, 3, np.nan]).nunique()
+        >>> ps.Series([1, 2, 3, np.nan]).nunique()
         3
 
-        >>> pp.Series([1, 2, 3, np.nan]).nunique(dropna=False)
+        >>> ps.Series([1, 2, 3, np.nan]).nunique(dropna=False)
         4
 
         On big data, we recommend using the approximate algorithm to speed up this function.
         The result will be very close to the exact unique count.
 
-        >>> pp.Series([1, 2, 3, np.nan]).nunique(approx=True)
+        >>> ps.Series([1, 2, 3, np.nan]).nunique(approx=True)
         3
 
-        >>> idx = pp.Index([1, 1, 2, None])
+        >>> idx = ps.Index([1, 1, 2, None])
         >>> idx
         Float64Index([1.0, 1.0, 2.0, nan], dtype='float64')
 
@@ -1788,7 +1788,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Series
 
-        >>> kser = pp.Series([100, 200, 300, 400, 500])
+        >>> kser = ps.Series([100, 200, 300, 400, 500])
         >>> kser
         0    100
         1    200
@@ -1805,7 +1805,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Index
 
-        >>> kidx = pp.Index([100, 200, 300, 400, 500])
+        >>> kidx = ps.Index([100, 200, 300, 400, 500])
         >>> kidx
         Int64Index([100, 200, 300, 400, 500], dtype='int64')
 
@@ -1814,7 +1814,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         MultiIndex
 
-        >>> kmidx = pp.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "c")])
+        >>> kmidx = ps.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "c")])
         >>> kmidx  # doctest: +SKIP
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
@@ -1828,8 +1828,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         if not is_list_like(indices) or isinstance(indices, (dict, set)):
             raise ValueError("`indices` must be a list-like except dict or set")
-        if isinstance(self, pp.Series):
-            return cast(pp.Series, self.iloc[indices])
+        if isinstance(self, ps.Series):
+            return cast(ps.Series, self.iloc[indices])
         else:
             return self._kdf.iloc[indices].index
 
@@ -1864,7 +1864,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kser = pp.Series(['b', None, 'a', 'c', 'b'])
+        >>> kser = ps.Series(['b', None, 'a', 'c', 'b'])
         >>> codes, uniques = kser.factorize()
         >>> codes
         0    1
@@ -1900,7 +1900,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         For Index:
 
-        >>> kidx = pp.Index(['b', None, 'a', 'c', 'b'])
+        >>> kidx = ps.Index(['b', None, 'a', 'c', 'b'])
         >>> codes, uniques = kidx.factorize()
         >>> codes
         Int64Index([1, -1, 0, 2, 1], dtype='int64')
@@ -2005,7 +2005,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.base.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.base tests").getOrCreate()
     )
