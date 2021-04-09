@@ -25,7 +25,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Base trait for TPC-DS related tests.
  *
- * Datatype mapping for TPC-DS and Spark SQL, see more at:
+ * Datatype mapping for TPC-DS and Spark SQL, fully matching schemas defined in `tpcds.sql` of the
+ * official tpcds toolkit
+ * see more at:
  *   http://www.tpc.org/tpc_documents_current_versions/pdf/tpc-ds_v2.9.0.pdf
  *
  *    |---------------|---------------|
