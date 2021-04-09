@@ -43,24 +43,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  *    |---------------|---------------|
  *    |     Date      |     Date      |
  *    |---------------|---------------|
- *
- * Remarks:
- * The TPC-DS spec requires benchmark implementer may employ any internal representation or SQL
- * datatype that meets the following requirements:
- * 1. Identifier means that the column shall be able to hold any key value generated for that
- *    column.
- * 2. Integer means that the column shall be able to exactly represent integer values (i.e.,
- *    values in increments of 1) in the range of [-2<sup>63</sup>, 2<sup>63</sup>-1]
- * 3. Decimal(d, f) means that the column shall be able to represent decimal values up to and
- *    including d digits,of which f shall occur to the right of the decimal place; the values can be
- *    either represented exactly or interpreted to be in this range.
- * 4. Char(N) means that the column shall be able to hold any string of characters of a fixed
- *    length of N.
- * 5. Varchar(N) means that the column shall be able to hold any string of characters of a
- *    variable length with a maximum length of N. Columns defined as "varchar(N)" may optionally
- *    be implemented as "char(N)".
- * 6. Date means that the column shall be able to express any calendar day
- *    between January 1, 1900 and December 31, 2199.
  */
 trait TPCDSBase extends SharedSparkSession {
 
