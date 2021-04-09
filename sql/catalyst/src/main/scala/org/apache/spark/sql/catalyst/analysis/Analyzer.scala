@@ -1817,12 +1817,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       case ordinal @ UnresolvedOrdinal(index) =>
         if (index > 0 && index <= aggs.size) {
           val ordinalExpr = aggs(index - 1)
-            if(ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
-              throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
-                index, ordinalExpr, ordinal)
-            } else {
-              ordinalExpr
-            }
+          if (ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
+            throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
+              index, ordinalExpr, ordinal)
+          } else {
+            ordinalExpr
+          }
         } else {
           throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
         }
