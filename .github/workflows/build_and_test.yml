@@ -74,6 +74,8 @@ jobs:
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- other tests"
     env:
+      HIVE_SERVER2_THRIFT_BIND_HOST: 127.0.0.1
+      SPARK_LOCAL_IP: 127.0.0.1
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
       INCLUDED_TAGS: ${{ matrix.included-tags }}
@@ -132,8 +134,6 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
-        cat /etc/hosts
-        sudo sed -i '1s/^/127.0.0.1       localhost/' /etc/hosts
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
@@ -166,6 +166,8 @@ jobs:
           - >-
             pyspark-pandas
     env:
+      HIVE_SERVER2_THRIFT_BIND_HOST: 127.0.0.1
+      SPARK_LOCAL_IP: 127.0.0.1
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: hadoop3.2
       HIVE_PROFILE: hive2.3
@@ -216,7 +218,6 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
-        cat /etc/hosts
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST"
     - name: Upload test results to report
       if: always()
@@ -237,6 +238,8 @@ jobs:
     container:
       image: dongjoon/apache-spark-github-action-image:20201025
     env:
+      HIVE_SERVER2_THRIFT_BIND_HOST: 127.0.0.1
+      SPARK_LOCAL_IP: 127.0.0.1
       HADOOP_PROFILE: hadoop3.2
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
@@ -273,7 +276,6 @@ jobs:
       run: |
         # The followings are also used by `r-lib/actions/setup-r` to avoid
         # R issues at docker environment
-        cat /etc/hosts
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
         ./dev/run-tests --parallelism 2 --modules sparkr
@@ -473,6 +475,8 @@ jobs:
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
     env:
+      HIVE_SERVER2_THRIFT_BIND_HOST: 127.0.0.1
+      SPARK_LOCAL_IP: 127.0.0.1
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
