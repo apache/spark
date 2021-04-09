@@ -139,11 +139,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       withProjection :: Nil
 
     case WriteToDataSourceV2(relationOpt, writer, query) =>
-      val refreshCacheFunc: () => Unit = () => relationOpt match {
+      val invalidateCacheFunc: () => Unit = () => relationOpt match {
         case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
         case None => ()
       }
-      WriteToDataSourceV2Exec(writer, refreshCacheFunc, planLater(query)) :: Nil
+      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query)) :: Nil
 
     case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)

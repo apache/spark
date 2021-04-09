@@ -848,7 +848,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-34947: micro batch streaming write should refresh cache") {
+  test("SPARK-34947: micro batch streaming write should invalidate cache") {
     import testImplicits._
 
     val t = "testcat.ns.t"
