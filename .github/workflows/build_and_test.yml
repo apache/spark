@@ -473,8 +473,6 @@ jobs:
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
-    # TODO: Enable this when the data in 'Cache TPC-DS generated data' fits the new schema
-    if: ${{ '1' == '0' }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -491,7 +489,7 @@ jobs:
       uses: actions/checkout@v2
       with:
         repository: maropu/spark-tpcds-sf-1
-        ref: 6b660a53091bd6d23cbe58b0f09aae08e71cc667
+        ref: 556111e35d400f56cb0625dc16e9063d54628320
         path: ./tpcds-sf-1
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
