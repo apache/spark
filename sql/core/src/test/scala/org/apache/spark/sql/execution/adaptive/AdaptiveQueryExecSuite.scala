@@ -1577,6 +1577,17 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-34980: Support coalesce partition through union") {
+    def checkResultPartition(
+      df: Dataset[Row], shuffleReaderNumber: Int, partitionNumber: Int): Unit = {
+      df.collect()
+      assert(
+        collect(df.queryExecution.executedPlan) {
+          case s: CustomShuffleReaderExec => s
+        }.size === shuffleReaderNumber
+      )
+      assert(df.rdd.partitions.length === partitionNumber)
+    }
+
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
@@ -1587,14 +1598,20 @@ class AdaptiveQueryExecSuite
       val df2 = spark.sparkContext.parallelize(
         (1 to 10).map(i => TestData(i, i.toString)), 4).toDF()
 
-      val df = df1.groupBy("key").count().unionAll(df2)
-      df.collect()
-      assert(
-        collect(df.queryExecution.executedPlan) {
-          case s: CustomShuffleReaderExec => s
-        }.size === 1
-      )
-      assert(df.rdd.partitions.length === 1 + 4)
+      checkResultPartition(
+        df1.groupBy("key").count().unionAll(df2),
+        1,
+        1 + 4)
+
+      checkResultPartition(
+        df1.groupBy("key").count().unionAll(df2).unionAll(df1),
+        1,
+        1 + 4 + 2)
+
+      checkResultPartition(
+        df1.groupBy("key").count().unionAll(df2).unionAll(df1.groupBy("key").count()),
+        2,
+        1 + 4 + 1)
     }
   }
 }
