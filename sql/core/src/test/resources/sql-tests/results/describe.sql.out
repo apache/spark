@@ -571,7 +571,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeTableCommand
-   +- DescribeTableCommand `default`.`t`, Map(c -> Us, d -> 2), false, [col_name#x, data_type#x, comment#x]
+   +- DescribeTableCommand `default`.`t`, [c=Us, d=2], false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query

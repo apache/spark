@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, Long
   group = "agg_funcs",
   since = "3.0.0")
 case class CountIf(predicate: Expression) extends UnevaluableAggregate with ImplicitCastInputTypes
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
 
   override def prettyName: String = "count_if"
 

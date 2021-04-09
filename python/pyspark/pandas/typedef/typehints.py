@@ -519,3 +519,22 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
         return UnknownType(tpe)
     else:
         return ScalarType(*types)
+
+
+def _test():
+    import doctest
+    import sys
+    import pyspark.pandas.typedef.typehints
+
+    globs = pyspark.pandas.typedef.typehints.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.typedef.typehints,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

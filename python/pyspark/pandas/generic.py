@@ -3100,3 +3100,41 @@ class Frame(object, metaclass=ABCMeta):
             return F.count(F.nanvl(spark_column, F.lit(None)))
         else:
             return F.count(spark_column)
+
+
+def _test():
+    import os
+    import doctest
+    import shutil
+    import sys
+    import tempfile
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.generic
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.generic.__dict__.copy()
+    globs["pp"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.generic tests")
+        .getOrCreate()
+    )
+
+    path = tempfile.mkdtemp()
+    globs["path"] = path
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.generic,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+
+    shutil.rmtree(path, ignore_errors=True)
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

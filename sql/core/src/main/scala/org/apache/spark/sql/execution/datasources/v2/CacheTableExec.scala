@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdenti
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.storage.StorageLevel
 
-trait BaseCacheTableExec extends V2CommandExec {
+trait BaseCacheTableExec extends LeafV2CommandExec {
   def relationName: String
   def planToCache: LogicalPlan
   def dataFrameForCachedPlan: DataFrame
@@ -117,7 +117,7 @@ case class CacheTableAsSelectExec(
 
 case class UncacheTableExec(
     relation: LogicalPlan,
-    cascade: Boolean) extends V2CommandExec {
+    cascade: Boolean) extends LeafV2CommandExec {
   override def run(): Seq[InternalRow] = {
     val sparkSession = sqlContext.sparkSession
     sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, relation, cascade)
