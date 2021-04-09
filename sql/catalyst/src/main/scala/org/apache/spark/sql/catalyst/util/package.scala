@@ -206,7 +206,8 @@ package object util extends Logging {
 
   /**
    * Hidden columns are a type of metadata column that are candidates during qualified star
-   * star expansions. They are propagated through Projects that have hidden output.
+   * star expansions. They are propagated through Projects that have hidden children output,
+   * so that nested hidden output is not lost.
    */
   val HIDDEN_COL_ATTR_KEY = "__hidden_col"
 
