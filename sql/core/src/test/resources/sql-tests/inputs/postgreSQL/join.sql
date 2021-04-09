@@ -889,7 +889,7 @@ from nt3 as nt3
     on ss2.id = nt3.nt2_id
 where nt3.id = 1 and ss2.b3;
 
--- [SPARK-28379] Correlated scalar subqueries must be aggregated
+-- Accessing outer query column is not allowed in LocalLimit
 --
 -- test case where a PlaceHolderVar is propagated into a subquery
 --
