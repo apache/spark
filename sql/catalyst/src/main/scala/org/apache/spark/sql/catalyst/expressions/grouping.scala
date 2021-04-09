@@ -32,16 +32,7 @@ trait BaseGroupingSets extends Expression with CodegenFallback {
   def selectedGroupByExprs: Seq[Seq[Expression]]
 
   def groupByExprs: Seq[Expression] = {
-    children.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
-      // Only unique expressions are included in the group by expressions and is determined
-      // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
-      // in grouping expression (a * b)
-      if (result.exists(_.semanticEquals(currentExpr))) {
-        result
-      } else {
-        result :+ currentExpr
-      }
-    }
+    BaseGroupingSets.distinctGroupByExprs(children)
   }
 
   // this should be replaced first
@@ -100,6 +91,19 @@ object BaseGroupingSets {
     val startOffsets = groupingSets.map(_.length).scanLeft(0)(_ + _).init
     groupingSets.zip(startOffsets).map {
       case (gs, startOffset) => gs.indices.map(_ + startOffset)
+    }
+  }
+
+  def distinctGroupByExprs(exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
+      // Only unique expressions are included in the group by expressions and is determined
+      // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
+      // in grouping expression (a * b)
+      if (result.exists(_.semanticEquals(currentExpr))) {
+        result
+      } else {
+        result :+ currentExpr
+      }
     }
   }
 }
@@ -232,17 +236,13 @@ object GroupingID {
 
 object GroupingAnalytics {
   def unapply(exprs: Seq[Expression])
-  : Option[(Seq[Seq[Expression]], Seq[Seq[Expression]], Seq[Expression])] = {
+  : Option[(Seq[Seq[Expression]], Seq[Expression])] = {
     if (!exprs.exists(e => e.find(_.isInstanceOf[BaseGroupingSets]).isDefined)) {
       None
     } else {
       val groups = exprs.flatMap {
         case gs: BaseGroupingSets => gs.groupByExprs
         case other: Expression => other :: Nil
-      }
-      val groupingSets = exprs.flatMap {
-        case gs: BaseGroupingSets => gs.groupingSets
-        case _ => Nil
       }
       val unmergedSelectedGroupByExprs = exprs.map {
         case gs: BaseGroupingSets => gs.selectedGroupByExprs
@@ -252,7 +252,7 @@ object GroupingAnalytics {
         .foldLeft(unmergedSelectedGroupByExprs.last) { (x, y) =>
           for (a <- x; b <- y) yield a ++ b
         }
-      Some(selectedGroupByExprs, groupingSets, groups.distinct)
+      Some(selectedGroupByExprs, BaseGroupingSets.distinctGroupByExprs(groups))
     }
   }
 }

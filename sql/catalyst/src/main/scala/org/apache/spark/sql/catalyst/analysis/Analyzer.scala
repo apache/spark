@@ -599,7 +599,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
-        case a @ Aggregate(GroupingAnalytics(_, _, groupByExprs), _, _) =>
+        case a @ Aggregate(GroupingAnalytics(_, groupByExprs), _, _) =>
           a.copy(groupingExpressions = groupByExprs)
       }
       // Try resolving the condition of the filter as though it is in the aggregate clause
@@ -610,7 +610,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
         val newChild = h.child match {
-          case Aggregate(GroupingAnalytics(selectedGroupByExprs, _, groupByExprs),
+          case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs),
               aggregateExpressions, child) =>
             constructAggregate(
               selectedGroupByExprs, groupByExprs,
@@ -638,14 +638,14 @@ class Analyzer(override val catalogManager: CatalogManager)
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
       case h @ UnresolvedHaving(_, agg @ Aggregate(
-        GroupingAnalytics(_, _, groupByExprs), aggregateExpressions, _))
+        GroupingAnalytics(_, groupByExprs), aggregateExpressions, _))
         if agg.childrenResolved && (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(GroupingAnalytics(selectedGroupByExprs, _, groupByExprs), aggExprs, child)
+      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child)
         if (groupByExprs ++ aggExprs).forall(_.resolved) =>
         constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, child)
 
