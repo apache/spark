@@ -50,7 +50,7 @@ class PhysicalAggregationSuite extends PlanTest {
     assertResult(1)(aggregateExpressions.length)
     assertResult(3)(resultExpressions.length)
 
-    // Verify that RegExpReplace's pos parameter is a Literal.
+    // Verify that Round's scale parameter is a Literal.
     resultExpressions(1) match {
       case Alias(Round(_, _: Literal), _) =>
     }
