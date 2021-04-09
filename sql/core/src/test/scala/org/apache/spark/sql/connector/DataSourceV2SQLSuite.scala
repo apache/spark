@@ -870,7 +870,7 @@ class DataSourceV2SQLSuite
         query.processAllAvailable()
         query.stop()
 
-        assert(!spark.sharedState.cacheManager.isEmpty)
+        assert(!spark.catalog.isCached("testcat.ns.t"))
         checkAnswer(spark.table(t), Row(1L, "a") :: Row(2L, "b") :: Nil)
       }
     }

@@ -139,9 +139,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       withProjection :: Nil
 
     case WriteToDataSourceV2(relationOpt, writer, query) =>
-      val refreshCacheFunc: () => Unit = relationOpt match {
-        case Some(r) => refreshCache(r)
-        case None => () => ()
+      val refreshCacheFunc: () => Unit = () => relationOpt match {
+        case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
+        case None => ()
       }
       WriteToDataSourceV2Exec(writer, refreshCacheFunc, planLater(query)) :: Nil
 
