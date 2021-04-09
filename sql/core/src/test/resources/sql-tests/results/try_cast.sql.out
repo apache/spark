@@ -5,7 +5,7 @@
 -- !query
 SELECT TRY_CAST('1.23' AS int)
 -- !query schema
-struct<CAST(1.23 AS INT):int>
+struct<TRY_CAST(1.23 AS INT):int>
 -- !query output
 NULL
 
@@ -13,7 +13,7 @@ NULL
 -- !query
 SELECT TRY_CAST('1.23' AS long)
 -- !query schema
-struct<CAST(1.23 AS BIGINT):bigint>
+struct<TRY_CAST(1.23 AS BIGINT):bigint>
 -- !query output
 NULL
 
@@ -21,7 +21,7 @@ NULL
 -- !query
 SELECT TRY_CAST('-4.56' AS int)
 -- !query schema
-struct<CAST(-4.56 AS INT):int>
+struct<TRY_CAST(-4.56 AS INT):int>
 -- !query output
 NULL
 
@@ -29,7 +29,7 @@ NULL
 -- !query
 SELECT TRY_CAST('-4.56' AS long)
 -- !query schema
-struct<CAST(-4.56 AS BIGINT):bigint>
+struct<TRY_CAST(-4.56 AS BIGINT):bigint>
 -- !query output
 NULL
 
@@ -37,7 +37,7 @@ NULL
 -- !query
 SELECT TRY_CAST('abc' AS int)
 -- !query schema
-struct<CAST(abc AS INT):int>
+struct<TRY_CAST(abc AS INT):int>
 -- !query output
 NULL
 
@@ -45,7 +45,7 @@ NULL
 -- !query
 SELECT TRY_CAST('abc' AS long)
 -- !query schema
-struct<CAST(abc AS BIGINT):bigint>
+struct<TRY_CAST(abc AS BIGINT):bigint>
 -- !query output
 NULL
 
@@ -53,7 +53,7 @@ NULL
 -- !query
 SELECT TRY_CAST('' AS int)
 -- !query schema
-struct<CAST( AS INT):int>
+struct<TRY_CAST( AS INT):int>
 -- !query output
 NULL
 
@@ -61,7 +61,7 @@ NULL
 -- !query
 SELECT TRY_CAST('' AS long)
 -- !query schema
-struct<CAST( AS BIGINT):bigint>
+struct<TRY_CAST( AS BIGINT):bigint>
 -- !query output
 NULL
 
@@ -69,7 +69,7 @@ NULL
 -- !query
 SELECT TRY_CAST(NULL AS int)
 -- !query schema
-struct<CAST(NULL AS INT):int>
+struct<TRY_CAST(NULL AS INT):int>
 -- !query output
 NULL
 
@@ -77,7 +77,7 @@ NULL
 -- !query
 SELECT TRY_CAST(NULL AS long)
 -- !query schema
-struct<CAST(NULL AS BIGINT):bigint>
+struct<TRY_CAST(NULL AS BIGINT):bigint>
 -- !query output
 NULL
 
@@ -85,7 +85,7 @@ NULL
 -- !query
 SELECT TRY_CAST('123.a' AS int)
 -- !query schema
-struct<CAST(123.a AS INT):int>
+struct<TRY_CAST(123.a AS INT):int>
 -- !query output
 NULL
 
@@ -93,7 +93,7 @@ NULL
 -- !query
 SELECT TRY_CAST('123.a' AS long)
 -- !query schema
-struct<CAST(123.a AS BIGINT):bigint>
+struct<TRY_CAST(123.a AS BIGINT):bigint>
 -- !query output
 NULL
 
@@ -101,7 +101,7 @@ NULL
 -- !query
 SELECT TRY_CAST('-2147483648' AS int)
 -- !query schema
-struct<CAST(-2147483648 AS INT):int>
+struct<TRY_CAST(-2147483648 AS INT):int>
 -- !query output
 -2147483648
 
@@ -109,7 +109,7 @@ struct<CAST(-2147483648 AS INT):int>
 -- !query
 SELECT TRY_CAST('-2147483649' AS int)
 -- !query schema
-struct<CAST(-2147483649 AS INT):int>
+struct<TRY_CAST(-2147483649 AS INT):int>
 -- !query output
 NULL
 
@@ -117,7 +117,7 @@ NULL
 -- !query
 SELECT TRY_CAST('2147483647' AS int)
 -- !query schema
-struct<CAST(2147483647 AS INT):int>
+struct<TRY_CAST(2147483647 AS INT):int>
 -- !query output
 2147483647
 
@@ -125,7 +125,7 @@ struct<CAST(2147483647 AS INT):int>
 -- !query
 SELECT TRY_CAST('2147483648' AS int)
 -- !query schema
-struct<CAST(2147483648 AS INT):int>
+struct<TRY_CAST(2147483648 AS INT):int>
 -- !query output
 NULL
 
@@ -133,7 +133,7 @@ NULL
 -- !query
 SELECT TRY_CAST('-9223372036854775808' AS long)
 -- !query schema
-struct<CAST(-9223372036854775808 AS BIGINT):bigint>
+struct<TRY_CAST(-9223372036854775808 AS BIGINT):bigint>
 -- !query output
 -9223372036854775808
 
@@ -141,7 +141,7 @@ struct<CAST(-9223372036854775808 AS BIGINT):bigint>
 -- !query
 SELECT TRY_CAST('-9223372036854775809' AS long)
 -- !query schema
-struct<CAST(-9223372036854775809 AS BIGINT):bigint>
+struct<TRY_CAST(-9223372036854775809 AS BIGINT):bigint>
 -- !query output
 NULL
 
@@ -149,7 +149,7 @@ NULL
 -- !query
 SELECT TRY_CAST('9223372036854775807' AS long)
 -- !query schema
-struct<CAST(9223372036854775807 AS BIGINT):bigint>
+struct<TRY_CAST(9223372036854775807 AS BIGINT):bigint>
 -- !query output
 9223372036854775807
 
@@ -157,7 +157,7 @@ struct<CAST(9223372036854775807 AS BIGINT):bigint>
 -- !query
 SELECT TRY_CAST('9223372036854775808' AS long)
 -- !query schema
-struct<CAST(9223372036854775808 AS BIGINT):bigint>
+struct<TRY_CAST(9223372036854775808 AS BIGINT):bigint>
 -- !query output
 NULL
 
@@ -165,7 +165,7 @@ NULL
 -- !query
 SELECT TRY_CAST('interval 3 month 1 hour' AS interval)
 -- !query schema
-struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
+struct<TRY_CAST(interval 3 month 1 hour AS INTERVAL):interval>
 -- !query output
 3 months 1 hours
 
@@ -173,7 +173,7 @@ struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
 -- !query
 SELECT TRY_CAST('abc' AS interval)
 -- !query schema
-struct<CAST(abc AS INTERVAL):interval>
+struct<TRY_CAST(abc AS INTERVAL):interval>
 -- !query output
 NULL
 
@@ -181,7 +181,7 @@ NULL
 -- !query
 select TRY_CAST('true' as boolean)
 -- !query schema
-struct<CAST(true AS BOOLEAN):boolean>
+struct<TRY_CAST(true AS BOOLEAN):boolean>
 -- !query output
 true
 
@@ -189,7 +189,7 @@ true
 -- !query
 select TRY_CAST('false' as boolean)
 -- !query schema
-struct<CAST(false AS BOOLEAN):boolean>
+struct<TRY_CAST(false AS BOOLEAN):boolean>
 -- !query output
 false
 
@@ -197,7 +197,7 @@ false
 -- !query
 select TRY_CAST('abc' as boolean)
 -- !query schema
-struct<CAST(abc AS BOOLEAN):boolean>
+struct<TRY_CAST(abc AS BOOLEAN):boolean>
 -- !query output
 NULL
 
@@ -205,7 +205,7 @@ NULL
 -- !query
 SELECT TRY_CAST("2021-01-01" AS date)
 -- !query schema
-struct<CAST(2021-01-01 AS DATE):date>
+struct<TRY_CAST(2021-01-01 AS DATE):date>
 -- !query output
 2021-01-01
 
@@ -213,7 +213,7 @@ struct<CAST(2021-01-01 AS DATE):date>
 -- !query
 SELECT TRY_CAST("2021-101-01" AS date)
 -- !query schema
-struct<CAST(2021-101-01 AS DATE):date>
+struct<TRY_CAST(2021-101-01 AS DATE):date>
 -- !query output
 NULL
 
@@ -221,7 +221,7 @@ NULL
 -- !query
 SELECT TRY_CAST("2021-01-01 00:00:00" AS timestamp)
 -- !query schema
-struct<CAST(2021-01-01 00:00:00 AS TIMESTAMP):timestamp>
+struct<TRY_CAST(2021-01-01 00:00:00 AS TIMESTAMP):timestamp>
 -- !query output
 2021-01-01 00:00:00
 
@@ -229,6 +229,6 @@ struct<CAST(2021-01-01 00:00:00 AS TIMESTAMP):timestamp>
 -- !query
 SELECT TRY_CAST("2021-101-01 00:00:00" AS timestamp)
 -- !query schema
-struct<CAST(2021-101-01 00:00:00 AS TIMESTAMP):timestamp>
+struct<TRY_CAST(2021-101-01 00:00:00 AS TIMESTAMP):timestamp>
 -- !query output
 NULL
