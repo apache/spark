@@ -443,7 +443,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-XXXXX: format year-month intervals") {
+  test("SPARK-35016: format year-month intervals") {
     Seq(
       0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),
       -11 -> ("-0-11", "INTERVAL '-0-11' YEAR TO MONTH"),
@@ -460,7 +460,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-XXXXX: format day-time intervals") {
+  test("SPARK-35016: format day-time intervals") {
     Seq(
       0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
       -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
