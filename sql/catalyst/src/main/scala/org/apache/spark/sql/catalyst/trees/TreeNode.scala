@@ -408,39 +408,61 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformDown or transformUp should be used.
    *
-   * @param rule the function use to transform this nodes children
-   * @param cond a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
-   *             T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
-   *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
-   *        pass it if the rule is not purely functional and reads a varying initial state for
-   *        different invocations.
+   * @param rule   the function use to transform this nodes children
    */
-  def transform(rule: PartialFunction[BaseType, BaseType],
-    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId): BaseType = {
-    transformDown(rule, cond, ruleId)
+  def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    transformDown(rule)
+  }
+
+  /**
+   * Returns a copy of this node where `rule` has been recursively applied to the tree.
+   * When `rule` does not apply to a given node it is left unchanged.
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * transformDown or transformUp should be used.
+   *
+   * @param rule   the function use to transform this nodes children
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[BaseType, BaseType])
+  : BaseType = {
+    transformDownWithPruning(cond, ruleId)(rule)
   }
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied to it and all of its
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
    *
-   * @param rule the function use to transform this nodes children
-   * @param cond a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
-   *             T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
-   *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
-   *        pass it if the rule is not purely functional and reads a varying initial state for
-   *        different invocations.
+   * @param rule   the function use to transform this nodes children
    */
-  def transformDown(rule: PartialFunction[BaseType, BaseType],
-    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId): BaseType = {
+  def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    transformDownWithPruning(AlwaysProcess.fn, RuleIdCollection.UnknownId)(rule)
+  }
+
+  /**
+   * Returns a copy of this node where `rule` has been recursively applied to it and all of its
+   * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
+   *
+   * @param rule   the function use to transform this nodes children
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformDownWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[BaseType, BaseType])
+  : BaseType = {
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
     }
@@ -450,7 +472,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
-      val rewritten_plan = mapChildren(_.transformDown(rule, cond, ruleId))
+      val rewritten_plan = mapChildren(_.transformDownWithPruning(cond, ruleId)(rule))
       if (this eq rewritten_plan) {
         markRuleAsIneffective(ruleId)
         this
@@ -460,7 +482,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     } else {
       // If the transform function replaces this node with a new one, carry over the tags.
       afterRule.copyTagsFrom(this)
-      afterRule.mapChildren(_.transformDown(rule, cond, ruleId))
+      afterRule.mapChildren(_.transformDownWithPruning(cond, ruleId)(rule))
     }
   }
 
@@ -469,23 +491,34 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
    * unchanged.
    *
-   * @param rule the function use to transform this nodes children
-   * @param cond a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
-   *             T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *        RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`) has been
-   *        marked as in effective on a TreeNode T, skips processing T and its subtree. Do not
-   *        pass it if the rule is not purely functional and reads a varying initial state for
-   *        different invocations.
+   * @param rule   the function use to transform this nodes children
    */
-  def transformUp(rule: PartialFunction[BaseType, BaseType],
-    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId): BaseType = {
+  def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    transformUpWithPruning(AlwaysProcess.fn, RuleIdCollection.UnknownId)(rule)
+  }
+
+  /**
+   * Returns a copy of this node where `rule` has been recursively applied first to all of its
+   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
+   * unchanged.
+   *
+   * @param rule   the function use to transform this nodes children
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformUpWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[BaseType, BaseType])
+  : BaseType = {
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
     }
-    val afterRuleOnChildren = mapChildren(_.transformUp(rule, cond, ruleId))
+    val afterRuleOnChildren = mapChildren(_.transformUpWithPruning(cond, ruleId)(rule))
     val newNode = if (this fastEquals afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])

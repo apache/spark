@@ -38,7 +38,8 @@ object PushExtraPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHel
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform ({
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(JOIN), ruleId) {
     case j @ Join(left, right, joinType, Some(joinCondition), hint)
         if canPushThrough(joinType) =>
       val alreadyProcessed = j.getTagValue(processedJoinConditionTag).exists { condition =>
@@ -75,5 +76,5 @@ object PushExtraPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHel
         newJoin.setTagValue(processedJoinConditionTag, joinCondition)
         newJoin
     }
-  }, _.containsPattern(JOIN), ruleId)
+  }
 }

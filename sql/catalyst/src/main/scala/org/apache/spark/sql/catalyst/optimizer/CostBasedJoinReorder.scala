@@ -39,7 +39,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
     } else {
-      val result = plan transformDown ({
+      val result = plan.transformDownWithPruning(_.containsPattern(INNER_LIKE_JOIN), ruleId) {
         // Start reordering with a joinable item, which is an InnerLike join with conditions.
         // Avoid reordering if a join hint is present.
         case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE) =>
@@ -47,7 +47,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
         case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
           if projectList.forall(_.isInstanceOf[Attribute]) =>
           reorder(p, p.output)
-      }, _.containsPattern(INNER_LIKE_JOIN), ruleId)
+      }
 
       // After reordering is finished, convert OrderedJoin back to Join.
       result transform {

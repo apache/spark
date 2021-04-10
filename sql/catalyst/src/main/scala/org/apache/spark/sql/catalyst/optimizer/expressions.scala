@@ -250,8 +250,9 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform ({
-    case q: LogicalPlan => q transformExpressionsDown ({
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(IN), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsDownWithPruning(_.containsPattern(IN), ruleId) {
       case In(v, list) if list.isEmpty =>
         // When v is not nullable, the following expression will be optimized
         // to FalseLiteral which is tested in OptimizeInSuite.scala
@@ -272,8 +273,8 @@ object OptimizeIn extends Rule[LogicalPlan] {
         } else { // newList.length == list.length && newList.length > 1
           expr
         }
-    }, _.containsPattern(IN), ruleId)
-  }, _.containsPattern(IN), ruleId)
+    }
+  }
 }
 
 
