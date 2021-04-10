@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.rules
 
 import scala.collection.mutable
 
-// Represent the unique id of a rule for tree traversal pruning.
+// Represent unique rule ids for rules that can be invoked multiple times.
 case class RuleId(id: Int) {
   // Currently, there are more than 128 but less than 192 rules needing an id. However, the
-  // assertion can be relaxed when we have more such rules. Note that increasing the max id can
+  // requirement can be relaxed when we have more such rules. Note that increasing the max id can
   // result in increased memory consumption from every TreeNode.
   require(id >= -1 && id < 192)
 }
