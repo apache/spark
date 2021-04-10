@@ -438,7 +438,7 @@ object SparkBuild extends PomBuild {
       val packages :: className :: otherArgs = spaceDelimited("<group:artifact:version> <MainClass> [args]").parsed.toList
       val scalaRun = (run / runner).value
       val classpath = (Runtime / fullClasspath).value
-      val args = Seq("--packages", packages, "--class", className, (LocalProject("core") / Keys.`package` in Compile)(Compile / Keys.`package`)
+      val args = Seq("--packages", packages, "--class", className, (LocalProject("core") / Compile / Keys.`package`)
         .value.getCanonicalPath) ++ otherArgs
       println(args)
       scalaRun.run("org.apache.spark.deploy.SparkSubmit", classpath.map(_.data), args, streams.value.log)
@@ -644,8 +644,10 @@ object KubernetesIntegrationTests {
       s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
     ),
     // Force packaging before building images, so that the latest code is tested.
-    dockerBuild := dockerBuild.dependsOn((assembly / packageBin in Compile)(Compile / packageBin))
-      .dependsOn((examples / packageBin in Compile)(Compile / packageBin)).value
+    dockerBuild := dockerBuild
+      .dependsOn(assembly / Compile / packageBin)
+      .dependsOn(examples / Compile / packageBin)
+      .value
   )
 }
 
