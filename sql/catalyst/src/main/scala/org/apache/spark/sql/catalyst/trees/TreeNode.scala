@@ -33,7 +33,9 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
+import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -177,11 +179,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *
    * @param ruleId the unique identifier of the rule. If `ruleId` is UnknownId, it is a no-op.
    */
-  private def markRuleAsIneffective(ruleId : Int): Unit = {
-    if (ruleId == RuleIdCollection.UnknownId ) {
+  private def markRuleAsIneffective(ruleId : RuleId): Unit = {
+    if (ruleId eq UnknownRuleId) {
       return
     }
-    ineffectiveRules.set(ruleId)
+    ineffectiveRules.set(ruleId.id)
   }
 
   /**
@@ -192,11 +194,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * @return true if the rule has been marked as ineffective; false otherwise. If `ruleId` is
    *         UnknownId, it returns false.
    */
-  private def isRuleIneffective(ruleId : Int): Boolean = {
-    if (ruleId == RuleIdCollection.UnknownId) {
+  private def isRuleIneffective(ruleId : RuleId): Boolean = {
+    if (ruleId eq UnknownRuleId) {
       return false
     }
-    ineffectiveRules.get(ruleId)
+    ineffectiveRules.get(ruleId.id)
   }
 
   def copyTagsFrom(other: BaseType): Unit = {
@@ -425,13 +427,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
    *               has been marked as in effective on a TreeNode T, skips processing T and its
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
   def transformWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[BaseType, BaseType])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
   : BaseType = {
     transformDownWithPruning(cond, ruleId)(rule)
   }
@@ -443,7 +445,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * @param rule   the function use to transform this nodes children
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    transformDownWithPruning(AlwaysProcess.fn, RuleIdCollection.UnknownId)(rule)
+    transformDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
@@ -455,13 +457,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
    *               has been marked as in effective on a TreeNode T, skips processing T and its
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
   def transformDownWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[BaseType, BaseType])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
   : BaseType = {
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
@@ -494,7 +496,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * @param rule   the function use to transform this nodes children
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    transformUpWithPruning(AlwaysProcess.fn, RuleIdCollection.UnknownId)(rule)
+    transformUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
@@ -507,13 +509,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
    *               has been marked as in effective on a TreeNode T, skips processing T and its
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
   def transformUpWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[BaseType, BaseType])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
   : BaseType = {
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this

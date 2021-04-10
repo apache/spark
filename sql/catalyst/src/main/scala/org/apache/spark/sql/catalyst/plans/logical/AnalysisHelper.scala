@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.rules.RuleId
+import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreePatternBits}
 import org.apache.spark.util.Utils
 
@@ -175,7 +176,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformDownWithPruning()]].
    */
   override def transformDownWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
   : LogicalPlan = {
     assertNotAnalysisRule()
     super.transformDownWithPruning(cond, ruleId)(rule)
@@ -187,7 +188,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformUpWithPruning()]]
    */
   override def transformUpWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
   : LogicalPlan = {
     assertNotAnalysisRule()
     super.transformUpWithPruning(cond, ruleId)(rule)
@@ -199,7 +200,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    */
   override def transformAllExpressionsWithPruning(
     cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[Expression, Expression])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     assertNotAnalysisRule()
     super.transformAllExpressionsWithPruning(cond, ruleId)(rule)

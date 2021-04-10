@@ -19,6 +19,18 @@ package org.apache.spark.sql.catalyst.rules
 
 import scala.collection.mutable
 
+// Represent the unique id of a rule for tree traversal pruning.
+case class RuleId(id: Int) {
+  // Currently, there are more than 128 but less than 192 rules needing an id. However, the
+  // assertion can be relaxed when we have more such rules. Note that increasing the max id can
+  // result in increased memory consumption from every TreeNode.
+  require(id >= -1 && id < 192)
+}
+
+// Unknown rule id which does not prune tree traversal. It is used as the default rule id for
+// tree transformation functions.
+object UnknownRuleId extends RuleId(-1)
+
 // A collection of rules that use rule ids to prune tree traversals.
 object RuleIdCollection {
 
@@ -38,42 +50,25 @@ object RuleIdCollection {
   }
 
   // Maps rule names to ids. Rule ids are continuous natural numbers starting from 0.
-  private val ruleToId = new mutable.HashMap[String, Int]
-
-  // Maps rule ids to names. Rule ids are continuous natural numbers starting from 0.
-  private val ruleIdToName = new mutable.HashMap[Int, String]
-
-  // Unknown rule id which does not prune tree traversal. It is used as the default rule id for
-  // tree transformation functions.
-  val UnknownId: Int = -1
+  private val ruleToId = new mutable.HashMap[String, RuleId]
 
   // The total number of rules with ids.
   val NumRules: Int = {
-    var ruleId = 0
+    var id = 0
     rulesNeedingIds.foreach(ruleName => {
-      ruleToId.put(ruleName, ruleId)
-      ruleIdToName.put(ruleId, ruleName)
-      ruleId = ruleId + 1
+      ruleToId.put(ruleName, RuleId(id))
+      id = id + 1
     })
-    // Currently, there are more than 128 but less than 192 rules needing an id. However, the
-    // assertion can be relaxed when we have more such rules. Note that increasing the max id can
-    // result in increased memory consumption from every TreeNode.
-    assert(ruleId < 192)
-    ruleId
+    id
   }
 
   // Return the rule Id for a rule name.
-  def getRuleId(ruleName: String): Int = {
+  def getRuleId(ruleName: String): RuleId = {
     val ruleIdOpt = ruleToId.get(ruleName)
-    // Please add the rule name to `rulesWithIds` if this assert fails.
-    assert(ruleIdOpt.isDefined, s"add $ruleName into `rulesNeedingIds`")
+    // Please add the rule name to `rulesWithIds` if rule id is not found.
+    if (!ruleIdOpt.isDefined) {
+      throw new NoSuchElementException(s"Rule id not found for $ruleName")
+    }
     ruleIdOpt.get
-  }
-
-  // Return the rule name from its id. It is for debugging purpose.
-  def getRuleName(ruleId: Int): String = {
-    val ruleNameOpt = ruleIdToName.get(ruleId)
-    assert(ruleNameOpt.isDefined, s"rule id $ruleId does not exist")
-    ruleNameOpt.get
   }
 }

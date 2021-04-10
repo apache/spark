@@ -22,7 +22,8 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.rules.RuleId
+import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
@@ -105,19 +106,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * transformExpressionsDown or transformExpressionsUp should be used.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *               on an expression T, skips processing T and its subtree; otherwise, processes
-   *               T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
-   *               has been marked as in effective on an expression T, skips processing T and its
-   *               subtree. Do not pass it if the rule is not purely functional and reads a
-   *               varying initial state for different invocations.
    */
-  def transformExpressions(rule: PartialFunction[Expression, Expression],
-    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId): this.type = {
-    transformExpressionsWithPruning(cond, ruleId)(rule)
+  def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
+    transformExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
@@ -131,13 +122,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    *               on an expression T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
    *               has been marked as in effective on an expression T, skips processing T and its
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
   def transformExpressionsWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[Expression, Expression])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     transformExpressionsDownWithPruning(cond, ruleId)(rule)
   }
@@ -146,19 +137,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
    *
    * @param rule   the rule to be applied to every expression in this operator.
-   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *               on an expression T, skips processing T and its subtree; otherwise, processes
-   *               T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
-   *               has been marked as in effective on an expression T, skips processing T and its
-   *               subtree. Do not pass it if the rule is not purely functional and reads a
-   *               varying initial state for different invocations.
    */
-  def transformExpressionsDown(rule: PartialFunction[Expression, Expression],
-    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId): this.type = {
-    transformExpressionsDownWithPruning(cond, ruleId)(rule)
+  def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
+    transformExpressionsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
@@ -169,13 +150,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    *               on an expression T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
    *               has been marked as in effective on an expression T, skips processing T and its
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
   def transformExpressionsDownWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[Expression, Expression])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     mapExpressions(_.transformDownWithPruning(cond, ruleId)(rule))
   }
@@ -184,19 +165,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
    *
    * @param rule the rule to be applied to every expression in this operator.
-   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *               on an expression T, skips processing T and its subtree; otherwise, processes
-   *               T and its subtree recursively.
-   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
-   *               has been marked as in effective on an expression T, skips processing T and its
-   *               subtree. Do not pass it if the rule is not purely functional and reads a
-   *               varying initial state for different invocations.
    */
-  def transformExpressionsUp(rule: PartialFunction[Expression, Expression],
-    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId): this.type = {
-    transformExpressionsUpWithPruning(cond, ruleId)(rule)
+  def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
+    transformExpressionsUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
@@ -207,13 +178,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    *               on an expression T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               RuleId.UnknownId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
    *               has been marked as in effective on an expression T, skips processing T and its
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
   def transformExpressionsUpWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[Expression, Expression])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     mapExpressions(_.transformUpWithPruning(cond, ruleId)(rule))
   }
@@ -257,10 +228,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Returns the result of running [[transformExpressions]] on this node
    * and all its children. Note that this method skips expressions inside subqueries.
    */
-  def transformAllExpressions(rule: PartialFunction[Expression, Expression],
-    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId): this.type = {
-    transformAllExpressionsWithPruning(cond, ruleId)(rule)
+  def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
+    transformAllExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
@@ -268,7 +237,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * and all its children. Note that this method skips expressions inside subqueries.
    */
   def transformAllExpressionsWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
-    ruleId: Int = RuleIdCollection.UnknownId)(rule: PartialFunction[Expression, Expression])
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     transformWithPruning(cond, ruleId) {
       case q: QueryPlan[_] =>
