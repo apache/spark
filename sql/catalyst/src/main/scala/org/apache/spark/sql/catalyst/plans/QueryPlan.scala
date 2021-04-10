@@ -100,8 +100,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   final def missingInput: AttributeSet = references -- inputSet
 
   /**
-   * Runs [[transformExpressionsDown]] with `rule` on all expressions present in this query
-   * operator.
+   * Runs [[transformExpressionsDown]] with `rule` on all expressions present
+   * in this query operator.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
    *
@@ -127,7 +127,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
-  def transformExpressionsWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  def transformExpressionsWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     transformExpressionsDownWithPruning(cond, ruleId)(rule)
@@ -136,7 +136,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
    *
-   * @param rule   the rule to be applied to every expression in this operator.
+   * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
     transformExpressionsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
@@ -156,7 +156,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
-  def transformExpressionsDownWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  def transformExpressionsDownWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     mapExpressions(_.transformDownWithPruning(cond, ruleId)(rule))
@@ -185,7 +185,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
-  def transformExpressionsUpWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  def transformExpressionsUpWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     mapExpressions(_.transformUpWithPruning(cond, ruleId)(rule))
@@ -238,7 +238,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Returns the result of running [[transformExpressionsWithPruning]] on this node
    * and all its children. Note that this method skips expressions inside subqueries.
    */
-  def transformAllExpressionsWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  def transformAllExpressionsWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     transformWithPruning(cond, ruleId) {

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expre
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
-import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreePatternBits}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePatternBits}
 import org.apache.spark.util.Utils
 
 
@@ -175,7 +175,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * the scope of a [[resolveOperatorsDown()]] call.
    * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformDownWithPruning()]].
    */
-  override def transformDownWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  override def transformDownWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
   : LogicalPlan = {
     assertNotAnalysisRule()
@@ -187,7 +187,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    *
    * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformUpWithPruning()]]
    */
-  override def transformUpWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  override def transformUpWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
   : LogicalPlan = {
     assertNotAnalysisRule()
@@ -199,7 +199,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * @see [[QueryPlan.transformAllExpressionsWithPruning()]]
    */
   override def transformAllExpressionsWithPruning(
-    cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+    cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
     assertNotAnalysisRule()

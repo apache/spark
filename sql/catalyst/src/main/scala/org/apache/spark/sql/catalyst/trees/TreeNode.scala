@@ -433,7 +433,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
-  def transformWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  def transformWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
   : BaseType = {
     transformDownWithPruning(cond, ruleId)(rule)
@@ -463,7 +463,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
-  def transformDownWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  def transformDownWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
   : BaseType = {
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
@@ -515,7 +515,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
-  def transformUpWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  def transformUpWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
   : BaseType = {
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
