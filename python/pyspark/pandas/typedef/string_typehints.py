@@ -28,7 +28,7 @@ def resolve_string_type_hint(tpe):
 
     locs = {
         "ps": ps,
-        "koalas": ps,
+        "pyspark.pandas": ps,
         "DataFrame": DataFrame,
         "Series": Series,
     }
