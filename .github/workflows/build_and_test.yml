@@ -485,7 +485,6 @@ jobs:
         restore-keys: |
           tpcds-
     - name: Checkout TPC-DS (SF=1) generated data repository
-      if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       uses: actions/checkout@v2
       with:
         repository: maropu/spark-tpcds-sf-1
