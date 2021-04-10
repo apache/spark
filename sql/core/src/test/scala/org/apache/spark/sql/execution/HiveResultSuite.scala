@@ -110,7 +110,7 @@ class HiveResultSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-34984: year-month interval formatting in hive result") {
+  test("SPARK-34984, SPARK-35016: year-month interval formatting in hive result") {
     val df = Seq(Period.ofYears(-10).minusMonths(1)).toDF("i")
     val plan1 = df.queryExecution.executedPlan
     assert(hiveResultString(plan1) === Seq("-10-1"))
@@ -118,7 +118,7 @@ class HiveResultSuite extends SharedSparkSession {
     assert(hiveResultString(plan2) === Seq("[-10-1]"))
   }
 
-  test("SPARK-34984: day-time interval formatting in hive result") {
+  test("SPARK-34984, SPARK-35016: day-time interval formatting in hive result") {
     val df = Seq(Duration.ofDays(5).plusMillis(10)).toDF("i")
     val plan1 = df.queryExecution.executedPlan
     assert(hiveResultString(plan1) === Seq("5 00:00:00.010000000"))
