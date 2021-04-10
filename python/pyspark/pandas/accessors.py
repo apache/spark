@@ -265,7 +265,7 @@ class KoalasFrameMethods(object):
         DataFrame.applymap: For elementwise operations.
         DataFrame.aggregate: Only perform aggregating type operations.
         DataFrame.transform: Only perform transforming type operations.
-        Series.koalas.transform_batch: transform the search as each pandas chunpp.
+        Series.koalas.transform_batch: transform the search as each pandas chunks.
 
         Examples
         --------
@@ -474,7 +474,7 @@ class KoalasFrameMethods(object):
         See Also
         --------
         DataFrame.koalas.apply_batch: For row/columnwise operations.
-        Series.koalas.transform_batch: transform the search as each pandas chunpp.
+        Series.koalas.transform_batch: transform the search as each pandas chunks.
 
         Examples
         --------

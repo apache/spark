@@ -10876,7 +10876,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             The query string to evaluate.
 
             You can refer to column names that contain spaces by surrounding
-            them in backticpp.
+            them in backticks.
 
             For example, if one of your columns is called ``a a`` and you want
             to sum it with ``b``, your query should be ```a a` + b``.
