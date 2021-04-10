@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.trees
 
-// Enums for commonly encountered tree patterns.
+// Enums for commonly encountered tree patterns in rewrite rules.
 object TreePattern extends Enumeration  {
   type TreePattern = Value
 

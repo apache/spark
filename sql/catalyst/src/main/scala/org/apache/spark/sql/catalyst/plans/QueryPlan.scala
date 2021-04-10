@@ -100,8 +100,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   final def missingInput: AttributeSet = references -- inputSet
 
   /**
-   * Runs [[transformExpressionsDown]] with `rule` on all expressions present
-   * in this query operator.
+   * Runs [[transformExpressionsDown]] with `rule` on all expressions present in this query
+   * operator.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
    *
@@ -112,7 +112,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * Runs [[transformExpressionsDown]] with `rule` on all expressions present
+   * Runs [[transformExpressionsDownWithPruning]] with `rule` on all expressions present
    * in this query operator.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
@@ -143,14 +143,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
+   * Runs [[transformDownWithPruning]] with `rule` on all expressions present in this query
+   * operator.
    *
    * @param rule   the rule to be applied to every expression in this operator.
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *               on an expression T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               UnknownRuleId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
    *               has been marked as in effective on an expression T, skips processing T and its
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
@@ -171,14 +172,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
+   * Runs [[transformExpressionsUpWithPruning]] with `rule` on all expressions present in this
+   * query operator.
    *
    * @param rule the rule to be applied to every expression in this operator.
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *               on an expression T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
    * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
-   *               UnknownRuleId, no pruning happens. Otherwise, if `rule`(with id `ruleId`)
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
    *               has been marked as in effective on an expression T, skips processing T and its
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
@@ -233,7 +235,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
-   * Returns the result of running [[transformExpressions]] on this node
+   * Returns the result of running [[transformExpressionsWithPruning]] on this node
    * and all its children. Note that this method skips expressions inside subqueries.
    */
   def transformAllExpressionsWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,

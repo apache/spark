@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.rules
 
 import scala.collection.mutable
 
-// Represent unique rule ids for rules that can be invoked multiple times.
+// Represent unique rule ids for rules that are invoked multiple times.
 case class RuleId(id: Int) {
   // Currently, there are more than 128 but less than 192 rules needing an id. However, the
   // requirement can be relaxed when we have more such rules. Note that increasing the max id can
@@ -27,7 +27,7 @@ case class RuleId(id: Int) {
   require(id >= -1 && id < 192)
 }
 
-// Unknown rule id which does not prune tree traversal. It is used as the default rule id for
+// Unknown rule id which does not prune tree traversals. It is used as the default rule id for
 // tree transformation functions.
 object UnknownRuleId extends RuleId(-1)
 
@@ -62,7 +62,7 @@ object RuleIdCollection {
     id
   }
 
-  // Return the rule Id for a rule name.
+  // Return the rule id for a rule name.
   def getRuleId(ruleName: String): RuleId = {
     val ruleIdOpt = ruleToId.get(ruleName)
     // Please add the rule name to `rulesWithIds` if rule id is not found.

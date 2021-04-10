@@ -82,7 +82,7 @@ object CurrentOrigin {
 // A tag of a `TreeNode`, which defines name and type
 case class TreeNodeTag[T](name: String)
 
-// A wrapper of Bitset for pattern enums.
+// A wrapper of BitSet for pattern enums.
 trait TreePatternBits {
   protected val treePatternBits: BitSet
 
@@ -142,7 +142,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
 
   /**
-   * A bit set of tree patterns for this TreeNode and its subtree. If this TreeNode node and its
+   * A BitSet of tree patterns for this TreeNode and its subtree. If this TreeNode and its
    * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
    */
   override lazy val treePatternBits: BitSet = {
@@ -161,10 +161,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
-   *  A BitSet of rule ids to record ineffective rules for this TreeNode and its subtree.
-   *  If a rule R (which does not read a varying state for each invocation) is ineffective in one
-   *  apply call for this TreeNode and its subtree, R will still be ineffective for subsequent
-   *  apply calls on this tree because query plan structures are immutable.
+   * A BitSet of rule ids to record ineffective rules for this TreeNode and its subtree.
+   * If a rule R (which does not read a varying, external state for each invocation) is
+   * ineffective in one apply call for this TreeNode and its subtree, R will still be
+   * ineffective for subsequent apply calls on this tree because query plan structures are
+   * immutable.
    */
   private val ineffectiveRules: BitSet = new BitSet(RuleIdCollection.NumRules)
 
@@ -410,7 +411,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformDown or transformUp should be used.
    *
-   * @param rule   the function use to transform this nodes children
+   * @param rule the function used to transform this nodes children
    */
   def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     transformDown(rule)
@@ -422,7 +423,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformDown or transformUp should be used.
    *
-   * @param rule   the function use to transform this nodes children
+   * @param rule   the function used to transform this nodes children
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
@@ -442,7 +443,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * Returns a copy of this node where `rule` has been recursively applied to it and all of its
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
    *
-   * @param rule   the function use to transform this nodes children
+   * @param rule the function used to transform this nodes children
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     transformDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
@@ -452,7 +453,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * Returns a copy of this node where `rule` has been recursively applied to it and all of its
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
    *
-   * @param rule   the function use to transform this nodes children
+   * @param rule   the function used to transform this nodes children
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
@@ -493,7 +494,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
    * unchanged.
    *
-   * @param rule   the function use to transform this nodes children
+   * @param rule   the function used to transform this nodes children
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     transformUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
@@ -504,7 +505,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
    * unchanged.
    *
-   * @param rule   the function use to transform this nodes children
+   * @param rule   the function used to transform this nodes children
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
