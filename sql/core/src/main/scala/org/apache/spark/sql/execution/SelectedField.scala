@@ -81,19 +81,25 @@ private[execution] object SelectedField {
       case GetArrayItem(child, _) =>
         selectField(child, fieldOpt)
       // Handles case "expr0.field.subfield", where "expr0" and "expr0.field" are of array type.
-      case GetArrayStructFields(child: GetArrayStructFields,
-          field @ StructField(name, dataType, nullable, metadata), _, _, _) =>
-        val childField = fieldOpt.map(field => StructField(name,
-            wrapStructType(dataType, field),
-            nullable, metadata)).orElse(Some(field))
+      case GetArrayStructFields(child: GetArrayStructFields, _, ordinal, _, _) =>
+        // For case-sensitivity aware field resolution, we should take `ordinal` which
+        // points to correct struct field.
+        val selectedField = child.dataType.asInstanceOf[ArrayType]
+          .elementType.asInstanceOf[StructType](ordinal)
+        val childField = fieldOpt.map(field => StructField(selectedField.name,
+            wrapStructType(selectedField.dataType, field),
+          selectedField.nullable, selectedField.metadata)).orElse(Some(selectedField))
         selectField(child, childField)
       // Handles case "expr0.field", where "expr0" is of array type.
-      case GetArrayStructFields(child,
-          field @ StructField(name, dataType, nullable, metadata), _, _, _) =>
+      case GetArrayStructFields(child, _, ordinal, _, _) =>
+        // For case-sensitivity aware field resolution, we should take `ordinal` which
+        // points to correct struct field.
+        val selectedField = child.dataType.asInstanceOf[ArrayType]
+          .elementType.asInstanceOf[StructType](ordinal)
         val childField =
-          fieldOpt.map(field => StructField(name,
-            wrapStructType(dataType, field),
-            nullable, metadata)).orElse(Some(field))
+          fieldOpt.map(field => StructField(selectedField.name,
+            wrapStructType(selectedField.dataType, field),
+            selectedField.nullable, selectedField.metadata)).orElse(Some(selectedField))
         selectField(child, childField)
       // Handles case "expr0.field[key]", where "expr0" is of struct type and "expr0.field" is of
       // map type.

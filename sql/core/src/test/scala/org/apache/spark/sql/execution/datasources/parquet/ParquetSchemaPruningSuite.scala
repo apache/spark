@@ -416,4 +416,46 @@ class ParquetSchemaPruningSuite
         assert(scanSchema === expectedScanSchema)
     }
   }
+
+  testSchemaPruning("SPARK-34963: extract case-insensitive struct field from array") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query1 = spark.table("contacts")
+        .select("friends.First", "friends.MiDDle")
+      checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query1,
+        Row(Array.empty[String], Array.empty[String]) ::
+          Row(Array("Susan"), Array("Z.")) ::
+          Row(null, null) ::
+          Row(null, null) :: Nil)
+
+      val query2 = spark.table("contacts")
+        .where("friends.First is not null")
+        .select("friends.First", "friends.MiDDle")
+      checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query2,
+        Row(Array.empty[String], Array.empty[String]) ::
+          Row(Array("Susan"), Array("Z.")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-34963: extract case-insensitive struct field from struct") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query1 = spark.table("contacts")
+        .select("Name.First", "NAME.MiDDle")
+      checkScan(query1, "struct<name:struct<first:string,middle:string>>")
+      checkAnswer(query1,
+        Row("Jane", "X.") ::
+          Row("Janet", null) ::
+          Row("Jim", null) ::
+          Row("John", "Y.") :: Nil)
+
+      val query2 = spark.table("contacts")
+        .where("Name.MIDDLE is not null")
+        .select("Name.First", "NAME.MiDDle")
+      checkScan(query2, "struct<name:struct<first:string,middle:string>>")
+      checkAnswer(query2,
+        Row("Jane", "X.") ::
+          Row("John", "Y.") :: Nil)
+    }
+  }
 }
