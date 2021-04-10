@@ -46,6 +46,7 @@ object OrcUtils extends Logging {
     "NONE" -> "",
     "SNAPPY" -> ".snappy",
     "ZLIB" -> ".zlib",
+    "ZSTD" -> ".zstd",
     "LZO" -> ".lzo")
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {

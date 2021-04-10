@@ -467,8 +467,9 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val storage = toStorageFormat(location, serdeInfo, ctx)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val cleanedProperties = cleanTableProperties(ctx, properties)
     CreateTableLikeCommand(
-      targetTable, sourceTable, storage, provider, properties, ctx.EXISTS != null)
+      targetTable, sourceTable, storage, provider, cleanedProperties, ctx.EXISTS != null)
   }
 
   /**

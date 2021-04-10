@@ -21,8 +21,9 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -97,6 +98,7 @@ class SparkSessionExtensions {
   type StrategyBuilder = SparkSession => Strategy
   type ParserBuilder = (SparkSession, ParserInterface) => ParserInterface
   type FunctionDescription = (FunctionIdentifier, ExpressionInfo, FunctionBuilder)
+  type TableFunctionDescription = (FunctionIdentifier, ExpressionInfo, TableFunctionBuilder)
   type ColumnarRuleBuilder = SparkSession => ColumnarRule
   type QueryStagePrepRuleBuilder = SparkSession => Rule[SparkPlan]
 
@@ -252,11 +254,20 @@ class SparkSessionExtensions {
 
   private[this] val injectedFunctions = mutable.Buffer.empty[FunctionDescription]
 
+  private[this] val injectedTableFunctions = mutable.Buffer.empty[TableFunctionDescription]
+
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
       functionRegistry.registerFunction(name, expressionInfo, function)
     }
     functionRegistry
+  }
+
+  private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
+    for ((name, expressionInfo, function) <- injectedTableFunctions) {
+      tableFunctionRegistry.registerFunction(name, expressionInfo, function)
+    }
+    tableFunctionRegistry
   }
 
   /**
@@ -265,5 +276,13 @@ class SparkSessionExtensions {
   */
   def injectFunction(functionDescription: FunctionDescription): Unit = {
     injectedFunctions += functionDescription
+  }
+
+  /**
+   * Injects a custom function into the
+   * [[org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry]] at runtime for all sessions.
+   */
+  def injectTableFunction(functionDescription: TableFunctionDescription): Unit = {
+    injectedTableFunctions += functionDescription
   }
 }

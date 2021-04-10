@@ -20,13 +20,14 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 /**
  * The shared abstract superclass for `MaxBy` and `MinBy` SQL aggregate functions.
  */
-abstract class MaxMinBy extends DeclarativeAggregate {
+abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression] {
 
   def valueExpr: Expression
   def orderingExpr: Expression
@@ -37,7 +38,8 @@ abstract class MaxMinBy extends DeclarativeAggregate {
   // Used to pick up updated ordering value.
   protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression
 
-  override def children: Seq[Expression] = valueExpr :: orderingExpr :: Nil
+  override def left: Expression = valueExpr
+  override def right: Expression = orderingExpr
 
   override def nullable: Boolean = true
 
@@ -108,6 +110,9 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
 
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     greatest(oldExpr, newExpr)
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MaxBy =
+    copy(valueExpr = newLeft, orderingExpr = newRight)
 }
 
 @ExpressionDescription(
@@ -128,4 +133,7 @@ case class MinBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
 
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     least(oldExpr, newExpr)
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MinBy =
+    copy(valueExpr = newLeft, orderingExpr = newRight)
 }

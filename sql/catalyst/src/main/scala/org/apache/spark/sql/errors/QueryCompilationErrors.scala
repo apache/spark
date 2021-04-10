@@ -1293,4 +1293,21 @@ private[spark] object QueryCompilationErrors {
       s"and column $colName cannot be resolved. Expected $expectedNum columns named $colName but " +
       s"got ${actualCols.map(_.name).mkString("[", ",", "]")}")
   }
+
+  def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
+    throw new AnalysisException("The number of partitions can't be specified with unspecified" +
+      " distribution. Invalid writer requirements detected.")
+  }
+
+  def cannotApplyTableValuedFunctionError(
+      name: String, arguments: String, usage: String, details: String = ""): Throwable = {
+    new AnalysisException(s"Table-valued function $name with alternatives: $usage\n" +
+      s"cannot be applied to ($arguments): $details")
+  }
+
+  def incompatibleRangeInputDataTypeError(
+      expression: Expression, dataType: DataType): Throwable = {
+    new AnalysisException(s"Incompatible input data type. " +
+      s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
+  }
 }
