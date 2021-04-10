@@ -40,7 +40,7 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
 
     @property
     def pdf(self):
-        return pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6],}, index=[0, 1, 3])
+        return pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=[0, 1, 3])
 
     @property
     def kdf(self):
@@ -111,7 +111,7 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
             dataframes = self.get_excel_dfs(koalas_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
-            pdf = pd.DataFrame({"a": [1, None, 3], "b": ["one", "two", None],}, index=[0, 1, 3])
+            pdf = pd.DataFrame({"a": [1, None, 3], "b": ["one", "two", None]}, index=[0, 1, 3])
 
             kdf = pp.from_pandas(pdf)
 
@@ -120,7 +120,7 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
             dataframes = self.get_excel_dfs(koalas_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
-            pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0],}, index=[0, 1, 3])
+            pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]}, index=[0, 1, 3])
 
             kdf = pp.from_pandas(pdf)
 
@@ -192,6 +192,7 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
             with open(output_path) as f:
                 self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
 
+    @unittest.skip("Pyperclip could not find a copy/paste mechanism for Linux.")
     def test_to_clipboard(self):
         pdf = self.pdf
         kdf = self.kdf
