@@ -17,9 +17,16 @@
 # under the License.
 
 from typing import overload
-from typing import Any, Union
+from typing import Any, List, Union
 
-from pyspark.sql._typing import LiteralType, DecimalLiteral, DateTimeLiteral
+import pyspark.context
+
+from pyspark.sql._typing import (
+    ColumnOrName,
+    LiteralType,
+    DecimalLiteral,
+    DateTimeLiteral
+)
 from pyspark.sql.types import (  # noqa: F401
     DataType,
     StructField,
@@ -116,3 +123,11 @@ class Column:
     def __nonzero__(self) -> None: ...
     def __bool__(self) -> None: ...
     def contains(self, item: Any) -> Column: ...
+
+def _to_java_column(col: ColumnOrName) -> JavaObject: ...
+def _to_seq(
+        sc: pyspark.context.SparkContext,
+        cols: Union[List[Column], List[str]],
+        converter: Any
+) -> JavaObject: ...
+def _create_column_from_literal(literal: LiteralType) -> JavaObject: ...
