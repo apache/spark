@@ -97,6 +97,7 @@ git clone "$ASF_REPO"
 cd spark
 git checkout $GIT_REF
 git_hash=`git rev-parse --short HEAD`
+export GIT_HASH=$git_hash
 echo "Checked out Spark git hash $git_hash"
 
 if [ -z "$SPARK_VERSION" ]; then

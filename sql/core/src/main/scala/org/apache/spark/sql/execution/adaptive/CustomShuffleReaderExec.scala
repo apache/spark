@@ -179,12 +179,12 @@ case class CustomShuffleReaderExec private(
   }
 
   private lazy val shuffleRDD: RDD[_] = {
-    sendDriverMetrics()
-
-    shuffleStage.map { stage =>
-      stage.shuffle.getShuffleRDD(partitionSpecs.toArray)
-    }.getOrElse {
-      throw new IllegalStateException("operating on canonicalized plan")
+    shuffleStage match {
+      case Some(stage) =>
+        sendDriverMetrics()
+        stage.shuffle.getShuffleRDD(partitionSpecs.toArray)
+      case _ =>
+        throw new IllegalStateException("operating on canonicalized plan")
     }
   }
 
@@ -195,4 +195,7 @@ case class CustomShuffleReaderExec private(
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     shuffleRDD.asInstanceOf[RDD[ColumnarBatch]]
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): CustomShuffleReaderExec =
+    copy(child = newChild)
 }

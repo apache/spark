@@ -163,17 +163,24 @@ trait PredicateHelper extends AliasHelper with Logging {
    * Example:  exprs = [a, b, c, d], op = And, returns (a And b) And (c And d)
    * exprs = [a, b, c, d, e, f], op = And, returns ((a And b) And (c And d)) And (e And f)
    */
-  protected def buildBalancedPredicate[Expression](
-    exprs: Seq[Expression], op: (Expression, Expression) => Expression): Expression = {
-    exprs match {
-      case Seq(expression) => expression
-      case expressions =>
-        val pairwiseExprs = expressions.grouped(2).map {
-          case Seq(e1, e2) => op(e1, e2)
-          case Seq(e) => e
+  protected def buildBalancedPredicate(
+      expressions: Seq[Expression], op: (Expression, Expression) => Expression): Expression = {
+    assert(expressions.nonEmpty)
+    var currentResult = expressions
+    while (currentResult.size != 1) {
+      var i = 0
+      val nextResult = new Array[Expression](currentResult.size / 2 + currentResult.size % 2)
+      while (i < currentResult.size) {
+        nextResult(i / 2) = if (i + 1 == currentResult.size) {
+          currentResult(i)
+        } else {
+          op(currentResult(i), currentResult(i + 1))
         }
-        buildBalancedPredicate(pairwiseExprs.toSeq, op)
+        i += 2
+      }
+      currentResult = nextResult
     }
+    currentResult.head
   }
 
   /**
@@ -315,6 +322,8 @@ case class Not(child: Expression)
   }
 
   override def sql: String = s"(NOT ${child.sql})"
+
+  override protected def withNewChildInternal(newChild: Expression): Not = copy(child = newChild)
 }
 
 /**
@@ -372,6 +381,9 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   override def nullable: Boolean = children.exists(_.nullable)
   override def toString: String = s"$value IN ($query)"
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): InSubquery =
+    copy(values = newChildren.dropRight(1), query = newChildren.last.asInstanceOf[ListQuery])
 }
 
 
@@ -513,6 +525,9 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val listSQL = list.map(_.sql).mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): In =
+    copy(value = newChildren.head, list = newChildren.tail)
 }
 
 /**
@@ -618,6 +633,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): InSet = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -701,6 +718,9 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
       """)
     }
   }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): And =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -785,6 +805,9 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
       """)
     }
   }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Or =
+    copy(left = newLeft, right = newRight)
 }
 
 
@@ -870,6 +893,9 @@ case class EqualTo(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): EqualTo = copy(left = newLeft, right = newRight)
 }
 
 // TODO: although map type is not orderable, technically map type should be able to be used
@@ -931,6 +957,10 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
         boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
            (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = FalseLiteral)
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): EqualNullSafe =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -963,6 +993,9 @@ case class LessThan(left: Expression, right: Expression)
   override def symbol: String = "<"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -995,6 +1028,9 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = "<="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -1027,6 +1063,9 @@ case class GreaterThan(left: Expression, right: Expression)
   override def symbol: String = ">"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -1059,6 +1098,10 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override def symbol: String = ">="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GreaterThanOrEqual =
+    copy(left = newLeft, right = newRight)
 }
 
 /**

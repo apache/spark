@@ -33,7 +33,7 @@ case class RenameTableExec(
     newIdent: Identifier,
     invalidateCache: () => Option[StorageLevel],
     cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
-  extends V2CommandExec {
+  extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 

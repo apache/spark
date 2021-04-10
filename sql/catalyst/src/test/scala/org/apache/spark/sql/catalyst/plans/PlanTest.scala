@@ -44,12 +44,18 @@ trait CodegenInterpretedPlanTest extends PlanTest {
     val codegenMode = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
     val interpretedMode = CodegenObjectFactoryMode.NO_CODEGEN.toString
 
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
-      super.test(testName + " (codegen path)", testTags: _*)(testFun)(pos)
-    }
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) {
-      super.test(testName + " (interpreted path)", testTags: _*)(testFun)(pos)
-    }
+    super.test(testName + " (codegen path)", testTags: _*)(
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) { testFun })(pos)
+    super.test(testName + " (interpreted path)", testTags: _*)(
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) { testFun })(pos)
+  }
+
+  protected def testFallback(
+      testName: String,
+      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+    val codegenMode = CodegenObjectFactoryMode.FALLBACK.toString
+    super.test(testName + " (codegen fallback mode)", testTags: _*)(
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) { testFun })(pos)
   }
 }
 
@@ -63,10 +69,10 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
    * Since attribute references are given globally unique ids during analysis,
    * we must normalize them to check if two different queries are identical.
    */
-  protected def normalizeExprIds(plan: LogicalPlan) = {
+  protected def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
     plan transformAllExpressions {
       case s: ScalarSubquery =>
-        s.copy(exprId = ExprId(0))
+        s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
       case e: Exists =>
         e.copy(exprId = ExprId(0))
       case l: ListQuery =>

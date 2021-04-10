@@ -339,7 +339,8 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[AddFileCommand]], [[AddJarCommand]], [[ListFilesCommand]] or [[ListJarsCommand]]
+   * Create a [[AddFileCommand]], [[AddJarCommand]], [[AddArchiveCommand]],
+   * [[ListFilesCommand]], [[ListJarsCommand]] or [[ListArchivesCommand]]
    * command depending on the requested operation on resources.
    * Expected format:
    * {{{
@@ -359,6 +360,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "file" => AddFileCommand(maybePaths)
           case "jar" => AddJarCommand(maybePaths)
+          case "archive" => AddArchiveCommand(maybePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
@@ -374,6 +376,12 @@ class SparkSqlAstBuilder extends AstBuilder {
               ListJarsCommand(maybePaths.split("\\s+"))
             } else {
               ListJarsCommand()
+            }
+          case "archives" | "archive" =>
+            if (maybePaths.length > 0) {
+              ListArchivesCommand(maybePaths.split("\\s+"))
+            } else {
+              ListArchivesCommand()
             }
           case other => operationNotAllowed(s"LIST with resource type '$other'", ctx)
         }
@@ -459,8 +467,9 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val storage = toStorageFormat(location, serdeInfo, ctx)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val cleanedProperties = cleanTableProperties(ctx, properties)
     CreateTableLikeCommand(
-      targetTable, sourceTable, storage, provider, properties, ctx.EXISTS != null)
+      targetTable, sourceTable, storage, provider, cleanedProperties, ctx.EXISTS != null)
   }
 
   /**

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, InsertStarAction, LocalRelation, LogicalPlan, MergeIntoTable, UpdateAction, UpdateStarAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
@@ -455,18 +455,41 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private def testMerge(originalCond: Expression, expectedCond: Expression): Unit = {
-    val func = (rel: LogicalPlan, expr: Expression) => {
-      val assignments = Seq(
+    val func = (target: LogicalPlan, source: LogicalPlan, expr: Expression) => {
+      val matchedAssignments = Seq(
         Assignment('i, 'i),
         Assignment('b, 'b),
         Assignment('a, 'a),
         Assignment('m, 'm)
       )
-      val matchedActions = UpdateAction(Some(expr), assignments) :: DeleteAction(Some(expr)) :: Nil
-      val notMatchedActions = InsertAction(Some(expr), assignments) :: Nil
-      MergeIntoTable(rel, rel, mergeCondition = expr, matchedActions, notMatchedActions)
+      val notMatchedAssignments = Seq(
+        Assignment('i, 'd)
+      )
+      val matchedActions = UpdateAction(Some(expr), matchedAssignments) ::
+        DeleteAction(Some(expr)) :: Nil
+      val notMatchedActions = InsertAction(None, notMatchedAssignments) :: Nil
+      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
     }
-    test(func, originalCond, expectedCond)
+    val originalPlan = func(testRelation, anotherTestRelation, originalCond).analyze
+    val optimizedPlan = Optimize.execute(originalPlan)
+    val expectedPlan = func(testRelation, anotherTestRelation, expectedCond).analyze
+    comparePlans(optimizedPlan, expectedPlan)
+
+    // Test with star actions
+    def mergePlanWithStar(expr: Expression): MergeIntoTable = {
+      val matchedActions = UpdateStarAction(Some(expr)) :: Nil
+      val notMatchedActions = InsertStarAction(Some(expr)) :: Nil
+      // Between source and target only one should have i and b as those are used for
+      // test expressions and both, source and target, having those columns is ambiguous  .
+      // However, the source must have all the columns present in target for star resolution.
+      val source = LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType))
+      val target = LocalRelation('a.array(IntegerType))
+      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
+    }
+    val originalPlanWithStar = mergePlanWithStar(originalCond).analyze
+    val optimizedPlanWithStar = Optimize.execute(originalPlanWithStar)
+    val expectedPlanWithStar = mergePlanWithStar(expectedCond).analyze
+    comparePlans(optimizedPlanWithStar, expectedPlanWithStar)
   }
 
   private def testHigherOrderFunc(

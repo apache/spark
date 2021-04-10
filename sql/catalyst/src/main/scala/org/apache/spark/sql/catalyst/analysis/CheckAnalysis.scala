@@ -260,7 +260,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
-          case Aggregate(groupingExprs, aggregateExprs, child) =>
+          case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
@@ -305,6 +305,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     s"nor is it an aggregate function. " +
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
+              case s: ScalarSubquery
+                  if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
+                failAnalysis(s"Correlated scalar subquery '${s.sql}' is neither " +
+                  "present in the group by, nor in an aggregate function. Add it to group by " +
+                  "using ordinal position or wrap it in first() (or first_value) if you don't " +
+                  "care which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
@@ -735,6 +741,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case child => child
     }
 
+    // Check whether the given expressions contains the subquery expression.
+    def containsExpr(expressions: Seq[Expression]): Boolean = {
+      expressions.exists(_.find(_.semanticEquals(expr)).isDefined)
+    }
+
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
 
@@ -756,7 +767,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           // Only certain operators are allowed to host subquery expression containing
           // outer references.
           plan match {
-            case _: Filter | _: Aggregate | _: Project | _: SupportsSubquery => // Ok
+            case _: Filter | _: Project | _: SupportsSubquery => // Ok
+            case a: Aggregate =>
+              // If the correlated scalar subquery is in the grouping expressions of an Aggregate,
+              // it must also be in the aggregate expressions to be rewritten in the optimization
+              // phase.
+              if (containsExpr(a.groupingExpressions) && !containsExpr(a.aggregateExpressions)) {
+                failAnalysis("Correlated scalar subqueries in the group by clause " +
+                  s"must also be in the aggregate expressions:\n$a")
+              }
             case other => failAnalysis(
               "Correlated scalar sub-queries can only be used in a " +
                 s"Filter/Aggregate/Project and a few commands: $plan")

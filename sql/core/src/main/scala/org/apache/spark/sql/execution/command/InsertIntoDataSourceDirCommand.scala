@@ -42,7 +42,7 @@ case class InsertIntoDataSourceDirCommand(
     storage: CatalogStorageFormat,
     provider: String,
     query: LogicalPlan,
-    overwrite: Boolean) extends RunnableCommand {
+    overwrite: Boolean) extends LeafRunnableCommand {
 
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 

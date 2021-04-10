@@ -52,13 +52,22 @@ object DataTypeTestUtils {
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]
    */
-  val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal + CalendarIntervalType
+  val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal ++ Set(
+    CalendarIntervalType,
+    DayTimeIntervalType,
+    YearMonthIntervalType)
 
   /**
    * All the types that support ordering
    */
-  val ordered: Set[DataType] =
-    numericTypeWithoutDecimal + BooleanType + TimestampType + DateType + StringType + BinaryType
+  val ordered: Set[DataType] = numericTypeWithoutDecimal ++ Set(
+    BooleanType,
+    TimestampType,
+    DateType,
+    StringType,
+    BinaryType,
+    DayTimeIntervalType,
+    YearMonthIntervalType)
 
   /**
    * All the types that we can use in a property check
@@ -73,7 +82,9 @@ object DataTypeTestUtils {
     BooleanType,
     DateType,
     StringType,
-    TimestampType
+    TimestampType,
+    DayTimeIntervalType,
+    YearMonthIntervalType
   )
 
   /**

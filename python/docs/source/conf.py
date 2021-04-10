@@ -64,7 +64,10 @@ rst_epilog = """
 .. _downloading: https://spark.apache.org/docs/{1}/building-spark.html
 .. |building_spark| replace:: Building Spark
 .. _building_spark: https://spark.apache.org/docs/{1}/#downloading
-""".format(os.environ.get("RELEASE_TAG", "master"), os.environ.get('RELEASE_VERSION', "latest"))
+""".format(
+    os.environ.get("GIT_HASH", "master"),
+    os.environ.get("RELEASE_VERSION", "latest"),
+)
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
