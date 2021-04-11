@@ -221,7 +221,13 @@ class Dataset[T] private[sql](
   }
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
-    val plan = queryExecution.analyzed
+    val analyzed = queryExecution.analyzed
+    val plan = if (queryExecution.commandExecuted) {
+      LocalRelation(analyzed.output, queryExecution.executedPlan.executeCollect(),
+        fromCommand = true)
+    } else {
+      analyzed
+    }
     if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) &&
         plan.getTagValue(Dataset.DATASET_ID_TAG).isEmpty) {
       plan.setTagValue(Dataset.DATASET_ID_TAG, id)

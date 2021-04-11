@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LocalRelation, LogicalPlan, ReturnAnswer, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ReturnAnswer, Union}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -55,9 +55,13 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val isCommand: Boolean = false) extends Logging {
+    val eagerRunCommand: Boolean = true) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
+
+  private var eagerRunCommandExecution: Option[QueryExecution] = None
+
+  def commandExecuted: Boolean = eagerRunCommandExecution.isDefined
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
@@ -70,54 +74,61 @@ class QueryExecution(
     }
   }
 
-  protected def rumCommand(plan: LogicalPlan): LogicalPlan = {
+  private def rumCommand(plan: LogicalPlan): Unit = {
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
-    def runCommand(plan: LogicalPlan): LogicalPlan = {
-      val qe = new QueryExecution(sparkSession, plan, isCommand = true)
-      LocalRelation(plan.output,
-        SQLExecution.withNewExecutionId(qe)(qe.executedPlan.executeCollect()),
-        fromCommand = true)
+    def runCommand(plan: LogicalPlan): Unit = {
+      // Set `eagerRunCommand` to false here, otherwise the logic would end up in a dead loop.
+      val qe = sparkSession.sessionState.executePlan(plan, eagerRunCommand = false)
+      SQLExecution.withNewExecutionId(qe, Some("command"))(qe.executedPlan.executeCollect())
+      eagerRunCommandExecution = Some(qe)
     }
 
-    if (isCommand) {
-      plan
-    } else {
-      plan match {
-        case c: Command => runCommand(c)
-        case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) => runCommand(u)
-        case _ => plan
-      }
+    plan match {
+      case c: Command => runCommand(c)
+      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) => runCommand(u)
+      case _ =>
     }
   }
 
-  lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
+  protected def analyze() = executePhase(QueryPlanningTracker.ANALYSIS) {
     // We can't clone `logical` here, which will reset the `_analyzed` flag.
-    rumCommand(sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker))
-  }
-
-  lazy val withCachedData: LogicalPlan = sparkSession.withActive {
-    assertAnalyzed()
-    assertSupported()
-    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-    // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
-  }
-
-  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
-    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-    // optimizing and planning.
-    val plan = sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
-    // We do not want optimized plans to be re-analyzed as literals that have been constant folded
-    // and such can cause issues during analysis. While `clone` should maintain the `analyzed` state
-    // of the LogicalPlan, we set the plan as analyzed here as well out of paranoia.
-    plan.setAnalyzed()
+    val plan = sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+    if (eagerRunCommand && eagerRunCommandExecution.isEmpty) {
+      rumCommand(plan)
+    }
     plan
+  }
+
+  lazy val analyzed: LogicalPlan = analyze()
+
+  lazy val withCachedData: LogicalPlan = eagerRunCommandExecution.map(_.withCachedData).getOrElse {
+    sparkSession.withActive {
+      assertAnalyzed()
+      assertSupported()
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
+    }
+  }
+
+  lazy val optimizedPlan: LogicalPlan = eagerRunCommandExecution.map(_.optimizedPlan).getOrElse {
+    executePhase(QueryPlanningTracker.OPTIMIZATION) {
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      val plan = sparkSession.sessionState.optimizer
+        .executeAndTrack(withCachedData.clone(), tracker)
+      // We do not want optimized plans to be re-analyzed as literals that have been constant folded
+      // and such can cause issues during analysis. While `clone` should maintain the `analyzed`
+      // state of the LogicalPlan, we set the plan as analyzed here as well out of paranoia.
+      plan.setAnalyzed()
+      plan
+    }
   }
 
   private def assertOptimized(): Unit = optimizedPlan
 
-  lazy val sparkPlan: SparkPlan = {
+  lazy val sparkPlan: SparkPlan = eagerRunCommandExecution.map(_.sparkPlan).getOrElse {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
     // the planning phase
     assertOptimized()
@@ -130,7 +141,7 @@ class QueryExecution(
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = {
+  lazy val executedPlan: SparkPlan = eagerRunCommandExecution.map(_.executedPlan).getOrElse {
     // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
     // that the optimization time is not counted as part of the planning phase.
     assertOptimized()

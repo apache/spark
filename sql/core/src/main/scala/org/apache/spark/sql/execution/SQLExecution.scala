@@ -63,7 +63,10 @@ object SQLExecution {
   def withNewExecutionId[T](
       queryExecution: QueryExecution,
       name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
-    if (queryExecution.analyzed.find {
+    // Don't generate executionId for the following cases:
+    // 1. re-execution of the same command
+    // 2. operation on top of command result, e.g.: sql("some command").show
+    if (queryExecution.commandExecuted || queryExecution.analyzed.find {
       case _ @ LocalRelation(_, _, _, fromCommand) => fromCommand
       case _ => false
     }.isDefined) {
