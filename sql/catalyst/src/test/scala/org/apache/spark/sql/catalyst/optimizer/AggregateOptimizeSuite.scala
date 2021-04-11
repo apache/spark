@@ -29,13 +29,10 @@ class AggregateOptimizeSuite extends AnalysisTest {
   val analyzer = getAnalyzer
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches =
-      Batch("Finish Analysis", Once,
-        EnforceGroupingReferencesInAggregates) ::
-      Batch("Aggregate", FixedPoint(100),
-        FoldablePropagation,
-        RemoveLiteralFromGroupExpressions,
-        RemoveRepetitionFromGroupExpressions) :: Nil
+    val batches = Batch("Aggregate", FixedPoint(100),
+      FoldablePropagation,
+      RemoveLiteralFromGroupExpressions,
+      RemoveRepetitionFromGroupExpressions) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -53,8 +50,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
       val analyzer = getAnalyzer
       val query = testRelation.groupBy(Literal("1"), Literal(1) + Literal(2))(sum('b))
       val optimized = Optimize.execute(analyzer.execute(query))
-      val correctAnswer = EnforceGroupingReferencesInAggregates(
-        analyzer.execute(testRelation.groupBy(Literal(0))(sum('b))))
+      val correctAnswer = analyzer.execute(testRelation.groupBy(Literal(0))(sum('b)))
 
       comparePlans(optimized, correctAnswer)
     }

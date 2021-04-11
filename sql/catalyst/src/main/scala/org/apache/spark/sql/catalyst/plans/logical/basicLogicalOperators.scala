@@ -625,17 +625,15 @@ case class Range(
  * This is a Group by operator with the aggregate functions and projections.
  *
  * @param groupingExpressions Expressions for grouping keys.
- * @param aggrExprWithGroupingRefs Expressions for a project list, which could contain
- *                                 [[AggregateExpression]]s and [[GroupingExprRef]]s.
+ * @param aggregateExpressions Expressions for a project list, which can contain
+ *                             [[AggregateExpression]]s and [[GroupingExprRef]]s.
  * @param child The child of the aggregate node.
- * @param enforceGroupingReferences If [[aggrExprWithGroupingRefs]] should contain
- *                                  [[GroupingExprRef]]s.
  *
- * [[aggrExprWithGroupingRefs]] without aggregate functions can contain [[GroupingExprRef]]
- * expressions to refer to complex grouping expressions in [[groupingExpressions]]. These references
- * ensure that optimization rules don't change the aggregate expressions to invalid ones that no
- * longer refer to any grouping expressions and also simplify the expression transformations on the
- * node (need to transform the expression only once).
+ * Expressions without aggregate functions in [[aggregateExpressions]] can contain
+ * [[GroupingExprRef]]s to refer to complex grouping expressions in [[groupingExpressions]]. These
+ * references ensure that optimization rules don't change the aggregate expressions to invalid ones
+ * that no longer refer to any grouping expressions and also simplify the expression transformations
+ * on the node (need to transform the expression only once).
  *
  * For example, in the following query Spark shouldn't optimize the aggregate expression
  * `Not(IsNull(c))` to `IsNotNull(c)` as the grouping expression is `IsNull(c)`:
@@ -644,27 +642,22 @@ case class Range(
  * GROUP BY c IS NULL
  * Instead, the aggregate expression should contain `Not(GroupingExprRef(0))`.
  */
-case class AggregateWithGroupingReferences(
+case class Aggregate(
     groupingExpressions: Seq[Expression],
-    aggrExprWithGroupingRefs: Seq[NamedExpression],
-    child: LogicalPlan,
-    enforceGroupingReferences: Boolean)
+    aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan)
   extends UnaryNode {
-  override val nodeName = "Aggregate"
-
-  override val stringArgs =
-    Iterator(groupingExpressions, aggrExprWithGroupingRefs, child)
 
   override lazy val resolved: Boolean = {
-    val hasWindowExpressions = aggrExprWithGroupingRefs.exists(_.collect {
-      case window: WindowExpression => window
-    }.nonEmpty)
+    val hasWindowExpressions = aggregateExpressions.exists ( _.collect {
+        case window: WindowExpression => window
+      }.nonEmpty
+    )
 
     !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
-  override def output: Seq[Attribute] = aggrExprWithGroupingRefs.map(_.toAttribute)
-
+  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = {
     if (groupingExpressions.isEmpty) {
       Some(1L)
@@ -682,12 +675,8 @@ case class AggregateWithGroupingReferences(
     }
   }
 
-  lazy val aggregateExpressions = {
-    if (enforceGroupingReferences) {
-      aggrExprWithGroupingRefs.map(expandGroupingReferences(_).asInstanceOf[NamedExpression])
-    } else {
-      aggrExprWithGroupingRefs
-    }
+  lazy val aggregateExpressionsWithoutGroupingRefs = {
+    aggregateExpressions.map(expandGroupingReferences(_).asInstanceOf[NamedExpression])
   }
 
   override lazy val validConstraints: ExpressionSet = {
@@ -727,35 +716,23 @@ object Aggregate {
     aggregateExpressions.map(insertGroupingExprRefs(_).asInstanceOf[NamedExpression])
   }
 
-  def apply(
+  def withGroupingRefs(
       groupingExpressions: Seq[Expression],
       aggregateExpressions: Seq[NamedExpression],
-      child: LogicalPlan,
-      enforceGroupingReferences: Boolean = true): Aggregate = {
-    val (newGroupingExpressions, aggrExprWithGroupingReferences) =
-      if (enforceGroupingReferences) {
-        val dealiasedGroupingExpressions = groupingExpressions.map {
-          case a: Alias => a.child
-          case o => o
-        }
-        val complexGroupingExpressions =
-          collectComplexGroupingExpressions(dealiasedGroupingExpressions)
-        val aggrExprWithGroupingReferences = if (complexGroupingExpressions.nonEmpty) {
-          insertGroupingReferences(aggregateExpressions, complexGroupingExpressions)
-        } else {
-          aggregateExpressions
-        }
-        (dealiasedGroupingExpressions, aggrExprWithGroupingReferences)
-      } else {
-        (groupingExpressions, aggregateExpressions)
-      }
-    new Aggregate(newGroupingExpressions, aggrExprWithGroupingReferences, child,
-      enforceGroupingReferences)
-  }
+      child: LogicalPlan): Aggregate = {
+    val dealiasedGroupingExpressions = groupingExpressions.map {
+      case a: Alias => a.child
+      case o => o
+    }
+    val complexGroupingExpressions =
+      collectComplexGroupingExpressions(dealiasedGroupingExpressions)
+    val aggrExprWithGroupingReferences = if (complexGroupingExpressions.nonEmpty) {
+      insertGroupingReferences(aggregateExpressions, complexGroupingExpressions)
+    } else {
+      aggregateExpressions
+    }
 
-  def unapply(
-      aggregate: Aggregate): Option[(Seq[Expression], Seq[NamedExpression], LogicalPlan)] = {
-    Some(aggregate.groupingExpressions, aggregate.aggregateExpressions, aggregate.child)
+    new Aggregate(dealiasedGroupingExpressions, aggrExprWithGroupingReferences, child)
   }
 }
 

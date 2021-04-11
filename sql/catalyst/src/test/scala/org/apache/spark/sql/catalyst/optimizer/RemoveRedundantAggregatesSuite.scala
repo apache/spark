@@ -96,7 +96,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy('a + 'b)(('a + 'b) as 'c)
         .analyze
       val optimized = Optimize.execute(query)
-      comparePlans(optimized, expected)
+      comparePlans(optimized, EnforceGroupingReferencesInAggregates(expected))
     }
   }
 

@@ -62,12 +62,12 @@ object UpdateGroupingExprRefNullability extends Rule[LogicalPlan] {
     case a: Aggregate =>
       val nullabilities = a.groupingExpressions.map(_.nullable).toArray
 
-      val newAggrExprWithGroupingRefs =
-        a.aggrExprWithGroupingRefs.map(_.transform {
+      val newAggregateExpressions =
+        a.aggregateExpressions.map(_.transform {
           case g: GroupingExprRef if g.nullable != nullabilities(g.ordinal) =>
             g.copy(nullable = nullabilities(g.ordinal))
         }.asInstanceOf[NamedExpression])
 
-      a.copy(aggrExprWithGroupingRefs = newAggrExprWithGroupingRefs)
+      a.copy(aggregateExpressions = newAggregateExpressions)
   }
 }

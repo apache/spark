@@ -287,7 +287,7 @@ object PhysicalAggregation {
     (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
-    case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
+    case a @ logical.Aggregate(groupingExpressions, resultExpressions, child) =>
       // A single aggregate expression might appear multiple times in resultExpressions.
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
       // build a set of semantically distinct aggregate expressions and re-write expressions so
@@ -322,7 +322,7 @@ object PhysicalAggregation {
       // which takes the grouping columns and final aggregate result buffer as input.
       // Thus, we must re-write the result expressions so that their attributes match up with
       // the attributes of the final result projection's input row:
-      val rewrittenResultExpressions = resultExpressions.map { expr =>
+      val rewrittenResultExpressions = a.aggregateExpressionsWithoutGroupingRefs.map { expr =>
         expr.transformDown {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,

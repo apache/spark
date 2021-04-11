@@ -167,7 +167,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       case oldVersion @ Aggregate(_, aggregateExpressions, _)
           if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
         Seq((oldVersion, oldVersion.copy(
-          aggrExprWithGroupingRefs = newAliases(aggregateExpressions))))
+          aggregateExpressions = newAliases(aggregateExpressions))))
 
       // We don't search the child plan recursively for the same reason as the above Project.
       case _ @ Aggregate(_, aggregateExpressions, _)
