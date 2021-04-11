@@ -1074,7 +1074,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         >>> def plus_max(x) -> pp.Series[np.int]:
         ...     return x + x.max()
-        >>> df.B.groupby(df.A).apply(plus_max).sort_index()
+        >>> df.B.groupby(df.A).apply(plus_max).sort_index()  # doctest: +SKIP
         0    6
         1    3
         2    4
@@ -1092,7 +1092,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         >>> def plus_length(x) -> np.int:
         ...     return len(x)
-        >>> df.B.groupby(df.A).apply(plus_length).sort_index()
+        >>> df.B.groupby(df.A).apply(plus_length).sort_index()  # doctest: +SKIP
         0    1
         1    2
         Name: B, dtype: int64
@@ -1101,7 +1101,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         >>> def calculation(x, y, z) -> np.int:
         ...     return len(x) + y * z
-        >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()
+        >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()  # doctest: +SKIP
         0    51
         1    52
         Name: B, dtype: int64

@@ -1382,12 +1382,12 @@ class Index(IndexOpsMixin):
         >>> s1 = pp.Series([1, 2, 3, 4], index=[1, 2, 3, 4])
         >>> s2 = pp.Series([1, 2, 3, 4], index=[2, 3, 4, 5])
 
-        >>> s1.index.symmetric_difference(s2.index)
+        >>> s1.index.symmetric_difference(s2.index)  # doctest: +SKIP
         Int64Index([5, 1], dtype='int64')
 
         You can set name of result Index.
 
-        >>> s1.index.symmetric_difference(s2.index, result_name='koalas')
+        >>> s1.index.symmetric_difference(s2.index, result_name='koalas')  # doctest: +SKIP
         Int64Index([5, 1], dtype='int64', name='koalas')
 
         You can set sort to `True`, if you want to sort the resulting index.
@@ -1397,7 +1397,7 @@ class Index(IndexOpsMixin):
 
         You can also use the ``^`` operator:
 
-        >>> s1.index ^ s2.index
+        >>> s1.index ^ s2.index  # doctest: +SKIP
         Int64Index([5, 1], dtype='int64')
         """
         if type(self) != type(other):
