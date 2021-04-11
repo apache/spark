@@ -289,11 +289,15 @@ public class VectorizedColumnReader {
 
     int rowId = 0;
     WritableColumnVector dictionaryIds = null;
+    WritableColumnVector resultDictionaryIds  = null;
     if (dictionary != null) {
       // SPARK-16334: We only maintain a single dictionary per row batch, so that it can be used to
       // decode all previous dictionary encoded pages if we ever encounter a non-dictionary encoded
       // page.
       dictionaryIds = column.reserveDictionaryIds(total);
+      if (column != resultColumn) {
+        resultDictionaryIds = resultColumn.reserveDictionaryIds(total);
+      }
     }
 
     while (total > 0) {
@@ -334,6 +338,9 @@ public class VectorizedColumnReader {
 
           boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
           column.setDictionary(new ParquetDictionary(dictionary, needTransform));
+          if (column != resultColumn) { // set result column as well
+            resultColumn.setDictionary(new ParquetDictionary(dictionary, needTransform));
+          }
         } else {
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
         }
@@ -341,7 +348,11 @@ public class VectorizedColumnReader {
         if (column.hasDictionary() && rowId != 0) {
           // This batch already has dictionary encoded values but this new page is not. The batch
           // does not support a mix of dictionary and not so we will decode the dictionary.
-          decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
+          if (column != resultColumn) {
+            decodeDictionaryIds(0, rowId, resultColumn, resultColumn.getDictionaryIds());
+          } else {
+            decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
+          }
         }
         column.setDictionary(null);
         switch (typeName) {
@@ -383,7 +394,9 @@ public class VectorizedColumnReader {
           int offset = (int) (rowIndexes[rowId] - currentRow);
           if (offset < num) {
             int validValueNum = num - offset;
-            if (resultColumn.dataType() == DataTypes.ByteType) {
+            if (isCurrentPageDictionaryEncoded && column.hasDictionary()) {
+              resultDictionaryIds.putInts(rowId, validValueNum, dictionaryIds.getInts(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.ByteType) {
               resultColumn.putBytes(rowId, validValueNum, column.getBytes(rowId + offset, validValueNum), 0);
             } else if (resultColumn.dataType() == DataTypes.ShortType) {
               resultColumn.putShorts(rowId, validValueNum, column.getShorts(rowId + offset, validValueNum), 0);
@@ -391,18 +404,14 @@ public class VectorizedColumnReader {
               resultColumn.putInts(rowId, validValueNum, column.getInts(rowId + offset, validValueNum), 0);
             } else if (resultColumn.dataType() == DataTypes.LongType) {
               resultColumn.putLongs(rowId, validValueNum, column.getLongs(rowId + offset, validValueNum), 0);
-            } else if (resultColumn.dataType() == DataTypes.DateType) {
-              resultColumn.putInts(rowId, validValueNum, column.getInts(rowId + offset, validValueNum), 0);
             } else if (resultColumn.dataType() == DataTypes.FloatType) {
               resultColumn.putFloats(rowId, validValueNum, column.getFloats(rowId + offset, validValueNum), 0);
             } else if (resultColumn.dataType() == DataTypes.DoubleType) {
               resultColumn.putDoubles(rowId, validValueNum, column.getDoubles(rowId + offset, validValueNum), 0);
+            } else if (resultColumn.dataType() == DataTypes.DateType) {
+              resultColumn.putInts(rowId, validValueNum, column.getInts(rowId + offset, validValueNum), 0);
             } else if (resultColumn.dataType() == DataTypes.TimestampType) {
               resultColumn.putLongs(rowId, validValueNum, column.getLongs(rowId + offset, validValueNum), 0);
-            } else if (resultColumn.dataType() == DataTypes.DayTimeIntervalType) {
-              resultColumn.putLongs(rowId, validValueNum, column.getLongs(rowId + offset, validValueNum), 0);
-            } else if (resultColumn.dataType() == DataTypes.YearMonthIntervalType) {
-              resultColumn.putInts(rowId, validValueNum, column.getInts(rowId + offset, validValueNum), 0);
             } else if (resultColumn.dataType() == DataTypes.BooleanType) {
               for (int i = 0; i < validValueNum; i++) {
                 resultColumn.putBoolean(rowId + i, column.getBoolean(rowId + offset + i));
@@ -424,7 +433,9 @@ public class VectorizedColumnReader {
             if (i >= num) {
               break;
             }
-            if (resultColumn.dataType() == DataTypes.ByteType) {
+            if (isCurrentPageDictionaryEncoded && column.hasDictionary()) {
+              resultDictionaryIds.putInt(rowId, dictionaryIds.getInt(startingRowId + i));
+            } if (resultColumn.dataType() == DataTypes.ByteType) {
               resultColumn.putByte(rowId, column.getByte(startingRowId + i));
             } else if (resultColumn.dataType() == DataTypes.ShortType) {
               resultColumn.putShort(rowId, column.getShort(startingRowId + i));
@@ -440,10 +451,6 @@ public class VectorizedColumnReader {
               resultColumn.putDouble(rowId, column.getDouble(startingRowId + i));
             } else if (resultColumn.dataType() == DataTypes.TimestampType) {
               resultColumn.putLong(rowId, column.getLong(startingRowId + i));
-            } else if (resultColumn.dataType() == DataTypes.DayTimeIntervalType) {
-              resultColumn.putLong(rowId, column.getLong(startingRowId + i));
-            } else if (resultColumn.dataType() == DataTypes.YearMonthIntervalType) {
-              resultColumn.putInt(rowId, column.getInt(startingRowId + i));
             } else if (resultColumn.dataType() == DataTypes.BooleanType) {
               resultColumn.putBoolean(rowId, column.getBoolean(startingRowId + i));
             } else {
