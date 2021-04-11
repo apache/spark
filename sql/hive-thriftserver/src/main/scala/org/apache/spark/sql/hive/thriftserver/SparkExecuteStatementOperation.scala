@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.hive.common.`type`.{HiveIntervalDayTime, HiveIntervalYearMonth}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
@@ -34,7 +33,6 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
-import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.VariableSubstitution
@@ -122,14 +120,9 @@ private[hive] class SparkExecuteStatementOperation(
           (from.getAs[CalendarInterval](ordinal), CalendarIntervalType),
           false,
           timeFormatters)
-      case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
+      case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] |
+          YearMonthIntervalType | DayTimeIntervalType =>
         to += toHiveString((from.get(ordinal), dataTypes(ordinal)), false, timeFormatters)
-      case YearMonthIntervalType =>
-        val period = from.getAs[java.time.Period](ordinal)
-        to += new HiveIntervalYearMonth(IntervalUtils.periodToMonths(period))
-      case DayTimeIntervalType =>
-        val duration = from.getAs[java.time.Duration](ordinal)
-        to += new HiveIntervalDayTime(duration.getSeconds, duration.getNano)
     }
   }
 
