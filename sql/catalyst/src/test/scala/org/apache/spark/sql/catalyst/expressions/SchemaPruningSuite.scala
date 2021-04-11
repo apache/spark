@@ -24,22 +24,28 @@ class SchemaPruningSuite extends SparkFunSuite {
   test("prune schema by the requested fields") {
     def testPrunedSchema(
         schema: StructType,
-        requestedFields: StructField*): Unit = {
+        requestedFields: Seq[StructField],
+        expectedSchema: StructType): Unit = {
       val requestedRootFields = requestedFields.map { f =>
         // `derivedFromAtt` doesn't affect the result of pruned schema.
         SchemaPruning.RootField(field = f, derivedFromAtt = true)
       }
-      val expectedSchema = SchemaPruning.pruneDataSchema(schema, requestedRootFields)
-      assert(expectedSchema == StructType(requestedFields))
+      val prunedSchema = SchemaPruning.pruneDataSchema(schema, requestedRootFields)
+      assert(prunedSchema === expectedSchema)
     }
 
-    testPrunedSchema(StructType.fromDDL("a int, b int"), StructField("a", IntegerType))
-    testPrunedSchema(StructType.fromDDL("a int, b int"), StructField("b", IntegerType))
+    testPrunedSchema(
+      StructType.fromDDL("a int, b int"),
+      Seq(StructField("a", IntegerType)),
+      StructType.fromDDL("a int, b int"))
 
     val structOfStruct = StructType.fromDDL("a struct<a:int, b:int>, b int")
-    testPrunedSchema(structOfStruct, StructField("a", StructType.fromDDL("a int, b int")))
-    testPrunedSchema(structOfStruct, StructField("b", IntegerType))
-    testPrunedSchema(structOfStruct, StructField("a", StructType.fromDDL("b int")))
+    testPrunedSchema(structOfStruct,
+      Seq(StructField("a", StructType.fromDDL("a int")), StructField("b", IntegerType)),
+      StructType.fromDDL("a struct<a:int>, b int"))
+    testPrunedSchema(structOfStruct,
+      Seq(StructField("a", StructType.fromDDL("a int"))),
+      StructType.fromDDL("a struct<a:int>, b int"))
 
     val arrayOfStruct = StructField("a", ArrayType(StructType.fromDDL("a int, b int, c string")))
     val mapOfStruct = StructField("d", MapType(StructType.fromDDL("a int, b int, c string"),
@@ -49,14 +55,31 @@ class SchemaPruningSuite extends SparkFunSuite {
       arrayOfStruct :: StructField("b", structOfStruct) :: StructField("c", IntegerType) ::
         mapOfStruct :: Nil)
 
-    testPrunedSchema(complexStruct, StructField("a", ArrayType(StructType.fromDDL("b int"))),
-      StructField("b", StructType.fromDDL("a int")))
     testPrunedSchema(complexStruct,
-      StructField("a", ArrayType(StructType.fromDDL("b int, c string"))),
-      StructField("b", StructType.fromDDL("b int")))
+      Seq(StructField("a", ArrayType(StructType.fromDDL("b int"))),
+        StructField("b", StructType.fromDDL("a int"))),
+      StructType(
+        StructField("a", ArrayType(StructType.fromDDL("b int"))) ::
+          StructField("b", StructType.fromDDL("a int")) ::
+          StructField("c", IntegerType) ::
+          mapOfStruct :: Nil))
+    testPrunedSchema(complexStruct,
+      Seq(StructField("a", ArrayType(StructType.fromDDL("b int, c string"))),
+        StructField("b", StructType.fromDDL("b int"))),
+      StructType(
+        StructField("a", ArrayType(StructType.fromDDL("b int, c string"))) ::
+          StructField("b", StructType.fromDDL("b int")) ::
+          StructField("c", IntegerType) ::
+          mapOfStruct :: Nil))
 
     val selectFieldInMap = StructField("d", MapType(StructType.fromDDL("a int, b int"),
       StructType.fromDDL("e int, f string")))
-    testPrunedSchema(complexStruct, StructField("c", IntegerType), selectFieldInMap)
+    testPrunedSchema(complexStruct,
+      Seq(StructField("c", IntegerType), selectFieldInMap),
+      StructType(
+        arrayOfStruct ::
+          StructField("b", structOfStruct) ::
+          StructField("c", IntegerType) ::
+          selectFieldInMap :: Nil))
   }
 }
