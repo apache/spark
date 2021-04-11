@@ -257,8 +257,8 @@ object GroupingAnalytics {
           case gs: BaseGroupingSets => gs.selectedGroupByExprs
           case other: Expression => Seq(Seq(other))
         }
-        val selectedGroupByExprs = unmergedSelectedGroupByExprs.init
-          .foldLeft(unmergedSelectedGroupByExprs.last) { (x, y) =>
+        val selectedGroupByExprs = unmergedSelectedGroupByExprs.tail
+          .foldLeft(unmergedSelectedGroupByExprs.head) { (x, y) =>
             for (a <- x; b <- y) yield a ++ b
           }
         Some(selectedGroupByExprs, BaseGroupingSets.distinctGroupByExprs(groups))

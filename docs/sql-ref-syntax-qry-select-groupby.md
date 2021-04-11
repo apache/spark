@@ -26,7 +26,7 @@ the group of rows based on one or more specified aggregate functions. Spark also
 aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
 The grouping expressions and advanced aggregations can be mixed in the `GROUP BY` clause.
 See more details in the `Mixed Grouping Analytics` section. When a FILTER clause is attached to
-an aggregate function, only the matching.
+an aggregate function, only the matching rows are passed to that function.
 
 ### Syntax
 
