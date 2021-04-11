@@ -22,6 +22,7 @@ import java.time.{Duration, Period}
 import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
+
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
