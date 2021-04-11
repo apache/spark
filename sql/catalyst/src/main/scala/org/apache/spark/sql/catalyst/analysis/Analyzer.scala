@@ -1815,16 +1815,18 @@ class Analyzer(override val catalogManager: CatalogManager)
         expr: Expression,
         aggs: Seq[Expression]): Expression = expr match {
       case ordinal @ UnresolvedOrdinal(index) =>
-        if (index > 0 && index <= aggs.size) {
-          val ordinalExpr = aggs(index - 1)
-          if (ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
-            throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
-              index, ordinalExpr, ordinal)
+        withPosition(ordinal) {
+          if (index > 0 && index <= aggs.size) {
+            val ordinalExpr = aggs(index - 1)
+            if (ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
+              throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
+                index, ordinalExpr)
+            } else {
+              ordinalExpr
+            }
           } else {
-            ordinalExpr
+            throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size)
           }
-        } else {
-          throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
         }
       case gs: BaseGroupingSets =>
         gs.withNewChildren(gs.children.map(resolveGroupByExpressionOrdinal(_, aggs)))
