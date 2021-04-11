@@ -59,8 +59,7 @@ class UpdatingSessionsIterator(
   private var currentKeys: InternalRow = _
   private var currentSession: UnsafeRow = _
 
-  private var currentRows: ExternalAppendOnlyUnsafeRowArray = new ExternalAppendOnlyUnsafeRowArray(
-    inMemoryThreshold, spillThreshold)
+  private var currentRows: ExternalAppendOnlyUnsafeRowArray = _
 
   private var returnRows: ExternalAppendOnlyUnsafeRowArray = _
   private var returnRowsIter: Iterator[InternalRow] = _
@@ -147,7 +146,7 @@ class UpdatingSessionsIterator(
     currentKeys = groupingKey.copy()
     currentSession = sessionStruct.copy()
 
-    currentRows.clear()
+    currentRows = new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
     currentRows.add(currentRow.asInstanceOf[UnsafeRow])
   }
 
@@ -192,9 +191,10 @@ class UpdatingSessionsIterator(
   }
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
+    assert(returnRowsIter == null || !returnRowsIter.hasNext)
+
     returnRows = currentRows
-    currentRows = new ExternalAppendOnlyUnsafeRowArray(
-      inMemoryThreshold, spillThreshold)
+    currentRows = null
 
     val groupingKey = generateGroupingKey()
 
@@ -203,11 +203,7 @@ class UpdatingSessionsIterator(
       restoreProj(join2(groupingKey, valueRow)).copy()
     }
 
-    if (returnRowsIter != null && returnRowsIter.hasNext) {
-      returnRowsIter = returnRowsIter ++ currentRowsIter
-    } else {
-      returnRowsIter = currentRowsIter
-    }
+    returnRowsIter = currentRowsIter
 
     if (keyChanged) processedKeys.add(currentKeys)
 
