@@ -83,14 +83,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
 
-  override def metadataOutput: Seq[Attribute] = {
-    val hiddenOutput = getTagValue(Project.hiddenOutputTag)
-    if (hiddenOutput.isDefined) {
-      child.metadataOutput.filter(_.isHiddenCol) ++ hiddenOutput.get
-    } else {
-      Nil
-    }
-  }
+  override def metadataOutput: Seq[Attribute] =
+    getTagValue(Project.hiddenOutputTag).getOrElse(Nil)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Project =
     copy(child = newChild)

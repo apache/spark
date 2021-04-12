@@ -3199,8 +3199,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         sys.error("Unsupported natural join type " + joinType)
     }
     // use Project to hide duplicated common keys
+    // propagate hidden columns from nested USING/NATURAL JOINs
     val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
-    project.setTagValue(Project.hiddenOutputTag, hiddenList.map(_.asHiddenCol()))
+    project.setTagValue(
+      Project.hiddenOutputTag,
+      hiddenList.map(_.asHiddenCol()) ++ project.child.metadataOutput.filter(_.isHiddenCol))
     project
   }
 
