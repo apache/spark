@@ -481,7 +481,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ./tpcds-sf-1
-        key: tpcds-${{ hashFiles('tpcds-sf-1/.spark-tpcds-sf-1.md5') }}
+        key: tpcds-556111e35d400f56cb0625dc16e9063d54628320
         restore-keys: |
           tpcds-
     - name: Checkout TPC-DS (SF=1) generated data repository
