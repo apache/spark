@@ -65,16 +65,16 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Runn
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val fileList = sparkSession.sparkContext.listFiles()
-      if (files.size > 0) {
-        files.map { f =>
-          val uri = Utils.resolveURI(f)
-          uri.getScheme match {
-            case null | "local" | "file" => new File(uri).getCanonicalFile.toURI.toString
-            case _ => f
-          }
-        }.collect {
-          case f if fileList.contains(f) => f
-        }.map(Row(_))
+    if (files.size > 0) {
+      files.map { f =>
+        val uri = Utils.resolveURI(f)
+        uri.getScheme match {
+          case null | "local" | "file" => new File(uri).getCanonicalFile.toURI.toString
+          case _ => f
+        }
+      }.collect {
+        case f if fileList.contains(f) => f
+      }.map(Row(_))
     } else {
       fileList.map(Row(_))
     }
