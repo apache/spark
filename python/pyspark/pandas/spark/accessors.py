@@ -20,10 +20,8 @@ Spark related features. Usually, the features here are missing in pandas
 but Spark has it.
 """
 from abc import ABCMeta, abstractmethod
-from distutils.version import LooseVersion
 from typing import TYPE_CHECKING, Optional, Union, List, cast
 
-import pyspark
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
@@ -881,28 +879,7 @@ class SparkFrameMethods(object):
         == Physical Plan ==
         ...
         """
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-            if mode is not None and extended is not None:
-                raise Exception("extended and mode should not be set together.")
-
-            if extended is not None and isinstance(extended, str):
-                mode = extended
-
-            if mode is not None:
-                if mode == "simple":
-                    extended = False
-                elif mode == "extended":
-                    extended = True
-                else:
-                    raise ValueError(
-                        "Unknown spark.explain mode: {}. Accepted spark.explain modes are "
-                        "'simple', 'extended'.".format(mode)
-                    )
-            if extended is None:
-                extended = False
-            self._kdf._internal.to_internal_spark_frame.explain(extended)
-        else:
-            self._kdf._internal.to_internal_spark_frame.explain(extended, mode)
+        self._kdf._internal.to_internal_spark_frame.explain(extended, mode)
 
     def apply(self, func, index_col: Optional[Union[str, List[str]]] = None) -> "ps.DataFrame":
         """

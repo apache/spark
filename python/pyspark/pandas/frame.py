@@ -61,7 +61,6 @@ else:
     from pandas.core.dtypes.common import _get_dtype_from_object as infer_dtype_from_object
 from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
-import pyspark
 from pyspark import StorageLevel
 from pyspark import sql as spark
 from pyspark.sql import Column, DataFrame as SparkDataFrame, functions as F
@@ -1313,12 +1312,7 @@ class DataFrame(Frame, Generic[T]):
             #
             # Aggregated output is usually pretty much small.
 
-            if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
-                return kdf.stack().droplevel(0)[list(func.keys())]
-            else:
-                pdf = kdf._to_internal_pandas().stack()
-                pdf.index = pdf.index.droplevel()
-                return ps.from_pandas(pdf[list(func.keys())])
+            return kdf.stack().droplevel(0)[list(func.keys())]
 
     agg = aggregate
 
@@ -2524,7 +2518,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
-        should_use_map_in_pandas = LooseVersion(pyspark.__version__) >= "3.0"
 
         def apply_func(pdf):
             pdf_or_pser = pdf.apply(func, axis=axis, args=args, **kwds)
@@ -2555,21 +2548,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 as_nullable_spark_type(kdf._internal.to_internal_spark_frame.schema)
             )
 
-            if should_use_map_in_pandas:
-                output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, apply_func, return_schema, retain_index=True
-                )
-                sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
-                    lambda iterator: map(output_func, iterator), schema=return_schema
-                )
-            else:
-                sdf = GroupBy._spark_group_map_apply(
-                    self_applied,
-                    apply_func,
-                    (F.spark_partition_id(),),
-                    return_schema,
-                    retain_index=True,
-                )
+            output_func = GroupBy._make_pandas_df_builder_func(
+                self_applied, apply_func, return_schema, retain_index=True
+            )
+            sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
+                lambda iterator: map(output_func, iterator), schema=return_schema
+            )
 
             # If schema is inferred, we can restore indexes too.
             internal = kdf._internal.with_new_sdf(sdf)
@@ -2608,21 +2592,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 data_dtypes = [cast(ScalarType, return_type).dtype]
                 column_labels = [None]
 
-            if should_use_map_in_pandas:
-                output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, apply_func, return_schema, retain_index=False
-                )
-                sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
-                    lambda iterator: map(output_func, iterator), schema=return_schema
-                )
-            else:
-                sdf = GroupBy._spark_group_map_apply(
-                    self_applied,
-                    apply_func,
-                    (F.spark_partition_id(),),
-                    return_schema,
-                    retain_index=False,
-                )
+            output_func = GroupBy._make_pandas_df_builder_func(
+                self_applied, apply_func, return_schema, retain_index=False
+            )
+            sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
+                lambda iterator: map(output_func, iterator), schema=return_schema
+            )
 
             # Otherwise, it loses index.
             internal = InternalFrame(
@@ -11387,8 +11362,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         7   whale
         8   zebra
         """
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-            raise RuntimeError("tail can be used in PySpark >= 3.0")
         if not isinstance(n, int):
             raise TypeError("bad operand type for unary -: '{}'".format(type(n).__name__))
         if n < 0:

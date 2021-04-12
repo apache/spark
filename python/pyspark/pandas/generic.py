@@ -30,7 +30,6 @@ import numpy as np  # noqa: F401
 import pandas as pd
 from pandas.api.types import is_list_like
 
-import pyspark
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -2453,9 +2452,6 @@ class Frame(object, metaclass=ABCMeta):
         >>> s.last_valid_index()  # doctest: +SKIP
         ('cow', 'weight')
         """
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-            raise RuntimeError("last_valid_index can be used in PySpark >= 3.0")
-
         data_spark_columns = self._internal.data_spark_columns
 
         if len(data_spark_columns) == 0:

@@ -18,13 +18,11 @@
 Koalas specific features.
 """
 import inspect
-from distutils.version import LooseVersion
 from typing import Any, Optional, Tuple, Union, TYPE_CHECKING, cast
 import types
 
 import numpy as np  # noqa: F401
 import pandas as pd
-import pyspark
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import StructField, StructType
@@ -333,7 +331,6 @@ class KoalasFrameMethods(object):
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
-        should_use_map_in_pandas = LooseVersion(pyspark.__version__) >= "3.0"
 
         original_func = func
         func = lambda o: original_func(o, *args, **kwds)
@@ -358,17 +355,13 @@ class KoalasFrameMethods(object):
             return_schema = force_decimal_precision_scale(
                 as_nullable_spark_type(kdf._internal.to_internal_spark_frame.schema)
             )
-            if should_use_map_in_pandas:
-                output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=True
-                )
-                sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
-                    lambda iterator: map(output_func, iterator), schema=return_schema
-                )
-            else:
-                sdf = GroupBy._spark_group_map_apply(
-                    self_applied, func, (F.spark_partition_id(),), return_schema, retain_index=True
-                )
+
+            output_func = GroupBy._make_pandas_df_builder_func(
+                self_applied, func, return_schema, retain_index=True
+            )
+            sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
+                lambda iterator: map(output_func, iterator), schema=return_schema
+            )
 
             # If schema is inferred, we can restore indexes too.
             internal = kdf._internal.with_new_sdf(sdf)
@@ -382,17 +375,12 @@ class KoalasFrameMethods(object):
                 )
             return_schema = cast(DataFrameType, return_type).spark_type
 
-            if should_use_map_in_pandas:
-                output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=False
-                )
-                sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
-                    lambda iterator: map(output_func, iterator), schema=return_schema
-                )
-            else:
-                sdf = GroupBy._spark_group_map_apply(
-                    self_applied, func, (F.spark_partition_id(),), return_schema, retain_index=False
-                )
+            output_func = GroupBy._make_pandas_df_builder_func(
+                self_applied, func, return_schema, retain_index=False
+            )
+            sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
+                lambda iterator: map(output_func, iterator), schema=return_schema
+            )
 
             # Otherwise, it loses index.
             internal = InternalFrame(
@@ -552,7 +540,6 @@ class KoalasFrameMethods(object):
         func = lambda o: original_func(o, *args, **kwargs)
 
         names = self._kdf._internal.to_internal_spark_frame.schema.names
-        should_by_pass = LooseVersion(pyspark.__version__) >= "3.0"
 
         def pandas_concat(series):
             # The input can only be a DataFrame for struct from Spark 3.0.
@@ -569,12 +556,9 @@ class KoalasFrameMethods(object):
             # from Spark 3.0.  See SPARK-23836
             return pdf[name]
 
-        def pandas_series_func(f, by_pass):
+        def pandas_series_func(f):
             ff = f
-            if by_pass:
-                return lambda *series: first_series(ff(*series))
-            else:
-                return lambda *series: first_series(ff(pandas_concat(series)))
+            return lambda *series: first_series(ff(*series))
 
         def pandas_frame_func(f, field_name):
             ff = f
@@ -609,7 +593,7 @@ class KoalasFrameMethods(object):
                 )
 
                 pudf = pandas_udf(
-                    pandas_series_func(output_func, should_by_pass),
+                    pandas_series_func(output_func),
                     returnType=spark_return_type,
                     functionType=PandasUDFType.SCALAR,
                 )
@@ -618,9 +602,7 @@ class KoalasFrameMethods(object):
                 internal = self._kdf._internal.copy(
                     column_labels=kser._internal.column_labels,
                     data_spark_columns=[
-                        (pudf(F.struct(*columns)) if should_by_pass else pudf(*columns)).alias(
-                            kser._internal.data_spark_column_names[0]
-                        )
+                        pudf(F.struct(*columns)).alias(kser._internal.data_spark_column_names[0])
                     ],
                     data_dtypes=kser._internal.data_dtypes,
                     column_label_names=kser._internal.column_label_names,
@@ -644,27 +626,17 @@ class KoalasFrameMethods(object):
                     self_applied, func, return_schema, retain_index=True
                 )
                 columns = self_applied._internal.spark_columns
-                if should_by_pass:
-                    pudf = pandas_udf(
-                        output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
-                    )
-                    temp_struct_column = verify_temp_column_name(
-                        self_applied._internal.spark_frame, "__temp_struct__"
-                    )
-                    applied = pudf(F.struct(*columns)).alias(temp_struct_column)
-                    sdf = self_applied._internal.spark_frame.select(applied)
-                    sdf = sdf.selectExpr("%s.*" % temp_struct_column)
-                else:
-                    applied = []
-                    for field in return_schema.fields:
-                        applied.append(
-                            pandas_udf(
-                                pandas_frame_func(output_func, field.name),
-                                returnType=field.dataType,
-                                functionType=PandasUDFType.SCALAR,
-                            )(*columns).alias(field.name)
-                        )
-                    sdf = self_applied._internal.spark_frame.select(*applied)
+
+                pudf = pandas_udf(
+                    output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
+                )
+                temp_struct_column = verify_temp_column_name(
+                    self_applied._internal.spark_frame, "__temp_struct__"
+                )
+                applied = pudf(F.struct(*columns)).alias(temp_struct_column)
+                sdf = self_applied._internal.spark_frame.select(applied)
+                sdf = sdf.selectExpr("%s.*" % temp_struct_column)
+
                 return DataFrame(kdf._internal.with_new_sdf(sdf))
         else:
             return_type = infer_return_type(original_func)
@@ -687,18 +659,14 @@ class KoalasFrameMethods(object):
                 )
 
                 pudf = pandas_udf(
-                    pandas_series_func(output_func, should_by_pass),
+                    pandas_series_func(output_func),
                     returnType=spark_return_type,
                     functionType=PandasUDFType.SCALAR,
                 )
                 columns = self._kdf._internal.spark_columns
                 internal = self._kdf._internal.copy(
                     column_labels=[None],
-                    data_spark_columns=[
-                        (pudf(F.struct(*columns)) if should_by_pass else pudf(*columns)).alias(
-                            SPARK_DEFAULT_SERIES_NAME
-                        )
-                    ],
+                    data_spark_columns=[pudf(F.struct(*columns)).alias(SPARK_DEFAULT_SERIES_NAME)],
                     data_dtypes=[cast(SeriesType, return_type).dtype],
                     column_label_names=None,
                 )
@@ -713,27 +681,16 @@ class KoalasFrameMethods(object):
                 )
                 columns = self_applied._internal.spark_columns
 
-                if should_by_pass:
-                    pudf = pandas_udf(
-                        output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
-                    )
-                    temp_struct_column = verify_temp_column_name(
-                        self_applied._internal.spark_frame, "__temp_struct__"
-                    )
-                    applied = pudf(F.struct(*columns)).alias(temp_struct_column)
-                    sdf = self_applied._internal.spark_frame.select(applied)
-                    sdf = sdf.selectExpr("%s.*" % temp_struct_column)
-                else:
-                    applied = []
-                    for field in return_schema.fields:
-                        applied.append(
-                            pandas_udf(
-                                pandas_frame_func(output_func, field.name),
-                                returnType=field.dataType,
-                                functionType=PandasUDFType.SCALAR,
-                            )(*columns).alias(field.name)
-                        )
-                    sdf = self_applied._internal.spark_frame.select(*applied)
+                pudf = pandas_udf(
+                    output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
+                )
+                temp_struct_column = verify_temp_column_name(
+                    self_applied._internal.spark_frame, "__temp_struct__"
+                )
+                applied = pudf(F.struct(*columns)).alias(temp_struct_column)
+                sdf = self_applied._internal.spark_frame.select(applied)
+                sdf = sdf.selectExpr("%s.*" % temp_struct_column)
+
                 internal = InternalFrame(
                     spark_frame=sdf,
                     index_spark_columns=None,

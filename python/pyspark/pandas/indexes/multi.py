@@ -24,7 +24,6 @@ import pandas as pd
 from pandas.api.types import is_list_like
 from pandas.api.types import is_hashable
 
-import pyspark
 from pyspark import sql as spark
 from pyspark.sql import functions as F, Window
 
@@ -38,7 +37,6 @@ from pyspark.pandas.missing.indexes import MissingPandasLikeMultiIndex
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.utils import (
     compare_disallow_null,
-    default_session,
     is_name_like_tuple,
     name_like_string,
     scol_for,
@@ -864,25 +862,6 @@ class MultiIndex(Index):
             data_dtypes=[],
         )
         return cast(MultiIndex, DataFrame(internal).index)
-
-    def value_counts(
-        self, normalize=False, sort=True, ascending=False, bins=None, dropna=True
-    ) -> Series:
-        if (
-            LooseVersion(pyspark.__version__) < LooseVersion("2.4")
-            and default_session().conf.get("spark.sql.execution.arrow.enabled") == "true"
-            and isinstance(self, MultiIndex)
-        ):
-            raise RuntimeError(
-                "if you're using pyspark < 2.4, set conf "
-                "'spark.sql.execution.arrow.enabled' to 'false' "
-                "for using this function with MultiIndex"
-            )
-        return super().value_counts(
-            normalize=normalize, sort=sort, ascending=ascending, bins=bins, dropna=dropna
-        )
-
-    value_counts.__doc__ = IndexOpsMixin.value_counts.__doc__
 
     def argmax(self) -> None:
         raise TypeError("reduction operation 'argmax' not allowed for this dtype")

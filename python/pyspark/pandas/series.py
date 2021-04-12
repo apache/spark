@@ -4984,12 +4984,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
 
         if isinstance(repeats, Series):
-            if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
-                raise ValueError(
-                    "`repeats` argument must be integer with Spark<2.4, but got {}".format(
-                        type(repeats)
-                    )
-                )
             if not same_anchor(self, repeats):
                 kdf = self.to_frame()
                 temp_repeats = verify_temp_column_name(kdf, "__temp_repeats__")
