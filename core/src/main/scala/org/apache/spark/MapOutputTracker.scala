@@ -449,7 +449,7 @@ private[spark] class MapOutputTrackerMasterEndpoint(
 
     case GetMapAndMergeResultStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
-      logInfo(s"Asked to send merge result locations for shuffle $shuffleId to $hostPort")
+      logInfo(s"Asked to send map/merge result locations for shuffle $shuffleId to $hostPort")
       tracker.post(GetMapAndMergeStatusMessage(shuffleId, context))
 
     case StopMapOutputTracker =>
@@ -1408,6 +1408,9 @@ private[spark] object MapOutputTracker extends Logging {
     // subrange requests. However, when a reduce task needs to fetch blocks from a subrange of
     // map outputs, it usually indicates skewed partitions which push-based shuffle delegates
     // to AQE to handle.
+    // TODO: SPARK-35036: Instead of reading map blocks in case of AQE with Push based shuffle,
+    // TODO: improve push based shuffle to read partial merged blocks satisfying the start/end
+    // TODO: map indexes
     if (mergeStatuses.isDefined && startMapIndex == 0 && endMapIndex == mapStatuses.length) {
       // We have MergeStatus and full range of mapIds are requested so return a merged block.
       val numMaps = mapStatuses.length
