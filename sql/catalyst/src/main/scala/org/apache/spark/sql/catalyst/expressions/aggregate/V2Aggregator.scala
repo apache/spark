@@ -61,5 +61,8 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
   override def nullable: Boolean = aggrFunc.isResultNullable
 
   override def dataType: DataType = aggrFunc.resultType()
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(children = newChildren)
 }
 

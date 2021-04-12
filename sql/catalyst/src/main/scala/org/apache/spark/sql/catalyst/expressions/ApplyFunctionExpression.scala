@@ -40,4 +40,7 @@ case class ApplyFunctionExpression(
 
     function.produceResult(reusedRow)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(children = newChildren)
 }
