@@ -39,6 +39,11 @@ object RuleIdCollection {
   // tree traversals in the transform function family. Note that those rules should not depend on
   // a changing, external state. Rules here are in alphabetical order.
   private val rulesNeedingIds: Seq[String] = {
+      // Catalyst Analyzer rules
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNaturalAndUsingJoin" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRandomSeed" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowFrame" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowOrder" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
