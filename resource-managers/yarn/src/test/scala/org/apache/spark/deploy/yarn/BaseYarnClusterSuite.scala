@@ -90,9 +90,32 @@ abstract class BaseYarnClusterSuite
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
     yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
 
-    yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
-    yarnCluster.init(yarnConf)
-    yarnCluster.start()
+    try {
+      yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
+      yarnCluster.init(yarnConf)
+      yarnCluster.start()
+    } catch {
+      case e: Throwable if org.apache.commons.lang3.exception.ExceptionUtils.indexOfThrowable(
+          e, classOf[java.net.BindException]) != -1 =>
+        // When InetAddress.getLocalHost returns a wrong address, see also SPARK-35002.
+        val original = System.getSecurityManager
+        System.setSecurityManager(new java.lang.SecurityManager() {
+          override def checkConnect(host: String, port: Int): Unit = {
+            if (host != "localhost" || host != "127.0.0.1") {
+              // Reject all hosts except loopback.
+              throw new SecurityException("Loopback only allowed")
+            }
+            super.checkConnect(host, port)
+          }
+        })
+        try {
+          yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
+          yarnCluster.init(yarnConf)
+          yarnCluster.start()
+        } finally {
+          System.setSecurityManager(original)
+        }
+    }
 
     // There's a race in MiniYARNCluster in which start() may return before the RM has updated
     // its address in the configuration. You can see this in the logs by noticing that when
