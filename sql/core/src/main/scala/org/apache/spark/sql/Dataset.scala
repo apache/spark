@@ -223,7 +223,8 @@ class Dataset[T] private[sql](
   @transient private[sql] val logicalPlan: LogicalPlan = {
     val analyzed = queryExecution.analyzed
     val plan = if (queryExecution.commandExecuted) {
-      LocalRelation(analyzed.output, queryExecution.executedPlan.executeCollect(),
+      LocalRelation(analyzed.output,
+        withAction("command", queryExecution)(_.executeCollect()),
         fromCommand = true)
     } else {
       analyzed
