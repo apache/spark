@@ -165,7 +165,7 @@ case class ShuffleQueryStageExec(
     case s: ShuffleExchangeLike => s
     case ReusedExchangeExec(_, s: ShuffleExchangeLike) => s
     case _ =>
-      throw QueryExecutionErrors.wrongPlanForShuffleStageError(plan.treeString)
+      throw new IllegalStateException(s"wrong plan for shuffle stage:\n ${plan.treeString}")
   }
 
   override def doMaterialize(): Future[Any] = shuffle.mapOutputStatisticsFuture
@@ -217,7 +217,7 @@ case class BroadcastQueryStageExec(
     case b: BroadcastExchangeLike => b
     case ReusedExchangeExec(_, b: BroadcastExchangeLike) => b
     case _ =>
-      throw QueryExecutionErrors.wrongPlanForBroadcastStageError(plan.treeString)
+      throw new IllegalStateException(s"wrong plan for broadcast stage:\n ${plan.treeString}")
   }
 
   @transient private lazy val materializeWithTimeout = {

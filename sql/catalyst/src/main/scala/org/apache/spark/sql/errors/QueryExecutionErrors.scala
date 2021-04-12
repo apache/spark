@@ -671,55 +671,12 @@ object QueryExecutionErrors {
     new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
   }
 
-  def unsupportedTypeForArgumentValuesError(values: Any): Throwable = {
-    new IllegalArgumentException(s"Unsupported type for argument values: $values")
-  }
-
-  def executionIDNotSetError(): Throwable = {
-    new IllegalStateException("Execution ID should be set")
-  }
-
-  def executeCanonicalizedPlanError(): Throwable = {
-    new IllegalStateException("A canonicalized plan is not supposed to be executed.")
-  }
-
-  def doExecuteBroadcastNotImplementedError(nodeName: String): Throwable = {
-    new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
-  }
-
-  def sparkPlanHasColumnSupportMismatchError(sparkPlan: Class[_], plan: String): Throwable = {
-    new IllegalStateException(s"Internal Error $sparkPlan has column support" +
-      s" mismatch:\n$plan")
-  }
-
-  def logicalOperatorNotReplacedError(
-      logicalOperator: String, replaceOperator: String): Throwable = {
-    new IllegalStateException(s"$logicalOperator should have been" +
-      s" replaced by $replaceOperator in the optimizer")
-  }
-
   def ddlUnsupportedTemporarilyError(ddl: String): Throwable = {
     new UnsupportedOperationException(s"$ddl is not supported temporarily.")
   }
 
   def operatingOnCanonicalizationPlanError(): Throwable = {
     new IllegalStateException("operating on canonicalization plan")
-  }
-
-  def unexpectedShufflePartitionSpecError(p: String): Throwable = {
-    new IllegalStateException(s"unexpected $p")
-  }
-
-  def operatingOnCanonicalizedPlanError(): Throwable = {
-    new IllegalStateException("operating on canonicalized plan")
-  }
-
-  def wrongPlanForShuffleStageError(plan: String): Throwable = {
-    new IllegalStateException(s"wrong plan for shuffle stage:\n $plan")
-  }
-
-  def wrongPlanForBroadcastStageError(plan: String): Throwable = {
-    new IllegalStateException(s"wrong plan for broadcast stage:\n $plan")
   }
 
   def executeBroadcastTimeoutError(timeout: Long): Throwable = {
@@ -733,11 +690,6 @@ object QueryExecutionErrors {
 
   def cannotCompareCostWithTargetCostError(cost: String): Throwable = {
     new IllegalArgumentException(s"Could not compare cost with $cost")
-  }
-
-  def callMethodWithEmptyGroupingExpressionsError(): Throwable = {
-    new IllegalStateException(
-      "This method should not be called when groupingExpressions is not empty.")
   }
 
   def unsupportedDataTypeError(dt: DataType): Throwable = {
@@ -756,21 +708,9 @@ object QueryExecutionErrors {
     new Exception(s"Unsupported type: ${dataType.catalogString}")
   }
 
-  def columnarInputUnsupportedError(): Throwable = {
-    new IllegalStateException("Columnar input is not supported")
-  }
-
-  def unsupportedTypeInEncodingError(operator: String): Throwable = {
-    new IllegalStateException(s"Not supported type in $operator.")
-  }
-
   def useDictionaryEncodingWhenDictionaryOverflowError(): Throwable = {
     new IllegalStateException(
       "Dictionary encoding should not be used because of dictionary overflow.")
-  }
-
-  def hashJoinCannotTakeJoinTypeError(joinType: JoinType): Throwable = {
-    new IllegalArgumentException(s"HashJoin should not take $joinType as the JoinType")
   }
 
   def hashJoinCannotTakeJoinTypeWithBuildLeftError(joinType: JoinType): Throwable = {
@@ -808,16 +748,6 @@ object QueryExecutionErrors {
   def cannotBuildHashedRelationLargerThan8GError(): Throwable = {
     new UnsupportedOperationException(
       "Can not build a HashedRelation that is larger than 8G")
-  }
-
-  def cannotMergeSQLMetricWithAccumulatorV2Error(
-      metric: String, accumulatorV2: AccumulatorV2[Long, Long]): Throwable = {
-    new UnsupportedOperationException(
-      s"Cannot merge $metric with ${accumulatorV2.getClass.getName}")
-  }
-
-  def unexpectedMetricsTypeError(metricsType: String): Throwable = {
-    new IllegalStateException(s"unexpected metrics type: $metricsType")
   }
 
   def failedToPushRowIntoRowQueueError(rowQueue: String): Throwable = {

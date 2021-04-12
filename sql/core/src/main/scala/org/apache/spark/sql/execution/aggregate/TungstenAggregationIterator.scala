@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
@@ -457,7 +456,8 @@ class TungstenAggregationIterator(
       hashMap.free()
       resultCopy
     } else {
-      throw QueryExecutionErrors.callMethodWithEmptyGroupingExpressionsError()
+      throw  new IllegalStateException(
+        "This method should not be called when groupingExpressions is not empty.")
     }
   }
 }

@@ -23,7 +23,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -66,7 +65,7 @@ case class CustomShuffleReaderExec private(
             case other => other
           }
         case _ =>
-          throw QueryExecutionErrors.operatingOnCanonicalizationPlanError()
+          throw new IllegalStateException("operating on canonicalization plan")
       }
     } else {
       UnknownPartitioning(partitionSpecs.length)
@@ -109,7 +108,7 @@ case class CustomShuffleReaderExec private(
         case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
           startReducerIndex.until(endReducerIndex).map(bytesByPartitionId).sum
         case p: PartialReducerPartitionSpec => p.dataSize
-        case p => throw QueryExecutionErrors.unexpectedShufflePartitionSpecError(p.toString)
+        case p => throw new IllegalStateException(s"unexpected $p")
       })
     } else {
       None
@@ -185,7 +184,7 @@ case class CustomShuffleReaderExec private(
         sendDriverMetrics()
         stage.shuffle.getShuffleRDD(partitionSpecs.toArray)
       case _ =>
-        throw QueryExecutionErrors.operatingOnCanonicalizedPlanError()
+        throw new IllegalStateException("operating on canonicalized plan")
     }
   }
 

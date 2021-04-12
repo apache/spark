@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -130,7 +129,7 @@ class RowBasedHashMapGenerator(
         case t: DataType =>
           if (!t.isInstanceOf[StringType] && !t.isInstanceOf[CalendarIntervalType] &&
             !CodeGenerator.isPrimitiveType(t)) {
-            throw QueryExecutionErrors.cannotGenerateCodeForUnsupportedTypeError(t)
+            throw new IllegalArgumentException(s"cannot generate code for unsupported type: $t")
           }
           s"agg_rowWriter.write(${ordinal}, ${key.name})"
       }

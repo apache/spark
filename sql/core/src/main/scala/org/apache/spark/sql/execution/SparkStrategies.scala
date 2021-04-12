@@ -617,26 +617,29 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         LocalTableScanExec(output, sink.allData.map(r => toRow(r).copy())) :: Nil
 
       case logical.Distinct(child) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
-          "logical distinct operator", "aggregate")
+        throw new IllegalStateException(
+          "logical distinct operator should have been replaced by aggregate in the optimizer")
       case logical.Intersect(left, right, false) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
-          "logical intersect operator", "semi-join")
+        throw new IllegalStateException(
+          "logical intersect  operator should have been replaced by semi-join in the optimizer")
       case logical.Intersect(left, right, true) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
-          "logical intersect operator", "union, aggregate and generate operators")
+        throw new IllegalStateException(
+          "logical intersect operator should have been replaced by union, aggregate" +
+            " and generate operators in the optimizer")
       case logical.Except(left, right, false) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
-          "logical except operator", "anti-join")
+        throw new IllegalStateException(
+          "logical except operator should have been replaced by anti-join in the optimizer")
       case logical.Except(left, right, true) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
-          "logical except (all) operator", "union, aggregate and generate operators")
+        throw new IllegalStateException(
+          "logical except (all) operator should have been replaced by union, aggregate" +
+            " and generate operators in the optimizer")
       case logical.ResolvedHint(child, hints) =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
-          "ResolvedHint operator", "join hint")
+        throw new IllegalStateException(
+          "ResolvedHint operator should have been replaced by join hint in the optimizer")
       case Deduplicate(_, child) if !child.isStreaming =>
-        throw QueryExecutionErrors.logicalOperatorNotReplacedError(
-          "Deduplicate operator for non streaming data source", "aggregate")
+        throw new IllegalStateException(
+          "Deduplicate operator for non streaming data source should have been replaced " +
+            "by aggregate in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil

@@ -61,7 +61,7 @@ trait HashJoin extends JoinCodegenSupport {
       case LeftExistence(_) =>
         left.output
       case x =>
-        throw QueryExecutionErrors.hashJoinCannotTakeJoinTypeError(x)
+        throw new IllegalArgumentException(s"HashJoin should not take $x as the JoinType")
     }
   }
 
@@ -333,7 +333,8 @@ trait HashJoin extends JoinCodegenSupport {
       case _: ExistenceJoin =>
         existenceJoin(streamedIter, hashed)
       case x =>
-        throw QueryExecutionErrors.hashJoinCannotTakeJoinTypeError(x)
+        throw new IllegalArgumentException(
+          s"HashJoin should not take $x as the JoinType")
     }
 
     val resultProj = createResultProjection
@@ -355,7 +356,8 @@ trait HashJoin extends JoinCodegenSupport {
       case LeftAnti => codegenAnti(ctx, input)
       case _: ExistenceJoin => codegenExistence(ctx, input)
       case x =>
-        throw QueryExecutionErrors.hashJoinCannotTakeJoinTypeError(x)
+        throw new IllegalArgumentException(
+          s"HashJoin should not take $x as the JoinType")
     }
   }
 

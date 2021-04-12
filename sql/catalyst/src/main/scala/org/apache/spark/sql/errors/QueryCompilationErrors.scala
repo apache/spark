@@ -1344,8 +1344,4 @@ private[spark] object QueryCompilationErrors {
       s"Expected udfs have the same evalType but got different evalTypes: " +
         s"${evalTypes.mkString(",")}")
   }
-
-  def unexpectedUDFEvalTypeError(): Throwable = {
-    new AnalysisException("Unexpected UDF evalType")
-  }
 }
