@@ -62,22 +62,14 @@ While `rowFormat` are defined as
 
     Spark uses the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
 
-* **SERDE**
-
-    Specifies a custom SerDe for one table.
-
 * **serde_class**
 
     Specifies a fully-qualified class name of a custom SerDe.
 
-* **SERDEPROPERTIES**
+* **serde_props**
 
     A list of key-value pairs that is used to tag the SerDe definition.
 
-* **DELIMITED**
-
-    The `DELIMITED` clause can be used to specify the native SerDe and state the delimiter, escape character, null character and so on.
-    
 * **FIELDS TERMINATED BY**
 
     Used to define a column separator.
@@ -125,22 +117,22 @@ While `rowFormat` are defined as
 ### Serde behavior
 
 Spark uses Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, columns will be transformed
-to `STRING` and delimited by tabs before feeding to the user script. Similarly, all `NULL` values will be converted
+to `STRING` and combined by tabs before feeding to the user script. Similarly, all `NULL` values will be converted
 to the literal string `"\N"` in order to differentiate `NULL` values from empty strings. The standard output of the
 user script will be treated as TAB-separated STRING columns, any cell containing only `"\N"` will be re-interpreted
 as a `NULL`, and then the resulting STRING column will be cast to the data type specified in the table declaration
-in the usual way. User scripts can output debug information to standard error which will be shown on the task detail
-page on Spark. These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`.
-
-### Schema-less Script Transforms
-
-If there is no `AS` clause after `USING my_script`, Spark assumes that the output of the script contains 2 parts:
+in the usual way. If the actual number of output columns is less than the number of specified output columns,
+insufficient output columns will be supplemented with `NULL`. If the actual number of output columns is more than the
+number of specified output columns, the output columns will only select the corresponding columns and the remaining part
+will be discarded. If there is no `AS` clause after `USING my_script`, Spark assumes that the output of the script contains 2 parts:
 
    1. key: which is before the first tab.
    2. value: which is the rest after the first tab.
 
 Note that this is different from specifying an `AS key, value` because in that case, the value will only contain the portion
 between the first tab and the second tab if there are multiple tabs. 
+User scripts can output debug information to standard error which will be shown on the task detail
+page on Spark. These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`. 
 
 ### Examples
 
