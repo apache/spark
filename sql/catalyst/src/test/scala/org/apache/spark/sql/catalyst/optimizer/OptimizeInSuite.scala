@@ -169,24 +169,37 @@ class OptimizeInSuite extends PlanTest {
   }
 
   test("OptimizedIn test: Setting the threshold for turning Set into InSet.") {
-    val plan =
-      testRelation
-        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), Literal(3))))
-        .analyze
+    {
+      val plan =
+        testRelation
+          .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), Literal(3))))
+          .analyze
 
-    withSQLConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "10") {
-      val notOptimizedPlan = OptimizeIn(plan)
-      comparePlans(notOptimizedPlan, plan)
+      withSQLConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "10") {
+        val notOptimizedPlan = OptimizeIn(plan)
+        comparePlans(notOptimizedPlan, plan)
+      }
     }
 
-    // Reduce the threshold to turning into InSet.
-    withSQLConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "2") {
-      val optimizedPlan = OptimizeIn(plan)
-      optimizedPlan match {
-        case Filter(cond, _)
-          if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].set.size == 3 =>
-        // pass
-        case _ => fail("Unexpected result for OptimizedIn")
+    // Since OptimizeIn has been marked as ineffective for `plan` in the preceding test, we need
+    // a new `plan` to run the next test. Here, OptimizeIn depends on a changing, external state,
+    // i.e., conf OPTIMIZER_INSET_CONVERSION_THRESHOLD, which however cannot happen in the
+    // production code path.
+    {
+      val plan =
+        testRelation
+          .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), Literal(3))))
+          .analyze
+
+      // Reduce the threshold to turning into InSet.
+      withSQLConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "2") {
+        val optimizedPlan = OptimizeIn(plan)
+        optimizedPlan match {
+          case Filter(cond, _)
+            if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].set.size == 3 =>
+          // pass
+          case _ => fail("Unexpected result for OptimizedIn")
+        }
       }
     }
   }

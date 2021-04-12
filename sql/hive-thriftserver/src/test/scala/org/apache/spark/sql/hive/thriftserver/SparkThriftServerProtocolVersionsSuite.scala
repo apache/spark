@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.{Date, Timestamp}
 import java.util.{List => JList, Properties}
 
+import org.apache.hadoop.hive.common.`type`.HiveIntervalDayTime
 import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet}
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.GetInfoType
@@ -456,6 +457,18 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
         testGetTablesWithProtocolVersion(version, "%", "table1", null) { rs =>
           checkResult(Seq("table1"), rs)
         }
+      }
+    }
+
+    test(s"SPARK-35017: $version get day-time interval type") {
+      testExecuteStatementWithProtocolVersion(
+        version, "SELECT date'2021-01-01' - date'2020-12-31' AS dt") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === new HiveIntervalDayTime(1, 0, 0, 0, 0))
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnName(1) === "dt")
+        assert(metaData.getColumnTypeName(1) === "interval_day_time")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
       }
     }
   }

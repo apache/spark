@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern.{INNER_LIKE_JOIN, JOIN,
+  LEFT_SEMI_OR_ANTI_JOIN, OUTER_JOIN, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -453,6 +455,17 @@ case class Join(
     case NaturalJoin(_) => false
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
+  }
+
+  override val nodePatterns : Seq[TreePattern] = {
+    var types = Seq(JOIN)
+    joinType match {
+      case _: InnerLike => types = types :+ INNER_LIKE_JOIN
+      case LeftOuter | FullOuter | RightOuter => types = types :+ OUTER_JOIN
+      case LeftSemiOrAnti(_) => types = types :+ LEFT_SEMI_OR_ANTI_JOIN
+      case _ =>
+    }
+    types
   }
 
   // Ignore hint for canonicalization

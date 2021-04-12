@@ -5,9 +5,9 @@
 -- !query
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15')
 -- !query schema
-struct<multiply_interval(subtracttimestamps(TIMESTAMP '2019-10-15 10:11:12.001002', DATE '2019-10-15'), 3):interval>
+struct<multiplydtinterval(subtracttimestamps(TIMESTAMP '2019-10-15 10:11:12.001002', DATE '2019-10-15'), 3):day-time interval>
 -- !query output
-30 hours 33 minutes 36.003006 seconds
+1 06:33:36.003006000
 
 
 -- !query
@@ -21,9 +21,9 @@ struct<multiply_interval(INTERVAL '4 months 14 days 0.000003 seconds', 1.5):inte
 -- !query
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5
 -- !query schema
-struct<divide_interval(subtracttimestamps(TIMESTAMP '2019-10-15 00:00:00', TIMESTAMP '2019-10-14 00:00:00'), 1.5):interval>
+struct<dividedtinterval(subtracttimestamps(TIMESTAMP '2019-10-15 00:00:00', TIMESTAMP '2019-10-14 00:00:00'), 1.5):day-time interval>
 -- !query output
-16 hours
+0 16:00:00.000000000
 
 
 -- !query
