@@ -115,4 +115,6 @@ case class Last(child: Expression, ignoreNulls: Boolean)
   override lazy val evaluateExpression: AttributeReference = last
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
+
+  override protected def withNewChildInternal(newChild: Expression): Last = copy(child = newChild)
 }

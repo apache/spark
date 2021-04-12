@@ -29,8 +29,7 @@ When a FILTER clause is attached to an aggregate function, only the matching row
 ### Syntax
 
 ```sql
-GROUP BY group_expression [ , group_expression [ , ... ] ]
-    [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
+GROUP BY group_expression [ , group_expression [ , ... ] ] [ WITH { ROLLUP | CUBE } ]
 
 GROUP BY { group_expression | { ROLLUP | CUBE | GROUPING SETS } (grouping_set [ , ...]) } [ , ... ]
 ```
@@ -66,6 +65,12 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
     equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
     and global aggregate.
+    
+    **Note:** For Hive compatibility Spark allows `GROUP BY ... GROUPING SETS (...)`. The GROUP BY
+    expressions are usually ignored, but if it contains extra expressions than the GROUPING SETS
+    expressions, the extra expressions will be included in the grouping expressions and the value
+    is always null. For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`,
+    the output of column `c` is always null.
 
 * **ROLLUP**
 
@@ -179,31 +184,6 @@ SELECT id, sum(quantity) FILTER (
 SELECT city, car_model, sum(quantity) AS sum FROM dealer
     GROUP BY GROUPING SETS ((city, car_model), (city), (car_model), ())
     ORDER BY city;
-+---------+------------+---+
-|     city|   car_model|sum|
-+---------+------------+---+
-|     null|        null| 78|
-|     null| HondaAccord| 33|
-|     null|    HondaCRV| 10|
-|     null|  HondaCivic| 35|
-|   Dublin|        null| 33|
-|   Dublin| HondaAccord| 10|
-|   Dublin|    HondaCRV|  3|
-|   Dublin|  HondaCivic| 20|
-|  Fremont|        null| 32|
-|  Fremont| HondaAccord| 15|
-|  Fremont|    HondaCRV|  7|
-|  Fremont|  HondaCivic| 10|
-| San Jose|        null| 13|
-| San Jose| HondaAccord|  8|
-| San Jose|  HondaCivic|  5|
-+---------+------------+---+
-
--- Alternate syntax for `GROUPING SETS` in which both `GROUP BY` and `GROUPING SETS`
--- specifications are present.
-SELECT city, car_model, sum(quantity) AS sum FROM dealer
-    GROUP BY city, car_model GROUPING SETS ((city, car_model), (city), (car_model), ())
-    ORDER BY city, car_model;
 +---------+------------+---+
 |     city|   car_model|sum|
 +---------+------------+---+

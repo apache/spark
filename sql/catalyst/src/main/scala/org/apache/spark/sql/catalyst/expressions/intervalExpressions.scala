@@ -49,22 +49,40 @@ abstract class ExtractIntervalPart(
 }
 
 case class ExtractIntervalYears(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getYears, "getYears")
+  extends ExtractIntervalPart(child, IntegerType, getYears, "getYears") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalYears =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalMonths(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths")
+  extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMonths =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalDays(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getDays, "getDays")
+  extends ExtractIntervalPart(child, IntegerType, getDays, "getDays") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalDays =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalHours(child: Expression)
-  extends ExtractIntervalPart(child, LongType, getHours, "getHours")
+  extends ExtractIntervalPart(child, LongType, getHours, "getHours") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalHours =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalMinutes(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes")
+  extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMinutes =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalSeconds(child: Expression)
-  extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
+  extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalSeconds =
+    copy(child = newChild)
+}
 
 object ExtractIntervalPart {
 
@@ -119,6 +137,10 @@ case class MultiplyInterval(
     if (failOnError) multiplyExact else multiply
 
   override protected def operationName: String = if (failOnError) "multiplyExact" else "multiply"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MultiplyInterval =
+    copy(interval = newLeft, num = newRight)
 }
 
 case class DivideInterval(
@@ -131,6 +153,10 @@ case class DivideInterval(
     if (failOnError) divideExact else divide
 
   override protected def operationName: String = if (failOnError) "divideExact" else "divide"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DivideInterval =
+    copy(interval = newLeft, num = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -251,6 +277,19 @@ case class MakeInterval(
   }
 
   override def prettyName: String = "make_interval"
+
+  // Seq(years, months, weeks, days, hours, mins, secs)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): MakeInterval =
+    copy(
+      years = newChildren(0),
+      months = newChildren(1),
+      weeks = newChildren(2),
+      days = newChildren(3),
+      hours = newChildren(4),
+      mins = newChildren(5),
+      secs = newChildren(6)
+    )
 }
 
 // Multiply an year-month interval by a numeric
@@ -298,6 +337,10 @@ case class MultiplyYMInterval(
   }
 
   override def toString: String = s"($left * $right)"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MultiplyYMInterval =
+    copy(interval = newLeft, num = newRight)
 }
 
 // Multiply a day-time interval by a numeric
@@ -340,6 +383,10 @@ case class MultiplyDTInterval(
   }
 
   override def toString: String = s"($left * $right)"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MultiplyDTInterval =
+    copy(interval = newLeft, num = newRight)
 }
 
 // Divide an year-month interval by a numeric
@@ -394,6 +441,10 @@ case class DivideYMInterval(
   }
 
   override def toString: String = s"($left / $right)"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DivideYMInterval =
+    copy(interval = newLeft, num = newRight)
 }
 
 // Divide a day-time interval by a numeric
@@ -437,4 +488,8 @@ case class DivideDTInterval(
   }
 
   override def toString: String = s"($left / $right)"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DivideDTInterval =
+    copy(interval = newLeft, num = newRight)
 }

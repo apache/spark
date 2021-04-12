@@ -35,7 +35,7 @@ case class ReplaceTableExec(
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends V2CommandExec {
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -59,7 +59,7 @@ case class AtomicReplaceTableExec(
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends V2CommandExec {
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(identifier)) {

@@ -62,4 +62,6 @@ case class Min(child: Expression) extends DeclarativeAggregate with UnaryLike[Ex
   }
 
   override lazy val evaluateExpression: AttributeReference = min
+
+  override protected def withNewChildInternal(newChild: Expression): Min = copy(child = newChild)
 }

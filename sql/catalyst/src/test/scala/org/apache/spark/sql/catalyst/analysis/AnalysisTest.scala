@@ -70,7 +70,8 @@ trait AnalysisTest extends PlanTest {
   }
 
   protected def getAnalyzer: Analyzer = {
-    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin)
+    val catalog = new SessionCatalog(
+      new InMemoryCatalog, FunctionRegistry.builtin, TableFunctionRegistry.builtin)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
