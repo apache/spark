@@ -595,13 +595,14 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
     }
 
-    private def tryResolveHavingCondition(h: UnresolvedHaving): LogicalPlan = {
-      val aggForResolving = h.child match {
-        // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
-        // groupingExpressions for condition resolving.
-        case a @ Aggregate(Seq(gs: BaseGroupingSets), _, _) =>
-          a.copy(groupingExpressions = gs.groupByExprs)
-      }
+    private def tryResolveHavingCondition(
+        h: UnresolvedHaving,
+        aggregate: Aggregate,
+        selectedGroupByExprs: Seq[Seq[Expression]],
+        groupByExprs: Seq[Expression]): LogicalPlan = {
+      // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
+      // groupingExpressions for condition resolving.
+      val aggForResolving = aggregate.copy(groupingExpressions = groupByExprs)
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val resolvedInfo =
         ResolveAggregateFunctions.resolveFilterCondInAggregate(h.havingCondition, aggForResolving)
@@ -609,12 +610,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Push the aggregate expressions into the aggregate (if any).
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
-        val newChild = h.child match {
-          case Aggregate(Seq(gs: BaseGroupingSets), aggregateExpressions, child) =>
-            constructAggregate(
-              gs.selectedGroupByExprs, gs.groupByExprs,
-              aggregateExpressions ++ extraAggExprs, child)
-        }
+        val newChild = constructAggregate(selectedGroupByExprs, groupByExprs,
+          aggregate.aggregateExpressions ++ extraAggExprs, aggregate.child)
 
         // Since the exprId of extraAggExprs will be changed in the constructed aggregate, and the
         // aggregateExpressions keeps the input order. So here we build an exprMap to resolve the
@@ -636,16 +633,17 @@ class Analyzer(override val catalogManager: CatalogManager)
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(gs: BaseGroupingSets), aggExprs, _))
-        if agg.childrenResolved && (gs.children ++ aggExprs).forall(_.resolved) =>
-        tryResolveHavingCondition(h)
+      case h @ UnresolvedHaving(_, agg @ Aggregate(
+        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, _))
+        if agg.childrenResolved && aggExprs.forall(_.resolved) =>
+        tryResolveHavingCondition(h, agg, selectedGroupByExprs, groupByExprs)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(Seq(gs: BaseGroupingSets), aggregateExpressions, child)
-        if (gs.children ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(gs.selectedGroupByExprs, gs.groupByExprs, aggregateExpressions, child)
+      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child)
+        if aggExprs.forall(_.resolved) =>
+        constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, child)
 
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>

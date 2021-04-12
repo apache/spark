@@ -24,7 +24,9 @@ license: |
 The `GROUP BY` clause is used to group the rows based on a set of specified grouping expressions and compute aggregations on
 the group of rows based on one or more specified aggregate functions. Spark also supports advanced aggregations to do multiple
 aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
-When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
+The grouping expressions and advanced aggregations can be mixed in the `GROUP BY` clause.
+See more details in the `Mixed Grouping Analytics` section. When a FILTER clause is attached to
+an aggregate function, only the matching rows are passed to that function.
 
 ### Syntax
 
@@ -41,7 +43,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 ### Parameters
 
-* **grouping_expression**
+* **group_expression**
 
     Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
     result values of the grouping expressions. A grouping expression may be a column name like `GROUP BY a`, a column position like
@@ -93,6 +95,25 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
      (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
 
+* **Mixed Grouping Analytics**
+
+    A GROUP BY clause can include multiple  `group_expression`s and multiple `CUBE|ROLLUP|GROUPING SETS`s.
+    `CUBE|ROLLUP` is just a syntax sugar for `GROUPING SETS`, please refer to the sections above for
+    how to translate `CUBE|ROLLUP` to `GROUPING SETS`. `group_expression` can be treated as a single-group
+    `GROUPING SETS` under this context. For multiple `GROUPING SETS` in the `GROUP BY` clause, we generate
+    a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s. For example,
+    `GROUP BY warehouse, GROUPING SETS((product), ()), GROUPING SETS((location, size), (location), (size), ())`
+    and `GROUP BY warehouse, ROLLUP(product), CUBE(location, size)` is equivalent to 
+    `GROUP BY GROUPING SETS(
+        (warehouse, product, location, size), 
+        (warehouse, product, location),
+        (warehouse, product, size), 
+        (warehouse, product),
+        (warehouse, location, size),
+        (warehouse, location),
+        (warehouse, size),
+        (warehouse))`.
+ 
 * **aggregate_name**
 
     Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).
