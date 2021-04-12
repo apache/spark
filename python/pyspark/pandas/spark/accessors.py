@@ -29,7 +29,7 @@ from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
 if TYPE_CHECKING:
-    import pyspark.pandas as pp  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.frame import CachedDataFrame  # noqa: F401 (SPARK-34943)
 
@@ -61,7 +61,7 @@ class SparkIndexOpsMethods(object, metaclass=ABCMeta):
         """
         return self._data._internal.spark_column_for(self._data._column_label)
 
-    def transform(self, func) -> Union["pp.Series", "pp.Index"]:
+    def transform(self, func) -> Union["ps.Series", "ps.Index"]:
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -86,7 +86,7 @@ class SparkIndexOpsMethods(object, metaclass=ABCMeta):
         Examples
         --------
         >>> from pyspark.sql.functions import log
-        >>> df = pp.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
+        >>> df = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
         >>> df
            a  b
         0  1  4
@@ -127,17 +127,17 @@ class SparkIndexOpsMethods(object, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def analyzed(self) -> Union["pp.Series", "pp.Index"]:
+    def analyzed(self) -> Union["ps.Series", "ps.Index"]:
         pass
 
 
 class SparkSeriesMethods(SparkIndexOpsMethods):
-    def transform(self, func) -> "pp.Series":
-        return cast("pp.Series", super().transform(func))
+    def transform(self, func) -> "ps.Series":
+        return cast("ps.Series", super().transform(func))
 
     transform.__doc__ = SparkIndexOpsMethods.transform.__doc__
 
-    def apply(self, func) -> "pp.Series":
+    def apply(self, func) -> "ps.Series":
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -168,9 +168,9 @@ class SparkSeriesMethods(SparkIndexOpsMethods):
 
         Examples
         --------
-        >>> from pyspark import pandas as pp
+        >>> from pyspark import pandas as ps
         >>> from pyspark.sql.functions import count, lit
-        >>> df = pp.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
+        >>> df = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
         >>> df
            a  b
         0  1  4
@@ -204,7 +204,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods):
         return first_series(DataFrame(sdf)).rename(self._data.name)
 
     @property
-    def analyzed(self) -> "pp.Series":
+    def analyzed(self) -> "ps.Series":
         """
         Returns a new Series with the analyzed Spark DataFrame.
 
@@ -222,7 +222,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods):
 
         Examples
         --------
-        >>> ser = pp.Series([1, 2, 3])
+        >>> ser = ps.Series([1, 2, 3])
         >>> ser
         0    1
         1    2
@@ -244,7 +244,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods):
         ...
         ValueError: ... enable 'compute.ops_on_diff_frames' option.
 
-        >>> with pp.option_context('compute.ops_on_diff_frames', True):
+        >>> with ps.option_context('compute.ops_on_diff_frames', True):
         ...     (ser + ser.spark.analyzed).sort_index()
         0    2
         1    4
@@ -258,13 +258,13 @@ class SparkSeriesMethods(SparkIndexOpsMethods):
 
 
 class SparkIndexMethods(SparkIndexOpsMethods):
-    def transform(self, func) -> "pp.Index":
-        return cast("pp.Index", super().transform(func))
+    def transform(self, func) -> "ps.Index":
+        return cast("ps.Index", super().transform(func))
 
     transform.__doc__ = SparkIndexOpsMethods.transform.__doc__
 
     @property
-    def analyzed(self) -> "pp.Index":
+    def analyzed(self) -> "ps.Index":
         """
         Returns a new Index with the analyzed Spark DataFrame.
 
@@ -282,7 +282,7 @@ class SparkIndexMethods(SparkIndexOpsMethods):
 
         Examples
         --------
-        >>> idx = pp.Index([1, 2, 3])
+        >>> idx = ps.Index([1, 2, 3])
         >>> idx
         Int64Index([1, 2, 3], dtype='int64')
 
@@ -298,7 +298,7 @@ class SparkIndexMethods(SparkIndexOpsMethods):
         ...
         ValueError: ... enable 'compute.ops_on_diff_frames' option.
 
-        >>> with pp.option_context('compute.ops_on_diff_frames', True):
+        >>> with ps.option_context('compute.ops_on_diff_frames', True):
         ...     (idx + idx.spark.analyzed).sort_values()
         Int64Index([2, 4, 6], dtype='int64')
         """
@@ -311,7 +311,7 @@ class SparkFrameMethods(object):
     """Spark related features. Usually, the features here are missing in pandas
     but Spark has it."""
 
-    def __init__(self, frame: "pp.DataFrame"):
+    def __init__(self, frame: "ps.DataFrame"):
         self._kdf = frame
 
     def schema(self, index_col: Optional[Union[str, List[str]]] = None) -> StructType:
@@ -331,7 +331,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': list('abc'),
+        >>> df = ps.DataFrame({'a': list('abc'),
         ...                    'b': list(range(1, 4)),
         ...                    'c': np.arange(3, 6).astype('i1'),
         ...                    'd': np.arange(4.0, 7.0, dtype='float64'),
@@ -361,7 +361,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': list('abc'),
+        >>> df = ps.DataFrame({'a': list('abc'),
         ...                    'b': list(range(1, 4)),
         ...                    'c': np.arange(3, 6).astype('i1'),
         ...                    'd': np.arange(4.0, 7.0, dtype='float64'),
@@ -409,7 +409,7 @@ class SparkFrameMethods(object):
         --------
         By default, this method loses the index as below.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
+        >>> df = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
         >>> df.to_spark().show()  # doctest: +NORMALIZE_WHITESPACE
         +---+---+---+
         |  a|  b|  c|
@@ -419,7 +419,7 @@ class SparkFrameMethods(object):
         |  3|  6|  9|
         +---+---+---+
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
+        >>> df = ps.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
         >>> df.spark.frame().show()  # doctest: +NORMALIZE_WHITESPACE
         +---+---+---+
         |  a|  b|  c|
@@ -530,7 +530,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'])
         >>> df
            dogs  cats
@@ -582,7 +582,7 @@ class SparkFrameMethods(object):
         Examples
         --------
         >>> import pyspark
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'])
         >>> df
            dogs  cats
@@ -643,7 +643,7 @@ class SparkFrameMethods(object):
         )
         return CachedDataFrame(self._kdf._internal, storage_level=storage_level)
 
-    def hint(self, name: str, *parameters) -> "pp.DataFrame":
+    def hint(self, name: str, *parameters) -> "ps.DataFrame":
         """
         Specifies some hint on the current DataFrame.
 
@@ -662,10 +662,10 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> df1 = pp.DataFrame({'lkey': ['foo', 'bar', 'baz', 'foo'],
+        >>> df1 = ps.DataFrame({'lkey': ['foo', 'bar', 'baz', 'foo'],
         ...                     'value': [1, 2, 3, 5]},
         ...                    columns=['lkey', 'value']).set_index('lkey')
-        >>> df2 = pp.DataFrame({'rkey': ['foo', 'bar', 'baz', 'foo'],
+        >>> df2 = ps.DataFrame({'rkey': ['foo', 'bar', 'baz', 'foo'],
         ...                     'value': [5, 6, 7, 8]},
         ...                    columns=['rkey', 'value']).set_index('rkey')
         >>> merged = df1.merge(df2.spark.hint("broadcast"), left_index=True, right_index=True)
@@ -736,7 +736,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> df = pp.DataFrame(dict(
+        >>> df = ps.DataFrame(dict(
         ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
@@ -809,7 +809,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> df = pp.DataFrame(dict(
+        >>> df = ps.DataFrame(dict(
         ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
@@ -846,7 +846,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'id': range(10)})
+        >>> df = ps.DataFrame({'id': range(10)})
         >>> df.spark.explain()  # doctest: +ELLIPSIS
         == Physical Plan ==
         ...
@@ -904,7 +904,7 @@ class SparkFrameMethods(object):
         else:
             self._kdf._internal.to_internal_spark_frame.explain(extended, mode)
 
-    def apply(self, func, index_col: Optional[Union[str, List[str]]] = None) -> "pp.DataFrame":
+    def apply(self, func, index_col: Optional[Union[str, List[str]]] = None) -> "ps.DataFrame":
         """
         Applies a function that takes and returns a Spark DataFrame. It allows natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -933,7 +933,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
+        >>> kdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
         >>> kdf
            a  b
         0  1  4
@@ -966,7 +966,7 @@ class SparkFrameMethods(object):
             )
         return output.to_koalas(index_col)
 
-    def repartition(self, num_partitions: int) -> "pp.DataFrame":
+    def repartition(self, num_partitions: int) -> "ps.DataFrame":
         """
         Returns a new DataFrame partitioned by the given partitioning expressions. The
         resulting DataFrame is hash partitioned.
@@ -982,7 +982,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({"age": [5, 5, 2, 2],
+        >>> kdf = ps.DataFrame({"age": [5, 5, 2, 2],
         ...         "name": ["Bob", "Bob", "Alice", "Alice"]}).set_index("age")
         >>> kdf.sort_index()  # doctest: +NORMALIZE_WHITESPACE
               name
@@ -1008,7 +1008,7 @@ class SparkFrameMethods(object):
         repartitioned_sdf = internal.spark_frame.repartition(num_partitions)
         return DataFrame(internal.with_new_sdf(repartitioned_sdf))
 
-    def coalesce(self, num_partitions: int) -> "pp.DataFrame":
+    def coalesce(self, num_partitions: int) -> "ps.DataFrame":
         """
         Returns a new DataFrame that has exactly `num_partitions` partitions.
 
@@ -1033,7 +1033,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({"age": [5, 5, 2, 2],
+        >>> kdf = ps.DataFrame({"age": [5, 5, 2, 2],
         ...         "name": ["Bob", "Bob", "Alice", "Alice"]}).set_index("age")
         >>> kdf.sort_index()  # doctest: +NORMALIZE_WHITESPACE
               name
@@ -1059,7 +1059,7 @@ class SparkFrameMethods(object):
         coalesced_sdf = internal.spark_frame.coalesce(num_partitions)
         return DataFrame(internal.with_new_sdf(coalesced_sdf))
 
-    def checkpoint(self, eager: bool = True) -> "pp.DataFrame":
+    def checkpoint(self, eager: bool = True) -> "ps.DataFrame":
         """Returns a checkpointed version of this DataFrame.
 
         Checkpointing can be used to truncate the logical plan of this DataFrame, which is
@@ -1077,7 +1077,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({"a": ["a", "b", "c"]})
+        >>> kdf = ps.DataFrame({"a": ["a", "b", "c"]})
         >>> kdf
            a
         0  a
@@ -1096,7 +1096,7 @@ class SparkFrameMethods(object):
         checkpointed_sdf = internal.spark_frame.checkpoint(eager)
         return DataFrame(internal.with_new_sdf(checkpointed_sdf))
 
-    def local_checkpoint(self, eager: bool = True) -> "pp.DataFrame":
+    def local_checkpoint(self, eager: bool = True) -> "ps.DataFrame":
         """Returns a locally checkpointed version of this DataFrame.
 
         Checkpointing can be used to truncate the logical plan of this DataFrame, which is
@@ -1115,7 +1115,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({"a": ["a", "b", "c"]})
+        >>> kdf = ps.DataFrame({"a": ["a", "b", "c"]})
         >>> kdf
            a
         0  a
@@ -1135,7 +1135,7 @@ class SparkFrameMethods(object):
         return DataFrame(internal.with_new_sdf(checkpointed_sdf))
 
     @property
-    def analyzed(self) -> "pp.DataFrame":
+    def analyzed(self) -> "ps.DataFrame":
         """
         Returns a new DataFrame with the analyzed Spark DataFrame.
 
@@ -1153,7 +1153,7 @@ class SparkFrameMethods(object):
 
         Examples
         --------
-        >>> df = pp.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
+        >>> df = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, columns=["a", "b"])
         >>> df
            a  b
         0  1  4
@@ -1175,7 +1175,7 @@ class SparkFrameMethods(object):
         ...
         ValueError: ... enable 'compute.ops_on_diff_frames' option.
 
-        >>> with pp.option_context('compute.ops_on_diff_frames', True):
+        >>> with ps.option_context('compute.ops_on_diff_frames', True):
         ...     (df + df.spark.analyzed).sort_index()
            a   b
         0  2   8
@@ -1201,9 +1201,9 @@ class CachedSparkFrameMethods(SparkFrameMethods):
 
         Examples
         --------
-        >>> import pyspark.pandas as pp
+        >>> import pyspark.pandas as ps
         >>> import pyspark
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'])
         >>> df
            dogs  cats
@@ -1237,7 +1237,7 @@ class CachedSparkFrameMethods(SparkFrameMethods):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'])
         >>> df = df.spark.cache()
 
@@ -1266,7 +1266,7 @@ def _test():
     globs = pyspark.pandas.spark.accessors.__dict__.copy()
     globs["np"] = numpy
     globs["pd"] = pandas
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.spark.accessors tests")

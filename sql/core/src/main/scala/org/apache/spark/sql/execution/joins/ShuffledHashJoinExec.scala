@@ -318,4 +318,8 @@ case class ShuffledHashJoinExec(
       v => s"$v = $thisPlan.buildHashedRelation(inputs[1]);", forceInline = true)
     HashedRelationInfo(relationTerm, keyIsUnique = false, isEmpty = false)
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): ShuffledHashJoinExec =
+    copy(left = newLeft, right = newRight)
 }

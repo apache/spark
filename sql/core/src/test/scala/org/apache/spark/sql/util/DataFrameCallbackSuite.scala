@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.test.SharedSparkSession
@@ -302,7 +302,7 @@ class DataFrameCallbackSuite extends QueryTest
 }
 
 /** A test command that throws `java.lang.Error` during execution. */
-case class ErrorTestCommand(foo: String) extends RunnableCommand {
+case class ErrorTestCommand(foo: String) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = Seq(AttributeReference("foo", StringType)())
 

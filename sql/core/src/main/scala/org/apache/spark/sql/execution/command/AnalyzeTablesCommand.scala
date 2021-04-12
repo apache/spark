@@ -27,7 +27,7 @@ import org.apache.spark.sql.{Row, SparkSession}
  */
 case class AnalyzeTablesCommand(
     databaseName: Option[String],
-    noScan: Boolean) extends RunnableCommand {
+    noScan: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

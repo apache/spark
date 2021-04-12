@@ -203,6 +203,10 @@ case class SimpleTypedAggregateExpression(
       schema: StructType): TypedAggregateExpression = {
     copy(inputDeserializer = Some(deser), inputClass = Some(cls), inputSchema = Some(schema))
   }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): SimpleTypedAggregateExpression =
+    super.legacyWithNewChildren(newChildren).asInstanceOf[SimpleTypedAggregateExpression]
 }
 
 case class ComplexTypedAggregateExpression(
@@ -285,4 +289,8 @@ case class ComplexTypedAggregateExpression(
       schema: StructType): TypedAggregateExpression = {
     copy(inputDeserializer = Some(deser), inputClass = Some(cls), inputSchema = Some(schema))
   }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): ComplexTypedAggregateExpression =
+    super.legacyWithNewChildren(newChildren).asInstanceOf[ComplexTypedAggregateExpression]
 }

@@ -34,7 +34,8 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  *   set;
  * }}}
  */
-case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
+case class SetCommand(kv: Option[(String, Option[String])])
+  extends LeafRunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
     val schema = StructType(
@@ -169,7 +170,7 @@ object SetCommand {
  *   reset spark.sql.session.timeZone;
  * }}}
  */
-case class ResetCommand(config: Option[String]) extends RunnableCommand with IgnoreCachedData {
+case class ResetCommand(config: Option[String]) extends LeafRunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val globalInitialConfigs = sparkSession.sharedState.conf

@@ -545,7 +545,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 3, 2])
+            >>> s = ps.Series([1, 3, 2])
             >>> s.plot.line()  # doctest: +SKIP
 
         For DataFrame:
@@ -555,7 +555,7 @@ class KoalasPlotAccessor(PandasObject):
             The following example shows the populations for some animals
             over the years.
 
-            >>> df = pp.DataFrame({'pig': [20, 18, 489, 675, 1776],
+            >>> df = ps.DataFrame({'pig': [20, 18, 489, 675, 1776],
             ...                    'horse': [4, 25, 281, 600, 1900]},
             ...                   index=[1990, 1997, 2003, 2009, 2014])
             >>> df.plot.line()  # doctest: +SKIP
@@ -565,7 +565,7 @@ class KoalasPlotAccessor(PandasObject):
             The following example shows the relationship between both
             populations.
 
-            >>> df = pp.DataFrame({'pig': [20, 18, 489, 675, 1776],
+            >>> df = ps.DataFrame({'pig': [20, 18, 489, 675, 1776],
             ...                    'horse': [4, 25, 281, 600, 1900]},
             ...                   index=[1990, 1997, 2003, 2009, 2014])
             >>> df.plot.line(x='pig', y='horse')  # doctest: +SKIP
@@ -602,14 +602,14 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 3, 2])
+            >>> s = ps.Series([1, 3, 2])
             >>> s.plot.bar()  # doctest: +SKIP
 
         For DataFrame:
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
+            >>> df = ps.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
             >>> df.plot.bar(x='lab', y='val')  # doctest: +SKIP
 
         Plot a whole dataframe to a bar plot. Each column is stacked with a
@@ -621,7 +621,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.bar()  # doctest: +SKIP
 
@@ -635,7 +635,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> fig = (make_subplots(rows=2, cols=1)
             ...        .add_trace(df.plot.bar(y='speed').data[0], row=1, col=1)
@@ -651,7 +651,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.bar(y='speed')  # doctest: +SKIP
 
@@ -663,7 +663,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.bar(x='lifespan')  # doctest: +SKIP
         """
@@ -711,14 +711,14 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
+            >>> df = ps.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
             >>> df.val.plot.barh()  # doctest: +SKIP
 
         For DataFrame:
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
+            >>> df = ps.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
             >>> df.plot.barh(x='lab', y='val')  # doctest: +SKIP
 
         Plot a whole DataFrame to a horizontal bar plot
@@ -729,7 +729,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.barh()  # doctest: +SKIP
 
@@ -741,7 +741,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.barh(y='speed')  # doctest: +SKIP
 
@@ -753,7 +753,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.barh(x='lifespan')  # doctest: +SKIP
         """
@@ -807,7 +807,7 @@ class KoalasPlotAccessor(PandasObject):
         .. plotly::
 
             >>> data = np.random.randn(25, 4)
-            >>> df = pp.DataFrame(data, columns=list('ABCD'))
+            >>> df = ps.DataFrame(data, columns=list('ABCD'))
             >>> df['A'].plot.box()  # doctest: +SKIP
 
         This is an unsupported function for DataFrame type
@@ -853,7 +853,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 3, 2])
+            >>> s = ps.Series([1, 3, 2])
             >>> s.plot.hist()  # doctest: +SKIP
 
         For DataFrame:
@@ -864,7 +864,7 @@ class KoalasPlotAccessor(PandasObject):
             ...     np.random.randint(1, 7, 6000),
             ...     columns=['one'])
             >>> df['two'] = df['one'] + np.random.randint(1, 7, 6000)
-            >>> df = pp.from_pandas(df)
+            >>> df = ps.from_pandas(df)
             >>> df.plot.hist(bins=12, alpha=0.5)  # doctest: +SKIP
         """
         return self(kind="hist", bins=bins, **kwds)
@@ -900,12 +900,12 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 2, 2.5, 3, 3.5, 4, 5])
+            >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
             >>> s.plot.kde(bw_method=0.3)  # doctest: +SKIP
 
         .. plotly::
 
-            >>> s = pp.Series([1, 2, 2.5, 3, 3.5, 4, 5])
+            >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
             >>> s.plot.kde(bw_method=3)  # doctest: +SKIP
 
         The `ind` parameter determines the evaluation points for the
@@ -913,14 +913,14 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 2, 2.5, 3, 3.5, 4, 5])
+            >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
             >>> s.plot.kde(ind=[1, 2, 3, 4, 5], bw_method=0.3)  # doctest: +SKIP
 
         For DataFrame, it works in the same way as Series:
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
@@ -928,7 +928,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
@@ -936,7 +936,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
@@ -979,7 +979,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'sales': [3, 2, 3, 9, 10, 6],
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
@@ -991,7 +991,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'sales': [3, 2, 3, 9, 10, 6],
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
@@ -1035,7 +1035,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'mass': [0.330, 4.87, 5.97],
+            >>> df = ps.DataFrame({'mass': [0.330, 4.87, 5.97],
             ...                    'radius': [2439.7, 6051.8, 6378.1]},
             ...                   index=['Mercury', 'Venus', 'Earth'])
             >>> df.mass.plot.pie()  # doctest: +SKIP
@@ -1045,7 +1045,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'mass': [0.330, 4.87, 5.97],
+            >>> df = ps.DataFrame({'mass': [0.330, 4.87, 5.97],
             ...                    'radius': [2439.7, 6051.8, 6378.1]},
             ...                   index=['Mercury', 'Venus', 'Earth'])
             >>> df.plot.pie(y='mass')  # doctest: +SKIP
@@ -1113,7 +1113,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame([[5.1, 3.5, 0], [4.9, 3.0, 0], [7.0, 3.2, 1],
+            >>> df = ps.DataFrame([[5.1, 3.5, 0], [4.9, 3.0, 0], [7.0, 3.2, 1],
             ...                    [6.4, 3.2, 1], [5.9, 3.0, 2]],
             ...                   columns=['length', 'width', 'species'])
             >>> df.plot.scatter(x='length', y='width')  # doctest: +SKIP
@@ -1122,7 +1122,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame([[5.1, 3.5, 0], [4.9, 3.0, 0], [7.0, 3.2, 1],
+            >>> df = ps.DataFrame([[5.1, 3.5, 0], [4.9, 3.0, 0], [7.0, 3.2, 1],
             ...                    [6.4, 3.2, 1], [5.9, 3.0, 2]],
             ...                   columns=['length', 'width', 'species'])
             >>> fig = df.plot.scatter(x='length', y='width')
