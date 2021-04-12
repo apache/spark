@@ -1601,7 +1601,8 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kser.astype("datetime64[ns]"), pser.astype("datetime64[ns]"))
         self.assert_eq(kser.astype("M"), pser.astype("M"))
         self.assert_eq(kser.astype("M").astype(str), pser.astype("M").astype(str))
-        self.assert_eq(kser.astype("M").dt.date.astype(str), pser.astype("M").dt.date.astype(str))
+        # Comment out the below test cause because pandas returns `NaT` or `nan` randomly
+        # self.assert_eq(kser.astype("M").dt.date.astype(str), pser.astype("M").dt.date.astype(str))
 
         if extension_object_dtypes_available:
             from pandas import StringDtype
