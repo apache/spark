@@ -20,6 +20,12 @@ select -interval '-1 month 1 day -1 second';
 select -interval -1 month 1 day -1 second;
 select +interval '-1 month 1 day -1 second';
 select +interval -1 month 1 day -1 second;
+select interval -'1-1' year to month;
+select interval -'-1-1' year to month;
+select interval +'-1-1' year to month;
+select interval - '1 2:3:4.001' day to second;
+select interval +'1 2:3:4.001' day to second;
+select interval -'-1 2:3:4.001' day to second;
 
 -- make intervals
 select make_interval(1);
