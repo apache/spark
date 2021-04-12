@@ -871,7 +871,7 @@ class DataSourceV2SQLSuite
         query.stop()
 
         assert(!spark.catalog.isCached("testcat.ns.t"))
-        checkAnswer(spark.table(t), Row(1L, "a") :: Row(2L, "b") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1L, "a") :: Row(2L, "b") :: Nil)
       }
     }
   }

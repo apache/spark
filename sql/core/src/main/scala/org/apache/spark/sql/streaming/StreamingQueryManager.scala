@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsWrite, Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
@@ -238,7 +238,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       recoverFromCheckpointLocation: Boolean,
       trigger: Trigger,
       triggerClock: Clock,
-      catalogAndIdent: Option[(CatalogPlugin, Identifier)] = None): StreamingQueryWrapper = {
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQueryWrapper = {
     val analyzedPlan = df.queryExecution.analyzed
     df.queryExecution.assertAnalyzed()
 
@@ -251,7 +251,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       outputMode,
       df.sparkSession.sessionState.newHadoopConf(),
       trigger.isInstanceOf[ContinuousTrigger],
-      analyzedPlan)
+      analyzedPlan,
+      catalogAndIdent)
 
     val analyzedStreamWritePlan =
       sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
@@ -271,8 +272,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           trigger,
           triggerClock,
           extraOptions,
-          analyzedStreamWritePlan,
-          catalogAndIdent))
+          analyzedStreamWritePlan))
     }
   }
   // scalastyle:on argcount
@@ -307,7 +307,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = Trigger.ProcessingTime(0),
       triggerClock: Clock = new SystemClock(),
-      catalogAndIdent: Option[(CatalogPlugin, Identifier)] = None): StreamingQuery = {
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQuery = {
     val query = createQuery(
       userSpecifiedName,
       userSpecifiedCheckpointLocation,
