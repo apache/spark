@@ -73,4 +73,7 @@ case class UpdatingSessionsExec(
     Seq((groupingWithoutSessionAttributes ++ Seq(sessionExpression))
       .map(SortOrder(_, Ascending)))
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): UpdatingSessionsExec =
+    copy(child = newChild)
 }
