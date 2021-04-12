@@ -21,22 +21,23 @@ import java.io.{File, FileOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 import java.util.Properties
 import java.util.concurrent.TimeUnit
+
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
+
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
-
-import java.security.Permission
 
 abstract class BaseYarnClusterSuite
   extends SparkFunSuite with BeforeAndAfterAll with Matchers with Logging {
@@ -106,7 +107,7 @@ abstract class BaseYarnClusterSuite
             }
             super.checkConnect(host, port)
           }
-          override def checkPermission(perm: Permission): Unit = {}
+          override def checkPermission(perm: java.security.Permission): Unit = { }
         })
         try {
           yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
