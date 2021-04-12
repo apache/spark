@@ -69,7 +69,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * [[resolveOperatorsUp]] or [[resolveOperatorsDown]] should be used.
    *
-   * @param rule the function used to transform this nodes children
+   * @param rule the function used to transform this nodes children.
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     resolveOperatorsDown(rule)
@@ -82,7 +82,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * [[resolveOperatorsUp]] or [[resolveOperatorsDown]] should be used.
    *
-   * @param rule   the function used to transform this nodes children
+   * @param rule   the function used to transform this nodes children.
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *               on an operator T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
@@ -104,7 +104,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * it is left unchanged.  This function is similar to `transformUp`, but skips sub-trees that
    * have already been marked as analyzed.
    *
-   * @param rule the function used to transform this nodes children
+   * @param rule the function used to transform this nodes children.
    */
   def resolveOperatorsUp(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     resolveOperatorsUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
@@ -116,7 +116,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * it is left unchanged.  This function is similar to `transformUp`, but skips sub-trees that
    * have already been marked as analyzed.
    *
-   * @param rule   the function used to transform this nodes children
+   * @param rule   the function used to transform this nodes children.
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *               on an operator T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
@@ -227,7 +227,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * Recursively transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.
    *
-   * @param rule   the function used to transform this nodes children
+   * @param rule   the function used to transform this nodes children.
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
    *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
    *               T and its subtree recursively.
