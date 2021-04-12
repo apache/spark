@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import  scala.collection.mutable
+import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, OWLQN => BreezeOWLQN}
