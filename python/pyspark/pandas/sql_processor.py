@@ -22,7 +22,7 @@ import pandas as pd
 
 from pyspark.sql import SparkSession, DataFrame as SDataFrame  # noqa: F401 (SPARK-34943)
 
-from pyspark import pandas as pp  # For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
@@ -76,7 +76,7 @@ def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
 
     Calling a built-in SQL function.
 
-    >>> pp.sql("select * from range(10) where id > 7")
+    >>> ps.sql("select * from range(10) where id > 7")
        id
     0   8
     1   9
@@ -84,16 +84,16 @@ def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
     A query can also reference a local variable or parameter by wrapping them in curly braces:
 
     >>> bound1 = 7
-    >>> pp.sql("select * from range(10) where id > {bound1} and id < {bound2}", bound2=9)
+    >>> ps.sql("select * from range(10) where id > {bound1} and id < {bound2}", bound2=9)
        id
     0   8
 
     You can also wrap a DataFrame with curly braces to query it directly. Note that when you do
     that, the indexes, if any, automatically become top level columns.
 
-    >>> mydf = pp.range(10)
+    >>> mydf = ps.range(10)
     >>> x = range(4)
-    >>> pp.sql("SELECT * from {mydf} WHERE id IN {x}")
+    >>> ps.sql("SELECT * from {mydf} WHERE id IN {x}")
        id
     0   0
     1   1
@@ -103,8 +103,8 @@ def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
     Queries can also be arbitrarily nested in functions:
 
     >>> def statement():
-    ...     mydf2 = pp.DataFrame({"x": range(2)})
-    ...     return pp.sql("SELECT * from {mydf2}")
+    ...     mydf2 = ps.DataFrame({"x": range(2)})
+    ...     return ps.sql("SELECT * from {mydf2}")
     >>> statement()
        x
     0  0
@@ -112,12 +112,12 @@ def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
 
     Mixing Koalas and pandas DataFrames in a join operation. Note that the index is dropped.
 
-    >>> pp.sql('''
+    >>> ps.sql('''
     ...   SELECT m1.a, m2.b
     ...   FROM {table1} m1 INNER JOIN {table2} m2
     ...   ON m1.key = m2.key
     ...   ORDER BY m1.a, m2.b''',
-    ...   table1=pp.DataFrame({"a": [1,2], "key": ["a", "b"]}),
+    ...   table1=ps.DataFrame({"a": [1,2], "key": ["a", "b"]}),
     ...   table2=pd.DataFrame({"b": [3,4,5], "key": ["a", "b", "b"]}))
        a  b
     0  1  3
@@ -126,8 +126,8 @@ def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
 
     Also, it is possible to query using Series.
 
-    >>> myser = pp.Series({'a': [1.0, 2.0, 3.0], 'b': [15.0, 30.0, 45.0]})
-    >>> pp.sql("SELECT * from {myser}")
+    >>> myser = ps.Series({'a': [1.0, 2.0, 3.0], 'b': [15.0, 30.0, 45.0]})
+    >>> ps.sql("SELECT * from {myser}")
                         0
     0     [1.0, 2.0, 3.0]
     1  [15.0, 30.0, 45.0]
@@ -226,18 +226,18 @@ class SQLProcessor(object):
         the underlying SQL engine.
 
         >>> str0 = 'abc'
-        >>> pp.sql("select {str0}")
+        >>> ps.sql("select {str0}")
            abc
         0  abc
 
         >>> str1 = 'abc"abc'
         >>> str2 = "abc'abc"
-        >>> pp.sql("select {str0}, {str1}, {str2}")
+        >>> ps.sql("select {str0}, {str1}, {str2}")
            abc  abc"abc  abc'abc
         0  abc  abc"abc  abc'abc
 
         >>> strs = ['a', 'b']
-        >>> pp.sql("select 'a' in {strs} as cond1, 'c' in {strs} as cond2")
+        >>> ps.sql("select 'a' in {strs} as cond1, 'c' in {strs} as cond2")
            cond1  cond2
         0   True  False
         """
@@ -285,7 +285,7 @@ class SQLProcessor(object):
         if isinstance(var, Series):
             return self._convert_var(var.to_dataframe())
         if isinstance(var, pd.DataFrame):
-            return self._convert_var(pp.DataFrame(var))
+            return self._convert_var(ps.DataFrame(var))
         if isinstance(var, DataFrame):
             df_id = "koalas_" + str(id(var))
             if df_id not in self._temp_views:
@@ -312,7 +312,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.sql_processor.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.sql_processor tests")
