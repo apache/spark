@@ -24,13 +24,14 @@ license: |
 The `GROUP BY` clause is used to group the rows based on a set of specified grouping expressions and compute aggregations on
 the group of rows based on one or more specified aggregate functions. Spark also supports advanced aggregations to do multiple
 aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
-When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
+The grouping expressions and advanced aggregations can be mixed in the `GROUP BY` clause.
+See more details in the `Mixed Grouping Analytics` section. When a FILTER clause is attached to
+an aggregate function, only the matching rows are passed to that function.
 
 ### Syntax
 
 ```sql
-GROUP BY group_expression [ , group_expression [ , ... ] ]
-    [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
+GROUP BY group_expression [ , group_expression [ , ... ] ] [ WITH { ROLLUP | CUBE } ]
 
 GROUP BY { group_expression | { ROLLUP | CUBE | GROUPING SETS } (grouping_set [ , ...]) } [ , ... ]
 ```
@@ -42,7 +43,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 ### Parameters
 
-* **grouping_expression**
+* **group_expression**
 
     Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
     result values of the grouping expressions. A grouping expression may be a column name like `GROUP BY a`, a column position like
@@ -66,6 +67,12 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
     equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
     and global aggregate.
+    
+    **Note:** For Hive compatibility Spark allows `GROUP BY ... GROUPING SETS (...)`. The GROUP BY
+    expressions are usually ignored, but if it contains extra expressions than the GROUPING SETS
+    expressions, the extra expressions will be included in the grouping expressions and the value
+    is always null. For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`,
+    the output of column `c` is always null.
 
 * **ROLLUP**
 
@@ -88,6 +95,25 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
      (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
 
+* **Mixed Grouping Analytics**
+
+    A GROUP BY clause can include multiple  `group_expression`s and multiple `CUBE|ROLLUP|GROUPING SETS`s.
+    `CUBE|ROLLUP` is just a syntax sugar for `GROUPING SETS`, please refer to the sections above for
+    how to translate `CUBE|ROLLUP` to `GROUPING SETS`. `group_expression` can be treated as a single-group
+    `GROUPING SETS` under this context. For multiple `GROUPING SETS` in the `GROUP BY` clause, we generate
+    a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s. For example,
+    `GROUP BY warehouse, GROUPING SETS((product), ()), GROUPING SETS((location, size), (location), (size), ())`
+    and `GROUP BY warehouse, ROLLUP(product), CUBE(location, size)` is equivalent to 
+    `GROUP BY GROUPING SETS(
+        (warehouse, product, location, size), 
+        (warehouse, product, location),
+        (warehouse, product, size), 
+        (warehouse, product),
+        (warehouse, location, size),
+        (warehouse, location),
+        (warehouse, size),
+        (warehouse))`.
+ 
 * **aggregate_name**
 
     Specifies an aggregate function name (MIN, MAX, COUNT, SUM, AVG, etc.).
@@ -179,31 +205,6 @@ SELECT id, sum(quantity) FILTER (
 SELECT city, car_model, sum(quantity) AS sum FROM dealer
     GROUP BY GROUPING SETS ((city, car_model), (city), (car_model), ())
     ORDER BY city;
-+---------+------------+---+
-|     city|   car_model|sum|
-+---------+------------+---+
-|     null|        null| 78|
-|     null| HondaAccord| 33|
-|     null|    HondaCRV| 10|
-|     null|  HondaCivic| 35|
-|   Dublin|        null| 33|
-|   Dublin| HondaAccord| 10|
-|   Dublin|    HondaCRV|  3|
-|   Dublin|  HondaCivic| 20|
-|  Fremont|        null| 32|
-|  Fremont| HondaAccord| 15|
-|  Fremont|    HondaCRV|  7|
-|  Fremont|  HondaCivic| 10|
-| San Jose|        null| 13|
-| San Jose| HondaAccord|  8|
-| San Jose|  HondaCivic|  5|
-+---------+------------+---+
-
--- Alternate syntax for `GROUPING SETS` in which both `GROUP BY` and `GROUPING SETS`
--- specifications are present.
-SELECT city, car_model, sum(quantity) AS sum FROM dealer
-    GROUP BY city, car_model GROUPING SETS ((city, car_model), (city), (car_model), ())
-    ORDER BY city, car_model;
 +---------+------------+---+
 |     city|   car_model|sum|
 +---------+------------+---+

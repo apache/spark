@@ -201,6 +201,9 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     Seq(child.executeColumnar().asInstanceOf[RDD[InternalRow]]) // Hack because of type erasure
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ColumnarToRowExec =
+    copy(child = newChild)
 }
 
 /**
@@ -486,6 +489,9 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): RowToColumnarExec =
+    copy(child = newChild)
 }
 
 /**

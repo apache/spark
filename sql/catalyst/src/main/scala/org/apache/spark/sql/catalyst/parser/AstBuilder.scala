@@ -415,7 +415,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         } else if (clause.matchedAction().UPDATE() != null) {
           val condition = Option(clause.matchedCond).map(expression)
           if (clause.matchedAction().ASTERISK() != null) {
-            UpdateAction(condition, Seq())
+            UpdateStarAction(condition)
           } else {
             UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
           }
@@ -430,7 +430,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         if (clause.notMatchedAction().INSERT() != null) {
           val condition = Option(clause.notMatchedCond).map(expression)
           if (clause.notMatchedAction().ASTERISK() != null) {
-            InsertAction(condition, Seq())
+            InsertStarAction(condition)
           } else {
             val columns = clause.notMatchedAction().columns.multipartIdentifier()
                 .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
@@ -916,11 +916,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
       val groupByExpressions = expressionList(ctx.groupingExpressions)
       if (ctx.GROUPING != null) {
-        // GROUP BY .... GROUPING SETS (...)
-        // `GROUP BY warehouse, product GROUPING SETS((warehouse, producets), (warehouse))` is
-        // semantically equivalent to `GROUP BY GROUPING SETS((warehouse, produce), (warehouse))`.
-        // Under this grammar, the fields appearing in `GROUPING SETS`'s groupingSets must be a
-        // subset of the columns appearing in group by expression.
+        // GROUP BY ... GROUPING SETS (...)
+        // `groupByExpressions` can be non-empty for Hive compatibility. It may add extra grouping
+        // expressions that do not exist in GROUPING SETS (...), and the value is always null.
+        // For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`, the output
+        // of column `c` is always null.
         val groupingSets =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
         Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
@@ -960,24 +960,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 Rollup(groupingSets.toSeq)
               } else {
                 assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-                GroupingSets(groupingSets.toSeq,
-                  groupingSets.flatten.distinct.toSeq)
+                GroupingSets(groupingSets.toSeq)
               }
             } else {
               expression(groupByExpr.expression)
             }
           })
-      val (groupingSet, expressions) = groupByExpressions.partition(_.isInstanceOf[GroupingSet])
-      if (expressions.nonEmpty && groupingSet.nonEmpty) {
-        throw new ParseException("Partial CUBE/ROLLUP/GROUPING SETS like " +
-          "`GROUP BY a, b, CUBE(a, b)` is not supported.",
-          ctx)
-      }
-      if (groupingSet.size > 1) {
-        throw new ParseException("Mixed CUBE/ROLLUP/GROUPING SETS like " +
-          "`GROUP BY CUBE(a, b), ROLLUP(a, c)` is not supported.",
-          ctx)
-      }
       Aggregate(groupByExpressions.toSeq, selectExpressions, query)
     }
   }

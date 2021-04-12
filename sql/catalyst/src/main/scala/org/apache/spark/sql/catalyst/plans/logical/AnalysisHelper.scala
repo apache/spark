@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.rules.RuleId
+import org.apache.spark.sql.catalyst.rules.UnknownRuleId
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePatternBits}
 import org.apache.spark.util.Utils
 
 
@@ -171,29 +173,37 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * In analyzer, use [[resolveOperatorsDown()]] instead. If this is used in the analyzer,
    * an exception will be thrown in test mode. It is however OK to call this function within
    * the scope of a [[resolveOperatorsDown()]] call.
-   * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformDown()]].
+   * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformDownWithPruning()]].
    */
-  override def transformDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+  override def transformDownWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
+  : LogicalPlan = {
     assertNotAnalysisRule()
-    super.transformDown(rule)
+    super.transformDownWithPruning(cond, ruleId)(rule)
   }
 
   /**
    * Use [[resolveOperators()]] in the analyzer.
-   * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformUp()]]
+   *
+   * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformUpWithPruning()]]
    */
-  override def transformUp(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+  override def transformUpWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
+  : LogicalPlan = {
     assertNotAnalysisRule()
-    super.transformUp(rule)
+    super.transformUpWithPruning(cond, ruleId)(rule)
   }
 
   /**
    * Use [[resolveExpressions()]] in the analyzer.
-   * @see [[QueryPlan.transformAllExpressions()]]
+   * @see [[QueryPlan.transformAllExpressionsWithPruning()]]
    */
-  override def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
+  override def transformAllExpressionsWithPruning(
+    cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
+  : this.type = {
     assertNotAnalysisRule()
-    super.transformAllExpressions(rule)
+    super.transformAllExpressionsWithPruning(cond, ruleId)(rule)
   }
 
   override def clone(): LogicalPlan = {

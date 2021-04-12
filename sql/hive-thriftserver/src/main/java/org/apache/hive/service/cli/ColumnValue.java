@@ -168,10 +168,6 @@ public class ColumnValue {
     case TIMESTAMP_TYPE:
       // SPARK-31859, SPARK-31861: converted to string already in SparkExecuteStatementOperation
       return stringValue((String)value);
-    case INTERVAL_YEAR_MONTH_TYPE:
-      return stringValue((HiveIntervalYearMonth) value);
-    case INTERVAL_DAY_TIME_TYPE:
-      return stringValue((HiveIntervalDayTime) value);
     case DECIMAL_TYPE:
       String plainStr = value == null ? null : ((BigDecimal)value).toPlainString();
       return stringValue(plainStr);
@@ -183,6 +179,8 @@ public class ColumnValue {
     case STRUCT_TYPE:
     case UNION_TYPE:
     case USER_DEFINED_TYPE:
+    case INTERVAL_YEAR_MONTH_TYPE:
+    case INTERVAL_DAY_TIME_TYPE:
       return stringValue((String)value);
     case NULL_TYPE:
       return stringValue((String)value);

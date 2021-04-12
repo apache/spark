@@ -95,6 +95,9 @@ case class StreamingGlobalLimitExec(
   private def getValueRow(value: Long): UnsafeRow = {
     UnsafeProjection.create(valueSchema)(new GenericInternalRow(Array[Any](value)))
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StreamingGlobalLimitExec =
+    copy(child = newChild)
 }
 
 
@@ -133,4 +136,7 @@ case class StreamingLocalLimitExec(limit: Int, child: SparkPlan)
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def output: Seq[Attribute] = child.output
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StreamingLocalLimitExec =
+    copy(child = newChild)
 }

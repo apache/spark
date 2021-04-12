@@ -18,7 +18,7 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, ResolveSessionCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, ResolveSessionCatalog, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -106,6 +106,16 @@ abstract class BaseSessionStateBuilder(
   }
 
   /**
+   * Internal catalog managing functions registered by the user.
+   *
+   * This either gets cloned from a pre-existing version or cloned from the built-in registry.
+   */
+  protected lazy val tableFunctionRegistry: TableFunctionRegistry = {
+    parentState.map(_.tableFunctionRegistry.clone())
+      .getOrElse(extensions.registerTableFunctions(TableFunctionRegistry.builtin.clone()))
+  }
+
+  /**
    * Experimental methods that can be used to define custom optimization rules and custom planning
    * strategies.
    *
@@ -140,6 +150,7 @@ abstract class BaseSessionStateBuilder(
       () => session.sharedState.externalCatalog,
       () => session.sharedState.globalTempViewManager,
       functionRegistry,
+      tableFunctionRegistry,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader)
@@ -336,6 +347,7 @@ abstract class BaseSessionStateBuilder(
       conf,
       experimentalMethods,
       functionRegistry,
+      tableFunctionRegistry,
       udfRegistration,
       () => catalog,
       sqlParser,
