@@ -126,6 +126,16 @@ def basic_datasource_example(spark):
         .save("users_with_options.orc"))
     # $example off:manual_save_options_orc$
 
+    # $example on:manual_save_options_parquet$
+    df = spark.read.parquet("examples/src/main/resources/users.parquet")
+    (df.write.format("parquet")
+        .option("parquet.bloom.filter.enabled#favorite_color", "true")
+        .option("parquet.bloom.filter.expected.ndv#favorite_color", "1000000")
+        .option("parquet.enable.dictionary", "true")
+        .option("parquet.page.write-checksum.enabled", "false")
+        .save("users_with_options.parquet"))
+    # $example off:manual_save_options_parquet$
+
     # $example on:write_sorting_and_bucketing$
     df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
     # $example off:write_sorting_and_bucketing$
