@@ -88,7 +88,7 @@ object AlwaysProcess {
 }
 
 // scalastyle:off
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with TreePatternBits{
+abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with TreePatternBits {
 // scalastyle:on
   self: BaseType =>
 
