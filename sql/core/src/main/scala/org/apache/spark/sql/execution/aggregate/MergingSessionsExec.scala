@@ -120,4 +120,7 @@ case class MergingSessionsExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): MergingSessionsExec =
+    copy(child = newChild)
 }
