@@ -78,7 +78,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.window import Window
 
-from pyspark import pandas as pp  # For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.accessors import KoalasFrameMethods
 from pyspark.pandas.config import option_context, get_option
 from pyspark.pandas.spark import functions as SF
@@ -157,7 +157,7 @@ DataFrame
 
 Examples
 --------
->>> df = pp.DataFrame({{'angles': [0, 3, 4],
+>>> df = ps.DataFrame({{'angles': [0, 3, 4],
 ...                    'degrees': [360, 180, 360]}},
 ...                   index=['circle', 'triangle', 'rectangle'],
 ...                   columns=['angles', 'degrees'])
@@ -437,7 +437,7 @@ class DataFrame(Frame, Generic[T]):
     Constructing DataFrame from a dictionary.
 
     >>> d = {'col1': [1, 2], 'col2': [3, 4]}
-    >>> df = pp.DataFrame(data=d, columns=['col1', 'col2'])
+    >>> df = ps.DataFrame(data=d, columns=['col1', 'col2'])
     >>> df
        col1  col2
     0     1     3
@@ -445,7 +445,7 @@ class DataFrame(Frame, Generic[T]):
 
     Constructing DataFrame from pandas DataFrame
 
-    >>> df = pp.DataFrame(pd.DataFrame(data=d, columns=['col1', 'col2']))
+    >>> df = ps.DataFrame(pd.DataFrame(data=d, columns=['col1', 'col2']))
     >>> df
        col1  col2
     0     1     3
@@ -460,7 +460,7 @@ class DataFrame(Frame, Generic[T]):
 
     To enforce a single dtype:
 
-    >>> df = pp.DataFrame(data=d, dtype=np.int8)
+    >>> df = ps.DataFrame(data=d, dtype=np.int8)
     >>> df.dtypes
     col1    int8
     col2    int8
@@ -468,7 +468,7 @@ class DataFrame(Frame, Generic[T]):
 
     Constructing DataFrame from numpy ndarray:
 
-    >>> df2 = pp.DataFrame(np.random.randint(low=0, high=10, size=(5, 5)),
+    >>> df2 = ps.DataFrame(np.random.randint(low=0, high=10, size=(5, 5)),
     ...                    columns=['a', 'b', 'c', 'd', 'e'])
     >>> df2  # doctest: +SKIP
        a  b  c  d  e
@@ -492,7 +492,7 @@ class DataFrame(Frame, Generic[T]):
             assert dtype is None
             assert not copy
             internal = InternalFrame(spark_frame=data, index_spark_columns=None)
-        elif isinstance(data, pp.Series):
+        elif isinstance(data, ps.Series):
             assert index is None
             assert columns is None
             assert dtype is None
@@ -599,7 +599,7 @@ class DataFrame(Frame, Generic[T]):
         Examples
         --------
 
-        >>> df = pp.DataFrame([[1, 2], [4, 5], [7, 8]],
+        >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
         >>> df
@@ -623,7 +623,7 @@ class DataFrame(Frame, Generic[T]):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
+        >>> df = ps.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
         >>> df.axes
         [Int64Index([0, 1], dtype='int64'), Index(['col1', 'col2'], dtype='object')]
         """
@@ -686,7 +686,7 @@ class DataFrame(Frame, Generic[T]):
             sdf = self._internal.spark_frame.select(*exprs)
 
             # The data is expected to be small so it's fine to transpose/use default index.
-            with pp.option_context("compute.max_rows", 1):
+            with ps.option_context("compute.max_rows", 1):
                 internal = InternalFrame(
                     spark_frame=sdf,
                     index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
@@ -736,7 +736,7 @@ class DataFrame(Frame, Generic[T]):
 
         For example, in some method, self is like:
 
-        >>> self = pp.range(3)
+        >>> self = ps.range(3)
 
         `self._kser_for(label)` can be used with `InternalFrame.column_labels`:
 
@@ -1034,7 +1034,7 @@ class DataFrame(Frame, Generic[T]):
         """
         Compare if the current value is equal to the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -1053,7 +1053,7 @@ class DataFrame(Frame, Generic[T]):
         """
         Compare if the current value is greater than the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -1070,7 +1070,7 @@ class DataFrame(Frame, Generic[T]):
         """
         Compare if the current value is greater than or equal to the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -1087,7 +1087,7 @@ class DataFrame(Frame, Generic[T]):
         """
         Compare if the current value is less than the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -1104,7 +1104,7 @@ class DataFrame(Frame, Generic[T]):
         """
         Compare if the current value is less than or equal to the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -1121,7 +1121,7 @@ class DataFrame(Frame, Generic[T]):
         """
         Compare if the current value is not equal to the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -1164,7 +1164,7 @@ class DataFrame(Frame, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame([[1, 2.12], [3.356, 4.567]])
+        >>> df = ps.DataFrame([[1, 2.12], [3.356, 4.567]])
         >>> df
                0      1
         0  1.000  2.120
@@ -1227,7 +1227,7 @@ class DataFrame(Frame, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame([[1, 2, 3],
+        >>> df = ps.DataFrame([[1, 2, 3],
         ...                    [4, 5, 6],
         ...                    [7, 8, 9],
         ...                    [np.nan, np.nan, np.nan]],
@@ -1318,7 +1318,7 @@ class DataFrame(Frame, Generic[T]):
             else:
                 pdf = kdf._to_internal_pandas().stack()
                 pdf.index = pdf.index.droplevel()
-                return pp.from_pandas(pdf[list(func.keys())])
+                return ps.from_pandas(pdf[list(func.keys())])
 
     agg = aggregate
 
@@ -1342,7 +1342,7 @@ class DataFrame(Frame, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'])
         >>> df.corr('pearson')
                   dogs      cats
@@ -1364,7 +1364,7 @@ class DataFrame(Frame, Generic[T]):
 
           * `min_periods` argument is not supported
         """
-        return pp.from_pandas(corr(self, method))
+        return ps.from_pandas(corr(self, method))
 
     def iteritems(self) -> Iterator:
         """
@@ -1382,7 +1382,7 @@ class DataFrame(Frame, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'species': ['bear', 'bear', 'marsupial'],
+        >>> df = ps.DataFrame({'species': ['bear', 'bear', 'marsupial'],
         ...                    'population': [1864, 22000, 80000]},
         ...                   index=['panda', 'polar', 'koala'],
         ...                   columns=['species', 'population'])
@@ -1431,7 +1431,7 @@ class DataFrame(Frame, Generic[T]):
            it does **not** preserve dtypes across the rows (dtypes are
            preserved across columns for DataFrames). For example,
 
-           >>> df = pp.DataFrame([[1, 1.5]], columns=['int', 'float'])
+           >>> df = ps.DataFrame([[1, 1.5]], columns=['int', 'float'])
            >>> row = next(df.iterrows())[1]
            >>> row
            int      1.0
@@ -1505,7 +1505,7 @@ class DataFrame(Frame, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'num_legs': [4, 2], 'num_wings': [0, 2]},
+        >>> df = ps.DataFrame({'num_legs': [4, 2], 'num_wings': [0, 2]},
         ...                   index=['dog', 'hawk'])
         >>> df
               num_legs  num_wings
@@ -1611,7 +1611,7 @@ class DataFrame(Frame, Generic[T]):
         --------
         Copy the contents of a DataFrame to the clipboard.
 
-        >>> df = pp.DataFrame([[1, 2, 3], [4, 5, 6]], columns=['A', 'B', 'C'])  # doctest: +SKIP
+        >>> df = ps.DataFrame([[1, 2, 3], [4, 5, 6]], columns=['A', 'B', 'C'])  # doctest: +SKIP
         >>> df.to_clipboard(sep=',')  # doctest: +SKIP
         ... # Wrote the following to the system clipboard:
         ... # ,A,B,C
@@ -1629,7 +1629,7 @@ class DataFrame(Frame, Generic[T]):
 
         This function also works for Series:
 
-        >>> df = pp.Series([1, 2, 3, 4, 5, 6, 7], name='x')  # doctest: +SKIP
+        >>> df = ps.Series([1, 2, 3, 4, 5, 6, 7], name='x')  # doctest: +SKIP
         >>> df.to_clipboard(sep=',')  # doctest: +SKIP
         ... # Wrote the following to the system clipboard:
         ... # 0, 1
@@ -1859,7 +1859,7 @@ class DataFrame(Frame, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'col1': [1, 2, 3], 'col2': [4, 5, 6]}, columns=['col1', 'col2'])
+        >>> df = ps.DataFrame({'col1': [1, 2, 3], 'col2': [4, 5, 6]}, columns=['col1', 'col2'])
         >>> print(df.to_string())
            col1  col2
         0     1     4
@@ -1923,7 +1923,7 @@ class DataFrame(Frame, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'col1': [1, 2],
+        >>> df = ps.DataFrame({'col1': [1, 2],
         ...                    'col2': [0.5, 0.75]},
         ...                   index=['row1', 'row2'],
         ...                   columns=['col1', 'col2'])
@@ -2081,7 +2081,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'name': ['Raphael', 'Donatello'],
+        >>> df = ps.DataFrame({'name': ['Raphael', 'Donatello'],
         ...                    'mask': ['red', 'purple'],
         ...                    'weapon': ['sai', 'bo staff']},
         ...                   columns=['name', 'mask', 'weapon'])
@@ -2120,7 +2120,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 >>> from pyspark.pandas.config import option_context
                 >>> with option_context('compute.max_rows', 1000):  # doctest: +NORMALIZE_WHITESPACE
-                ...     pp.DataFrame({'a': range(1001)}).transpose()
+                ...     ps.DataFrame({'a': range(1001)}).transpose()
                 Traceback (most recent call last):
                   ...
                 ValueError: Current DataFrame has more then the given limit 1000 rows.
@@ -2150,7 +2150,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         **Square DataFrame with homogeneous dtype**
 
         >>> d1 = {'col1': [1, 2], 'col2': [3, 4]}
-        >>> df1 = pp.DataFrame(data=d1, columns=['col1', 'col2'])
+        >>> df1 = ps.DataFrame(data=d1, columns=['col1', 'col2'])
         >>> df1
            col1  col2
         0     1     3
@@ -2179,7 +2179,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> d2 = {'score': [9.5, 8],
         ...       'kids': [0, 0],
         ...       'age': [12, 22]}
-        >>> df2 = pp.DataFrame(data=d2, columns=['score', 'kids', 'age'])
+        >>> df2 = ps.DataFrame(data=d2, columns=['score', 'kids', 'age'])
         >>> df2
            score  kids  age
         0    9.5     0   12
@@ -2347,7 +2347,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ... def length(s) -> int:
             ...     return len(s)
             ...
-            >>> df = pp.DataFrame({'A': range(1000)})
+            >>> df = ps.DataFrame({'A': range(1000)})
             >>> df.apply(length, axis=0)  # doctest: +SKIP
             0     83
             1     83
@@ -2364,7 +2364,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             To avoid this, specify the return type as `Series` or scalar value in ``func``,
             for instance, as below:
 
-            >>> def square(s) -> pp.Series[np.int32]:
+            >>> def square(s) -> ps.Series[np.int32]:
             ...     return s ** 2
 
             Koalas uses return type hint and does not try to infer the type.
@@ -2372,7 +2372,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             In case when axis is 1, it requires to specify `DataFrame` or scalar value
             with type hints as below:
 
-            >>> def plus_one(x) -> pp.DataFrame[float, float]:
+            >>> def plus_one(x) -> ps.DataFrame[float, float]:
             ...     return x + 1
 
             If the return type is specified as `DataFrame`, the output column names become
@@ -2381,11 +2381,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             To specify the column names, you can assign them in a pandas friendly style as below:
 
-            >>> def plus_one(x) -> pp.DataFrame["a": float, "b": float]:
+            >>> def plus_one(x) -> ps.DataFrame["a": float, "b": float]:
             ...     return x + 1
 
             >>> pdf = pd.DataFrame({'a': [1, 2, 3], 'b': [3, 4, 5]})
-            >>> def plus_one(x) -> pp.DataFrame[zip(pdf.dtypes, pdf.columns)]:
+            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.dtypes, pdf.columns)]:
             ...     return x + 1
 
             However, this way switches the index type to default index type in the output
@@ -2428,7 +2428,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame([[4, 9]] * 3, columns=['A', 'B'])
+        >>> df = ps.DataFrame([[4, 9]] * 3, columns=['A', 'B'])
         >>> df
            A  B
         0  4  9
@@ -2438,7 +2438,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Using a numpy universal function (in this case the same as
         ``np.sqrt(df)``):
 
-        >>> def sqrt(x) -> pp.Series[float]:
+        >>> def sqrt(x) -> ps.Series[float]:
         ...     return np.sqrt(x)
         ...
         >>> df.apply(sqrt, axis=0)
@@ -2491,7 +2491,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         In order to specify the types when `axis` is '1', it should use DataFrame[...]
         annotation. In this case, the column names are automatically generated.
 
-        >>> def identify(x) -> pp.DataFrame['A': np.int64, 'B': np.int64]:
+        >>> def identify(x) -> ps.DataFrame['A': np.int64, 'B': np.int64]:
         ...     return x
         ...
         >>> df.apply(identify, axis=1)
@@ -2502,7 +2502,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         You can also specify extra arguments.
 
-        >>> def plus_two(a, b, c) -> pp.DataFrame[np.int64, np.int64]:
+        >>> def plus_two(a, b, c) -> ps.DataFrame[np.int64, np.int64]:
         ...     return a + b + c
         ...
         >>> df.apply(plus_two, axis=1, args=(1,), c=3)
@@ -2542,12 +2542,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             limit = get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = pdf.apply(func, axis=axis, args=args, **kwds)
-            kser_or_kdf = pp.from_pandas(applied)
+            kser_or_kdf = ps.from_pandas(applied)
             if len(pdf) <= limit:
                 return kser_or_kdf
 
             kdf = kser_or_kdf
-            if isinstance(kser_or_kdf, pp.Series):
+            if isinstance(kser_or_kdf, ps.Series):
                 should_return_series = True
                 kdf = kser_or_kdf._kdf
 
@@ -2652,7 +2652,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
              To avoid this, specify return type in ``func``, for instance, as below:
 
-             >>> def square(x) -> pp.Series[np.int32]:
+             >>> def square(x) -> ps.Series[np.int32]:
              ...     return x ** 2
 
              Koalas uses return type hint and does not try to infer the type.
@@ -2663,7 +2663,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             does work as a global aggregation but an aggregation of each segment. See
             below:
 
-            >>> def func(x) -> pp.Series[np.int32]:
+            >>> def func(x) -> ps.Series[np.int32]:
             ...     return x + sum(x)
 
         Parameters
@@ -2695,14 +2695,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': range(3), 'B': range(1, 4)}, columns=['A', 'B'])
+        >>> df = ps.DataFrame({'A': range(3), 'B': range(1, 4)}, columns=['A', 'B'])
         >>> df
            A  B
         0  0  1
         1  1  2
         2  2  3
 
-        >>> def square(x) -> pp.Series[np.int32]:
+        >>> def square(x) -> ps.Series[np.int32]:
         ...     return x ** 2
         >>> df.transform(square)
            A  B
@@ -2737,7 +2737,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         You can also specify extra arguments.
 
-        >>> def calculation(x, y, z) -> pp.Series[int]:
+        >>> def calculation(x, y, z) -> ps.Series[int]:
         ...     return x ** y + z
         >>> df.transform(calculation, y=10, z=20)  # doctest: +NORMALIZE_WHITESPACE
               X
@@ -2819,7 +2819,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame([('falcon', 'bird', 389.0),
+        >>> df = ps.DataFrame([('falcon', 'bird', 389.0),
         ...                    ('parrot', 'bird', 24.0),
         ...                    ('lion', 'mammal', 80.5),
         ...                    ('monkey','mammal', np.nan)],
@@ -2848,7 +2848,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Also support for MultiIndex
 
-        >>> df = pp.DataFrame([('falcon', 'bird', 389.0),
+        >>> df = ps.DataFrame([('falcon', 'bird', 389.0),
         ...                    ('parrot', 'bird', 24.0),
         ...                    ('lion', 'mammal', 80.5),
         ...                    ('monkey','mammal', np.nan)],
@@ -2921,7 +2921,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...      'class': ['mammal', 'mammal', 'mammal', 'bird'],
         ...      'animal': ['cat', 'dog', 'bat', 'penguin'],
         ...      'locomotion': ['walks', 'walks', 'flies', 'walks']}
-        >>> df = pp.DataFrame(data=d)
+        >>> df = ps.DataFrame(data=d)
         >>> df = df.set_index(['class', 'animal', 'locomotion'])
         >>> df  # doctest: +NORMALIZE_WHITESPACE
                                    num_legs  num_wings
@@ -3059,7 +3059,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> idx = pd.date_range('2018-04-09', periods=4, freq='1D20min')
-        >>> kdf = pp.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
+        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
         >>> kdf
                              A
         2018-04-09 00:00:00  1
@@ -3085,14 +3085,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis != 0:
             raise NotImplementedError("between_time currently only works for axis=0")
 
-        if not isinstance(self.index, pp.DatetimeIndex):
+        if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("Index must be DatetimeIndex")
 
         kdf = self.copy()
         kdf.index.name = verify_temp_column_name(kdf, "__index_name__")
         return_types = [kdf.index.dtype] + list(kdf.dtypes)
 
-        def pandas_between_time(pdf) -> pp.DataFrame[return_types]:  # type: ignore
+        def pandas_between_time(pdf) -> ps.DataFrame[return_types]:  # type: ignore
             return pdf.between_time(start_time, end_time, include_start, include_end).reset_index()
 
         # apply_batch will remove the index of the Koalas DataFrame and attach a default index,
@@ -3138,7 +3138,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> idx = pd.date_range('2018-04-09', periods=4, freq='12H')
-        >>> kdf = pp.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
+        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=idx)
         >>> kdf
                              A
         2018-04-09 00:00:00  1
@@ -3159,7 +3159,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis != 0:
             raise NotImplementedError("at_time currently only works for axis=0")
 
-        if not isinstance(self.index, pp.DatetimeIndex):
+        if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("Index must be DatetimeIndex")
 
         kdf = self.copy()
@@ -3168,12 +3168,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if LooseVersion(pd.__version__) < LooseVersion("0.24"):
 
-            def pandas_at_time(pdf) -> pp.DataFrame[return_types]:  # type: ignore
+            def pandas_at_time(pdf) -> ps.DataFrame[return_types]:  # type: ignore
                 return pdf.at_time(time, asof).reset_index()
 
         else:
 
-            def pandas_at_time(pdf) -> pp.DataFrame[return_types]:  # type: ignore
+            def pandas_at_time(pdf) -> ps.DataFrame[return_types]:  # type: ignore
                 return pdf.at_time(time, asof, axis).reset_index()
 
         # apply_batch will remove the index of the Koalas DataFrame and attach a default index,
@@ -3210,8 +3210,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
-        >>> df1 = pp.DataFrame({'A': [0, 1, 2, 3, 4], 'B':[100, 200, 300, 400, 500]})
-        >>> df2 = pp.DataFrame({'A': [0, -1, -2, -3, -4], 'B':[-100, -200, -300, -400, -500]})
+        >>> df1 = ps.DataFrame({'A': [0, 1, 2, 3, 4], 'B':[100, 200, 300, 400, 500]})
+        >>> df2 = ps.DataFrame({'A': [0, -1, -2, -3, -4], 'B':[-100, -200, -300, -400, -500]})
         >>> df1
            A    B
         0  0  100
@@ -3261,7 +3261,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         When the column name of cond is different from self, it treats all values are False
 
-        >>> cond = pp.DataFrame({'C': [0, -1, -2, -3, -4], 'D':[4, 3, 2, 1, 0]}) % 3 == 0
+        >>> cond = ps.DataFrame({'C': [0, -1, -2, -3, -4], 'D':[4, 3, 2, 1, 0]}) % 3 == 0
         >>> cond
                C      D
         0   True  False
@@ -3280,7 +3280,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         When the type of cond is Series, it just check boolean regardless of column name
 
-        >>> cond = pp.Series([1, 2]) > 1
+        >>> cond = ps.Series([1, 2]) > 1
         >>> cond
         0    False
         1     True
@@ -3401,8 +3401,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
-        >>> df1 = pp.DataFrame({'A': [0, 1, 2, 3, 4], 'B':[100, 200, 300, 400, 500]})
-        >>> df2 = pp.DataFrame({'A': [0, -1, -2, -3, -4], 'B':[-100, -200, -300, -400, -500]})
+        >>> df1 = ps.DataFrame({'A': [0, 1, 2, 3, 4], 'B':[100, 200, 300, 400, 500]})
+        >>> df2 = ps.DataFrame({'A': [0, -1, -2, -3, -4], 'B':[-100, -200, -300, -400, -500]})
         >>> df1
            A    B
         0  0  100
@@ -3481,13 +3481,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> pp.range(10).empty
+        >>> ps.range(10).empty
         False
 
-        >>> pp.range(0).empty
+        >>> ps.range(0).empty
         True
 
-        >>> pp.DataFrame({}, index=list('abc')).empty
+        >>> ps.DataFrame({}, index=list('abc')).empty
         True
         """
         return (
@@ -3506,7 +3506,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> pp.range(1001).style  # doctest: +SKIP
+        >>> ps.range(1001).style  # doctest: +SKIP
         <pandas.io.formats.style.Styler object at ...>
         """
         max_results = get_option("compute.max_rows")
@@ -3547,7 +3547,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'month': [1, 4, 7, 10],
+        >>> df = ps.DataFrame({'month': [1, 4, 7, 10],
         ...                    'year': [2012, 2014, 2013, 2014],
         ...                    'sale': [55, 40, 84, 31]},
         ...                   columns=['month', 'year', 'sale'])
@@ -3661,7 +3661,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame([('bird', 389.0),
+        >>> df = ps.DataFrame([('bird', 389.0),
         ...                    ('bird', 24.0),
         ...                    ('mammal', 80.5),
         ...                    ('mammal', np.nan)],
@@ -3704,7 +3704,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...                                   names=['class', 'name'])
         >>> columns = pd.MultiIndex.from_tuples([('speed', 'max'),
         ...                                      ('species', 'type')])
-        >>> df = pp.DataFrame([(389.0, 'fly'),
+        >>> df = ps.DataFrame([(389.0, 'fly'),
         ...                    ( 24.0, 'fly'),
         ...                    ( 80.5, 'run'),
         ...                    (np.nan, 'jump')],
@@ -3908,7 +3908,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, None), (.6, None), (.2, .1)])
+        >>> df = ps.DataFrame([(.2, .3), (.0, None), (.6, None), (.2, .1)])
         >>> df.isnull()
                0      1
         0  False  False
@@ -3916,7 +3916,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  False   True
         3  False  False
 
-        >>> df = pp.DataFrame([[None, 'bee', None], ['dog', None, 'fly']])
+        >>> df = ps.DataFrame([[None, 'bee', None], ['dog', None, 'fly']])
         >>> df.isnull()
                0      1      2
         0   True  False   True
@@ -3940,7 +3940,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, None), (.6, None), (.2, .1)])
+        >>> df = ps.DataFrame([(.2, .3), (.0, None), (.6, None), (.2, .1)])
         >>> df.notnull()
               0      1
         0  True   True
@@ -3948,7 +3948,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  True  False
         3  True   True
 
-        >>> df = pp.DataFrame([['ant', 'bee', 'cat'], ['dog', None, 'fly']])
+        >>> df = ps.DataFrame([['ant', 'bee', 'cat'], ['dog', None, 'fly']])
         >>> df.notnull()
               0      1     2
         0  True   True  True
@@ -3982,7 +3982,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = pp.DataFrame([1, 2, 3])
+        >>> kdf = ps.DataFrame([1, 2, 3])
         >>> kdf.sort_index()
            0
         0  1
@@ -4005,7 +4005,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  4  6  2
         2  4  7  3
 
-        >>> kdf.insert(2, 'z', pp.Series([8, 9, 10]))
+        >>> kdf.insert(2, 'z', ps.Series([8, 9, 10]))
         >>> kdf.sort_index()
            x  y   z  0
         0  4  5   8  1
@@ -4063,7 +4063,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'Col1': [10, 20, 15, 30, 45],
+        >>> df = ps.DataFrame({'Col1': [10, 20, 15, 30, 45],
         ...                    'Col2': [13, 23, 18, 33, 48],
         ...                    'Col3': [17, 27, 22, 37, 52]},
         ...                   columns=['Col1', 'Col2', 'Col3'])
@@ -4115,7 +4115,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4, 5, 6],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4, 5, 6],
         ...                    'b': [1, 1, 2, 3, 5, 8],
         ...                    'c': [1, 4, 9, 16, 25, 36]}, columns=['a', 'b', 'c'])
         >>> df
@@ -4198,7 +4198,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2, 3], 'B': [np.nan, 3, np.nan]})
+        >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [np.nan, 3, np.nan]})
         >>> df.nunique()
         A    3
         B    1
@@ -4231,7 +4231,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
         # The data is expected to be small so it's fine to transpose/use default index.
-        with pp.option_context("compute.max_rows", 1):
+        with ps.option_context("compute.max_rows", 1):
             internal = self._internal.copy(
                 spark_frame=sdf,
                 index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
@@ -4273,7 +4273,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A':[0.028208, 0.038683, 0.877076],
+        >>> df = ps.DataFrame({'A':[0.028208, 0.038683, 0.877076],
         ...                    'B':[0.992815, 0.645646, 0.149370],
         ...                    'C':[0.173891, 0.577595, 0.491027]},
         ...                    columns=['A', 'B', 'C'],
@@ -4296,14 +4296,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         second  0.0  0.645646  0.58
         third   0.9  0.149370  0.49
 
-        >>> decimals = pp.Series([1, 0, 2], index=['A', 'B', 'C'])
+        >>> decimals = ps.Series([1, 0, 2], index=['A', 'B', 'C'])
         >>> df.round(decimals)
                   A    B     C
         first   0.0  1.0  0.17
         second  0.0  1.0  0.58
         third   0.9  0.0  0.49
         """
-        if isinstance(decimals, pp.Series):
+        if isinstance(decimals, ps.Series):
             decimals = {
                 k if isinstance(k, tuple) else (k,): v
                 for k, v in decimals._to_internal_pandas().items()
@@ -4385,7 +4385,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 3], 'b': [1, 1, 1, 4], 'c': [1, 1, 1, 5]},
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 3], 'b': [1, 1, 1, 4], 'c': [1, 1, 1, 5]},
         ...                   columns = ['a', 'b', 'c'])
         >>> df
            a  b  c
@@ -4461,8 +4461,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 >>> with option_context(
                 ...     'compute.max_rows', 1000, "compute.ops_on_diff_frames", True
                 ... ):  # doctest: +NORMALIZE_WHITESPACE
-                ...     kdf = pp.DataFrame({'a': range(1001)})
-                ...     kser = pp.Series([2], index=['a'])
+                ...     kdf = ps.DataFrame({'a': range(1001)})
+                ...     kser = ps.Series([2], index=['a'])
                 ...     kdf.dot(kser)
                 Traceback (most recent call last):
                   ...
@@ -4499,8 +4499,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
-        >>> kdf = pp.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]])
-        >>> kser = pp.Series([1, 1, 2, 1])
+        >>> kdf = ps.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]])
+        >>> kser = ps.Series([1, 1, 2, 1])
         >>> kdf.dot(kser)
         0   -4
         1    5
@@ -4519,10 +4519,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         dtype: int64
         >>> reset_option("compute.ops_on_diff_frames")
         """
-        if not isinstance(other, pp.Series):
+        if not isinstance(other, ps.Series):
             raise TypeError("Unsupported type {}".format(type(other).__name__))
         else:
-            return cast(pp.Series, other.dot(self.transpose())).rename(None)
+            return cast(ps.Series, other.dot(self.transpose())).rename(None)
 
     def __matmul__(self, other):
         """
@@ -4553,7 +4553,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'col1': [1, 2], 'col2': [3, 4]}, columns=['col1', 'col2'])
+        >>> df = ps.DataFrame({'col1': [1, 2], 'col2': [3, 4]}, columns=['col1', 'col2'])
         >>> df
            col1  col2
         0     1     3
@@ -4682,7 +4682,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
 
-        >>> df = pp.DataFrame(dict(
+        >>> df = ps.DataFrame(dict(
         ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
@@ -4763,7 +4763,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame(dict(
+        >>> df = ps.DataFrame(dict(
         ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
@@ -4831,7 +4831,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame(dict(
+        >>> df = ps.DataFrame(dict(
         ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
@@ -4887,7 +4887,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'])
         >>> df.to_pandas()
            dogs  cats
@@ -4934,7 +4934,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'temp_c': [17.0, 25.0]},
+        >>> df = ps.DataFrame({'temp_c': [17.0, 25.0]},
         ...                   index=['Portland', 'Berkeley'])
         >>> df
                   temp_c
@@ -5064,7 +5064,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         Use dict as input
 
-        >>> pp.DataFrame.from_records({'A': [1, 2, 3]})
+        >>> ps.DataFrame.from_records({'A': [1, 2, 3]})
            A
         0  1
         1  2
@@ -5072,14 +5072,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Use list of tuples as input
 
-        >>> pp.DataFrame.from_records([(1, 2), (3, 4)])
+        >>> ps.DataFrame.from_records([(1, 2), (3, 4)])
            0  1
         0  1  2
         1  3  4
 
         Use NumPy array as input
 
-        >>> pp.DataFrame.from_records(np.eye(3))
+        >>> ps.DataFrame.from_records(np.eye(3))
              0    1    2
         0  1.0  0.0  0.0
         1  0.0  1.0  0.0
@@ -5130,7 +5130,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2], 'B': [0.5, 0.75]},
+        >>> df = ps.DataFrame({'A': [1, 2], 'B': [0.5, 0.75]},
         ...                   index=['a', 'b'])
         >>> df
            A     B
@@ -5183,7 +5183,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'x': [1, 2], 'y': [3, 4], 'z': [5, 6], 'w': [7, 8]},
+        >>> df = ps.DataFrame({'x': [1, 2], 'y': [3, 4], 'z': [5, 6], 'w': [7, 8]},
         ...                   columns=['x', 'y', 'z', 'w'])
         >>> df
            x  y  z  w
@@ -5238,7 +5238,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({"name": ['Alfred', 'Batman', 'Catwoman'],
+        >>> df = ps.DataFrame({"name": ['Alfred', 'Batman', 'Catwoman'],
         ...                    "toy": [None, 'Batmobile', 'Bullwhip'],
         ...                    "born": [None, "1940-04-25", None]},
         ...                   columns=['name', 'toy', 'born'])
@@ -5441,7 +5441,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'A': [None, 3, None, None],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
@@ -5551,7 +5551,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({"name": ['Ironman', 'Captain America', 'Thor', 'Hulk'],
+        >>> df = ps.DataFrame({"name": ['Ironman', 'Captain America', 'Thor', 'Hulk'],
         ...                    "weapon": ['Mark-45', 'Shield', 'Mjolnir', 'Smash']},
         ...                   columns=['name', 'weapon'])
         >>> df
@@ -5669,7 +5669,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> pp.DataFrame({'A': [0, 2, 4]}).clip(1, 3)
+        >>> ps.DataFrame({'A': [0, 2, 4]}).clip(1, 3)
            A
         0  1
         1  2
@@ -5679,7 +5679,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         -----
         One difference between this implementation and pandas is that running
         pd.DataFrame({'A': ['a', 'b']}).clip(0, 1) will crash with "TypeError: '<=' not supported
-        between instances of 'str' and 'int'" while pp.DataFrame({'A': ['a', 'b']}).clip(0, 1)
+        between instances of 'str' and 'int'" while ps.DataFrame({'A': ['a', 'b']}).clip(0, 1)
         will output the original DataFrame, simply ignoring the incompatible types.
         """
         if is_list_like(lower) or is_list_like(upper):
@@ -5712,7 +5712,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'animal':['alligator', 'bee', 'falcon', 'lion',
+        >>> df = ps.DataFrame({'animal':['alligator', 'bee', 'falcon', 'lion',
         ...                    'monkey', 'parrot', 'shark', 'whale', 'zebra']})
         >>> df
               animal
@@ -5781,7 +5781,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
 
         >>> index = pd.date_range('2018-04-09', periods=4, freq='2D')
-        >>> kdf = pp.DataFrame({'A': [1, 2, 3, 4]}, index=index)
+        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=index)
         >>> kdf
                     A
         2018-04-09  1
@@ -5801,7 +5801,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         not returned.
         """
         # Check index type should be format DateTime
-        if not isinstance(self.index, pp.DatetimeIndex):
+        if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("'last' only supports a DatetimeIndex")
 
         offset = to_offset(offset)
@@ -5836,7 +5836,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
 
         >>> index = pd.date_range('2018-04-09', periods=4, freq='2D')
-        >>> kdf = pp.DataFrame({'A': [1, 2, 3, 4]}, index=index)
+        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4]}, index=index)
         >>> kdf
                     A
         2018-04-09  1
@@ -5856,7 +5856,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         not returned.
         """
         # Check index type should be format DatetimeIndex
-        if not isinstance(self.index, pp.DatetimeIndex):
+        if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("'first' only supports a DatetimeIndex")
 
         offset = to_offset(offset)
@@ -5894,7 +5894,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({"A": ["foo", "foo", "foo", "foo", "foo",
+        >>> df = ps.DataFrame({"A": ["foo", "foo", "foo", "foo", "foo",
         ...                          "bar", "bar", "bar", "bar"],
         ...                    "B": ["one", "one", "one", "two", "two",
         ...                          "one", "one", "two", "two"],
@@ -6182,7 +6182,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'foo': ['one', 'one', 'one', 'two', 'two',
+        >>> df = ps.DataFrame({'foo': ['one', 'one', 'one', 'two', 'two',
         ...                            'two'],
         ...                    'bar': ['A', 'B', 'C', 'A', 'B', 'C'],
         ...                    'baz': [1, 2, 3, 4, 5, 6],
@@ -6218,7 +6218,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         is an expensive operation and it is preferred to permissively execute over failing fast
         when processing large data.
 
-        >>> df = pp.DataFrame({"foo": ['one', 'one', 'two', 'two'],
+        >>> df = ps.DataFrame({"foo": ['one', 'one', 'two', 'two'],
         ...                    "bar": ['A', 'A', 'B', 'C'],
         ...                    "baz": [1, 2, 3, 4]}, columns=['foo', 'bar', 'baz'])
         >>> df
@@ -6342,7 +6342,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': list('abc'),
+        >>> df = ps.DataFrame({'a': list('abc'),
         ...                    'b': list(range(1, 4)),
         ...                    'c': np.arange(3, 6).astype('i1'),
         ...                    'd': np.arange(4.0, 7.0, dtype='float64'),
@@ -6407,7 +6407,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ValueError
             * If both of ``include`` and ``exclude`` are empty
 
-                >>> df = pp.DataFrame({'a': [1, 2] * 3,
+                >>> df = ps.DataFrame({'a': [1, 2] * 3,
                 ...                    'b': [True, False] * 3,
                 ...                    'c': [1.0, 2.0] * 3})
                 >>> df.select_dtypes()
@@ -6417,7 +6417,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             * If ``include`` and ``exclude`` have overlapping elements
 
-                >>> df = pp.DataFrame({'a': [1, 2] * 3,
+                >>> df = ps.DataFrame({'a': [1, 2] * 3,
                 ...                    'b': [True, False] * 3,
                 ...                    'c': [1.0, 2.0] * 3})
                 >>> df.select_dtypes(include='a', exclude='a')
@@ -6432,7 +6432,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 2] * 3,
+        >>> df = ps.DataFrame({'a': [1, 2] * 3,
         ...                    'b': [True, False] * 3,
         ...                    'c': [1.0, 2.0] * 3,
         ...                    'd': ['a', 'b'] * 3}, columns=['a', 'b', 'c', 'd'])
@@ -6569,7 +6569,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     [[3, 4], [7, 8], [11, 12]],
         ...     index=pd.MultiIndex.from_tuples([(1, 2), (5, 6), (9, 10)], names=["a", "b"]),
         ... )
@@ -6693,7 +6693,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'x': [1, 2], 'y': [3, 4], 'z': [5, 6], 'w': [7, 8]},
+        >>> df = ps.DataFrame({'x': [1, 2], 'y': [3, 4], 'z': [5, 6], 'w': [7, 8]},
         ...                   columns=['x', 'y', 'z', 'w'])
         >>> df
            x  y  z  w
@@ -6717,7 +6717,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Also support for MultiIndex
 
-        >>> df = pp.DataFrame({'x': [1, 2], 'y': [3, 4], 'z': [5, 6], 'w': [7, 8]},
+        >>> df = ps.DataFrame({'x': [1, 2], 'y': [3, 4], 'z': [5, 6], 'w': [7, 8]},
         ...                   columns=['x', 'y', 'z', 'w'])
         >>> columns = [('a', 'x'), ('a', 'y'), ('b', 'z'), ('b', 'w')]
         >>> df.columns = pd.MultiIndex.from_tuples(columns)
@@ -6828,7 +6828,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'col1': ['A', 'B', None, 'D', 'C'],
         ...     'col2': [2, 9, 8, 7, 4],
         ...     'col3': [0, 9, 4, 2, 3],
@@ -6864,7 +6864,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Sort by multiple columns
 
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'col1': ['A', 'A', 'B', None, 'D', 'C'],
         ...     'col2': [2, 1, 9, 8, 7, 4],
         ...     'col3': [0, 1, 9, 4, 2, 3],
@@ -6888,7 +6888,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         new_by = []
         for colname in by:
             ser = self[colname]
-            if not isinstance(ser, pp.Series):
+            if not isinstance(ser, ps.Series):
                 raise ValueError(
                     "The column %s is not unique. For a multi-index, the label must be a tuple "
                     "with elements corresponding to each level." % name_like_string(colname)
@@ -6930,7 +6930,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [2, 1, np.nan]}, index=['b', 'a', np.nan])
+        >>> df = ps.DataFrame({'A': [2, 1, np.nan]}, index=['b', 'a', np.nan])
 
         >>> df.sort_index()
                A
@@ -6957,7 +6957,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b    2.0
         NaN  NaN
 
-        >>> df = pp.DataFrame({'A': range(4), 'B': range(4)[::-1]},
+        >>> df = ps.DataFrame({'A': range(4), 'B': range(4)[::-1]},
         ...                   index=[['b', 'b', 'a', 'a'], [1, 0, 1, 0]],
         ...                   columns=['A', 'B'])
 
@@ -7028,7 +7028,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Swap levels in a MultiIndex on index.
 
-        >>> kdf = pp.DataFrame({'x': [5, 6], 'y':[5, 6]}, index=midx)
+        >>> kdf = ps.DataFrame({'x': [5, 6], 'y':[5, 6]}, index=midx)
         >>> kdf  # doctest: +NORMALIZE_WHITESPACE
                            x  y
         color number size
@@ -7055,7 +7055,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Swap levels in a MultiIndex on columns.
 
-        >>> kdf = pp.DataFrame({'x': [5, 6], 'y':[5, 6]})
+        >>> kdf = ps.DataFrame({'x': [5, 6], 'y':[5, 6]})
         >>> kdf.columns = midx
         >>> kdf
         color  red blue
@@ -7112,7 +7112,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 >>> from pyspark.pandas.config import option_context
                 >>> with option_context('compute.max_rows', 1000):  # doctest: +NORMALIZE_WHITESPACE
-                ...     pp.DataFrame({'a': range(1001)}).swapaxes(i=0, j=1)
+                ...     ps.DataFrame({'a': range(1001)}).swapaxes(i=0, j=1)
                 Traceback (most recent call last):
                   ...
                 ValueError: Current DataFrame has more then the given limit 1000 rows.
@@ -7132,7 +7132,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = pp.DataFrame(
+        >>> kdf = ps.DataFrame(
         ...     [[1, 2, 3], [4, 5, 6], [7, 8, 9]], index=['x', 'y', 'z'], columns=['a', 'b', 'c']
         ... )
         >>> kdf
@@ -7189,7 +7189,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return internal
 
     def _swaplevel_index(self, i, j) -> InternalFrame:
-        assert isinstance(self.index, pp.MultiIndex)
+        assert isinstance(self.index, ps.MultiIndex)
         for index in (i, j):
             if not isinstance(index, int) and index not in self.index.names:
                 raise KeyError("Level %s not found" % index)
@@ -7263,7 +7263,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'X': [1, 2, 3, 5, 6, 7, np.nan],
+        >>> df = ps.DataFrame({'X': [1, 2, 3, 5, 6, 7, np.nan],
         ...                    'Y': [6, 7, 8, 9, 10, 11, 12]})
         >>> df
              X   Y
@@ -7326,7 +7326,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'X': [1, 2, 3, 5, 6, 7, np.nan],
+        >>> df = ps.DataFrame({'X': [1, 2, 3, 5, 6, 7, np.nan],
         ...                    'Y': [6, 7, 8, 9, 10, 11, 12]})
         >>> df
              X   Y
@@ -7377,7 +7377,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'num_legs': [2, 4], 'num_wings': [2, 0]},
+        >>> df = ps.DataFrame({'num_legs': [2, 4], 'num_wings': [2, 0]},
         ...                   index=['falcon', 'dog'],
         ...                   columns=['num_legs', 'num_wings'])
         >>> df
@@ -7444,11 +7444,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
+        >>> df = ps.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
         >>> df.shape
         (2, 2)
 
-        >>> df = pp.DataFrame({'col1': [1, 2], 'col2': [3, 4],
+        >>> df = ps.DataFrame({'col1': [1, 2], 'col2': [3, 4],
         ...                    'col3': [5, 6]})
         >>> df.shape
         (2, 3)
@@ -7522,10 +7522,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df1 = pp.DataFrame({'lkey': ['foo', 'bar', 'baz', 'foo'],
+        >>> df1 = ps.DataFrame({'lkey': ['foo', 'bar', 'baz', 'foo'],
         ...                     'value': [1, 2, 3, 5]},
         ...                    columns=['lkey', 'value'])
-        >>> df2 = pp.DataFrame({'rkey': ['foo', 'bar', 'baz', 'foo'],
+        >>> df2 = ps.DataFrame({'rkey': ['foo', 'bar', 'baz', 'foo'],
         ...                     'value': [5, 6, 7, 8]},
         ...                    columns=['rkey', 'value'])
         >>> df1
@@ -7554,8 +7554,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...foo        5  foo        5
         ...foo        5  foo        8
 
-        >>> left_kdf = pp.DataFrame({'A': [1, 2]})
-        >>> right_kdf = pp.DataFrame({'B': ['x', 'y']}, index=[1, 2])
+        >>> left_kdf = ps.DataFrame({'A': [1, 2]})
+        >>> right_kdf = ps.DataFrame({'B': ['x', 'y']}, index=[1, 2])
 
         >>> left_kdf.merge(right_kdf, left_index=True, right_index=True).sort_index()
            A  B
@@ -7593,7 +7593,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             else:
                 return [o if is_name_like_tuple(o) else (o,) for o in os]
 
-        if isinstance(right, pp.Series):
+        if isinstance(right, ps.Series):
             right = right.to_frame()
 
         if on:
@@ -7839,10 +7839,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf1 = pp.DataFrame({'key': ['K0', 'K1', 'K2', 'K3'],
+        >>> kdf1 = ps.DataFrame({'key': ['K0', 'K1', 'K2', 'K3'],
         ...                      'A': ['A0', 'A1', 'A2', 'A3']},
         ...                     columns=['key', 'A'])
-        >>> kdf2 = pp.DataFrame({'key': ['K0', 'K1', 'K2'],
+        >>> kdf2 = ps.DataFrame({'key': ['K0', 'K1', 'K2'],
         ...                      'B': ['B0', 'B1', 'B2']},
         ...                     columns=['key', 'B'])
         >>> kdf1
@@ -7887,7 +7887,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> join_kdf.index
         Int64Index([0, 1, 2, 3], dtype='int64')
         """
-        if isinstance(right, pp.Series):
+        if isinstance(right, ps.Series):
             common = list(self.columns.intersection([right.name]))
         else:
             common = list(self.columns.intersection(right.columns))
@@ -7945,7 +7945,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame([[1, 2], [3, 4]], columns=list('AB'))
+        >>> df = ps.DataFrame([[1, 2], [3, 4]], columns=list('AB'))
 
         >>> df.append(df)
            A  B
@@ -7961,7 +7961,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  1  2
         3  3  4
         """
-        if isinstance(other, pp.Series):
+        if isinstance(other, ps.Series):
             raise ValueError("DataFrames.append() does not support appending Series to DataFrames")
         if sort:
             raise NotImplementedError("The 'sort' parameter is currently not supported")
@@ -8016,8 +8016,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2, 3], 'B': [400, 500, 600]}, columns=['A', 'B'])
-        >>> new_df = pp.DataFrame({'B': [4, 5, 6], 'C': [7, 8, 9]}, columns=['B', 'C'])
+        >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [400, 500, 600]}, columns=['A', 'B'])
+        >>> new_df = ps.DataFrame({'B': [4, 5, 6], 'C': [7, 8, 9]}, columns=['B', 'C'])
         >>> df.update(new_df)
         >>> df.sort_index()
            A  B
@@ -8028,8 +8028,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         The DataFrame's length does not increase as a result of the update,
         only values at matching index/column labels are updated.
 
-        >>> df = pp.DataFrame({'A': ['a', 'b', 'c'], 'B': ['x', 'y', 'z']}, columns=['A', 'B'])
-        >>> new_df = pp.DataFrame({'B': ['d', 'e', 'f', 'g', 'h', 'i']}, columns=['B'])
+        >>> df = ps.DataFrame({'A': ['a', 'b', 'c'], 'B': ['x', 'y', 'z']}, columns=['A', 'B'])
+        >>> new_df = ps.DataFrame({'B': ['d', 'e', 'f', 'g', 'h', 'i']}, columns=['B'])
         >>> df.update(new_df)
         >>> df.sort_index()
            A  B
@@ -8039,8 +8039,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         For Series, it's name attribute must be set.
 
-        >>> df = pp.DataFrame({'A': ['a', 'b', 'c'], 'B': ['x', 'y', 'z']}, columns=['A', 'B'])
-        >>> new_column = pp.Series(['d', 'e'], name='B', index=[0, 2])
+        >>> df = ps.DataFrame({'A': ['a', 'b', 'c'], 'B': ['x', 'y', 'z']}, columns=['A', 'B'])
+        >>> new_column = ps.Series(['d', 'e'], name='B', index=[0, 2])
         >>> df.update(new_column)
         >>> df.sort_index()
            A  B
@@ -8050,8 +8050,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         If `other` contains None the corresponding values are not updated in the original dataframe.
 
-        >>> df = pp.DataFrame({'A': [1, 2, 3], 'B': [400, 500, 600]}, columns=['A', 'B'])
-        >>> new_df = pp.DataFrame({'B': [4, None, 6]}, columns=['B'])
+        >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [400, 500, 600]}, columns=['A', 'B'])
+        >>> new_df = ps.DataFrame({'B': [4, None, 6]}, columns=['B'])
         >>> df.update(new_df)
         >>> df.sort_index()
            A      B
@@ -8062,7 +8062,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if join != "left":
             raise NotImplementedError("Only left join is supported")
 
-        if isinstance(other, pp.Series):
+        if isinstance(other, ps.Series):
             other = other.to_frame()
 
         update_columns = list(
@@ -8131,7 +8131,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'num_legs': [2, 4, 8, 0],
+        >>> df = ps.DataFrame({'num_legs': [2, 4, 8, 0],
         ...                    'num_wings': [2, 0, 0, 0],
         ...                    'num_specimen_seen': [10, 2, 1, 8]},
         ...                   index=['falcon', 'dog', 'spider', 'fish'],
@@ -8206,7 +8206,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 2, 3], 'b': [1, 2, 3]}, dtype='int64')
+        >>> df = ps.DataFrame({'a': [1, 2, 3], 'b': [1, 2, 3]}, dtype='int64')
         >>> df
            a  b
         0  1  1
@@ -8281,7 +8281,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2, 3, 4], 'B': [3, 4, 5, 6]}, columns=['A', 'B'])
+        >>> df = ps.DataFrame({'A': [1, 2, 3, 4], 'B': [3, 4, 5, 6]}, columns=['A', 'B'])
         >>> df
            A  B
         0  1  3
@@ -8326,7 +8326,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2, 3, 4], 'B': [3, 4, 5, 6]}, columns=['A', 'B'])
+        >>> df = ps.DataFrame({'A': [1, 2, 3, 4], 'B': [3, 4, 5, 6]}, columns=['A', 'B'])
         >>> df
            A  B
         0  1  3
@@ -8387,7 +8387,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         Describing a numeric ``Series``.
 
-        >>> s = pp.Series([1, 2, 3])
+        >>> s = ps.Series([1, 2, 3])
         >>> s.describe()
         count    3.0
         mean     2.0
@@ -8401,7 +8401,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Describing a ``DataFrame``. Only numeric fields are returned.
 
-        >>> df = pp.DataFrame({'numeric1': [1, 2, 3],
+        >>> df = ps.DataFrame({'numeric1': [1, 2, 3],
         ...                    'numeric2': [4.0, 5.0, 6.0],
         ...                    'object': ['a', 'b', 'c']
         ...                   },
@@ -8445,7 +8445,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Describing a ``DataFrame`` and selecting custom percentiles.
 
-        >>> df = pp.DataFrame({'numeric1': [1, 2, 3],
+        >>> df = ps.DataFrame({'numeric1': [1, 2, 3],
         ...                    'numeric2': [4.0, 5.0, 6.0]
         ...                   },
         ...                   columns=['numeric1', 'numeric2'])
@@ -8553,7 +8553,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         DataFrame
             DataFrame with duplicates removed or None if ``inplace=True``.
 
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     {'a': [1, 2, 2, 2, 3], 'b': ['a', 'a', 'a', 'c', 'd']}, columns = ['a', 'b'])
         >>> df
            a  b
@@ -8662,7 +8662,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Create a dataframe with some fictional data.
 
         >>> index = ['Firefox', 'Chrome', 'Safari', 'IE10', 'Konqueror']
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...      'http_status': [200, 200, 404, 404, 301],
         ...      'response_time': [0.04, 0.02, 0.07, 0.08, 1.0]},
         ...       index=index,
@@ -8726,7 +8726,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         of dates).
 
         >>> date_index = pd.date_range('1/1/2010', periods=6, freq='D')
-        >>> df2 = pp.DataFrame({"prices": [100, 101, np.nan, 100, 89, 88]},
+        >>> df2 = ps.DataFrame({"prices": [100, 101, np.nan, 100, 89, 88]},
         ...                    index=date_index)
         >>> df2.sort_index()
                     prices
@@ -8798,13 +8798,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # When axis is index, we can mimic pandas' by a right outer join.
         nlevels = self._internal.index_level
         assert nlevels <= 1 or (
-            isinstance(index, pp.MultiIndex) and nlevels == index.nlevels
+            isinstance(index, ps.MultiIndex) and nlevels == index.nlevels
         ), "MultiIndex DataFrame can only be reindexed with a similar Koalas MultiIndex."
 
         index_columns = self._internal.index_spark_column_names
         frame = self._internal.resolved_copy.spark_frame.drop(NATURAL_ORDER_COLUMN_NAME)
 
-        if isinstance(index, pp.Index):
+        if isinstance(index, ps.Index):
             if nlevels != index.nlevels:
                 return DataFrame(index._internal.with_new_columns([])).reindex(
                     columns=self.columns, fill_value=fill_value
@@ -8816,7 +8816,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 [scol.alias(index_column) for scol, index_column in zip(scols, index_columns)]
             )
         else:
-            kser = pp.Series(list(index))
+            kser = ps.Series(list(index))
             labels = kser._internal.spark_frame.select(kser.spark.column.alias(index_columns[0]))
             index_names = self._internal.index_names
 
@@ -8949,7 +8949,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
 
-        >>> df1 = pp.DataFrame([[24.3, 75.7, 'high'],
+        >>> df1 = ps.DataFrame([[24.3, 75.7, 'high'],
         ...                     [31, 87.8, 'high'],
         ...                     [22, 71.6, 'medium'],
         ...                     [35, 95, 'medium']],
@@ -8964,7 +8964,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2014-02-14          22.0             71.6    medium
         2014-02-15          35.0             95.0    medium
 
-        >>> df2 = pp.DataFrame([[28, 'low'],
+        >>> df2 = ps.DataFrame([[28, 'low'],
         ...                     [30, 'low'],
         ...                     [35.1, 'medium']],
         ...                    columns=['temp_celsius', 'windspeed'],
@@ -9021,7 +9021,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': {0: 'a', 1: 'b', 2: 'c'},
+        >>> df = ps.DataFrame({'A': {0: 'a', 1: 'b', 2: 'c'},
         ...                    'B': {0: 1, 1: 3, 2: 5},
         ...                    'C': {0: 2, 1: 4, 2: 6}},
         ...                   columns=['A', 'B', 'C'])
@@ -9031,7 +9031,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  b  3  4
         2  c  5  6
 
-        >>> pp.melt(df)
+        >>> ps.melt(df)
           variable value
         0        A     a
         1        B     1
@@ -9058,7 +9058,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1        A     b
         2        A     c
 
-        >>> pp.melt(df, id_vars=['A', 'B'])
+        >>> ps.melt(df, id_vars=['A', 'B'])
            A  B variable  value
         0  a  1        C      2
         1  b  3        C      4
@@ -9072,7 +9072,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         The names of 'variable' and 'value' columns can be customized:
 
-        >>> pp.melt(df, id_vars=['A'], value_vars=['B'],
+        >>> ps.melt(df, id_vars=['A'], value_vars=['B'],
         ...         var_name='myVarname', value_name='myValname')
            A myVarname  myValname
         0  a         B          1
@@ -9245,7 +9245,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         **Single level columns**
 
-        >>> df_single_level_cols = pp.DataFrame([[0, 1], [2, 3]],
+        >>> df_single_level_cols = ps.DataFrame([[0, 1], [2, 3]],
         ...                                     index=['cat', 'dog'],
         ...                                     columns=['weight', 'height'])
 
@@ -9266,7 +9266,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> multicol1 = pd.MultiIndex.from_tuples([('weight', 'kg'),
         ...                                        ('weight', 'pounds')])
-        >>> df_multi_level_cols1 = pp.DataFrame([[1, 2], [2, 4]],
+        >>> df_multi_level_cols1 = ps.DataFrame([[1, 2], [2, 4]],
         ...                                     index=['cat', 'dog'],
         ...                                     columns=multicol1)
 
@@ -9288,7 +9288,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> multicol2 = pd.MultiIndex.from_tuples([('weight', 'kg'),
         ...                                        ('height', 'm')])
-        >>> df_multi_level_cols2 = pp.DataFrame([[1.0, 2.0], [3.0, 4.0]],
+        >>> df_multi_level_cols2 = ps.DataFrame([[1.0, 2.0], [3.0, 4.0]],
         ...                                     index=['cat', 'dog'],
         ...                                     columns=multicol2)
 
@@ -9409,7 +9409,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({"A": {"0": "a", "1": "b", "2": "c"},
+        >>> df = ps.DataFrame({"A": {"0": "a", "1": "b", "2": "c"},
         ...                    "B": {"0": "1", "1": "3", "2": "5"},
         ...                    "C": {"0": "2", "1": "4", "2": "6"}},
         ...                   columns=["A", "B", "C"])
@@ -9446,7 +9446,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         For MultiIndex case:
 
-        >>> df = pp.DataFrame({"A": ["a", "b", "c"],
+        >>> df = ps.DataFrame({"A": ["a", "b", "c"],
         ...                    "B": [1, 3, 5],
         ...                    "C": [2, 4, 6]},
         ...                   columns=["A", "B", "C"])
@@ -9569,7 +9569,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         Create a dataframe from a dictionary.
 
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...    'col1': [True, True, True],
         ...    'col2': [True, False, False],
         ...    'col3': [0, 0, 0],
@@ -9656,7 +9656,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
         Create a dataframe from a dictionary.
 
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...    'col1': [False, False, False],
         ...    'col2': [True, False, False],
         ...    'col3': [0, 0, 1],
@@ -9747,7 +9747,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2, 2, 3], 'B': [4, 3, 2, 1]}, columns= ['A', 'B'])
+        >>> df = ps.DataFrame({'A': [1, 2, 2, 3], 'B': [4, 3, 2, 1]}, columns= ['A', 'B'])
         >>> df
            A  B
         0  1  4
@@ -9831,7 +9831,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame(np.array(([1, 2, 3], [4, 5, 6])),
+        >>> df = ps.DataFrame(np.array(([1, 2, 3], [4, 5, 6])),
         ...                   index=['mouse', 'rabbit'],
         ...                   columns=['one', 'two', 'three'])
 
@@ -9997,7 +9997,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf1 = pp.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+        >>> kdf1 = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
         >>> kdf1.rename(columns={"A": "a", "B": "c"})  # doctest: +NORMALIZE_WHITESPACE
            a  c
         0  1  4
@@ -10027,14 +10027,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         20  3  6
 
         >>> idx = pd.MultiIndex.from_tuples([('X', 'A'), ('X', 'B'), ('Y', 'C'), ('Y', 'D')])
-        >>> kdf2 = pp.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8]], columns=idx)
+        >>> kdf2 = ps.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8]], columns=idx)
         >>> kdf2.rename(columns=str_lower, level=0)  # doctest: +NORMALIZE_WHITESPACE
            x     y
            A  B  C  D
         0  1  2  3  4
         1  5  6  7  8
 
-        >>> kdf3 = pp.DataFrame([[1, 2], [3, 4], [5, 6], [7, 8]], index=idx, columns=list('ab'))
+        >>> kdf3 = ps.DataFrame([[1, 2], [3, 4], [5, 6], [7, 8]], index=idx, columns=list('ab'))
         >>> kdf3.rename(index=str_lower)  # doctest: +NORMALIZE_WHITESPACE
              a  b
         x a  1  2
@@ -10231,7 +10231,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({"num_legs": [4, 4, 2],
+        >>> df = ps.DataFrame({"num_legs": [4, 4, 2],
         ...                    "num_arms": [0, 0, 2]},
         ...                   index=["dog", "cat", "monkey"],
         ...                   columns=["num_legs", "num_arms"])
@@ -10262,7 +10262,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> index = pd.MultiIndex.from_product([['mammal'],
         ...                                     ['dog', 'cat', 'monkey']],
         ...                                    names=['type', 'name'])
-        >>> df = pp.DataFrame({"num_legs": [4, 4, 2],
+        >>> df = ps.DataFrame({"num_legs": [4, 4, 2],
         ...                    "num_arms": [0, 0, 2]},
         ...                   index=index,
         ...                   columns=["num_legs", "num_arms"])
@@ -10349,7 +10349,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame([[1, 2], [4, 5], [7, 8]],
+        >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', 'sidewinder'],
         ...                   columns=['max_speed', 'shield'])
         >>> df
@@ -10386,7 +10386,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Percentage change in French franc, Deutsche Mark, and Italian lira
         from 1980-01-01 to 1980-03-01.
 
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'FR': [4.0405, 4.0963, 4.3149],
         ...     'GR': [1.7246, 1.7482, 1.8519],
         ...     'IT': [804.74, 810.01, 860.13]},
@@ -10445,7 +10445,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({'a': [1, 2, 3, 2],
+        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 2],
         ...                     'b': [4.0, 2.0, 3.0, 1.0],
         ...                     'c': [300, 200, 400, 200]})
         >>> kdf
@@ -10463,7 +10463,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         For Multi-column Index
 
-        >>> kdf = pp.DataFrame({'a': [1, 2, 3, 2],
+        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 2],
         ...                     'b': [4.0, 2.0, 3.0, 1.0],
         ...                     'c': [300, 200, 400, 200]})
         >>> kdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
@@ -10497,7 +10497,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         kdf = DataFrame(self._internal.with_filter(cond))  # type: "DataFrame"
 
-        return cast(pp.Series, pp.from_pandas(kdf._to_internal_pandas().idxmax()))
+        return cast(ps.Series, ps.from_pandas(kdf._to_internal_pandas().idxmax()))
 
     # TODO: axis = 1
     def idxmin(self, axis=0) -> "Series":
@@ -10523,7 +10523,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({'a': [1, 2, 3, 2],
+        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 2],
         ...                     'b': [4.0, 2.0, 3.0, 1.0],
         ...                     'c': [300, 200, 400, 200]})
         >>> kdf
@@ -10541,7 +10541,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         For Multi-column Index
 
-        >>> kdf = pp.DataFrame({'a': [1, 2, 3, 2],
+        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 2],
         ...                     'b': [4.0, 2.0, 3.0, 1.0],
         ...                     'c': [300, 200, 400, 200]})
         >>> kdf.columns = pd.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
@@ -10569,7 +10569,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         kdf = DataFrame(self._internal.with_filter(cond))  # type: "DataFrame"
 
-        return cast(pp.Series, pp.from_pandas(kdf._to_internal_pandas().idxmin()))
+        return cast(ps.Series, ps.from_pandas(kdf._to_internal_pandas().idxmin()))
 
     def info(self, verbose=None, buf=None, max_cols=None, null_counts=None) -> None:
         """
@@ -10608,7 +10608,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> int_values = [1, 2, 3, 4, 5]
         >>> text_values = ['alpha', 'beta', 'gamma', 'delta', 'epsilon']
         >>> float_values = [0.0, 0.25, 0.5, 0.75, 1.0]
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     {"int_col": int_values, "text_col": text_values, "float_col": float_values},
         ...     columns=['int_col', 'text_col', 'float_col'])
         >>> df
@@ -10723,7 +10723,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({'a': [1, 2, 3, 4, 5], 'b': [6, 7, 8, 9, 0]})
+        >>> kdf = ps.DataFrame({'a': [1, 2, 3, 4, 5], 'b': [6, 7, 8, 9, 0]})
         >>> kdf
            a  b
         0  1  6
@@ -10859,7 +10859,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             So, for example, to use `@` syntax, make sure the variable is serialized by, for
             example, putting it within the closure as below.
 
-            >>> df = pp.DataFrame({'A': range(2000), 'B': range(2000)})
+            >>> df = ps.DataFrame({'A': range(2000), 'B': range(2000)})
             >>> def query_func(pdf):
             ...     num = 1995
             ...     return pdf.query('A > @num')
@@ -10876,7 +10876,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             The query string to evaluate.
 
             You can refer to column names that contain spaces by surrounding
-            them in backticpp.
+            them in backticks.
 
             For example, if one of your columns is called ``a a`` and you want
             to sum it with ``b``, your query should be ```a a` + b``.
@@ -10892,7 +10892,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': range(1, 6),
+        >>> df = ps.DataFrame({'A': range(1, 6),
         ...                    'B': range(10, 0, -2),
         ...                    'C C': range(10, 5, -1)})
         >>> df
@@ -10991,7 +10991,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame([('falcon', 'bird', 389.0),
+        >>> df = ps.DataFrame([('falcon', 'bird', 389.0),
         ...                    ('parrot', 'bird', 24.0),
         ...                    ('lion', 'mammal', 80.5),
         ...                    ('monkey', 'mammal', np.nan)],
@@ -11072,7 +11072,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': range(1, 6), 'B': range(10, 0, -2)})
+        >>> df = ps.DataFrame({'A': range(1, 6), 'B': range(10, 0, -2)})
         >>> df
            A   B
         0  1  10
@@ -11182,7 +11182,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [[1, 2, 3], [], [3, 4]], 'B': 1})
+        >>> df = ps.DataFrame({'A': [[1, 2, 3], [], [3, 4]], 'B': 1})
         >>> df
                    A  B
         0  [1, 2, 3]  1
@@ -11234,7 +11234,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
         ...                   columns=['a', 'b'])
 
         >>> df.mad()
@@ -11290,7 +11290,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             # The data is expected to be small so it's fine to transpose/use default index.
-            with pp.option_context("compute.max_rows", 1):
+            with ps.option_context("compute.max_rows", 1):
                 internal = InternalFrame(
                     spark_frame=sdf,
                     index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
@@ -11344,7 +11344,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = pp.DataFrame({'animal': ['alligator', 'bee', 'falcon', 'lion',
+        >>> df = ps.DataFrame({'animal': ['alligator', 'bee', 'falcon', 'lion',
         ...                    'monkey', 'parrot', 'shark', 'whale', 'zebra']})
         >>> df
               animal
@@ -11394,7 +11394,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if n < 0:
             n = len(self) + n
         if n <= 0:
-            return pp.DataFrame(self._internal.with_filter(F.lit(False)))
+            return ps.DataFrame(self._internal.with_filter(F.lit(False)))
         # Should use `resolved_copy` here for the case like `(kdf + 1).tail()`
         sdf = self._internal.resolved_copy.spark_frame
         rows = sdf.tail(n)
@@ -11431,9 +11431,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> pp.set_option("compute.ops_on_diff_frames", True)
-        >>> df1 = pp.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]}, index=[10, 20, 30])
-        >>> df2 = pp.DataFrame({"a": [4, 5, 6], "c": ["d", "e", "f"]}, index=[10, 11, 12])
+        >>> ps.set_option("compute.ops_on_diff_frames", True)
+        >>> df1 = ps.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]}, index=[10, 20, 30])
+        >>> df2 = ps.DataFrame({"a": [4, 5, 6], "c": ["d", "e", "f"]}, index=[10, 11, 12])
 
         Align both axis:
 
@@ -11497,7 +11497,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Align with a Series:
 
-        >>> s = pp.Series([7, 8, 9], index=[10, 11, 12])
+        >>> s = ps.Series([7, 8, 9], index=[10, 11, 12])
         >>> aligned_l, aligned_r = df1.align(s, axis=0)
         >>> aligned_l.sort_index()
               a     b
@@ -11514,7 +11514,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         30    NaN
         dtype: float64
 
-        >>> pp.reset_option("compute.ops_on_diff_frames")
+        >>> ps.reset_option("compute.ops_on_diff_frames")
         """
         from pyspark.pandas.series import Series, first_series
 
@@ -11615,7 +11615,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         By default the keys of the dict become the DataFrame columns:
 
         >>> data = {'col_1': [3, 2, 1, 0], 'col_2': [10, 20, 30, 40]}
-        >>> pp.DataFrame.from_dict(data)
+        >>> ps.DataFrame.from_dict(data)
            col_1  col_2
         0      3     10
         1      2     20
@@ -11626,7 +11626,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         keys as rows:
 
         >>> data = {'row_1': [3, 2, 1, 0], 'row_2': [10, 20, 30, 40]}
-        >>> pp.DataFrame.from_dict(data, orient='index').sort_index()
+        >>> ps.DataFrame.from_dict(data, orient='index').sort_index()
                 0   1   2   3
         row_1   3   2   1   0
         row_2  10  20  30  40
@@ -11634,7 +11634,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         When using the 'index' orientation, the column names can be
         specified manually:
 
-        >>> pp.DataFrame.from_dict(data, orient='index',
+        >>> ps.DataFrame.from_dict(data, orient='index',
         ...                        columns=['A', 'B', 'C', 'D']).sort_index()
                 A   B   C   D
         row_1   3   2   1   0
@@ -11754,7 +11754,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 True,
             ):
                 kdf = self.reset_index()
-                kdf[key] = pp.DataFrame(value)
+                kdf[key] = ps.DataFrame(value)
                 kdf = kdf.set_index(kdf.columns[: self._internal.index_level])
                 kdf.index.names = self.index.names
 
@@ -11990,7 +11990,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.frame.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
     )

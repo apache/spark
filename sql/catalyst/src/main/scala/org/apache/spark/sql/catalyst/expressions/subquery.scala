@@ -22,12 +22,33 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.BitSet
 
 /**
  * An interface for expressions that contain a [[QueryPlan]].
  */
 abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
+
+  // Override `treePatternBits` to propagate bits for its internal plan.
+  override lazy val treePatternBits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    // Propagate node pattern bits
+    val nodeTypeIterator = nodePatterns.iterator
+    while (nodeTypeIterator.hasNext) {
+      bits.set(nodeTypeIterator.next().id)
+    }
+    // Propagate children's bits
+    val childIterator = children.iterator
+    while (childIterator.hasNext) {
+      bits.union(childIterator.next().treePatternBits)
+    }
+    // Propagate its query plan's pattern bits
+    bits.union(plan.treePatternBits)
+    bits
+  }
+
   /**  The id of the subquery expression. */
   def exprId: ExprId
 

@@ -22,7 +22,7 @@ import pandas as pd
 from pandas.api.types import is_hashable
 from pyspark._globals import _NoValue
 
-from pyspark import pandas as pp
+from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeDatetimeIndex
 from pyspark.pandas.series import Series, first_series
@@ -78,20 +78,20 @@ class DatetimeIndex(Index):
 
     Examples
     --------
-    >>> pp.DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'])
+    >>> ps.DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'])
     DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'], dtype='datetime64[ns]', freq=None)
 
     From a Series:
 
     >>> from datetime import datetime
-    >>> s = pp.Series([datetime(2021, 3, 1), datetime(2021, 3, 2)], index=[10, 20])
-    >>> pp.DatetimeIndex(s)
+    >>> s = ps.Series([datetime(2021, 3, 1), datetime(2021, 3, 2)], index=[10, 20])
+    >>> ps.DatetimeIndex(s)
     DatetimeIndex(['2021-03-01', '2021-03-02'], dtype='datetime64[ns]', freq=None)
 
     From an Index:
 
-    >>> idx = pp.DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'])
-    >>> pp.DatetimeIndex(idx)
+    >>> idx = ps.DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'])
+    >>> ps.DatetimeIndex(idx)
     DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'], dtype='datetime64[ns]', freq=None)
     """
 
@@ -129,7 +129,7 @@ class DatetimeIndex(Index):
         )
         if freq is not _NoValue:
             kwargs["freq"] = freq
-        return pp.from_pandas(pd.DatetimeIndex(**kwargs))
+        return ps.from_pandas(pd.DatetimeIndex(**kwargs))
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeDatetimeIndex, item):
@@ -225,7 +225,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range('2016-12-31', '2017-01-08', freq='D')
+        >>> idx = ps.date_range('2016-12-31', '2017-01-08', freq='D')
         >>> idx.dayofweek
         Int64Index([5, 6, 0, 1, 2, 3, 4, 5, 6], dtype='int64')
         """
@@ -280,7 +280,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range("2018-02-27", periods=3)
+        >>> idx = ps.date_range("2018-02-27", periods=3)
         >>> idx.is_month_start
         Index([False, False, True], dtype='object')
         """
@@ -303,7 +303,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range("2018-02-27", periods=3)
+        >>> idx = ps.date_range("2018-02-27", periods=3)
         >>> idx.is_month_end
         Index([False, True, False], dtype='object')
         """
@@ -326,7 +326,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range('2017-03-30', periods=4)
+        >>> idx = ps.date_range('2017-03-30', periods=4)
         >>> idx.is_quarter_start
         Index([False, False, True, False], dtype='object')
         """
@@ -349,7 +349,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range('2017-03-30', periods=4)
+        >>> idx = ps.date_range('2017-03-30', periods=4)
         >>> idx.is_quarter_end
         Index([False, True, False, False], dtype='object')
         """
@@ -371,7 +371,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range("2017-12-30", periods=3)
+        >>> idx = ps.date_range("2017-12-30", periods=3)
         >>> idx.is_year_start
         Index([False, False, True], dtype='object')
         """
@@ -393,7 +393,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range("2017-12-30", periods=3)
+        >>> idx = ps.date_range("2017-12-30", periods=3)
         >>> idx.is_year_end
         Index([False, True, False], dtype='object')
         """
@@ -416,7 +416,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range("2012-01-01", "2015-01-01", freq="Y")
+        >>> idx = ps.date_range("2012-01-01", "2015-01-01", freq="Y")
         >>> idx.is_leap_year
         Index([True, False, False], dtype='object')
         """
@@ -456,7 +456,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> rng = pp.date_range('1/1/2018 11:59:00', periods=3, freq='min')
+        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')
         >>> rng.ceil('H')  # doctest: +NORMALIZE_WHITESPACE
         DatetimeIndex(['2018-01-01 12:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 13:00:00'],
@@ -486,7 +486,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> rng = pp.date_range('1/1/2018 11:59:00', periods=3, freq='min')
+        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')
         >>> rng.floor("H")  # doctest: +NORMALIZE_WHITESPACE
         DatetimeIndex(['2018-01-01 11:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 12:00:00'],
@@ -516,7 +516,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> rng = pp.date_range('1/1/2018 11:59:00', periods=3, freq='min')
+        >>> rng = ps.date_range('1/1/2018 11:59:00', periods=3, freq='min')
         >>> rng.round("H")  # doctest: +NORMALIZE_WHITESPACE
         DatetimeIndex(['2018-01-01 12:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 12:00:00'],
@@ -543,7 +543,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range(start='2018-01', freq='M', periods=3)
+        >>> idx = ps.date_range(start='2018-01', freq='M', periods=3)
         >>> idx.month_name()
         Index(['January', 'February', 'March'], dtype='object')
         """
@@ -566,7 +566,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range(start='2018-01-01', freq='D', periods=3)
+        >>> idx = ps.date_range(start='2018-01-01', freq='D', periods=3)
         >>> idx.day_name()
         Index(['Monday', 'Tuesday', 'Wednesday'], dtype='object')
         """
@@ -596,7 +596,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range(start='2014-08-01 10:00', freq='H', periods=3)
+        >>> idx = ps.date_range(start='2014-08-01 10:00', freq='H', periods=3)
         >>> idx.normalize()
         DatetimeIndex(['2014-08-01', '2014-08-01', '2014-08-01'], dtype='datetime64[ns]', freq=None)
         """
@@ -629,7 +629,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.date_range(pd.Timestamp("2018-03-10 09:00"), periods=3, freq='s')
+        >>> idx = ps.date_range(pd.Timestamp("2018-03-10 09:00"), periods=3, freq='s')
         >>> idx.strftime('%B %d, %Y, %r')  # doctest: +NORMALIZE_WHITESPACE
         Index(['March 10, 2018, 09:00:00 AM', 'March 10, 2018, 09:00:01 AM',
                'March 10, 2018, 09:00:02 AM'],
@@ -663,7 +663,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> kidx = pp.date_range("2000-01-01", periods=3, freq="T")
+        >>> kidx = ps.date_range("2000-01-01", periods=3, freq="T")
         >>> kidx  # doctest: +NORMALIZE_WHITESPACE
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
@@ -679,17 +679,17 @@ class DatetimeIndex(Index):
         Int64Index([2], dtype='int64')
         """
 
-        def pandas_between_time(pdf) -> pp.DataFrame[int]:
+        def pandas_between_time(pdf) -> ps.DataFrame[int]:
             return pdf.between_time(start_time, end_time, include_start, include_end)
 
         kdf = self.to_frame()[[]]
         id_column_name = verify_temp_column_name(kdf, "__id_column__")
         kdf = kdf.koalas.attach_id_column("distributed-sequence", id_column_name)
-        with pp.option_context("compute.default_index_type", "distributed"):
+        with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
             # so we enforce “distributed” default index type
             kdf = kdf.koalas.apply_batch(pandas_between_time)
-        return pp.Index(first_series(kdf).rename(self.name))
+        return ps.Index(first_series(kdf).rename(self.name))
 
     def indexer_at_time(self, time: Union[datetime.time, str], asof: bool = False) -> Index:
         """
@@ -709,7 +709,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> kidx = pp.date_range("2000-01-01", periods=3, freq="T")
+        >>> kidx = ps.date_range("2000-01-01", periods=3, freq="T")
         >>> kidx  # doctest: +NORMALIZE_WHITESPACE
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
@@ -724,17 +724,17 @@ class DatetimeIndex(Index):
         if asof:
             raise NotImplementedError("'asof' argument is not supported")
 
-        def pandas_at_time(pdf) -> pp.DataFrame[int]:
+        def pandas_at_time(pdf) -> ps.DataFrame[int]:
             return pdf.at_time(time, asof)
 
         kdf = self.to_frame()[[]]
         id_column_name = verify_temp_column_name(kdf, "__id_column__")
         kdf = kdf.koalas.attach_id_column("distributed-sequence", id_column_name)
-        with pp.option_context("compute.default_index_type", "distributed"):
+        with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index in the statement below will be dropped soon,
             # so we enforce “distributed” default index type
             kdf = kdf.koalas.apply_batch(pandas_at_time)
-        return pp.Index(first_series(kdf).rename(self.name))
+        return ps.Index(first_series(kdf).rename(self.name))
 
 
 def disallow_nanoseconds(freq):
@@ -752,7 +752,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.indexes.datetimes.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.indexes.datetimes tests")

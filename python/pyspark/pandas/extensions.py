@@ -93,7 +93,7 @@ def _register_accessor(name, cls):
     Ultimately, you can structure this however you like, but Koalas would likely do something like
     this:
 
-    >>> pp.Series(['a', 'b']).dt
+    >>> ps.Series(['a', 'b']).dt
     ...
     Traceback (most recent call last):
         ...
@@ -151,7 +151,7 @@ def register_dataframe_accessor(name):
     Ultimately, you can structure this however you like, but Koalas would likely do something like
     this:
 
-    >>> pp.Series(['a', 'b']).dt
+    >>> ps.Series(['a', 'b']).dt
     ...
     Traceback (most recent call last):
         ...
@@ -185,7 +185,7 @@ def register_dataframe_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import GeoAccessor
-        >>> kdf = pp.DataFrame({"longitude": np.linspace(0,10),
+        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
         >>> kdf.geo.center  # doctest: +SKIP
         (5.0, 10.0)
@@ -232,7 +232,7 @@ def register_series_accessor(name):
     Ultimately, you can structure this however you like, but Koalas would likely do something like
     this:
 
-    >>> pp.Series(['a', 'b']).dt
+    >>> ps.Series(['a', 'b']).dt
     ...
     Traceback (most recent call last):
         ...
@@ -259,7 +259,7 @@ def register_series_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import GeoAccessor
-        >>> kdf = pp.DataFrame({"longitude": np.linspace(0,10),
+        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
         >>> kdf.longitude.geo.is_valid  # doctest: +SKIP
         True
@@ -304,7 +304,7 @@ def register_index_accessor(name):
     Ultimately, you can structure this however you like, but Koalas would likely do something like
     this:
 
-    >>> pp.Series(['a', 'b']).dt
+    >>> ps.Series(['a', 'b']).dt
     ...
     Traceback (most recent call last):
         ...
@@ -332,7 +332,7 @@ def register_index_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import CustomAccessor
-        >>> kdf = pp.DataFrame({"longitude": np.linspace(0,10),
+        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
         >>> kdf.index.foo.bar  # doctest: +SKIP
         'baz'
@@ -354,7 +354,7 @@ def _test():
 
     globs = pyspark.pandas.extensions.__dict__.copy()
     globs["np"] = numpy
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.extensions tests")
