@@ -72,7 +72,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * @param rule the function used to transform this nodes children.
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
-    resolveOperatorsDown(rule)
+    resolveOperatorsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
@@ -80,7 +80,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * `rule` does not apply to a given node, it is left unchanged. This function is similar to
    * `transform`, but skips sub-trees that have already been marked as analyzed.
    * Users should not expect a specific directionality. If a specific directionality is needed,
-   * [[resolveOperatorsUp]] or [[resolveOperatorsDown]] should be used.
+   * [[resolveOperatorsUpWithPruning]] or [[resolveOperatorsDownWithPruning]] should be used.
    *
    * @param rule   the function used to transform this nodes children.
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
