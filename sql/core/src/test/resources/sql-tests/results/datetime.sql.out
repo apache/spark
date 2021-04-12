@@ -338,7 +338,7 @@ select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678'
 -- !query schema
 struct<subtracttimestamps(DATE '2020-01-01', TIMESTAMP '2019-10-06 10:11:12.345678'):day-time interval>
 -- !query output
-INTERVAL '86 13:48:47.654322' DAY TO SECOND
+86 13:48:47.654322000
 
 
 -- !query
@@ -346,7 +346,7 @@ select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
 -- !query schema
 struct<subtracttimestamps(TIMESTAMP '2019-10-06 10:11:12.345678', DATE '2020-01-01'):day-time interval>
 -- !query output
-INTERVAL '-86 13:48:47.654322' DAY TO SECOND
+-86 13:48:47.654322000
 
 
 -- !query
@@ -612,7 +612,7 @@ select date '2001-10-01' - date '2001-09-28'
 -- !query schema
 struct<subtractdates(DATE '2001-10-01', DATE '2001-09-28'):day-time interval>
 -- !query output
-INTERVAL '3 00:00:00' DAY TO SECOND
+3 00:00:00.000000000
 
 
 -- !query
