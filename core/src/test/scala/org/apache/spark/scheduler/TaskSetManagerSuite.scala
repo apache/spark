@@ -2242,6 +2242,45 @@ class TaskSetManagerSuite
     // After 3s have elapsed now the task is marked as speculative task
     assert(sched.speculativeTasks.size == 1)
   }
+
+
+  test("SPARK-35022: TaskSet with scheduling plugin") {
+    sc = new SparkContext("local", "test")
+    sc.conf.set(config.TASK_SCHEDULING_PLUGIN_CLASSNAME, classOf[TestSchedulingPlugin].getName)
+
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(5)
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val accumUpdates = taskSet.tasks.head.metrics.internalAccums
+
+    // Offer a host with NO_PREF as the constraint,
+    // we should get a nopref task immediately since that's what we only have
+    val taskOption1 = manager.resourceOffer("exec1", "host1", NO_PREF)._1
+    assert(taskOption1.isDefined)
+
+    clock.advance(1)
+
+    // `TestSchedulingPlugin` asks to schedule the task with largest task index.
+    val scheduledTask1 = taskOption1.get
+    assert(scheduledTask1.index == 4)
+
+    // Tell it the task has finished
+    manager.handleSuccessfulTask(scheduledTask1.taskId,
+      createTaskResult(scheduledTask1.taskId.toInt, accumUpdates))
+    assert(sched.endedTasks(scheduledTask1.index) === Success)
+
+    val taskOption2 = manager.resourceOffer("exec1", "host1", NO_PREF)._1
+    assert(taskOption2.isDefined)
+
+    clock.advance(1)
+    val scheduledTask2 = taskOption2.get
+
+    assert(scheduledTask2.index == 3)
+    manager.handleSuccessfulTask(scheduledTask2.taskId,
+      createTaskResult(scheduledTask2.taskId.toInt, accumUpdates))
+    assert(sched.endedTasks(scheduledTask2.index) === Success)
+  }
 }
 
 class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {
@@ -2251,5 +2290,27 @@ class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, pa
       Thread.sleep(10000)
     }
     0
+  }
+}
+
+class TestSchedulingPlugin extends TaskSchedulingPlugin {
+  private var topRanked: Int = -1
+
+  override def rankTasks(
+      execId: String, host: String, tasks: Seq[Task[_]], taskIndexes: Seq[Int]): Seq[Int] = {
+    if (taskIndexes.isEmpty) {
+      topRanked = -1
+      taskIndexes
+    } else {
+      // Tells `TaskSetManager` to schedule the task at largest task index.
+      topRanked = taskIndexes(0)
+      Seq(0) ++ Range(taskIndexes.size - 1, 0, -1)
+    }
+  }
+
+  override def informScheduledTask(message: TaskScheduledResult): Unit = {
+    if (topRanked != -1 && topRanked != message.scheduledTaskIndex) {
+      throw new IllegalStateException(s"scheduled task index must be ${message.scheduledTaskIndex}")
+    }
   }
 }

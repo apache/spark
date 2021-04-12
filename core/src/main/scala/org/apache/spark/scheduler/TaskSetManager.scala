@@ -200,6 +200,10 @@ private[spark] class TaskSetManager(
     t.epoch = epoch
   }
 
+  val schedulingPlungin = conf.get(config.TASK_SCHEDULING_PLUGIN_CLASSNAME).map { plugin =>
+    Utils.loadExtensions(classOf[TaskSchedulingPlugin], Seq(plugin), conf).head
+  }
+
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
   addPendingTasks()
@@ -299,9 +303,11 @@ private[spark] class TaskSetManager(
       host: String,
       list: ArrayBuffer[Int],
       speculative: Boolean = false): Option[Int] = {
-    var indexOffset = list.size
-    while (indexOffset > 0) {
-      indexOffset -= 1
+    // Gets preferred task ranking. Otherwise, dequeue from the tail of the list.
+    val rankedIndexOffsets = schedulingPlungin.map(_.rankTasks(execId, host, tasks, list))
+      .getOrElse(Range(list.size - 1, -1, -1))
+
+    rankedIndexOffsets.foreach { indexOffset =>
       val index = list(indexOffset)
       if (!isTaskExcludededOnExecOrNode(index, execId, host) &&
           !(speculative && hasAttemptOnHost(index, host))) {
@@ -362,6 +368,11 @@ private[spark] class TaskSetManager(
       val task = dequeueTaskFromList(execId, host, list, speculative)
       if (speculative && task.isDefined) {
         speculatableTasks -= task.get
+      }
+      // Let the scheduling plugin know which task is chosen.
+      task.foreach { taskIndex =>
+        schedulingPlungin.map(
+          _.informScheduledTask(TaskWaitingForSchedule(tasks(taskIndex), taskIndex)))
       }
       task
     }

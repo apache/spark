@@ -1502,6 +1502,15 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val TASK_SCHEDULING_PLUGIN_CLASSNAME =
+    ConfigBuilder("spark.task.scheduling.pluginClassName")
+      .doc("The classname of the plugin used for providing scheduling suggestion to Spark task " +
+        "scheduler. The class must extend `TaskSchedulingPlugin` interface.")
+      .version("3.2.0")
+      .internal()
+      .stringConf
+      .createOptional
+
   private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
     ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
       .doc("The max number of executors for which the local dirs are stored. This size is " +
