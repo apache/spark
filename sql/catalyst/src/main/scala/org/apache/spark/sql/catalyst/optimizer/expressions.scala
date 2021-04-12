@@ -795,7 +795,7 @@ object NullPropagation extends Rule[LogicalPlan] {
  */
 object FoldablePropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    EnforceGroupingReferencesInAggregates(CleanupAliases(propagateFoldables(plan)._1))
+    CleanupAliases(propagateFoldables(plan)._1)
   }
 
   private def propagateFoldables(plan: LogicalPlan): (LogicalPlan, AttributeMap[Alias]) = {

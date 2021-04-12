@@ -690,8 +690,7 @@ object Aggregate {
     groupingExpressions.zipWithIndex
       .foldLeft(mutable.Map.empty[Expression, (Expression, Int)]) {
         case (m, (ge, i)) =>
-          if (ge.deterministic && !ge.foldable && ge.children.nonEmpty &&
-            !m.contains(ge.canonicalized)) {
+          if (!ge.foldable && ge.children.nonEmpty && !m.contains(ge.canonicalized)) {
             m += ge.canonicalized -> (ge, i)
           }
           m
