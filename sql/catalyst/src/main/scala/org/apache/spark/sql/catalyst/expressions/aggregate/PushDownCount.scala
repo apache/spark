@@ -34,6 +34,10 @@ case class PushDownCount(children: Seq[Expression], pushdown: Boolean) extends C
       )
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression])
+    : PushDownCount =
+    copy(children = newChildren)
 }
 
 object PushDownCount {
