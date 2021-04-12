@@ -1009,7 +1009,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     // Allocate a new byte array, and copy the inputs one by one into it.
     // The size of the new array is the size of all inputs, plus the separators.
-    int intNumInputBytes = Ints.checkedCast(numInputBytes + (numInputs - 1) * separator.numBytes);
+    int intNumInputBytes = Math.toIntExact(numInputBytes + (numInputs - 1) * separator.numBytes);
     final byte[] result = new byte[intNumInputBytes];
     int offset = 0;
 
