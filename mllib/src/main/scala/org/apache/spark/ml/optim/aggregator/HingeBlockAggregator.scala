@@ -37,7 +37,7 @@ import org.apache.spark.ml.linalg._
  *                     in a virtual way. Then we MUST adjust the intercept of both initial
  *                     coefficients and final solution in the caller.
  */
-class HingeBlockAggregator(
+private[ml] class HingeBlockAggregator(
     bcInverseStd: Broadcast[Array[Double]],
     bcScaledMean: Broadcast[Array[Double]],
     fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])

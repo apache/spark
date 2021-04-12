@@ -985,7 +985,7 @@ class LogisticRegression @Since("1.2.0") (
         BLAS.getBLAS(numFeatures).daxpy(numClasses, 1.0, adapt, 0, 1,
           initialSolution, numClasses * numFeatures, 1)
       } else {
-        // orginal `initialCoefWithInterceptArray` is for problem:
+        // original `initialSolution` is for problem:
         // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
         // we should adjust it to the initial solution for problem:
         // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)

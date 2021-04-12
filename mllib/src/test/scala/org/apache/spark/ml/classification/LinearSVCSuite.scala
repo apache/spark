@@ -23,7 +23,7 @@ import breeze.linalg.{DenseVector => BDV}
 import org.scalatest.Assertions._
 
 import org.apache.spark.ml.classification.LinearSVCSuite._
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
@@ -177,11 +177,11 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
 
   test("linearSVC with sample weights") {
     def modelEquals(m1: LinearSVCModel, m2: LinearSVCModel): Unit = {
-      assert(m1.coefficients ~== m2.coefficients absTol 0.05)
+      assert(m1.coefficients ~== m2.coefficients relTol 0.05)
       assert(m1.intercept ~== m2.intercept absTol 0.05)
     }
 
-    val estimator = new LinearSVC().setRegParam(0.01).setTol(0.01)
+    val estimator = new LinearSVC().setRegParam(0.01).setTol(0.001)
     val dataset = smallBinaryDataset
     MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals)
@@ -221,7 +221,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     val model1 = trainer1.fit(binaryDataset)
 
     /*
-      Use the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using e1071 package.
 
       library(e1071)
       data <- read.csv("path/target/tmp/LinearSVC/binaryDataset/part-00000", header=FALSE)
