@@ -103,7 +103,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     `GROUPING SETS` under this context. For multiple `GROUPING SETS` in the `GROUP BY` clause, we generate
     a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s. For example,
     `GROUP BY warehouse, GROUPING SETS((product), ()), GROUPING SETS((location, size), (location), (size), ())`
-    and `GROUP BY warehouse, ROLLUP(warehouse), CUBE(location, size)` is equivalent to 
+    and `GROUP BY warehouse, ROLLUP(product), CUBE(location, size)` is equivalent to 
     `GROUP BY GROUPING SETS(
         (warehouse, product, location, size), 
         (warehouse, product, location),
