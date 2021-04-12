@@ -452,15 +452,15 @@ case class Join(
   }
 
   override val nodePatterns : Seq[TreePattern] = {
-    var types = Seq(JOIN)
+    var patterns = Seq(JOIN)
     joinType match {
-      case _: InnerLike => types = types :+ INNER_LIKE_JOIN
-      case LeftOuter | FullOuter | RightOuter => types = types :+ OUTER_JOIN
-      case LeftSemiOrAnti(_) => types = types :+ LEFT_SEMI_OR_ANTI_JOIN
-      case NaturalJoin(_) | UsingJoin(_, _) => types = types :+ NATURAL_LIKE_JOIN
+      case _: InnerLike => patterns = patterns :+ INNER_LIKE_JOIN
+      case LeftOuter | FullOuter | RightOuter => patterns = patterns :+ OUTER_JOIN
+      case LeftSemiOrAnti(_) => patterns = patterns :+ LEFT_SEMI_OR_ANTI_JOIN
+      case NaturalJoin(_) | UsingJoin(_, _) => patterns = patterns :+ NATURAL_LIKE_JOIN
       case _ =>
     }
-    types
+    patterns
   }
 
   // Ignore hint for canonicalization

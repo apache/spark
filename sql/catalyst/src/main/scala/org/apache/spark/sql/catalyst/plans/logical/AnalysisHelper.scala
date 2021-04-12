@@ -72,7 +72,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * @param rule the function used to transform this nodes children.
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
-    resolveOperatorsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+    resolveOperatorsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
   }
 
   /**
@@ -162,7 +162,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   def resolveOperatorsDownWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
   : LogicalPlan = {
-    if (!analyzed) {
+    if (!analyzed && cond.apply(self) && !isRuleIneffective(ruleId)) {
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
         val afterRule = CurrentOrigin.withOrigin(origin) {
           rule.applyOrElse(self, identity[LogicalPlan])
