@@ -625,6 +625,8 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.indexes.test_base",
         "pyspark.pandas.tests.indexes.test_category",
         "pyspark.pandas.tests.indexes.test_datetime",
+        "pyspark.pandas.tests.test_dataframe",
+        "pyspark.pandas.tests.test_indexops_spark",
         "pyspark.pandas.tests.test_ops_on_diff_frames",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_expanding",
