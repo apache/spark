@@ -70,7 +70,7 @@ class ExtensionTest(ReusedSQLTestCase):
     @property
     def pdf(self):
         return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0],},
+            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=np.random.rand(9),
         )
 

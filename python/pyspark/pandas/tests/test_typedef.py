@@ -152,7 +152,7 @@ class TypeHintTests(unittest.TestCase):
         "Type inference from pandas instances is supported with Python 3.7+",
     )
     def test_infer_schema_with_names_pandas_instances(self):
-        def func() -> 'pd.DataFrame["a" : np.float, "b":str]':  # noqa: F821
+        def func() -> 'pd.DataFrame["a" : np.float, "b":str]':  # noqa: F405
             pass
 
         expected = StructType([StructField("a", DoubleType()), StructField("b", StringType())])
@@ -160,7 +160,7 @@ class TypeHintTests(unittest.TestCase):
         self.assertEqual(inferred.dtypes, [np.float64, np.unicode_])
         self.assertEqual(inferred.spark_type, expected)
 
-        def func() -> "pd.DataFrame['a': np.float, 'b': int]":  # noqa: F821
+        def func() -> "pd.DataFrame['a': np.float, 'b': int]":  # noqa: F405
             pass
 
         expected = StructType([StructField("a", DoubleType()), StructField("b", LongType())])
@@ -206,7 +206,7 @@ class TypeHintTests(unittest.TestCase):
     )
     def test_infer_schema_with_names_pandas_instances_negative(self):
         def try_infer_return_type():
-            def f() -> 'pd.DataFrame["a" : np.float : 1, "b":str:2]':  # noqa: F821
+            def f() -> 'pd.DataFrame["a" : np.float : 1, "b":str:2]':  # noqa: F405
                 pass
 
             infer_return_type(f)
@@ -225,7 +225,7 @@ class TypeHintTests(unittest.TestCase):
         self.assertRaisesRegex(TypeError, "not understood", try_infer_return_type)
 
         def try_infer_return_type():
-            def f() -> 'pd.DataFrame["a" : np.float : 1, "b":str:2]':  # noqa: F821
+            def f() -> 'pd.DataFrame["a" : np.float : 1, "b":str:2]':  # noqa: F405
                 pass
 
             infer_return_type(f)
@@ -253,7 +253,7 @@ class TypeHintTests(unittest.TestCase):
 
     def test_infer_schema_with_names_negative(self):
         def try_infer_return_type():
-            def f() -> 'ps.DataFrame["a" : np.float : 1, "b":str:2]':  # noqa: F821
+            def f() -> 'ps.DataFrame["a" : np.float : 1, "b":str:2]':  # noqa: F405
                 pass
 
             infer_return_type(f)
@@ -272,7 +272,7 @@ class TypeHintTests(unittest.TestCase):
         self.assertRaisesRegex(TypeError, "not understood", try_infer_return_type)
 
         def try_infer_return_type():
-            def f() -> 'ps.DataFrame["a" : np.float : 1, "b":str:2]':  # noqa: F821
+            def f() -> 'ps.DataFrame["a" : np.float : 1, "b":str:2]':  # noqa: F405
                 pass
 
             infer_return_type(f)

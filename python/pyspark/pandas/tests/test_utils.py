@@ -34,13 +34,13 @@ class UtilsTest(ReusedSQLTestCase, SQLTestUtils):
     def to_html(self, max_rows=None, unsupported_param=None):
         args = locals()
 
-        pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6],}, index=[0, 1, 3])
+        pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=[0, 1, 3])
         validate_arguments_and_invoke_function(pdf, self.to_html, pd.DataFrame.to_html, args)
 
     def to_clipboard(self, sep=",", **kwargs):
         args = locals()
 
-        pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6],}, index=[0, 1, 3])
+        pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=[0, 1, 3])
         validate_arguments_and_invoke_function(
             pdf, self.to_clipboard, pd.DataFrame.to_clipboard, args
         )
