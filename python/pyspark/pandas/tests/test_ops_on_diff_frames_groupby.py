@@ -75,10 +75,10 @@ class OpsOnDiffFramesGroupByTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_groupby_multiindex_columns(self):
         pdf1 = pd.DataFrame(
-            {("y", "c"): [4, 2, 7, 3, None, 1, 1, 1, 2], ("z", "d"): list("abcdefght"),}
+            {("y", "c"): [4, 2, 7, 3, None, 1, 1, 1, 2], ("z", "d"): list("abcdefght")}
         )
         pdf2 = pd.DataFrame(
-            {("x", "a"): [1, 2, 6, 4, 4, 6, 4, 3, 7], ("x", "b"): [4, 2, 7, 3, 3, 1, 1, 1, 2],}
+            {("x", "a"): [1, 2, 6, 4, 4, 6, 4, 3, 7], ("x", "b"): [4, 2, 7, 3, 3, 1, 1, 1, 2]}
         )
         kdf1 = ps.from_pandas(pdf1)
         kdf2 = ps.from_pandas(pdf2)
