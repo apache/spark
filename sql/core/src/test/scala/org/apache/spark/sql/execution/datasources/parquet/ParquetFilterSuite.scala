@@ -1637,15 +1637,16 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   test("SPARK-34562: Bloom filter push down") {
     withTempPath { dir =>
-      val path = dir.toURI.toString
-      spark.range(100).selectExpr("id * 2 AS id").write
-        .option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#id", "true")
+      val path = dir.getCanonicalPath
+      spark.range(100).selectExpr("id * 2 AS id")
+        .write
+        .option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#id", true)
+        // Disable dictionary because the distinct values less than 40000.
+        .option(ParquetOutputFormat.ENABLE_DICTIONARY, false)
         .parquet(path)
 
       Seq(true, false).foreach { bloomFilterEnabled =>
-        withSQLConf(
-          ParquetInputFormat.DICTIONARY_FILTERING_ENABLED -> "false",
-          ParquetInputFormat.BLOOM_FILTERING_ENABLED -> bloomFilterEnabled.toString) {
+        withSQLConf(ParquetInputFormat.BLOOM_FILTERING_ENABLED -> bloomFilterEnabled.toString) {
           val accu = new NumRowGroupsAcc
           sparkContext.register(accu)
 

@@ -107,7 +107,7 @@ For example, you can control bloom filters and dictionary encodings for ORC data
 The following ORC example will create bloom filter and use dictionary encoding only for `favorite_color`.
 For Parquet, there exists `parquet.bloom.filter.enabled` and `parquet.enable.dictionary`, too.
 To find more detailed information about the extra ORC/Parquet options,
-visit the official Apache ORC/Parquet websites.
+visit the official Apache [ORC](https://orc.apache.org/docs/spark-config.html) / [Parquet](https://github.com/apache/parquet-mr/tree/master/parquet-hadoop) websites.
 
 ORC data source:
 
@@ -172,15 +172,15 @@ Parquet data source:
 
 {% highlight sql %}
 CREATE TABLE users_with_options (
-name STRING,
-favorite_color STRING,
-favorite_numbers array<integer>
+  name STRING,
+  favorite_color STRING,
+  favorite_numbers array<integer>
 ) USING parquet
 OPTIONS (
-`parquet.bloom.filter.enabled#favorite_color` true,
-`parquet.bloom.filter.expected.ndv#favorite_color` 1000000,
-parquet.enable.dictionary true,
-parquet.page.write-checksum.enabled true
+  `parquet.bloom.filter.enabled#favorite_color` true,
+  `parquet.bloom.filter.expected.ndv#favorite_color` 1000000,
+  parquet.enable.dictionary true,
+  parquet.page.write-checksum.enabled true
 )
 {% endhighlight %}
 
