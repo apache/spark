@@ -792,15 +792,8 @@ private class BufferReleasingInputStream(
   extends InputStream {
   private[this] var closed = false
 
-  override def read(): Int = {
-    try {
-      delegate.read()
-    } catch {
-      case e: IOException if detectCorruption =>
-        IOUtils.closeQuietly(this)
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
-    }
-  }
+  override def read(): Int =
+    tryOrFetchFailedException(delegate.read())
 
   override def close(): Unit = {
     if (!closed) {
@@ -814,39 +807,33 @@ private class BufferReleasingInputStream(
 
   override def mark(readlimit: Int): Unit = delegate.mark(readlimit)
 
-  override def skip(n: Long): Long = {
-    try {
-      delegate.skip(n)
-    } catch {
-      case e: IOException if detectCorruption =>
-        IOUtils.closeQuietly(this)
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
-    }
-  }
+  override def skip(n: Long): Long =
+    tryOrFetchFailedException(delegate.skip(n))
 
   override def markSupported(): Boolean = delegate.markSupported()
 
-  override def read(b: Array[Byte]): Int = {
-    try {
-      delegate.read(b)
-    } catch {
-      case e: IOException if detectCorruption =>
-        IOUtils.closeQuietly(this)
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
-    }
-  }
+  override def read(b: Array[Byte]): Int =
+    tryOrFetchFailedException(delegate.read(b))
 
-  override def read(b: Array[Byte], off: Int, len: Int): Int = {
-    try {
-      delegate.read(b, off, len)
-    } catch {
-      case e: IOException if detectCorruption =>
-        IOUtils.closeQuietly(this)
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
-    }
-  }
+  override def read(b: Array[Byte], off: Int, len: Int): Int =
+    tryOrFetchFailedException(delegate.read(b, off, len))
 
   override def reset(): Unit = delegate.reset()
+
+  /**
+   * Execute a block of code that returns a value, close this stream quietly and re-throwing
+   * IOException as FetchFailedException when detectCorruption is true. This method is only
+   * used by the `read` and `skip` methods inside `BufferReleasingInputStream` currently.
+   */
+  private def tryOrFetchFailedException[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: IOException if detectCorruption =>
+        IOUtils.closeQuietly(this)
+        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
+    }
+  }
 }
 
 /**
