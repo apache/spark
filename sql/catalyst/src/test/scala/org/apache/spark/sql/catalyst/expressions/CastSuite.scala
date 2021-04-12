@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.DateTimeException
+import java.time.{DateTimeException, Duration, Period}
+import java.time.temporal.ChronoUnit
 import java.util.{Calendar, TimeZone}
 
 import scala.collection.parallel.immutable.ParVector
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -62,11 +64,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
-    (atomicTypes -- Set(
-      // TODO(SPARK-34668): Support casting of day-time intervals to strings
-      DayTimeIntervalType,
-      // TODO(SPARK-34667): Support casting of year-month intervals to strings
-      YearMonthIntervalType)).foreach(dt => checkNullCast(dt, StringType))
+    atomicTypes.foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
@@ -798,6 +796,52 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           s"$lb${if (legacyCast) "" else "null"},${if (legacyCast) "" else " null"}$rb")
       }
     }
+  }
+
+  test("SPARK-34667: cast year-month interval to string") {
+    Seq(
+      Period.ofMonths(0) -> "0-0",
+      Period.ofMonths(1) -> "0-1",
+      Period.ofMonths(-1) -> "-0-1",
+      Period.ofYears(1) -> "1-0",
+      Period.ofYears(-1) -> "-1-0",
+      Period.ofYears(10).plusMonths(10) -> "10-10",
+      Period.ofYears(-123).minusMonths(6) -> "-123-6",
+      Period.ofMonths(Int.MaxValue) -> "178956970-7",
+      Period.ofMonths(Int.MinValue) -> "-178956970-8"
+    ).foreach { case (period, intervalPayload) =>
+      checkEvaluation(
+        Cast(Literal(period), StringType),
+        s"INTERVAL '$intervalPayload' YEAR TO MONTH")
+    }
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Cast(child, StringType), YearMonthIntervalType)
+  }
+
+  test("SPARK-34668: cast day-time interval to string") {
+    Seq(
+      Duration.ZERO -> "0 00:00:00",
+      Duration.of(1, ChronoUnit.MICROS) -> "0 00:00:00.000001",
+      Duration.ofMillis(-1) -> "-0 00:00:00.001",
+      Duration.ofMillis(1234) -> "0 00:00:01.234",
+      Duration.ofSeconds(-9).minus(999999, ChronoUnit.MICROS) -> "-0 00:00:09.999999",
+      Duration.ofMinutes(30).plusMillis(59010) -> "0 00:30:59.01",
+      Duration.ofHours(-23).minusSeconds(59) -> "-0 23:00:59",
+      Duration.ofDays(1).plus(12345678, ChronoUnit.MICROS) -> "1 00:00:12.345678",
+      Duration.ofDays(-1234).minusHours(23).minusMinutes(59).minusSeconds(59).minusMillis(999) ->
+        "-1234 23:59:59.999",
+      microsToDuration(Long.MaxValue) -> "106751991 04:00:54.775807",
+      microsToDuration(Long.MinValue + 1) -> "-106751991 04:00:54.775807",
+      microsToDuration(Long.MinValue) -> "-106751991 04:00:54.775808"
+    ).foreach { case (period, intervalPayload) =>
+      checkEvaluation(
+        Cast(Literal(period), StringType),
+        s"INTERVAL '$intervalPayload' DAY TO SECOND")
+    }
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Cast(child, StringType), DayTimeIntervalType)
   }
 }
 

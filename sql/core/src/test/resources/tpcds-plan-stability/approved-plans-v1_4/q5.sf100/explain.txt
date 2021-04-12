@@ -429,7 +429,7 @@ Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#95))#129,17,2) AS sales#
 
 (77) Expand [codegen id : 23]
 Input [5]: [sales#41, RETURNS#42, profit#43, channel#44, id#45]
-Arguments: [List(sales#41, returns#42, profit#43, channel#44, id#45, 0), List(sales#41, returns#42, profit#43, channel#44, null, 1), List(sales#41, returns#42, profit#43, null, null, 3)], [sales#41, returns#42, profit#43, channel#138, id#139, spark_grouping_id#140]
+Arguments: [ArrayBuffer(sales#41, returns#42, profit#43, channel#44, id#45, 0), ArrayBuffer(sales#41, returns#42, profit#43, channel#44, null, 1), ArrayBuffer(sales#41, returns#42, profit#43, null, null, 3)], [sales#41, returns#42, profit#43, channel#138, id#139, spark_grouping_id#140]
 
 (78) HashAggregate [codegen id : 23]
 Input [6]: [sales#41, returns#42, profit#43, channel#138, id#139, spark_grouping_id#140]

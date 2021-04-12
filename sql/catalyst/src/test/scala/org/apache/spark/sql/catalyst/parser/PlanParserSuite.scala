@@ -342,7 +342,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq('a, 'b, 'sum.function('c).as("c")), table("d")))
 
     assertEqual(s"$sqlWithoutGroupBy group by grouping sets((a, b), (a), ())",
-      Aggregate(Seq(GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b))),
+      Aggregate(Seq(GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()))),
         Seq('a, 'b, 'sum.function('c).as("c")), table("d")))
 
     val m = intercept[ParseException] {

@@ -66,7 +66,7 @@ case class CreateViewCommand(
     allowExisting: Boolean,
     replace: Boolean,
     viewType: ViewType)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   import ViewHelper._
 
@@ -233,7 +233,7 @@ case class CreateViewCommand(
 case class AlterViewAsCommand(
     name: TableIdentifier,
     originalText: String,
-    query: LogicalPlan) extends RunnableCommand {
+    query: LogicalPlan) extends LeafRunnableCommand {
 
   import ViewHelper._
 
@@ -301,7 +301,7 @@ case class AlterViewAsCommand(
 case class ShowViewsCommand(
     databaseName: String,
     tableIdentifierPattern: Option[String],
-    override val output: Seq[Attribute]) extends RunnableCommand {
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

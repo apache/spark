@@ -226,6 +226,9 @@ case class Alias(child: Expression, name: String)(
       if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
     s"${child.sql} AS $qualifierPrefix${quoteIfNeeded(name)}"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Alias =
+    copy(child = newChild)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
 }
 
 /**

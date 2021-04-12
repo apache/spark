@@ -204,7 +204,7 @@ cannot resolve 'subtracttimestamps('1', CAST('2017-12-11 09:30:00.0' AS TIMESTAM
 -- !query
 SELECT '1' - cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
-struct<subtractdates(1, CAST(2017-12-11 09:30:00 AS DATE)):interval>
+struct<subtractdates(1, CAST(2017-12-11 09:30:00 AS DATE)):day-time interval>
 -- !query output
 NULL
 
