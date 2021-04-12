@@ -2294,7 +2294,6 @@ class IndexesTest(ReusedSQLTestCase, TestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.indexes.test_base import *  # noqa: F401
 
     try:
