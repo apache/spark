@@ -685,11 +685,11 @@ object DataSourceStrategy
         Some(Min(name, min.dataType))
       case max@aggregate.Max(pushableColumn(name)) =>
         Some(Max(name, max.dataType))
-      case count@aggregate.Count(pushableColumn(name)) =>
+      case count: aggregate.Count =>
         val columnName = count.children.head match {
           // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
           case Literal(_, _) => "1"
-          case _ => name
+          case pushableColumn(name) => name
         }
         Some(Count(columnName, count.dataType, aggregates.isDistinct))
       case _ => None

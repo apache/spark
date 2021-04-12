@@ -20,7 +20,6 @@ import java.math.{BigDecimal, BigInteger}
 import java.time.{ZoneId, ZoneOffset}
 import java.util
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuilder
 import scala.language.existentials
 
@@ -40,7 +39,6 @@ import org.apache.spark.sql.sources.{Aggregation, Count, Max, Min}
 import org.apache.spark.sql.types.{BinaryType, ByteType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
-
 
 object ParquetUtils {
   def inferSchema(
@@ -149,9 +147,9 @@ object ParquetUtils {
   }
 
   /**
-   * When the Aggregates (Max/Min/Count) are pushed down to parquet, we don't need to
+   * When the partial Aggregates (Max/Min/Count) are pushed down to parquet, we don't need to
    * createRowBaseReader to read data from parquet and aggregate at spark layer. Instead we want
-   * to calculate the Aggregates (Max/Min/Count) result using the statistics information
+   * to calculate the partial Aggregates (Max/Min/Count) result using the statistics information
    * from parquet footer file, and then construct an InternalRow from these Aggregate results.
    *
    * @return Aggregate results in the format of InternalRow
@@ -174,106 +172,74 @@ object ParquetUtils {
       int96RebaseModeInRead)
     parquetTypes.zipWithIndex.map {
       case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
-        if (values(i) == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          dataSchema.fields(i).dataType match {
-            case b: ByteType =>
-              mutableRow.setByte(i, values(i).asInstanceOf[Integer].toByte)
-            case s: ShortType =>
-              mutableRow.setShort(i, values(i).asInstanceOf[Integer].toShort)
-            case int: IntegerType =>
-              mutableRow.setInt(i, values(i).asInstanceOf[Integer])
-            case d: DateType =>
-              val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
-                datetimeRebaseMode, "Parquet")
-              mutableRow.update(i, dateRebaseFunc(values(i).asInstanceOf[Integer]))
-            case d: DecimalType =>
-              val decimal = Decimal(values(i).asInstanceOf[Integer].toLong, d.precision, d.scale)
-              mutableRow.setDecimal(i, decimal, d.precision)
-            case _ => throw new IllegalArgumentException("Unexpected type for INT32")
-          }
+        dataSchema.fields(i).dataType match {
+          case b: ByteType =>
+            mutableRow.setByte(i, values(i).asInstanceOf[Integer].toByte)
+          case s: ShortType =>
+            mutableRow.setShort(i, values(i).asInstanceOf[Integer].toShort)
+          case int: IntegerType =>
+            mutableRow.setInt(i, values(i).asInstanceOf[Integer])
+          case d: DateType =>
+            val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+              datetimeRebaseMode, "Parquet")
+            mutableRow.update(i, dateRebaseFunc(values(i).asInstanceOf[Integer]))
+          case d: DecimalType =>
+            val decimal = Decimal(values(i).asInstanceOf[Integer].toLong, d.precision, d.scale)
+            mutableRow.setDecimal(i, decimal, d.precision)
+          case _ => throw new IllegalArgumentException("Unexpected type for INT32")
         }
       case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
-        if (values(i) == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          dataSchema.fields(i).dataType match {
-            case long: LongType =>
-              mutableRow.setLong(i, values(i).asInstanceOf[Long])
-            case d: DecimalType =>
-              val decimal = Decimal(values(i).asInstanceOf[Long], d.precision, d.scale)
-              mutableRow.setDecimal(i, decimal, d.precision)
-            case _ => throw new IllegalArgumentException("Unexpected type for INT64")
-          }
+        dataSchema.fields(i).dataType match {
+          case long: LongType =>
+            mutableRow.setLong(i, values(i).asInstanceOf[Long])
+          case d: DecimalType =>
+            val decimal = Decimal(values(i).asInstanceOf[Long], d.precision, d.scale)
+            mutableRow.setDecimal(i, decimal, d.precision)
+          case _ => throw new IllegalArgumentException("Unexpected type for INT64")
         }
       case (PrimitiveType.PrimitiveTypeName.INT96, i) =>
-        if (values(i) == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          dataSchema.fields(i).dataType match {
-            case l: LongType =>
-              mutableRow.setLong(i, values(i).asInstanceOf[Long])
-            case d: TimestampType =>
-              val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
-                int96RebaseMode, "Parquet INT96")
-              val julianMicros =
-                ParquetRowConverter.binaryToSQLTimestamp(values(i).asInstanceOf[Binary])
-              val gregorianMicros = int96RebaseFunc(julianMicros)
-              val adjTime =
-                convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
-                  .getOrElse(gregorianMicros)
-              mutableRow.setLong(i, adjTime)
-            case _ => throw new IllegalArgumentException("Unexpected type for INT96")
-          }
+        dataSchema.fields(i).dataType match {
+          case l: LongType =>
+            mutableRow.setLong(i, values(i).asInstanceOf[Long])
+          case d: TimestampType =>
+            val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+              int96RebaseMode, "Parquet INT96")
+            val julianMicros =
+              ParquetRowConverter.binaryToSQLTimestamp(values(i).asInstanceOf[Binary])
+            val gregorianMicros = int96RebaseFunc(julianMicros)
+            val adjTime =
+              convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
+                .getOrElse(gregorianMicros)
+            mutableRow.setLong(i, adjTime)
+          case _ => throw new IllegalArgumentException("Unexpected type for INT96")
         }
       case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
-        if (values(i) == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          mutableRow.setFloat(i, values(i).asInstanceOf[Float])
-        }
+        mutableRow.setFloat(i, values(i).asInstanceOf[Float])
       case (PrimitiveType.PrimitiveTypeName.DOUBLE, i) =>
-        if (values(i) == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          mutableRow.setDouble(i, values(i).asInstanceOf[Double])
-        }
+        mutableRow.setDouble(i, values(i).asInstanceOf[Double])
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
-        if (values(i) == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          mutableRow.setBoolean(i, values(i).asInstanceOf[Boolean])
-        }
+        mutableRow.setBoolean(i, values(i).asInstanceOf[Boolean])
       case (PrimitiveType.PrimitiveTypeName.BINARY, i) =>
-        if (values(i) == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          val bytes = values(i).asInstanceOf[Binary].getBytes
-          dataSchema.fields(i).dataType match {
-            case s: StringType =>
-              mutableRow.update(i, UTF8String.fromBytes(bytes))
-            case b: BinaryType =>
-              mutableRow.update(i, bytes)
-            case d: DecimalType =>
-              val decimal =
-                Decimal(new BigDecimal(new BigInteger(bytes), d.scale), d.precision, d.scale)
-              mutableRow.setDecimal(i, decimal, d.precision)
-            case _ => throw new IllegalArgumentException("Unexpected type for Binary")
-          }
+        val bytes = values(i).asInstanceOf[Binary].getBytes
+        dataSchema.fields(i).dataType match {
+          case s: StringType =>
+            mutableRow.update(i, UTF8String.fromBytes(bytes))
+          case b: BinaryType =>
+            mutableRow.update(i, bytes)
+          case d: DecimalType =>
+            val decimal =
+              Decimal(new BigDecimal(new BigInteger(bytes), d.scale), d.precision, d.scale)
+            mutableRow.setDecimal(i, decimal, d.precision)
+          case _ => throw new IllegalArgumentException("Unexpected type for Binary")
         }
       case (PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, i) =>
-        if (values(i) == null) {
-          mutableRow.setNullAt(i)
-        } else {
-          val bytes = values(i).asInstanceOf[Binary].getBytes
-          dataSchema.fields(i).dataType match {
-            case d: DecimalType =>
-              val decimal =
-                Decimal(new BigDecimal(new BigInteger(bytes), d.scale), d.precision, d.scale)
-              mutableRow.setDecimal(i, decimal, d.precision)
-            case _ => throw new IllegalArgumentException("Unexpected type for FIXED_LEN_BYTE_ARRAY")
-          }
+        val bytes = values(i).asInstanceOf[Binary].getBytes
+        dataSchema.fields(i).dataType match {
+          case d: DecimalType =>
+            val decimal =
+              Decimal(new BigDecimal(new BigInteger(bytes), d.scale), d.precision, d.scale)
+            mutableRow.setDecimal(i, decimal, d.precision)
+          case _ => throw new IllegalArgumentException("Unexpected type for FIXED_LEN_BYTE_ARRAY")
         }
       case _ =>
         throw new IllegalArgumentException("Unexpected parquet type name")
@@ -315,81 +281,49 @@ object ParquetUtils {
 
     parquetTypes.zipWithIndex.map {
       case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
-        if (values(i) == null) {
-          columnVectors(i).appendNull()
-        } else {
-          dataSchema.fields(i).dataType match {
-            case b: ByteType =>
-              columnVectors(i).appendByte(values(i).asInstanceOf[Integer].toByte)
-            case s: ShortType =>
-              columnVectors(i).appendShort(values(i).asInstanceOf[Integer].toShort)
-            case int: IntegerType =>
-              columnVectors(i).appendInt(values(i).asInstanceOf[Integer])
-            case d: DateType =>
-              val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
-                datetimeRebaseMode, "Parquet")
-              columnVectors(i).appendInt(dateRebaseFunc(values(i).asInstanceOf[Integer]))
-            case _ => throw new IllegalArgumentException("Unexpected type for INT32")
-          }
+        dataSchema.fields(i).dataType match {
+          case b: ByteType =>
+            columnVectors(i).appendByte(values(i).asInstanceOf[Integer].toByte)
+          case s: ShortType =>
+            columnVectors(i).appendShort(values(i).asInstanceOf[Integer].toShort)
+          case int: IntegerType =>
+            columnVectors(i).appendInt(values(i).asInstanceOf[Integer])
+          case d: DateType =>
+            val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+              datetimeRebaseMode, "Parquet")
+            columnVectors(i).appendInt(dateRebaseFunc(values(i).asInstanceOf[Integer]))
+          case _ => throw new IllegalArgumentException("Unexpected type for INT32")
         }
       case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
-        if (values(i) == null) {
-          columnVectors(i).appendNull()
-        } else {
-          columnVectors(i).appendLong(values(i).asInstanceOf[Long])
-        }
+        columnVectors(i).appendLong(values(i).asInstanceOf[Long])
       case (PrimitiveType.PrimitiveTypeName.INT96, i) =>
-        if (values(i) == null) {
-          columnVectors(i).appendNull()
-        } else {
-          dataSchema.fields(i).dataType match {
-            case l: LongType =>
-              columnVectors(i).appendLong(values(i).asInstanceOf[Long])
-            case d: TimestampType =>
-              val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
-                int96RebaseMode, "Parquet INT96")
-              val julianMicros =
-                ParquetRowConverter.binaryToSQLTimestamp(values(i).asInstanceOf[Binary])
-              val gregorianMicros = int96RebaseFunc(julianMicros)
-              val adjTime =
-                convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
-                  .getOrElse(gregorianMicros)
-              columnVectors(i).appendLong(adjTime)
-            case _ => throw new IllegalArgumentException("Unexpected type for INT96")
-          }
+        dataSchema.fields(i).dataType match {
+          case l: LongType =>
+            columnVectors(i).appendLong(values(i).asInstanceOf[Long])
+          case d: TimestampType =>
+            val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+              int96RebaseMode, "Parquet INT96")
+            val julianMicros =
+              ParquetRowConverter.binaryToSQLTimestamp(values(i).asInstanceOf[Binary])
+            val gregorianMicros = int96RebaseFunc(julianMicros)
+            val adjTime =
+              convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
+                .getOrElse(gregorianMicros)
+            columnVectors(i).appendLong(adjTime)
+          case _ => throw new IllegalArgumentException("Unexpected type for INT96")
         }
       case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
-        if (values(i) == null) {
-          columnVectors(i).appendNull()
-        } else {
-          columnVectors(i).appendFloat(values(i).asInstanceOf[Float])
-        }
+        columnVectors(i).appendFloat(values(i).asInstanceOf[Float])
       case (PrimitiveType.PrimitiveTypeName.DOUBLE, i) =>
-        if (values(i) == null) {
-          columnVectors(i).appendNull()
-        } else {
-          columnVectors(i).appendDouble(values(i).asInstanceOf[Double])
-        }
+        columnVectors(i).appendDouble(values(i).asInstanceOf[Double])
       case (PrimitiveType.PrimitiveTypeName.BINARY, i) =>
-        if (values(i) == null) {
-          columnVectors(i).appendNull()
-        } else {
-          val bytes = values(i).asInstanceOf[Binary].getBytes
-          columnVectors(i).putByteArray(0, bytes, 0, bytes.length)
-        }
+        val bytes = values(i).asInstanceOf[Binary].getBytes
+        columnVectors(i).putByteArray(0, bytes, 0, bytes.length)
       case (PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, i) =>
-        if (values(i) == null) {
-          columnVectors(i).appendNull()
-        } else {
-          val bytes = values(i).asInstanceOf[Binary].getBytes
-          columnVectors(i).putByteArray(0, bytes, 0, bytes.length)
-        }
+        val bytes = values(i).asInstanceOf[Binary].getBytes
+        columnVectors(i).putByteArray(0, bytes, 0, bytes.length)
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
-        if (values(i) == null) {
-          columnVectors(i).appendNull()
-        } else {
-          columnVectors(i).appendBoolean(values(i).asInstanceOf[Boolean])
-        }
+        columnVectors(i).appendBoolean(values(i).asInstanceOf[Boolean])
       case _ =>
         throw new IllegalArgumentException("Unexpected parquet type name")
     }
@@ -441,7 +375,7 @@ object ParquetUtils {
 
           case Count(col, _, _) =>
             index = dataSchema.fieldNames.toList.indexOf(col)
-            rowCount += getRowCountFromParquetMetadata(footer)
+            rowCount += block.getRowCount
             if (!col.equals("1")) {  // "1" is for count(*)
               rowCount -= getNumNulls(footer, blockMetaData, index)
             }
@@ -476,15 +410,12 @@ object ParquetUtils {
       throw new IllegalArgumentException("Unsupported type : " + parquetType.toString)
     }
     val statistics = columnChunkMetaData.get(i).getStatistics()
-    if (isMax) statistics.genericGetMax() else statistics.genericGetMin()
-  }
-
-  private def getRowCountFromParquetMetadata(footer: ParquetMetadata): Long = {
-    var rowCount: Long = 0
-    for (blockMetaData <- footer.getBlocks.asScala) {
-      rowCount += blockMetaData.getRowCount
+    if (!statistics.hasNonNullValue) {
+      throw new UnsupportedOperationException("No min/max found for parquet file, Set SQLConf" +
+        " PARQUET_AGGREGATE_PUSHDOWN_ENABLED to false and execute again")
+    } else {
+      if (isMax) statistics.genericGetMax() else statistics.genericGetMin()
     }
-    rowCount
   }
 
   private def getNumNulls(
@@ -495,12 +426,11 @@ object ParquetUtils {
     if (!parquetType.isPrimitive) {
       throw new IllegalArgumentException("Unsupported type: " + parquetType.toString)
     }
-    var numNulls: Long = 0;
     val statistics = columnChunkMetaData.get(i).getStatistics()
     if (!statistics.isNumNullsSet()) {
-      throw new UnsupportedOperationException("Number of nulls not set for parquet file.");
+      throw new UnsupportedOperationException("Number of nulls not set for parquet file." +
+      "  Set SQLConf PARQUET_AGGREGATE_PUSHDOWN_ENABLED to false and execute again")
     }
-    numNulls += statistics.getNumNulls();
-    numNulls
+    statistics.getNumNulls();
   }
 }

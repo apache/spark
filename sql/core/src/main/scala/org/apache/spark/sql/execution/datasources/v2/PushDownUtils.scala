@@ -83,21 +83,15 @@ object PushDownUtils extends PredicateHelper {
       aggregates: Seq[AggregateExpression],
       groupBy: Seq[Expression]): Aggregation = {
 
-    def columnAsString(e: Expression): String = e match {
-      case AttributeReference(name, _, _, _) => name
-      case _ => ""
-    }
-
     scanBuilder match {
       case r: SupportsPushDownAggregates =>
         val translatedAggregates = aggregates.map(DataSourceStrategy
           .translateAggregate(_, PushableColumn(false)))
-        val translatedGroupBys = groupBy.map(columnAsString)
 
-        if (translatedAggregates.exists(_.isEmpty) || translatedGroupBys.exists(_.isEmpty)) {
+        if (translatedAggregates.exists(_.isEmpty)) {
           Aggregation.empty
         } else {
-          r.pushAggregation(Aggregation(translatedAggregates.flatten, translatedGroupBys))
+          r.pushAggregation(Aggregation(translatedAggregates.flatten, Seq.empty))
           r.pushedAggregation
         }
       case _ => Aggregation.empty

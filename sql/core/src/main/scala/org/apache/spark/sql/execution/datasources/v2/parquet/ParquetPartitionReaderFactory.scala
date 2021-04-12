@@ -27,6 +27,7 @@ import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.{NO_FILTER, SKIP_ROW_GROUPS}
 import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetRecordReader}
+import org.apache.parquet.hadoop.metadata.ParquetMetadata
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -66,7 +67,6 @@ case class ParquetPartitionReaderFactory(
     aggregation: Aggregation,
     parquetOptions: ParquetOptions) extends FilePartitionReaderFactory with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-  private val aggSchema = buildAggSchema
   private val newReadDataSchema = if (aggregation.aggregateExpressions.isEmpty) {
     readDataSchema
   } else {
@@ -87,31 +87,49 @@ case class ParquetPartitionReaderFactory(
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
   private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
-
-  private def buildAggSchema: StructType = {
-    var aggSchema = new StructType()
-    for (i <- 0 until aggregation.aggregateExpressions.size) {
-      var index = 0
-      aggregation.aggregateExpressions(i) match {
-        case Max(col, _) =>
-          index = dataSchema.fieldNames.toList.indexOf(col)
-          val field = dataSchema.fields(index)
-          aggSchema = aggSchema.add(field.copy("max(" + field.name + ")"))
-        case Min(col, _) =>
-          index = dataSchema.fieldNames.toList.indexOf(col)
-          val field = dataSchema.fields(index)
-          aggSchema = aggSchema.add(field.copy("min(" + field.name + ")"))
-        case Count(col, _, _) =>
-          if (col.equals("1")) {
-            aggSchema = aggSchema.add(new StructField("count(*)", LongType))
-          } else {
-            aggSchema = aggSchema.add(new StructField("count(" + col + ")", LongType))
-          }
-        case _ =>
-      }
+  private lazy val aggSchema = {
+    var schema = new StructType()
+    aggregation.aggregateExpressions.map {
+      case Max(col, _) =>
+        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col))
+        schema = schema.add(field.copy("max(" + field.name + ")"))
+      case Min(col, _) =>
+        val field = dataSchema.fields(dataSchema.fieldNames.toList.indexOf(col))
+        schema = schema.add(field.copy("min(" + field.name + ")"))
+      case Count(col, _, _) =>
+        if (col.equals("1")) {
+          schema = schema.add(new StructField("count(*)", LongType))
+        } else {
+          schema = schema.add(new StructField("count(" + col + ")", LongType))
+        }
+      case _ =>
     }
-    aggSchema
+    schema
   }
+
+  private def getFooter(file: PartitionedFile): ParquetMetadata = {
+    val conf = broadcastedConf.value.value
+
+    val filePath = new Path(new URI(file.filePath))
+
+    if (aggregation.aggregateExpressions.isEmpty) {
+      ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS)
+    } else {
+      ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
+    }
+  }
+
+  // Define isCreatedByParquetMr as function to avoid unnecessary parquet footer reads.
+  private def isCreatedByParquetMr(file: PartitionedFile): Boolean =
+    getFooter(file).getFileMetaData.getCreatedBy().startsWith("parquet-mr")
+
+  private def convertTz(isCreatedByParquetMr: Boolean): Option[ZoneId] =
+    if (timestampConversion && !isCreatedByParquetMr) {
+      Some(DateTimeUtils
+        .getZoneId(broadcastedConf.value.value.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
+    } else {
+      None
+    }
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.parquetVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
@@ -146,21 +164,11 @@ case class ParquetPartitionReaderFactory(
         }
 
         override def get(): InternalRow = {
-          val conf = broadcastedConf.value.value
-          val filePath = new Path(new URI(file.filePath))
-          val footer = ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
-          def isCreatedByParquetMr: Boolean =
-            footer.getFileMetaData.getCreatedBy().startsWith("parquet-mr")
-          val convertTz =
-            if (timestampConversion && !isCreatedByParquetMr) {
-              Some(DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
-            } else {
-              None
-            }
+          val footer = getFooter(file)
           val (parquetTypes, values) =
             ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)
           ParquetUtils.aggResultToSparkInternalRows(footer, parquetTypes, values, aggSchema,
-            datetimeRebaseModeInRead, int96RebaseModeInRead, convertTz)
+            datetimeRebaseModeInRead, int96RebaseModeInRead, convertTz(isCreatedByParquetMr(file)))
         }
 
         override def close(): Unit = return
@@ -195,21 +203,12 @@ case class ParquetPartitionReaderFactory(
         }
 
         override def get(): ColumnarBatch = {
-          val conf = broadcastedConf.value.value
-          val filePath = new Path(new URI(file.filePath))
-          val footer = ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
-          def isCreatedByParquetMr: Boolean =
-            footer.getFileMetaData.getCreatedBy().startsWith("parquet-mr")
-          val convertTz =
-            if (timestampConversion && !isCreatedByParquetMr) {
-              Some(DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
-            } else {
-              None
-            }
+          val footer = getFooter(file)
           val (parquetTypes, values) =
             ParquetUtils.getPushedDownAggResult(footer, dataSchema, aggregation)
           ParquetUtils.aggResultToSparkColumnarBatch(footer, parquetTypes, values, aggSchema,
-            enableOffHeapColumnVector, datetimeRebaseModeInRead, int96RebaseModeInRead, convertTz)
+            enableOffHeapColumnVector, datetimeRebaseModeInRead, int96RebaseModeInRead,
+            convertTz(isCreatedByParquetMr(file)))
         }
 
         override def close(): Unit = return
@@ -230,8 +229,7 @@ case class ParquetPartitionReaderFactory(
     val filePath = new Path(new URI(file.filePath))
     val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
-    lazy val footerFileMetaData =
-      ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+    lazy val footerFileMetaData = getFooter(file).getFileMetaData
     // Try to push down filters when filter push-down is enabled.
     val pushed = if (enableParquetFilterPushDown) {
       val parquetSchema = footerFileMetaData.getSchema
@@ -250,16 +248,6 @@ case class ParquetPartitionReaderFactory(
     // *only* if the file was created by something other than "parquet-mr", so check the actual
     // writer here for this file.  We have to do this per-file, as each file in the table may
     // have different writers.
-    // Define isCreatedByParquetMr as function to avoid unnecessary parquet footer reads.
-    def isCreatedByParquetMr: Boolean =
-      footerFileMetaData.getCreatedBy().startsWith("parquet-mr")
-
-    val convertTz =
-      if (timestampConversion && !isCreatedByParquetMr) {
-        Some(DateTimeUtils.getZoneId(conf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key)))
-      } else {
-        None
-      }
 
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
@@ -280,7 +268,7 @@ case class ParquetPartitionReaderFactory(
       file.partitionValues,
       hadoopAttemptContext,
       pushed,
-      convertTz,
+      convertTz(isCreatedByParquetMr(file)),
       datetimeRebaseMode,
       int96RebaseMode)
     reader.initialize(split, hadoopAttemptContext)
