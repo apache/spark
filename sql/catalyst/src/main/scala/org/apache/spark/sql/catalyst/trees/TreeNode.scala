@@ -82,49 +82,8 @@ object CurrentOrigin {
 // A tag of a `TreeNode`, which defines name and type
 case class TreeNodeTag[T](name: String)
 
-// A wrapper of BitSet for pattern enums.
-trait TreePatternBits {
-  protected val treePatternBits: BitSet
-
-  /**
-   * @param t, the tree pattern enum to be tested.
-   * @return true if the bit for `t` is set; false otherwise.
-   */
-  @inline final def containsPattern(t: TreePattern): Boolean = {
-    treePatternBits.get(t.id)
-  }
-
-  /**
-   * @param patterns, a sequence of tree pattern enums to be tested.
-   * @return true if every bit for `patterns` is set; false otherwise.
-   */
-  final def containsAllPatterns(patterns: TreePattern*): Boolean = {
-    val iterator = patterns.iterator
-    while (iterator.hasNext) {
-      if (!containsPattern(iterator.next)) {
-        return false
-      }
-    }
-    true
-  }
-
-  /**
-   * @param patterns, a sequence of tree pattern enums to be tested.
-   * @return true if at least one bit for `patterns` is set; false otherwise.
-   */
-  final def containsAnyPattern(patterns: TreePattern*): Boolean = {
-    val iterator = patterns.iterator
-    while (iterator.hasNext) {
-      if (containsPattern(iterator.next)) {
-        return true
-      }
-    }
-    false
-  }
-}
-
 // A functor that always returns true.
-object AlwaysProcess{
+object AlwaysProcess {
   val fn: TreePatternBits => Boolean = { _ => true}
 }
 
