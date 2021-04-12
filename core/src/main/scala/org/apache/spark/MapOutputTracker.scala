@@ -749,17 +749,29 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  def unregisterMergeResult(shuffleId: Int, reduceId: Int, bmAddress: BlockManagerId) {
+  /**
+   * Unregisters a merge result corresponding to the reduceId if present. If the optional mapId
+   * is specified, it will only unregister the merge result if the mapId is part of that merge
+   * result.
+   *
+   * @param shuffleId the shuffleId.
+   * @param reduceId  the reduceId.
+   * @param bmAddress block manager address.
+   * @param mapId     the optional mapId which should be checked to see it was part of the merge
+   *                  result.
+   */
+  def unregisterMergeResult(
+    shuffleId: Int,
+    reduceId: Int,
+    bmAddress: BlockManagerId,
+    mapId: Option[Int] = None) {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
-        shuffleStatus.removeMergeResult(reduceId, bmAddress)
-        // Here we share the same epoch for both map outputs and merge results. This means
-        // that even if we are only unregistering map output, this would also clear the executor
-        // side cached merge statuses and lead to executors re-fetching the merge statuses which
-        // hasn't changed, and vise versa. This is a reasonable compromise to prevent complicating
-        // how the epoch is currently used and to make sure the executor is always working with
-        // a pair of matching map statuses and merge statuses for each shuffle.
-        incrementEpoch()
+        val mergeStatus = shuffleStatus.mergeStatuses(reduceId)
+        if (mergeStatus != null && (mapId.isEmpty || mergeStatus.tracker.contains(mapId.get))) {
+          shuffleStatus.removeMergeResult(reduceId, bmAddress)
+          incrementEpoch()
+        }
       case None =>
         throw new SparkException("unregisterMergeResult called for nonexistent shuffle ID")
     }

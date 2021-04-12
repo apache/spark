@@ -352,7 +352,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     tracker.registerMergeResult(10, 1, MergeStatus(BlockManagerId("b", "hostB", 1000),
       bitmap, 1000L))
     assert(tracker.getNumAvailableMergeResults(10) == 2)
-    tracker.unregisterMergeResult(10, 0, BlockManagerId("a", "hostA", 1000));
+    tracker.unregisterMergeResult(10, 0, BlockManagerId("a", "hostA", 1000))
     assert(tracker.getNumAvailableMergeResults(10) == 1)
     tracker.stop()
     rpcEnv.shutdown()
