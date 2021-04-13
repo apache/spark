@@ -32,22 +32,22 @@ clause to embed the mapper or the reducer scripts.
 
 ```sql
 SELECT { TRANSFORM ( named_expression [ , ... ] ) | MAP named_expression [ , ... ] | REDUCE named_expression [ , ... ] }
-    [ rowFormat ]
-    [ RECORDWRITER recordWriter_class ]
+    [ ROW FORMAT row_format ]
+    [ RECORDWRITER record_writer_class ]
     USING script [ AS ( [ col_name [ col_type ] ] [ , ... ] ) ]
-    [ rowFormat ]
-    [ RECORDREADER recordReader_class ]
+    [ ROW FORMAT row_format ]
+    [ RECORDREADER record_reader_class ]
 ```
 
-While `rowFormat` are defined as
+While `row_format` are defined as
 ```sql
-{ ROW FORMAT SERDE serde_class [ WITH SERDEPROPERTIES serde_props ] | 
-    ROW FORMAT DELIMITED
-        [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escapedBy ] ]
-        [ COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy ]
-        [ MAP KEYS TERMINATED BY keysTerminatedBy ]
-        [ LINES TERMINATED BY linesSeparatedBy ]
-        [ NULL DEFINED AS nullDefinedAs ] }
+{ SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ] | 
+    DELIMITED
+        [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escaped_char ] ]
+        [ COLLECTION ITEMS TERMINATED BY collection_items_terminated_char ]
+        [ MAP KEYS TERMINATED BY map_key_terminated_char ]
+        [ LINES TERMINATED BY row_terminated_char ]
+        [ NULL DEFINED AS null_char ] }
 ```
 
 ### Parameters
@@ -65,10 +65,6 @@ While `rowFormat` are defined as
 * **serde_class**
 
     Specifies a fully-qualified class name of a custom SerDe.
-
-* **serde_props**
-
-    A list of key-value pairs that is used to tag the SerDe definition.
 
 * **FIELDS TERMINATED BY**
 
@@ -94,27 +90,19 @@ While `rowFormat` are defined as
 
     Used for escape mechanism.
 
-* **RECORDREADER**
-
-    Specifies a custom RecordReader for one table.
-
 * **RECORDWRITER**
 
-    Specifies a custom RecordWriter for one table.
+    Specifies a fully-qualified class name of a custom RecordWriter. A default value is `org.apache.hadoop.hive.ql.exec.TextRecordWriter`.
 
-* **recordReader_class**
+* **RECORDREADER**
 
     Specifies a fully-qualified class name of a custom RecordReader. A default value is `org.apache.hadoop.hive.ql.exec.TextRecordReader`.
-
-* **recordWriter_class**
-
-    Specifies a fully-qualified class name of a custom RecordWriter. A default value is `org.apache.hadoop.hive.ql.exec.TextRecordWriter`.
 
 * **script**
 
     Specifies a command to process data.
 
-### Serde behavior
+### SerDe behavior
 
 Spark uses Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, columns will be transformed
 to `STRING` and combined by tabs before feeding to the user script. All `NULL` values will be converted
