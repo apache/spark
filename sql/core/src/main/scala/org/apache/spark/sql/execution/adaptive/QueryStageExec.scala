@@ -22,16 +22,16 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.{Future, Promise}
 
-import org.apache.spark.{FutureAction, MapOutputStatistics, SparkException}
+import org.apache.spark.{FutureAction, MapOutputStatistics}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
@@ -165,7 +165,7 @@ case class ShuffleQueryStageExec(
     case s: ShuffleExchangeLike => s
     case ReusedExchangeExec(_, s: ShuffleExchangeLike) => s
     case _ =>
-      throw new IllegalStateException("wrong plan for shuffle stage:\n " + plan.treeString)
+      throw new IllegalStateException(s"wrong plan for shuffle stage:\n ${plan.treeString}")
   }
 
   override def doMaterialize(): Future[Any] = shuffle.mapOutputStatisticsFuture
@@ -217,7 +217,7 @@ case class BroadcastQueryStageExec(
     case b: BroadcastExchangeLike => b
     case ReusedExchangeExec(_, b: BroadcastExchangeLike) => b
     case _ =>
-      throw new IllegalStateException("wrong plan for broadcast stage:\n " + plan.treeString)
+      throw new IllegalStateException(s"wrong plan for broadcast stage:\n ${plan.treeString}")
   }
 
   @transient private lazy val materializeWithTimeout = {
@@ -226,9 +226,7 @@ case class BroadcastQueryStageExec(
     val promise = Promise[Any]()
     val fail = BroadcastQueryStageExec.scheduledExecutor.schedule(new Runnable() {
       override def run(): Unit = {
-        promise.tryFailure(new SparkException(s"Could not execute broadcast in $timeout secs. " +
-          s"You can increase the timeout for broadcasts via ${SQLConf.BROADCAST_TIMEOUT.key} or " +
-          s"disable broadcast join by setting ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key} to -1"))
+        promise.tryFailure(QueryExecutionErrors.executeBroadcastTimeoutError(timeout))
       }
     }, timeout, TimeUnit.SECONDS)
     broadcastFuture.onComplete(_ => fail.cancel(false))(AdaptiveSparkPlanExec.executionContext)

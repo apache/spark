@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckSuccess
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types._
 
 /**
@@ -51,15 +52,13 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "2.0.0")
 case class First(child: Expression, ignoreNulls: Boolean)
-  extends DeclarativeAggregate with ExpectsInputTypes {
+  extends DeclarativeAggregate with ExpectsInputTypes with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, false)
 
   def this(child: Expression, ignoreNullsExpr: Expression) = {
     this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr, "first"))
   }
-
-  override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = true
 
@@ -116,6 +115,8 @@ case class First(child: Expression, ignoreNulls: Boolean)
   override lazy val evaluateExpression: AttributeReference = first
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
+
+  override protected def withNewChildInternal(newChild: Expression): First = copy(child = newChild)
 }
 
 object FirstLast {

@@ -76,11 +76,7 @@ trait QueryExecutionListener {
 class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean)
   extends Logging {
 
-  private val listenerBus = new ExecutionListenerBus(session.sessionUUID)
-  session.sparkContext.listenerBus.addToSharedQueue(listenerBus)
-  session.sparkContext.cleaner.foreach { cleaner =>
-    cleaner.registerSparkListenerForCleanup(this, listenerBus)
-  }
+  private val listenerBus = new ExecutionListenerBus(this, session)
 
   if (loadExtensions) {
     val conf = session.sparkContext.conf
@@ -128,8 +124,16 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
   }
 }
 
-private[sql] class ExecutionListenerBus(sessionUUID: String)
+private[sql] class ExecutionListenerBus private(sessionUUID: String)
   extends SparkListener with ListenerBus[QueryExecutionListener, SparkListenerSQLExecutionEnd] {
+
+  def this(manager: ExecutionListenerManager, session: SparkSession) = {
+    this(session.sessionUUID)
+    session.sparkContext.listenerBus.addToSharedQueue(this)
+    session.sparkContext.cleaner.foreach { cleaner =>
+      cleaner.registerSparkListenerForCleanup(manager, this)
+    }
+  }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case e: SparkListenerSQLExecutionEnd => postToAll(e)

@@ -443,6 +443,13 @@ private[spark] object Config extends Logging {
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
+  val KUBERNETES_TRUST_CERTIFICATES =
+    ConfigBuilder("spark.kubernetes.trust.certificates")
+      .doc("If set to true then client can submit to kubernetes cluster only with token")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
 
   val KUBERNETES_DELETE_EXECUTORS =

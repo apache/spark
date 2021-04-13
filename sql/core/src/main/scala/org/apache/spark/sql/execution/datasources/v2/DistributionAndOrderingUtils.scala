@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByEx
 import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, IdentityTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortValue}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 object DistributionAndOrderingUtils {
@@ -32,21 +33,25 @@ object DistributionAndOrderingUtils {
     case write: RequiresDistributionAndOrdering =>
       val resolver = conf.resolver
 
+      val numPartitions = write.requiredNumPartitions()
       val distribution = write.requiredDistribution match {
-        case d: OrderedDistribution =>
-          d.ordering.map(e => toCatalyst(e, query, resolver))
-        case d: ClusteredDistribution =>
-          d.clustering.map(e => toCatalyst(e, query, resolver))
-        case _: UnspecifiedDistribution =>
-          Array.empty[Expression]
+        case d: OrderedDistribution => d.ordering.map(e => toCatalyst(e, query, resolver))
+        case d: ClusteredDistribution => d.clustering.map(e => toCatalyst(e, query, resolver))
+        case _: UnspecifiedDistribution => Array.empty[Expression]
       }
 
       val queryWithDistribution = if (distribution.nonEmpty) {
-        val numShufflePartitions = conf.numShufflePartitions
+        val finalNumPartitions = if (numPartitions > 0) {
+          numPartitions
+        } else {
+          conf.numShufflePartitions
+        }
         // the conversion to catalyst expressions above produces SortOrder expressions
         // for OrderedDistribution and generic expressions for ClusteredDistribution
         // this allows RepartitionByExpression to pick either range or hash partitioning
-        RepartitionByExpression(distribution, query, numShufflePartitions)
+        RepartitionByExpression(distribution, query, finalNumPartitions)
+      } else if (numPartitions > 0) {
+        throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
       } else {
         query
       }

@@ -73,6 +73,9 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
       singlePartitionRDD.mapPartitionsInternal(_.take(limit))
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }
 
 /**
@@ -95,6 +98,9 @@ case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
     // job launch, we might just have to mimic the implementation of `CollectLimitExec`.
     sparkContext.parallelize(executeCollect(), numSlices = 1)
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }
 
 object BaseLimitExec {
@@ -112,6 +118,10 @@ object BaseLimitExec {
  */
 trait BaseLimitExec extends LimitExec with CodegenSupport {
   override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
@@ -157,10 +167,8 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
  * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
  */
 case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }
 
 /**
@@ -170,9 +178,8 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }
 
 /**
@@ -254,4 +261,7 @@ case class TakeOrderedAndProjectExec(
 
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }

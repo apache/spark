@@ -28,6 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.window._
 import org.apache.spark.sql.types._
@@ -153,7 +154,7 @@ case class WindowInPandasExec(
         _: SlidingWindowFunctionFrame |
         _: UnboundedPrecedingWindowFunctionFrame => BoundedWindow
       // It should be impossible to get other types of window function frame here
-      case frame => throw new RuntimeException(s"Unexpected window function frame $frame.")
+      case frame => throw QueryExecutionErrors.unexpectedWindowFunctionFrameError(frame.toString)
     }
 
     val requiredIndices = functionFrames.map {
@@ -401,4 +402,7 @@ case class WindowInPandasExec(
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): WindowInPandasExec =
+    copy(child = newChild)
 }

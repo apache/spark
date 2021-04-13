@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.net.URI
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
@@ -30,9 +28,11 @@ import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
+import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.execution.PruneHiveTablePartitions
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
+import org.apache.spark.util.Utils
 
 /**
  * Builder that produces a Hive-aware `SessionState`.
@@ -61,6 +61,7 @@ class HiveSessionStateBuilder(
       () => session.sharedState.globalTempViewManager,
       new HiveMetastoreCatalog(session),
       functionRegistry,
+      tableFunctionRegistry,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader)
@@ -79,6 +80,7 @@ class HiveSessionStateBuilder(
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(catalogManager) +:
+        ResolveWriteToStream +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -124,7 +126,7 @@ class HiveSessionResourceLoader(
   extends SessionResourceLoader(session) {
   private lazy val client = clientBuilder()
   override def addJar(path: String): Unit = {
-    val uri = URI.create(path)
+    val uri = Utils.resolveURI(path)
     resolveJars(uri).foreach { p =>
       client.addJar(p)
       super.addJar(p)

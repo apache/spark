@@ -830,6 +830,18 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assert(sql(s"list jar $testJar").count() == 1)
   }
 
+  test("SPARK-34955: ADD JAR should treat paths which contains white spaces") {
+    withTempDir { dir =>
+      val file = File.createTempFile("someprefix1", "somesuffix1", dir)
+      Files.write(file.toPath, "test_file1".getBytes)
+      val jarFile = new File(dir, "test file.jar")
+      TestUtils.createJar(Seq(file), jarFile)
+      sql(s"ADD JAR ${jarFile.getAbsolutePath}")
+      assert(sql("LIST JARS").
+        filter(_.getString(0).contains(s"${jarFile.getName}".replace(" ", "%20"))).count() > 0)
+    }
+  }
+
   test("CREATE TEMPORARY FUNCTION") {
     val funcJar = TestHive.getHiveFile("TestUDTF.jar")
     val jarURL = funcJar.toURI.toURL

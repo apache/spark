@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
@@ -174,7 +175,8 @@ object UnresolvedAttribute {
   /**
    * Creates an [[UnresolvedAttribute]], parsing segments separated by dots ('.').
    */
-  def apply(name: String): UnresolvedAttribute = new UnresolvedAttribute(name.split("\\."))
+  def apply(name: String): UnresolvedAttribute =
+    new UnresolvedAttribute(CatalystSqlParser.parseMultipartIdentifier(name))
 
   /**
    * Creates an [[UnresolvedAttribute]], from a single quoted string (for example using backticks in
@@ -194,7 +196,7 @@ object UnresolvedAttribute {
    * Used to split attribute name by dot with backticks rule.
    * Backticks must appear in pairs, and the quoted string must be a complete name part,
    * which means `ab..c`e.f is not allowed.
-   * Escape character is not supported now, so we can't use backtick inside name part.
+   * We can use backtick only inside quoted name parts.
    */
   def parseAttributeName(name: String): Seq[String] = {
     def e = QueryCompilationErrors.attributeNameSyntaxError(name)
@@ -206,8 +208,13 @@ object UnresolvedAttribute {
       val char = name(i)
       if (inBacktick) {
         if (char == '`') {
-          inBacktick = false
-          if (i + 1 < name.length && name(i + 1) != '.') throw e
+          if (i + 1 < name.length && name(i + 1) == '`') {
+            tmp += '`'
+            i += 1
+          } else {
+            inBacktick = false
+            if (i + 1 < name.length && name(i + 1) != '.') throw e
+          }
         } else {
           tmp += char
         }
@@ -256,6 +263,9 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
 
   override def terminate(): TraversableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): UnresolvedGenerator = copy(children = newChildren)
 }
 
 case class UnresolvedFunction(
@@ -276,6 +286,15 @@ case class UnresolvedFunction(
   override def toString: String = {
     val distinct = if (isDistinct) "distinct " else ""
     s"'$name($distinct${children.mkString(", ")})"
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UnresolvedFunction = {
+    if (filter.isDefined) {
+      copy(arguments = newChildren.dropRight(1), filter = Some(newChildren.last))
+    } else {
+      copy(arguments = newChildren)
+    }
   }
 }
 
@@ -434,6 +453,8 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def toString: String = s"$child AS $names"
 
+  override protected def withNewChildInternal(newChild: Expression): MultiAlias =
+    copy(child = newChild)
 }
 
 /**
@@ -468,6 +489,11 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
 
   override def toString: String = s"$child[$extraction]"
   override def sql: String = s"${child.sql}[${extraction.sql}]"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): UnresolvedExtractValue = {
+      copy(child = newLeft, extraction = newRight)
+  }
 }
 
 /**
@@ -492,6 +518,9 @@ case class UnresolvedAlias(
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
 
   override lazy val resolved = false
+
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedAlias =
+    copy(child = newChild)
 }
 
 /**
@@ -513,6 +542,9 @@ case class UnresolvedSubqueryColumnAliases(
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): UnresolvedSubqueryColumnAliases = copy(child = newChild)
 }
 
 /**
@@ -534,10 +566,24 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+
+  override protected def withNewChildInternal(newChild: Expression): UnresolvedDeserializer =
+    copy(deserializer = newChild)
 }
 
 case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
   with Unevaluable with NonSQLExpression {
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved = false
+}
+
+case class GetViewColumnByNameAndOrdinal(
+    viewName: String,
+    colName: String,
+    ordinal: Int,
+    expectedNumCandidates: Int)
+  extends LeafExpression with Unevaluable with NonSQLExpression {
+  override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 }
@@ -569,6 +615,8 @@ case class UnresolvedHaving(
   extends UnaryNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedHaving =
+    copy(child = newChild)
 }
 
 /**

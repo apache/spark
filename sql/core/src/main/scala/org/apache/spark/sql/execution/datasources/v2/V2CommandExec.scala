@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.StructType
 
@@ -57,8 +58,6 @@ abstract class V2CommandExec extends SparkPlan {
     sqlContext.sparkContext.parallelize(result, 1)
   }
 
-  override def children: Seq[SparkPlan] = Nil
-
   override def producedAttributes: AttributeSet = outputSet
 
   protected def toCatalystRow(values: Any*): InternalRow = {
@@ -69,3 +68,5 @@ abstract class V2CommandExec extends SparkPlan {
     RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
   }
 }
+
+trait LeafV2CommandExec extends V2CommandExec with LeafLike[SparkPlan]

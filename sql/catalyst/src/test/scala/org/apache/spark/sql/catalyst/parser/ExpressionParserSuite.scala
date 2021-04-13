@@ -778,11 +778,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("SPARK-17832 function identifier contains backtick") {
     val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
-    assertEqual(complexName.quotedString, UnresolvedAttribute("`fo`o.`ba`r"))
+    assertEqual(complexName.quotedString, UnresolvedAttribute(Seq("`fo`o", "`ba`r")))
     intercept(complexName.unquotedString, "mismatched input")
     // Function identifier contains continuous backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
-    assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
+    assertEqual(complexName2.quotedString, UnresolvedAttribute(Seq("fo``o", "ba``r")))
   }
 
   test("SPARK-19526 Support ignore nulls keywords for first and last") {

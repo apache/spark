@@ -98,9 +98,6 @@ class ParquetToSparkSchemaConverter(
     def typeString =
       if (originalType == null) s"$typeName" else s"$typeName ($originalType)"
 
-    def typeNotSupported() =
-      throw QueryCompilationErrors.parquetTypeUnsupportedError(typeString)
-
     def typeNotImplemented() =
       throw QueryCompilationErrors.parquetTypeUnsupportedYetError(typeString)
 
@@ -131,13 +128,11 @@ class ParquetToSparkSchemaConverter(
       case INT32 =>
         originalType match {
           case INT_8 => ByteType
-          case INT_16 => ShortType
-          case INT_32 | null => IntegerType
+          case INT_16 | UINT_8 => ShortType
+          case INT_32 | UINT_16 | null => IntegerType
           case DATE => DateType
           case DECIMAL => makeDecimalType(Decimal.MAX_INT_DIGITS)
-          case UINT_8 => typeNotSupported()
-          case UINT_16 => typeNotSupported()
-          case UINT_32 => typeNotSupported()
+          case UINT_32 => LongType
           case TIME_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -146,7 +141,7 @@ class ParquetToSparkSchemaConverter(
         originalType match {
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
-          case UINT_64 => typeNotSupported()
+          case UINT_64 => DecimalType.LongDecimal
           case TIMESTAMP_MICROS => TimestampType
           case TIMESTAMP_MILLIS => TimestampType
           case _ => illegalType()

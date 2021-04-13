@@ -150,7 +150,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       withTransformQuerySpecification(
         ctx,
         ctx.transformClause,
+        ctx.lateralView,
         ctx.whereClause,
+        ctx.aggregationClause,
+        ctx.havingClause,
+        ctx.windowClause,
         plan
       )
     } else {
@@ -415,7 +419,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         } else if (clause.matchedAction().UPDATE() != null) {
           val condition = Option(clause.matchedCond).map(expression)
           if (clause.matchedAction().ASTERISK() != null) {
-            UpdateAction(condition, Seq())
+            UpdateStarAction(condition)
           } else {
             UpdateAction(condition, withAssignments(clause.matchedAction().assignmentList()))
           }
@@ -430,7 +434,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         if (clause.notMatchedAction().INSERT() != null) {
           val condition = Option(clause.notMatchedCond).map(expression)
           if (clause.notMatchedAction().ASTERISK() != null) {
-            InsertAction(condition, Seq())
+            InsertStarAction(condition)
           } else {
             val columns = clause.notMatchedAction().columns.multipartIdentifier()
                 .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
@@ -587,7 +591,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
-    withTransformQuerySpecification(ctx, ctx.transformClause, ctx.whereClause, from)
+    withTransformQuerySpecification(
+      ctx,
+      ctx.transformClause,
+      ctx.lateralView,
+      ctx.whereClause,
+      ctx.aggregationClause,
+      ctx.havingClause,
+      ctx.windowClause,
+      from
+    )
   }
 
   override def visitRegularQuerySpecification(
@@ -641,14 +654,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   private def withTransformQuerySpecification(
       ctx: ParserRuleContext,
       transformClause: TransformClauseContext,
+      lateralView: java.util.List[LateralViewContext],
       whereClause: WhereClauseContext,
-    relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    // Add where.
-    val withFilter = relation.optionalMap(whereClause)(withWhereClause)
-
-    // Create the transform.
-    val expressions = visitNamedExpressionSeq(transformClause.namedExpressionSeq)
-
+      aggregationClause: AggregationClauseContext,
+      havingClause: HavingClauseContext,
+      windowClause: WindowClauseContext,
+      relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Create the attributes.
     val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
       // Typed return columns.
@@ -664,12 +675,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         AttributeReference("value", StringType)()), true)
     }
 
-    // Create the transform.
+    val plan = visitCommonSelectQueryClausePlan(
+      relation,
+      lateralView,
+      transformClause.namedExpressionSeq,
+      whereClause,
+      aggregationClause,
+      havingClause,
+      windowClause,
+      isDistinct = false)
+
     ScriptTransformation(
-      expressions,
+      // TODO: Remove this logic and see SPARK-34035
+      Seq(UnresolvedStar(None)),
       string(transformClause.script),
       attributes,
-      withFilter,
+      plan,
       withScriptIOSchema(
         ctx,
         transformClause.inRowFormat,
@@ -697,13 +718,40 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
       relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val isDistinct = selectClause.setQuantifier() != null &&
+      selectClause.setQuantifier().DISTINCT() != null
+
+    val plan = visitCommonSelectQueryClausePlan(
+      relation,
+      lateralView,
+      selectClause.namedExpressionSeq,
+      whereClause,
+      aggregationClause,
+      havingClause,
+      windowClause,
+      isDistinct)
+
+    // Hint
+    selectClause.hints.asScala.foldRight(plan)(withHints)
+  }
+
+  def visitCommonSelectQueryClausePlan(
+      relation: LogicalPlan,
+      lateralView: java.util.List[LateralViewContext],
+      namedExpressionSeq: NamedExpressionSeqContext,
+      whereClause: WhereClauseContext,
+      aggregationClause: AggregationClauseContext,
+      havingClause: HavingClauseContext,
+      windowClause: WindowClauseContext,
+      isDistinct: Boolean): LogicalPlan = {
     // Add lateral views.
     val withLateralView = lateralView.asScala.foldLeft(relation)(withGenerate)
 
     // Add where.
     val withFilter = withLateralView.optionalMap(whereClause)(withWhereClause)
 
-    val expressions = visitNamedExpressionSeq(selectClause.namedExpressionSeq)
+    val expressions = visitNamedExpressionSeq(namedExpressionSeq)
+
     // Add aggregation or a project.
     val namedExpressions = expressions.map {
       case e: NamedExpression => e
@@ -737,9 +785,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     // Distinct
-    val withDistinct = if (
-      selectClause.setQuantifier() != null &&
-      selectClause.setQuantifier().DISTINCT() != null) {
+    val withDistinct = if (isDistinct) {
       Distinct(withProject)
     } else {
       withProject
@@ -748,8 +794,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     // Window
     val withWindow = withDistinct.optionalMap(windowClause)(withWindowClause)
 
-    // Hint
-    selectClause.hints.asScala.foldRight(withWindow)(withHints)
+    withWindow
   }
 
   // Script Transform's input/output format.
@@ -907,29 +952,66 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Add an [[Aggregate]] or [[GroupingSets]] to a logical plan.
+   * Add an [[Aggregate]] to a logical plan.
    */
   private def withAggregationClause(
       ctx: AggregationClauseContext,
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val groupByExpressions = expressionList(ctx.groupingExpressions)
-
-    if (ctx.GROUPING != null) {
-      // GROUP BY .... GROUPING SETS (...)
-      val selectedGroupByExprs =
-        ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-      GroupingSets(selectedGroupByExprs.toSeq, groupByExpressions, query, selectExpressions)
-    } else {
-      // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
-      val mappedGroupByExpressions = if (ctx.CUBE != null) {
-        Seq(Cube(groupByExpressions))
-      } else if (ctx.ROLLUP != null) {
-        Seq(Rollup(groupByExpressions))
+    if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
+      val groupByExpressions = expressionList(ctx.groupingExpressions)
+      if (ctx.GROUPING != null) {
+        // GROUP BY ... GROUPING SETS (...)
+        // `groupByExpressions` can be non-empty for Hive compatibility. It may add extra grouping
+        // expressions that do not exist in GROUPING SETS (...), and the value is always null.
+        // For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`, the output
+        // of column `c` is always null.
+        val groupingSets =
+          ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
+        Aggregate(Seq(GroupingSets(groupingSets.toSeq, groupByExpressions)),
+          selectExpressions, query)
       } else {
-        groupByExpressions
+        // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
+        val mappedGroupByExpressions = if (ctx.CUBE != null) {
+          Seq(Cube(groupByExpressions.map(Seq(_))))
+        } else if (ctx.ROLLUP != null) {
+          Seq(Rollup(groupByExpressions.map(Seq(_))))
+        } else {
+          groupByExpressions
+        }
+        Aggregate(mappedGroupByExpressions, selectExpressions, query)
       }
-      Aggregate(mappedGroupByExpressions, selectExpressions, query)
+    } else {
+      val groupByExpressions =
+        ctx.groupingExpressionsWithGroupingAnalytics.asScala
+          .map(groupByExpr => {
+            val groupingAnalytics = groupByExpr.groupingAnalytics
+            if (groupingAnalytics != null) {
+              val groupingSets = groupingAnalytics.groupingSet.asScala
+                .map(_.expression.asScala.map(e => expression(e)).toSeq)
+              if (groupingAnalytics.CUBE != null) {
+                // CUBE(A, B, (A, B), ()) is not supported.
+                if (groupingSets.exists(_.isEmpty)) {
+                  throw new ParseException("Empty set in CUBE grouping sets is not supported.",
+                    groupingAnalytics)
+                }
+                Cube(groupingSets.toSeq)
+              } else if (groupingAnalytics.ROLLUP != null) {
+                // ROLLUP(A, B, (A, B), ()) is not supported.
+                if (groupingSets.exists(_.isEmpty)) {
+                  throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
+                    groupingAnalytics)
+                }
+                Rollup(groupingSets.toSeq)
+              } else {
+                assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
+                GroupingSets(groupingSets.toSeq)
+              }
+            } else {
+              expression(groupByExpr.expression)
+            }
+          })
+      Aggregate(groupByExpressions.toSeq, selectExpressions, query)
     }
   }
 
@@ -993,7 +1075,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       // scalastyle:off caselocale
       Some(ctx.tblName.getText.toLowerCase),
       // scalastyle:on caselocale
-      ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply).toSeq,
+      ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.quoted).toSeq,
       query)
   }
 
@@ -1605,7 +1687,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
-    val cast = Cast(expression(ctx.expression), dataType)
+    val cast = ctx.name.getType match {
+      case SqlBaseParser.CAST =>
+        Cast(expression(ctx.expression), dataType)
+
+      case SqlBaseParser.TRY_CAST =>
+        TryCast(expression(ctx.expression), dataType)
+    }
     cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
     cast
   }
@@ -2289,7 +2377,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       try {
         val from = ctx.from.getText.toLowerCase(Locale.ROOT)
         val to = ctx.to.getText.toLowerCase(Locale.ROOT)
-        (from, to) match {
+        val interval = (from, to) match {
           case ("year", "month") =>
             IntervalUtils.fromYearMonthString(value)
           case ("day", "hour") =>
@@ -2307,6 +2395,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case _ =>
             throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
         }
+        Option(ctx.intervalValue.MINUS)
+          .map(_ => IntervalUtils.negateExact(interval))
+          .getOrElse(interval)
       } catch {
         // Handle Exceptions thrown by CalendarInterval
         case e: IllegalArgumentException =>
