@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1074,11 +1074,11 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
+        Seq(UnresolvedStar(None)),
         "cat",
         Seq(AttributeReference("key", StringType)(),
           AttributeReference("value", StringType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, true))
     )
@@ -1091,12 +1091,12 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
+        Seq(UnresolvedStar(None)),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, false)))
 
@@ -1108,12 +1108,12 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
+        Seq(UnresolvedStar(None)),
         "cat",
         Seq(AttributeReference("a", IntegerType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", LongType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, false)))
 
@@ -1137,12 +1137,12 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq('a, 'b, 'c),
+        Seq(UnresolvedStar(None)),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        UnresolvedRelation(TableIdentifier("testData")),
+        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(
           Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
             ("TOK_TABLEROWFORMATCOLLITEMS", "\u0002"),
