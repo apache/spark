@@ -19,15 +19,17 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
+
 
 /**
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffleReaderRule {
+case class CoalesceShufflePartitions(session: SparkSession)
+  extends CustomShuffleReaderRule with UnionAwareOptimizerRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS, REPARTITION)
 
@@ -36,24 +38,18 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
       return plan
     }
 
-    if (canCoalescePartitions(plan)) {
-      coalescePartitions(plan)
-    } else {
-      plan.transformUp {
-        case u: UnionExec =>
-          u.withNewChildren(u.children.map { child =>
-            if (canCoalescePartitions(child) &&
-              child.find(_.isInstanceOf[UnionExec]).isEmpty) {
-              coalescePartitions(child)
-            } else {
-              child
-            }
-          })
-      }
-    }
+    optimizeWithUnion(plan, coalescePartitions)
   }
 
   private def coalescePartitions(plan: SparkPlan): SparkPlan = {
+    if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])
+      || plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isDefined) {
+      // If not all leaf nodes are query stages, it's not safe to reduce the number of
+      // shuffle partitions, because we may break the assumption that all children of a spark plan
+      // have same number of output partitions.
+      return plan
+    }
+
     def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
       case stage: ShuffleQueryStageExec => Seq(stage)
       case _ => plan.children.flatMap(collectShuffleStages)
@@ -102,11 +98,6 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
         plan
       }
     }
-  }
-
-  private def canCoalescePartitions(plan: SparkPlan): Boolean = {
-    plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec]) &&
-      plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isEmpty
   }
 
   private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
