@@ -734,7 +734,27 @@ case class Range(
   }
 
   override def computeStats(): Statistics = {
-    Statistics(sizeInBytes = LongType.defaultSize * numElements, rowCount = Some(numElements))
+    if (numElements == 0) {
+      Statistics(sizeInBytes = 0, rowCount = Some(0))
+    } else {
+      val (minVal, maxVal) = if (step > 0) {
+        (start, start + (numElements - 1) * step)
+      } else {
+        (start + (numElements - 1) * step, start)
+      }
+      val colStat = ColumnStat(
+        distinctCount = Some(numElements),
+        max = Some(maxVal),
+        min = Some(minVal),
+        nullCount = Some(0),
+        avgLen = Some(LongType.defaultSize),
+        maxLen = Some(LongType.defaultSize))
+
+      Statistics(
+        sizeInBytes = LongType.defaultSize * numElements,
+        rowCount = Some(numElements),
+        attributeStats = AttributeMap(Seq(output.head -> colStat)))
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = {
