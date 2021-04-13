@@ -18,19 +18,23 @@
 import base64
 from distutils.version import LooseVersion
 from io import BytesIO
+import unittest
 
-import matplotlib
-from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.pandas.testing.utils import have_matplotlib, ReusedSQLTestCase, TestUtils
 
-matplotlib.use("agg")
+if have_matplotlib:
+    import matplotlib
+    from matplotlib import pyplot as plt
+
+    matplotlib.use("agg")
 
 
+@unittest.skipIf(not have_matplotlib, "matplotlib is not installed.")
 class SeriesPlotMatplotlibTest(ReusedSQLTestCase, TestUtils):
     @classmethod
     def setUpClass(cls):
@@ -388,7 +392,6 @@ class SeriesPlotMatplotlibTest(ReusedSQLTestCase, TestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.plot.test_series_plot_matplotlib import *  # noqa: F401
 
     try:

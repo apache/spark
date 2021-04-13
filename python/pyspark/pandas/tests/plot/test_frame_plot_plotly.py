@@ -21,18 +21,21 @@ import pprint
 
 import pandas as pd
 import numpy as np
-from plotly import express
-import plotly.graph_objs as go
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils, have_plotly
 from pyspark.pandas.utils import name_like_string
+
+if have_plotly:
+    from plotly import express
+    import plotly.graph_objs as go
 
 
 @unittest.skipIf(
-    LooseVersion(pd.__version__) < "1.0.0",
-    "pandas<1.0 does not support latest plotly and/or 'plotting.backend' option.",
+    not have_plotly or LooseVersion(pd.__version__) < "1.0.0",
+    "plotly is not installed or pandas<1.0. pandas<1.0 does not support latest plotly "
+    "and/or 'plotting.backend' option.",
 )
 class DataFramePlotPlotlyTest(ReusedSQLTestCase, TestUtils):
     @classmethod

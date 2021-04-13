@@ -18,20 +18,23 @@
 import base64
 from distutils.version import LooseVersion
 from io import BytesIO
+import unittest
 
-import matplotlib
-from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.pandas.testing.utils import have_matplotlib, ReusedSQLTestCase, TestUtils
+
+if have_matplotlib:
+    import matplotlib
+    from matplotlib import pyplot as plt
+
+    matplotlib.use("agg")
 
 
-matplotlib.use("agg")
-
-
+@unittest.skipIf(not have_matplotlib, "matplotlib is not installed.")
 class DataFramePlotMatplotlibTest(ReusedSQLTestCase, TestUtils):
     sample_ratio_default = None
 
@@ -456,7 +459,6 @@ class DataFramePlotMatplotlibTest(ReusedSQLTestCase, TestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.plot.test_frame_plot_matplotlib import *  # noqa: F401
 
     try:

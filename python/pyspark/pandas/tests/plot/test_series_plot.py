@@ -20,8 +20,9 @@ import unittest
 import pandas as pd
 import numpy as np
 
-from databricks import koalas as ks
-from databricks.koalas.plot import KoalasPlotAccessor, BoxPlotBase
+from pyspark import pandas as ps
+from pyspark.pandas.plot import KoalasPlotAccessor, BoxPlotBase
+from pyspark.pandas.testing.utils import have_plotly
 
 
 class SeriesPlotTest(unittest.TestCase):
@@ -33,22 +34,23 @@ class SeriesPlotTest(unittest.TestCase):
 
     @property
     def kdf1(self):
-        return ks.from_pandas(self.pdf1)
+        return ps.from_pandas(self.pdf1)
 
+    @unittest.skipIf(not have_plotly, "plotly is not installed")
     def test_plot_backends(self):
         plot_backend = "plotly"
 
-        with ks.option_context("plotting.backend", plot_backend):
-            self.assertEqual(ks.options.plotting.backend, plot_backend)
+        with ps.option_context("plotting.backend", plot_backend):
+            self.assertEqual(ps.options.plotting.backend, plot_backend)
 
             module = KoalasPlotAccessor._get_plot_backend(plot_backend)
-            self.assertEqual(module.__name__, "databricks.koalas.plot.plotly")
+            self.assertEqual(module.__name__, "pyspark.pandas.plot.plotly")
 
     def test_plot_backends_incorrect(self):
         fake_plot_backend = "none_plotting_module"
 
-        with ks.option_context("plotting.backend", fake_plot_backend):
-            self.assertEqual(ks.options.plotting.backend, fake_plot_backend)
+        with ps.option_context("plotting.backend", fake_plot_backend):
+            self.assertEqual(ps.options.plotting.backend, fake_plot_backend)
 
             with self.assertRaises(ValueError):
                 KoalasPlotAccessor._get_plot_backend(fake_plot_backend)
