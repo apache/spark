@@ -1847,9 +1847,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       }}
     }
 
+    // Group by alias is not allowed in ANSI mode.
+    private def allowGroupByAlias: Boolean = conf.groupByAliases && !conf.ansiEnabled
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case agg @ Aggregate(groups, aggs, child)
-          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+          if allowGroupByAlias && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
     }
