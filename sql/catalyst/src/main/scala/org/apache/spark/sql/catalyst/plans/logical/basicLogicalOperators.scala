@@ -1100,6 +1100,8 @@ case class SubqueryAlias(
     child.metadataOutput.map(_.withQualifier(qualifierList))
   }
 
+  override def maxRows: Option[Long] = child.maxRows
+
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 
   override protected def withNewChildInternal(newChild: LogicalPlan): SubqueryAlias =
