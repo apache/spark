@@ -62,8 +62,6 @@ case class Last(child: Expression, ignoreNulls: Boolean)
 
   override def nullable: Boolean = true
 
-  override lazy val deterministic: Boolean = true
-
   // Return data type.
   override def dataType: DataType = child.dataType
 

@@ -43,8 +43,6 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   override def dataType: DataType = ArrayType(child.dataType, false)
 
-  override lazy val deterministic: Boolean = true
-
   protected def convertToBufferElement(value: Any): Any
 
   override def update(buffer: T, input: InternalRow): T = {
