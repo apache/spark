@@ -481,15 +481,13 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ./tpcds-sf-1
-        key: tpcds-${{ hashFiles('tpcds-sf-1/.spark-tpcds-sf-1.md5') }}
-        restore-keys: |
-          tpcds-
+        key: tpcds-556111e35d400f56cb0625dc16e9063d54628320
     - name: Checkout TPC-DS (SF=1) generated data repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       uses: actions/checkout@v2
       with:
         repository: maropu/spark-tpcds-sf-1
-        ref: 6b660a53091bd6d23cbe58b0f09aae08e71cc667
+        ref: 556111e35d400f56cb0625dc16e9063d54628320
         path: ./tpcds-sf-1
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
