@@ -131,18 +131,6 @@ private[spark] class Client(
 
   require(keytab == null || !Utils.isLocalUri(keytab), "Keytab should reference a local file.")
 
-  private val ivySettings = sparkConf.getOption("spark.jars.ivySettings")
-  private val ivySettingsLocalizedFileName: Option[String] = ivySettings match {
-    case Some(ivySettingsPath) if isClusterMode && !Utils.isLocalUri(ivySettingsPath) =>
-      val ivySettingsFile = new File(ivySettingsPath)
-      require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
-      require(ivySettingsFile.isFile(), s"Ivy settings file $ivySettingsFile is not a normal file")
-      // Generate a file name that can be used for the ivySettings file, that does not conflict
-      // with any user file.
-      Some(ivySettingsFile.getName() + "-" + UUID.randomUUID().toString)
-    case _ => None
-  }
-
   private val launcherBackend = new LauncherBackend() {
     override protected def conf: SparkConf = sparkConf
 
@@ -531,10 +519,29 @@ private[spark] class Client(
     }
 
     // If we passed in a ivySettings file, make sure we copy the file to the distributed cache
-    // so that the driver can access it
-    ivySettingsLocalizedFileName.foreach { ivy =>
-      val (_, localizedPath) = distribute(ivySettings.get, destName = Some(ivy))
-      require(localizedPath != null, "IvySettings file already distributed.")
+    // in cluster mode so that the driver can access it
+    val ivySettings = sparkConf.getOption("spark.jars.ivySettings")
+    val ivySettingsLocalizedPath: Option[String] = ivySettings match {
+      case Some(ivySettingsPath) if isClusterMode =>
+        val uri = new URI(ivySettingsPath)
+        Option(uri.getScheme).getOrElse("file") match {
+          case "file" =>
+            val ivySettingsFile = new File(ivySettingsPath)
+            require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
+            require(ivySettingsFile.isFile(), s"Ivy settings file $ivySettingsFile is not a" +
+              "normal file")
+            // Generate a file name that can be used for the ivySettings file, that does not
+            // conflict with any user file.
+            val localizedFileName = Some(ivySettingsFile.getName() + "-" +
+              UUID.randomUUID().toString)
+            val (_, localizedPath) = distribute(ivySettings.get, destName = localizedFileName)
+            require(localizedPath != null, "IvySettings file already distributed.")
+            Some(localizedPath)
+          case scheme =>
+            throw new IllegalArgumentException(s"Scheme $scheme not supported in" +
+              "spark.jars.ivySettings")
+        }
+      case _ => None
     }
 
     /**
@@ -691,7 +698,18 @@ private[spark] class Client(
     val remoteFs = FileSystem.get(remoteConfArchivePath.toUri(), hadoopConf)
     cachedResourcesConf.set(CACHED_CONF_ARCHIVE, remoteConfArchivePath.toString())
 
-    val localConfArchive = new Path(createConfArchive().toURI())
+    val confsToOverride = Map.empty[String, String]
+    // If propagating the keytab to the AM, override the keytab name with the name of the
+    // distributed file.
+    amKeytabFileName.foreach { kt => confsToOverride.put(KEYTAB.key, kt) }
+
+    // If propagating the ivySettings file to the distributed cache, override the ivySettings
+    // file name with the name of the distributed file.
+    ivySettingsLocalizedPath.foreach { path =>
+      confsToOverride.put("spark.jars.ivySettings", path)
+    }
+
+    val localConfArchive = new Path(createConfArchive(confsToOverride).toURI())
     copyFileToRemote(destDir, localConfArchive, replication, symlinkCache, force = true,
       destName = Some(LOCALIZED_CONF_ARCHIVE))
 
@@ -720,8 +738,10 @@ private[spark] class Client(
    *
    * The archive also contains some Spark configuration. Namely, it saves the contents of
    * SparkConf in a file to be loaded by the AM process.
+   *
+   * @param confsToOverride configs that should overriden when creating the final spark conf file
    */
-  private def createConfArchive(): File = {
+  private def createConfArchive(confsToOverride: Map[String, String]): File = {
     val hadoopConfFiles = new HashMap[String, File]()
 
     // SPARK_CONF_DIR shows up in the classpath before HADOOP_CONF_DIR/YARN_CONF_DIR
@@ -807,17 +827,7 @@ private[spark] class Client(
 
       // Save Spark configuration to a file in the archive.
       val props = confToProperties(sparkConf)
-
-      // If propagating the keytab to the AM, override the keytab name with the name of the
-      // distributed file.
-      amKeytabFileName.foreach { kt => props.setProperty(KEYTAB.key, kt) }
-
-      // If propagating the ivySettings file to the distributed cache, override the ivySettings
-      // file name with the name of the distributed file.
-      ivySettingsLocalizedFileName.foreach { ivy =>
-        props.setProperty("spark.jars.ivySettings", ivy)
-      }
-
+      confsToOverride.foreach { case (k, v) => props.setProperty(k, v)}
       writePropertiesToArchive(props, SPARK_CONF_FILE, confStream)
 
       // Write the distributed cache config to the archive.

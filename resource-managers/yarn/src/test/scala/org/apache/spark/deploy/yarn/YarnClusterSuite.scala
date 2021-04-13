@@ -375,20 +375,6 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     emptyIvySettings
   }
 
-
-  test("SPARK-34472: local:// ivySettings file should not be localized on driver in cluster mode") {
-    val emptyIvySettings = createEmptyIvySettingsFile
-    val localIvySettingsPath = s"${Utils.LOCAL_SCHEME}://${emptyIvySettings.getAbsolutePath}"
-    val result = File.createTempFile("result", null, tempDir)
-    val finalState = runSpark(clientMode = false,
-      mainClassName(YarnAddJarTest.getClass),
-      // If original ivySettings was a local URI, it should not be localized through YarnClient
-      // so the expected ivySettings path on the driver is exactly the same as the user path
-      appArgs = Seq(result.getAbsolutePath, localIvySettingsPath),
-      extraConf = Map("spark.jars.ivySettings" -> localIvySettingsPath))
-    checkResult(finalState, result)
-  }
-
   test("SPARK-34472: non-local ivySettings file should be localized on driver in cluster mode") {
     val emptyIvySettings = createEmptyIvySettingsFile
     val result = File.createTempFile("result", null, tempDir)
@@ -396,7 +382,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       mainClassName(YarnAddJarTest.getClass),
       // For non-local URIs, make sure that ivySettings conf was changed to the localized file
       // So the expected ivySettings path on the driver will start with the file name and then
-      // so random UUID suffix
+      // some random UUID suffix
       appArgs = Seq(result.getAbsolutePath, emptyIvySettings.getName),
       extraConf = Map("spark.jars.ivySettings" -> emptyIvySettings.getAbsolutePath))
     checkResult(finalState, result)
