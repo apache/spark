@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -78,9 +79,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         SetCommand(Some("-v" -> None))
       case s if s.isEmpty =>
         SetCommand(None)
-      case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
-        "'SET key=value'. If you want to include special characters in key, or include semicolon " +
-        "in value, please use quotes, e.g., SET `ke y`=`v;alue`.", ctx)
+      case _ => throw QueryParsingErrors.unexpectedFomatForSetConfigurationError(ctx)
     }
   }
 
@@ -93,16 +92,16 @@ class SparkSqlAstBuilder extends AstBuilder {
       val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
       keyCandidate match {
         case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
-        case _ => throw new ParseException(s"'$keyCandidate' is an invalid property key, please " +
-          s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
+        case _ => throw QueryParsingErrors.invalidPropertyKeyForSetQuotedConfigurationError(
+          keyCandidate, valueStr, ctx)
       }
     } else {
       val keyStr = ctx.configKey().getText
       if (ctx.EQ() != null) {
         remainder(ctx.EQ().getSymbol).trim match {
           case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
-          case other => throw new ParseException(s"'$other' is an invalid property value, please " +
-            s"use quotes, e.g. SET `$keyStr`=`$other`", ctx)
+          case other => throw QueryParsingErrors.invalidPropertyValueForSetQuotedConfigurationError(
+            other, keyStr, ctx)
         }
       } else {
         SetCommand(Some(keyStr -> None))
@@ -125,9 +124,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         ResetCommand(Some(key))
       case s if s.trim.isEmpty =>
         ResetCommand(None)
-      case _ => throw new ParseException("Expected format is 'RESET' or 'RESET key'. " +
-        "If you want to include special characters in key, " +
-        "please use quotes, e.g., RESET `ke y`.", ctx)
+      case _ => throw QueryParsingErrors.unexpectedFormatForResetConfigurationError(ctx)
     }
   }
 
@@ -152,9 +149,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       if (interval.months != 0 || interval.days != 0 ||
         math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
         interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
-        throw new ParseException("The interval value must be in the range of [-18, +18] hours" +
-          " with second precision",
-          ctx.interval())
+        throw QueryParsingErrors.intervalValueOutOfRangeError(ctx.interval())
       } else {
         val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
         SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))
@@ -167,7 +162,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           SetCommand(Some(key -> Some(string(ctx.STRING))))
       }
     } else {
-      throw new ParseException("Invalid time zone displacement value", ctx)
+      throw QueryParsingErrors.invalidTimeZoneDisplacementValueError(ctx)
     }
   }
 
@@ -280,7 +275,7 @@ class SparkSqlAstBuilder extends AstBuilder {
 
       val (_, _, _, _, options, location, _, _) = visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
-        throw new ParseException("CREATE TEMPORARY TABLE without a provider is not allowed.", ctx))
+        throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
       val schema = Option(ctx.colTypeList()).map(createSchema)
 
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
@@ -460,7 +455,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     serdeInfo match {
       case Some(SerdeInfo(storedAs, formatClasses, serde, _)) =>
         if (storedAs.isEmpty && formatClasses.isEmpty && serde.isDefined) {
-          throw new ParseException("'ROW FORMAT' must be used with 'STORED AS'", ctx)
+          throw QueryParsingErrors.rowFormatNotUsedWithStoredAsError(ctx)
         }
       case _ =>
     }
@@ -484,8 +479,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
       // TODO: what does this message mean?
-      throw new ParseException(
-        "Unsupported operation: Used defined record reader/writer classes.", ctx)
+      throw QueryParsingErrors.useDefinedRecordReaderOrWriterClassesError(ctx)
     }
 
     if (!conf.getConf(CATALOG_IMPLEMENTATION).equals("hive")) {
@@ -576,8 +570,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val path = Option(ctx.path).map(string).getOrElse("")
 
     if (!(path.isEmpty ^ storage.locationUri.isEmpty)) {
-      throw new ParseException(
-        "Directory path and 'path' in OPTIONS should be specified one, but not both", ctx)
+      throw QueryParsingErrors.directoryPathAndOptionsPathBothSpecifiedError(ctx)
     }
 
     if (!path.isEmpty) {
@@ -590,7 +583,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val scheme = Option(storage.locationUri.get.getScheme)
       scheme match {
         case Some(pathScheme) if (!pathScheme.equals("file")) =>
-          throw new ParseException("LOCAL is supported only with file: scheme", ctx)
+          throw QueryParsingErrors.unsupportedLocalFileSchemeError(ctx)
         case _ =>
           // force scheme to be file rather than fs.default.name
           val loc = Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())

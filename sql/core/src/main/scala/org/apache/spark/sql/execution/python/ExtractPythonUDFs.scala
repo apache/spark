@@ -21,11 +21,11 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 
 /**
@@ -257,9 +257,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
 
           val evalTypes = validUdfs.map(_.evalType).toSet
           if (evalTypes.size != 1) {
-            throw new AnalysisException(
-              s"Expected udfs have the same evalType but got different evalTypes: " +
-              s"${evalTypes.mkString(",")}")
+            throw QueryCompilationErrors.unexpectedEvalTypesForUDFsError(evalTypes)
           }
           val evalType = evalTypes.head
           val evaluation = evalType match {
@@ -268,7 +266,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
-              throw new AnalysisException("Unexpected UDF evalType")
+              throw new IllegalStateException("Unexpected UDF evalType")
           }
 
           attributeMap ++= validUdfs.map(canonicalizeDeterministic).zip(resultAttrs)
