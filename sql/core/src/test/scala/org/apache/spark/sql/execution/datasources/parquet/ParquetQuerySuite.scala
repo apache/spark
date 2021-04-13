@@ -900,29 +900,6 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         }
       }
     }
-
-    // scale is 0
-    withTempPath { path =>
-      val df = sql("SELECT 11 a, 22L b")
-      df.write.parquet(path.toString)
-
-      withAllParquetReaders {
-        val schema = "a DECIMAL(9, 0), b DECIMAL(18, 0)"
-        checkAnswer(readParquet(schema, path), df)
-      }
-
-      withAllParquetReaders {
-        val schema = "a DECIMAL(38, 0), b DECIMAL(38, 0)"
-        if (conf.parquetVectorizedReaderEnabled) {
-          val e = intercept[SparkException] {
-            readParquet(schema, path).collect()
-          }.getCause.getCause
-          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
-        } else {
-          checkAnswer(readParquet(schema, path), df)
-        }
-      }
-    }
   }
 }
 
