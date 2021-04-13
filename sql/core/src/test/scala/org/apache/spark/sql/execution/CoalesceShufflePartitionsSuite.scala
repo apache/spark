@@ -404,7 +404,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       assert(
         finalPlan.collect {
           case r @ CoalescedShuffleReader() => r
-        }.size === 0)
+        }.isEmpty)
     }
     withSparkSession(test, 100, None)
   }

@@ -23,7 +23,6 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
-
 /**
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
@@ -43,7 +42,7 @@ case class CoalesceShufflePartitions(session: SparkSession)
 
   private def coalescePartitions(plan: SparkPlan): SparkPlan = {
     if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])
-      || plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isDefined) {
+        || plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isDefined) {
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.
