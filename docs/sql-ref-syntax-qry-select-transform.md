@@ -37,17 +37,14 @@ SELECT { TRANSFORM ( named_expression [ , ... ] ) | MAP named_expression [ , ...
     USING script [ AS ( [ col_name [ col_type ] ] [ , ... ] ) ]
     [ ROW FORMAT row_format ]
     [ RECORDREADER record_reader_class ]
-```
 
-While `row_format` are defined as
-```sql
-{ SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ] | 
-    DELIMITED
-        [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escaped_char ] ]
-        [ COLLECTION ITEMS TERMINATED BY collection_items_terminated_char ]
+row_format:    
+    : SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ]
+    | DELIMITED [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escaped_char ] ] 
+        [ COLLECTION ITEMS TERMINATED BY collection_items_terminated_char ] 
         [ MAP KEYS TERMINATED BY map_key_terminated_char ]
         [ LINES TERMINATED BY row_terminated_char ]
-        [ NULL DEFINED AS null_char ] }
+        [ NULL DEFINED AS null_char ]
 ```
 
 ### Parameters
