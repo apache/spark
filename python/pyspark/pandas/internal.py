@@ -30,7 +30,7 @@ from pyspark import sql as spark
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import functions as F, Window
 from pyspark.sql.functions import PandasUDFType, pandas_udf
-from pyspark.sql.types import BooleanType, DataType, IntegralType, StructField, StructType, LongType
+from pyspark.sql.types import BooleanType, DataType, StructField, StructType, LongType
 
 try:
     from pyspark.sql.types import to_arrow_type

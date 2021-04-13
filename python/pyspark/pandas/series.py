@@ -24,7 +24,6 @@ import inspect
 import sys
 import warnings
 from collections.abc import Mapping
-from distutils.version import LooseVersion
 from functools import partial, wraps, reduce
 from typing import Any, Generic, Iterable, List, Optional, Tuple, TypeVar, Union, cast
 
@@ -35,7 +34,6 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import is_list_like, is_hashable
 from pandas.api.extensions import ExtensionDtype
 from pandas.tseries.frequencies import DateOffset
-import pyspark
 from pyspark import sql as spark
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import (
