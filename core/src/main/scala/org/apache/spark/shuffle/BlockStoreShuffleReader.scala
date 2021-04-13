@@ -35,7 +35,6 @@ private[spark] class BlockStoreShuffleReader[K, C](
     readMetrics: ShuffleReadMetricsReporter,
     serializerManager: SerializerManager = SparkEnv.get.serializerManager,
     blockManager: BlockManager = SparkEnv.get.blockManager,
-    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker,
     shouldBatchFetch: Boolean = false)
   extends ShuffleReader[K, C] with Logging {
 
