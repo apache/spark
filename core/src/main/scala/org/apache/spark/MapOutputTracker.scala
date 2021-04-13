@@ -289,12 +289,12 @@ private class ShuffleStatus(
       isLocal: Boolean,
       minBroadcastSize: Int,
       conf: SparkConf,
-      isMapOutput: Boolean): (Array[Byte], Array[Byte]) = {
+      isMapOnlyOutput: Boolean): (Array[Byte], Array[Byte]) = {
     var mapStatuses: Array[Byte] = null
     var mergeStatuses: Array[Byte] = null
 
     withReadLock {
-      if (isMapOutput) {
+      if (isMapOnlyOutput) {
         if (cachedSerializedMapStatus != null) {
           mapStatuses = cachedSerializedMapStatus
         }
@@ -309,7 +309,7 @@ private class ShuffleStatus(
       }
     }
 
-    if (isMapOutput) {
+    if (isMapOnlyOutput) {
       if (mapStatuses == null) {
         mapStatuses =
           serializeAndCacheMapStatuses(broadcastManager, isLocal, minBroadcastSize, conf)
@@ -646,19 +646,14 @@ private[spark] class MapOutputTrackerMaster(
     private def handleStatusMessage(
         shuffleId: Int,
         context: RpcCallContext,
-        isMapOutput: Boolean): Unit = {
+        isMapOnlyOutput: Boolean): Unit = {
       val hostPort = context.senderAddress.hostPort
       val shuffleStatus = shuffleStatuses.get(shuffleId).head
-      val mapOrMerge = if (isMapOutput) {
-        "map"
-      } else {
-        "merge"
-      }
-      logDebug(s"Handling request to send $mapOrMerge output locations" +
-        s" for shuffle $shuffleId to $hostPort")
+      logDebug(s"Handling request to send ${if (isMapOnlyOutput) "map" else "map/merge"}" +
+        s" output locations for shuffle $shuffleId to $hostPort")
       context.reply(
         shuffleStatus.serializedOutputStatus(broadcastManager, isLocal,
-          minSizeForBroadcast, conf, isMapOutput = isMapOutput))
+          minSizeForBroadcast, conf, isMapOnlyOutput = isMapOnlyOutput))
     }
 
     override def run(): Unit = {

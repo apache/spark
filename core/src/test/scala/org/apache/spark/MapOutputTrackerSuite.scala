@@ -589,6 +589,53 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-32921: test new protocol changes fetching both Map and Merge status in single RPC") {
+    val newConf = new SparkConf
+    newConf.set(RPC_MESSAGE_MAX_SIZE, 1)
+    newConf.set(RPC_ASK_TIMEOUT, "1") // Fail fast
+    newConf.set(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, 10240L) // 10 KiB << 1MiB framesize
+    newConf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    newConf.set(IS_TESTING, true)
+
+    // needs TorrentBroadcast so need a SparkContext
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val rpcEnv = sc.env.rpcEnv
+      val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
+      rpcEnv.stop(masterTracker.trackerEndpoint)
+      rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+      val bitmap1 = new RoaringBitmap()
+      bitmap1.add(1)
+
+      masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      (0 until 100).foreach { i =>
+        masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
+          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5))
+      }
+      masterTracker.registerMergeResult(20, 0, MergeStatus(BlockManagerId("999", "mps", 1000),
+        bitmap1, 1000L))
+
+      val mapWorkerRpcEnv = createRpcEnv("spark-worker", "localhost", 0, new SecurityManager(conf))
+      val mapWorkerTracker = new MapOutputTrackerWorker(conf)
+      mapWorkerTracker.trackerEndpoint =
+        mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+      val fetchedBytes = mapWorkerTracker.trackerEndpoint
+        .askSync[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(20))
+      assert(masterTracker.getNumAvailableMergeResults(20) == 1)
+      assert(masterTracker.getNumAvailableOutputs(20) == 100)
+
+      val mapOutput =
+        MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, newConf)
+      val mergeOutput =
+        MapOutputTracker.deserializeOutputStatuses[MergeStatus](fetchedBytes._2, newConf)
+      assert(mapOutput.length == 100)
+      assert(mergeOutput.length == 1)
+      mapWorkerTracker.stop()
+      masterTracker.stop()
+    }
+  }
+
   test("SPARK-32921: unregister merge result if it is present and contains the map Id") {
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
