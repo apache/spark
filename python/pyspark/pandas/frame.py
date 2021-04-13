@@ -80,7 +80,6 @@ from pyspark.sql.window import Window
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.accessors import KoalasFrameMethods
 from pyspark.pandas.config import option_context, get_option
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -10740,7 +10739,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         def quantile(spark_column, spark_type):
             if isinstance(spark_type, (BooleanType, NumericType)):
-                return SF.percentile_approx(spark_column.cast(DoubleType()), q, accuracy)
+                return F.percentile_approx(spark_column.cast(DoubleType()), q, accuracy)
             else:
                 raise TypeError(
                     "Could not convert {} ({}) to numeric".format(

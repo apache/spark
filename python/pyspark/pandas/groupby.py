@@ -71,7 +71,6 @@ from pyspark.pandas.utils import (
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
 from pyspark.pandas.exceptions import DataError
-from pyspark.pandas.spark import functions as SF
 
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
@@ -2421,7 +2420,7 @@ class GroupBy(object, metaclass=ABCMeta):
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
-        stat_function = lambda col: SF.percentile_approx(col, 0.5, accuracy)
+        stat_function = lambda col: F.percentile_approx(col, 0.5, accuracy)
         return self._reduce_for_stat_function(stat_function, only_numeric=numeric_only)
 
     def _reduce_for_stat_function(self, sfun, only_numeric):

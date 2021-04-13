@@ -43,7 +43,6 @@ from pyspark.sql.types import (
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Scalar, spark_type_to_pandas_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,
@@ -1902,7 +1901,7 @@ class Frame(object, metaclass=ABCMeta):
 
         def median(spark_column, spark_type):
             if isinstance(spark_type, (BooleanType, NumericType)):
-                return SF.percentile_approx(spark_column.cast(DoubleType()), 0.5, accuracy)
+                return F.percentile_approx(spark_column.cast(DoubleType()), 0.5, accuracy)
             else:
                 raise TypeError(
                     "Could not convert {} ({}) to numeric".format(
