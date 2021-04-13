@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -50,8 +49,10 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case YearMonthIntervalType | DayTimeIntervalType => TypeCheckResult.TypeCheckSuccess
-    case _ => TypeUtils.checkForNumericExpr(child.dataType, "function sum")
+    case YearMonthIntervalType | DayTimeIntervalType | NullType => TypeCheckResult.TypeCheckSuccess
+    case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
+    case other => TypeCheckResult.TypeCheckFailure(
+      s"function sum requires numeric or interval types, not ${other.catalogString}")
   }
 
   private lazy val resultType = child.dataType match {
