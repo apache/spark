@@ -103,14 +103,14 @@ Input [6]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_ne
 
 (5) BroadcastExchange
 Input [5]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_sold_date_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint), cast(input[0, int, true] as bigint)),false), [id=#8]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [id=#8]
 
 (6) Scan parquet default.web_returns
 Output [5]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_amt#12, wr_returned_date_sk#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
 PushedFilters: [IsNotNull(wr_return_amt), GreaterThan(wr_return_amt,10000.00), IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
-ReadSchema: struct<wr_item_sk:bigint,wr_order_number:bigint,wr_return_quantity:int,wr_return_amt:decimal(7,2)>
+ReadSchema: struct<wr_item_sk:int,wr_order_number:int,wr_return_quantity:int,wr_return_amt:decimal(7,2)>
 
 (7) ColumnarToRow
 Input [5]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_amt#12, wr_returned_date_sk#13]
@@ -124,7 +124,7 @@ Output [4]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_
 Input [5]: [wr_item_sk#9, wr_order_number#10, wr_return_quantity#11, wr_return_amt#12, wr_returned_date_sk#13]
 
 (10) BroadcastHashJoin [codegen id : 3]
-Left keys [2]: [cast(ws_order_number#2 as bigint), cast(ws_item_sk#1 as bigint)]
+Left keys [2]: [ws_order_number#2, ws_item_sk#1]
 Right keys [2]: [wr_order_number#10, wr_item_sk#9]
 Join condition: None
 
@@ -338,14 +338,14 @@ Input [6]: [ss_item_sk#79, ss_ticket_number#80, ss_quantity#81, ss_net_paid#82, 
 
 (57) BroadcastExchange
 Input [5]: [ss_item_sk#79, ss_ticket_number#80, ss_quantity#81, ss_net_paid#82, ss_sold_date_sk#84]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint), cast(input[0, int, true] as bigint)),false), [id=#85]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [id=#85]
 
 (58) Scan parquet default.store_returns
 Output [5]: [sr_item_sk#86, sr_ticket_number#87, sr_return_quantity#88, sr_return_amt#89, sr_returned_date_sk#90]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00), IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
-ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
+ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
 
 (59) ColumnarToRow
 Input [5]: [sr_item_sk#86, sr_ticket_number#87, sr_return_quantity#88, sr_return_amt#89, sr_returned_date_sk#90]
@@ -359,7 +359,7 @@ Output [4]: [sr_item_sk#86, sr_ticket_number#87, sr_return_quantity#88, sr_retur
 Input [5]: [sr_item_sk#86, sr_ticket_number#87, sr_return_quantity#88, sr_return_amt#89, sr_returned_date_sk#90]
 
 (62) BroadcastHashJoin [codegen id : 17]
-Left keys [2]: [cast(ss_ticket_number#80 as bigint), cast(ss_item_sk#79 as bigint)]
+Left keys [2]: [ss_ticket_number#80, ss_item_sk#79]
 Right keys [2]: [sr_ticket_number#87, sr_item_sk#86]
 Join condition: None
 

@@ -22,13 +22,12 @@ import org.mockito.Mockito.mock
 import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
-
+import org.apache.spark.sql.types.{BooleanType, ByteType, IntegerType, LongType}
 
 class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   val attribute = attr("key")
@@ -42,13 +41,90 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     // row count * (overhead + column size)
     size = Some(10 * (8 + 4)))
 
-  test("range") {
+  test("range with positive step") {
     val range = Range(1, 5, 1, None)
-    val rangeStats = Statistics(sizeInBytes = 4 * 8, Some(4))
-    checkStats(
-      range,
-      expectedStatsCboOn = rangeStats,
-      expectedStatsCboOff = rangeStats)
+    val rangeStats = Statistics(
+      sizeInBytes = 4 * 8,
+      rowCount = Some(4),
+      attributeStats = AttributeMap(
+        range.output.map(
+          attr =>
+            (
+              attr,
+              ColumnStat(
+                distinctCount = Some(4),
+                min = Some(1),
+                max = Some(4),
+                nullCount = Some(0),
+                maxLen = Some(LongType.defaultSize),
+                avgLen = Some(LongType.defaultSize))))))
+    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+  }
+
+  test("range with positive step where end minus start not divisible by step") {
+    val range = Range(-4, 5, 2, None)
+    val rangeStats = Statistics(
+      sizeInBytes = 5 * 8,
+      rowCount = Some(5),
+      attributeStats = AttributeMap(
+        range.output.map(
+          attr =>
+            (
+              attr,
+              ColumnStat(
+                distinctCount = Some(5),
+                min = Some(-4),
+                max = Some(4),
+                nullCount = Some(0),
+                maxLen = Some(LongType.defaultSize),
+                avgLen = Some(LongType.defaultSize))))))
+    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+  }
+
+  test("range with negative step") {
+    val range = Range(-10, -20, -2, None)
+    val rangeStats = Statistics(
+      sizeInBytes = 5 * 8,
+      rowCount = Some(5),
+      attributeStats = AttributeMap(
+        range.output.map(
+          attr =>
+            (
+              attr,
+              ColumnStat(
+                distinctCount = Some(5),
+                min = Some(-18),
+                max = Some(-10),
+                nullCount = Some(0),
+                maxLen = Some(LongType.defaultSize),
+                avgLen = Some(LongType.defaultSize))))))
+    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+  }
+
+  test("range with negative step where end minus start not divisible by step") {
+    val range = Range(-10, -20, -3, None)
+    val rangeStats = Statistics(
+      sizeInBytes = 4 * 8,
+      rowCount = Some(4),
+      attributeStats = AttributeMap(
+        range.output.map(
+          attr =>
+            (
+              attr,
+              ColumnStat(
+                distinctCount = Some(4),
+                min = Some(-19),
+                max = Some(-10),
+                nullCount = Some(0),
+                maxLen = Some(LongType.defaultSize),
+                avgLen = Some(LongType.defaultSize))))))
+    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+  }
+
+  test("range with empty output") {
+    val range = Range(-10, -10, -1, None)
+    val rangeStats = Statistics(sizeInBytes = 0, rowCount = Some(0))
+    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
   }
 
   test("windows") {
@@ -146,9 +222,14 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     val childrenSize = union.children.size
     val sizeInBytes = plan.size.get * childrenSize
     val rowCount = Some(plan.rowCount * childrenSize)
+    val attributeStats = AttributeMap(
+      Seq(
+        attribute -> ColumnStat(min = Some(1), max = Some(10))))
     checkStats(
       union,
-      expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
+      expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes,
+        rowCount = rowCount,
+        attributeStats = attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
   }
 
@@ -161,6 +242,41 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       intersect,
       expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
       expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+  }
+
+  test("row size and column stats estimation for sort") {
+    val columnInfo = AttributeMap(
+      Seq(
+        AttributeReference("cbool", BooleanType)() -> ColumnStat(
+          distinctCount = Some(2),
+          min = Some(false),
+          max = Some(true),
+          nullCount = Some(0),
+          avgLen = Some(1),
+          maxLen = Some(1)),
+        AttributeReference("cbyte", ByteType)() -> ColumnStat(
+          distinctCount = Some(2),
+          min = Some(1),
+          max = Some(2),
+          nullCount = Some(0),
+          avgLen = Some(1),
+          maxLen = Some(1))))
+
+    val expectedSize = 16
+    val child = StatsTestPlan(
+      outputList = columnInfo.keys.toSeq,
+      rowCount = 2,
+      attributeStats = columnInfo,
+      size = Some(expectedSize))
+
+    val sortOrder = SortOrder(columnInfo.keys.head, Ascending)
+    val sort = Sort(order = Seq(sortOrder), global = true, child = child)
+    val expectedSortStats =
+      Statistics(sizeInBytes = expectedSize, rowCount = Some(2), attributeStats = columnInfo)
+    checkStats(
+      sort,
+      expectedStatsCboOn = expectedSortStats,
+      expectedStatsCboOff = Statistics(sizeInBytes = expectedSize))
   }
 
   /** Check estimated stats when cbo is turned on/off. */

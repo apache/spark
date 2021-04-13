@@ -40,7 +40,7 @@ except ImportError:
     from pyspark.sql.pandas.types import to_arrow_type  # noqa: F401
 
 # For running doctests and reference resolution in PyCharm.
-from pyspark import pandas as pp  # noqa: F401
+from pyspark import pandas as ps  # noqa: F401
 
 if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
@@ -91,7 +91,7 @@ class InternalFrame(object):
     For instance, if we have a Koalas DataFrame as below, pandas DataFrame does not store the index
     as columns.
 
-    >>> kdf = pp.DataFrame({
+    >>> kdf = ps.DataFrame({
     ...     'A': [1, 2, 3, 4],
     ...     'B': [5, 6, 7, 8],
     ...     'C': [9, 10, 11, 12],
@@ -304,7 +304,7 @@ class InternalFrame(object):
 
     >>> columns = pd.MultiIndex.from_tuples([('X', 'A'), ('X', 'B'),
     ...                                      ('Y', 'C'), ('Y', 'D')])
-    >>> kdf3 = pp.DataFrame([
+    >>> kdf3 = ps.DataFrame([
     ...     [1, 2, 3, 4],
     ...     [5, 6, 7, 8],
     ...     [9, 10, 11, 12],
@@ -424,7 +424,7 @@ class InternalFrame(object):
         >>> row_index = pd.MultiIndex.from_tuples(
         ...     [('foo', 'bar'), ('foo', 'bar'), ('zoo', 'bar')],
         ...     names=["row_index_a", "row_index_b"])
-        >>> kdf = pp.DataFrame(
+        >>> kdf = ps.DataFrame(
         ...     [[1, 2, 3], [4, 5, 6], [7, 8, 9]], index=row_index, columns=column_labels)
         >>> kdf.set_index(('a', 'x'), append=True, inplace=True)
         >>> kdf  # doctest: +NORMALIZE_WHITESPACE
@@ -635,7 +635,7 @@ class InternalFrame(object):
         notion so corresponding column should be generated.
         There are several types of default index can be configured by `compute.default_index_type`.
 
-        >>> spark_frame = pp.range(10).to_spark()
+        >>> spark_frame = ps.range(10).to_spark()
         >>> spark_frame
         DataFrame[id: bigint]
 
@@ -692,7 +692,7 @@ class InternalFrame(object):
         This method attaches a Spark column that has a sequence in a distributed manner.
         This is equivalent to the column assigned when default index type 'distributed-sequence'.
 
-        >>> sdf = pp.DataFrame(['a', 'b', 'c']).to_spark()
+        >>> sdf = ps.DataFrame(['a', 'b', 'c']).to_spark()
         >>> sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name="sequence")
         >>> sdf.show()  # doctest: +NORMALIZE_WHITESPACE
         +--------+---+
@@ -736,7 +736,7 @@ class InternalFrame(object):
     @staticmethod
     def _attach_distributed_sequence_column(sdf, column_name):
         """
-        >>> sdf = pp.DataFrame(['a', 'b', 'c']).to_spark()
+        >>> sdf = ps.DataFrame(['a', 'b', 'c']).to_spark()
         >>> sdf = InternalFrame._attach_distributed_sequence_column(sdf, column_name="sequence")
         >>> sdf.sort("sequence").show()  # doctest: +NORMALIZE_WHITESPACE
         +--------+---+
@@ -1436,3 +1436,33 @@ class InternalFrame(object):
             reset_index[name] = col.replace({np.nan: None})
 
         return reset_index, index_columns, index_dtypes, data_columns, data_dtypes
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.internal
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.internal.__dict__.copy()
+    globs["ps"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.internal tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.internal,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

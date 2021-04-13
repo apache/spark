@@ -35,7 +35,7 @@ import pandas as pd
 from pandas.api.types import is_list_like
 
 # For running doctests and reference resolution in PyCharm.
-from pyspark import pandas as pp  # noqa: F401
+from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas.typedef.typehints import (
     as_spark_type,
     extension_dtypes,
@@ -300,8 +300,8 @@ def align_diff_frames(
         >>>
         >>> set_option("compute.ops_on_diff_frames", True)
         >>>
-        >>> kdf1 = pp.DataFrame({'a': [9, 8, 7, 6, 5, 4, 3, 2, 1]})
-        >>> kdf2 = pp.DataFrame({'a': [9, 8, 7, 6, 5, 4, 3, 2, 1]})
+        >>> kdf1 = ps.DataFrame({'a': [9, 8, 7, 6, 5, 4, 3, 2, 1]})
+        >>> kdf2 = ps.DataFrame({'a': [9, 8, 7, 6, 5, 4, 3, 2, 1]})
         >>>
         >>> def func(kdf, this_column_labels, that_column_labels):
         ...    kdf  # conceptually this is A + B.
@@ -759,7 +759,7 @@ def verify_temp_column_name(
     The temporary column names should start and end with `__`. In addition, `column_name_or_label`
     expects a single string, or column labels when `df` is a Koalas DataFrame.
 
-    >>> kdf = pp.DataFrame({("x", "a"): ['a', 'b', 'c']})
+    >>> kdf = ps.DataFrame({("x", "a"): ['a', 'b', 'c']})
     >>> kdf["__dummy__"] = 0
     >>> kdf[("", "__dummy__")] = 1
     >>> kdf  # doctest: +NORMALIZE_WHITESPACE
@@ -876,3 +876,31 @@ def compare_disallow_null(left, right, comp):
 
 def compare_allow_null(left, right, comp):
     return left.isNull() | right.isNull() | comp(left, right)
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.utils
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.utils.__dict__.copy()
+    globs["ps"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]").appName("pyspark.pandas.utils tests").getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.utils,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

@@ -83,6 +83,7 @@ jobs:
       CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -161,6 +162,8 @@ jobs:
             pyspark-sql, pyspark-mllib, pyspark-resource
           - >-
             pyspark-core, pyspark-streaming, pyspark-ml
+          - >-
+            pyspark-pandas
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: hadoop3.2
@@ -169,6 +172,7 @@ jobs:
       CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -236,6 +240,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -466,6 +471,8 @@ jobs:
   tpcds-1g:
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
+    env:
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -474,15 +481,13 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ./tpcds-sf-1
-        key: tpcds-${{ hashFiles('tpcds-sf-1/.spark-tpcds-sf-1.md5') }}
-        restore-keys: |
-          tpcds-
+        key: tpcds-556111e35d400f56cb0625dc16e9063d54628320
     - name: Checkout TPC-DS (SF=1) generated data repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       uses: actions/checkout@v2
       with:
         repository: maropu/spark-tpcds-sf-1
-        ref: 6b660a53091bd6d23cbe58b0f09aae08e71cc667
+        ref: 556111e35d400f56cb0625dc16e9063d54628320
         path: ./tpcds-sf-1
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2

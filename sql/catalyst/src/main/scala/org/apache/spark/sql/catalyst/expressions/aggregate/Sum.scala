@@ -148,4 +148,6 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
         CheckOverflowInSum(sum, d, !SQLConf.get.ansiEnabled))
     case _ => sum
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Sum = copy(child = newChild)
 }

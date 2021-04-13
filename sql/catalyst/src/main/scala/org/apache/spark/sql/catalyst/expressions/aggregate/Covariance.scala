@@ -109,6 +109,10 @@ case class CovPopulation(
     If(n === 0.0, Literal.create(null, DoubleType), ck / n)
   }
   override def prettyName: String = "covar_pop"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): CovPopulation =
+    copy(left = newLeft, right = newRight)
 }
 
 
@@ -135,4 +139,7 @@ case class CovSample(
       If(n === 1.0, divideByZeroEvalResult, ck / (n - 1.0)))
   }
   override def prettyName: String = "covar_samp"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): CovSample = copy(left = newLeft, right = newRight)
 }

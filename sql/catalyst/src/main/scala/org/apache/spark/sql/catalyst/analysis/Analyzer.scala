@@ -39,6 +39,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  EXPRESSION_WITH_RANDOM_SEED, NATURAL_LIKE_JOIN, WINDOW_EXPRESSION
+}
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -595,13 +598,14 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
     }
 
-    private def tryResolveHavingCondition(h: UnresolvedHaving): LogicalPlan = {
-      val aggForResolving = h.child match {
-        // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
-        // groupingExpressions for condition resolving.
-        case a @ Aggregate(Seq(gs: GroupingSet), _, _) =>
-          a.copy(groupingExpressions = gs.groupByExprs)
-      }
+    private def tryResolveHavingCondition(
+        h: UnresolvedHaving,
+        aggregate: Aggregate,
+        selectedGroupByExprs: Seq[Seq[Expression]],
+        groupByExprs: Seq[Expression]): LogicalPlan = {
+      // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
+      // groupingExpressions for condition resolving.
+      val aggForResolving = aggregate.copy(groupingExpressions = groupByExprs)
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val resolvedInfo =
         ResolveAggregateFunctions.resolveFilterCondInAggregate(h.havingCondition, aggForResolving)
@@ -609,12 +613,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Push the aggregate expressions into the aggregate (if any).
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
-        val newChild = h.child match {
-          case Aggregate(Seq(gs: GroupingSet), aggregateExpressions, child) =>
-            constructAggregate(
-              gs.selectedGroupByExprs, gs.groupByExprs,
-              aggregateExpressions ++ extraAggExprs, child)
-        }
+        val newChild = constructAggregate(selectedGroupByExprs, groupByExprs,
+          aggregate.aggregateExpressions ++ extraAggExprs, aggregate.child)
 
         // Since the exprId of extraAggExprs will be changed in the constructed aggregate, and the
         // aggregateExpressions keeps the input order. So here we build an exprMap to resolve the
@@ -636,16 +636,17 @@ class Analyzer(override val catalogManager: CatalogManager)
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(gs: GroupingSet), aggregateExpressions, _))
-        if agg.childrenResolved && (gs.children ++ aggregateExpressions).forall(_.resolved) =>
-        tryResolveHavingCondition(h)
+      case h @ UnresolvedHaving(_, agg @ Aggregate(
+        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, _))
+        if agg.childrenResolved && aggExprs.forall(_.resolved) =>
+        tryResolveHavingCondition(h, agg, selectedGroupByExprs, groupByExprs)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(Seq(gs: GroupingSet), aggregateExpressions, child)
-        if (gs.children ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(gs.selectedGroupByExprs, gs.groupByExprs, aggregateExpressions, child)
+      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child)
+        if aggExprs.forall(_.resolved) =>
+        constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, child)
 
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
@@ -1385,14 +1386,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
-      // If the script transformation input contains Stars, expand it.
+      // TODO: Remove this logic and see SPARK-34035
       case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(
-          input = t.input.flatMap {
-            case s: Star => s.expand(t.child, resolver)
-            case o => o :: Nil
-          }
-        )
+        t.copy(input = t.child.output)
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
 
@@ -1470,7 +1466,11 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // The update value can access columns from both target and source tables.
                 UpdateAction(
                   resolvedUpdateCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
+                  resolveAssignments(Some(assignments), m, resolveValuesWithSourceOnly = false))
+              case UpdateStarAction(updateCondition) =>
+                UpdateAction(
+                  updateCondition.map(resolveExpressionByPlanChildren(_, m)),
+                  resolveAssignments(assignments = None, m, resolveValuesWithSourceOnly = false))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1481,7 +1481,15 @@ class Analyzer(override val catalogManager: CatalogManager)
                   resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
+                  resolveAssignments(Some(assignments), m, resolveValuesWithSourceOnly = true))
+              case InsertStarAction(insertCondition) =>
+                // The insert action is used when not matched, so its condition and value can only
+                // access columns from the source table.
+                val resolvedInsertCondition = insertCondition.map(
+                  resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
+                InsertAction(
+                  resolvedInsertCondition,
+                  resolveAssignments(assignments = None, m, resolveValuesWithSourceOnly = true))
               case o => o
             }
             val resolvedMergeCondition = resolveExpressionByPlanChildren(m.mergeCondition, m)
@@ -1499,7 +1507,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def resolveAssignments(
-        assignments: Seq[Assignment],
+        assignments: Option[Seq[Assignment]],
         mergeInto: MergeIntoTable,
         resolveValuesWithSourceOnly: Boolean): Seq[Assignment] = {
       if (assignments.isEmpty) {
@@ -1507,7 +1515,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         val expandedValues = mergeInto.sourceTable.output
         expandedColumns.zip(expandedValues).map(kv => Assignment(kv._1, kv._2))
       } else {
-        assignments.map { assign =>
+        assignments.get.map { assign =>
           val resolvedKey = assign.key match {
             case c if !c.resolved =>
               resolveExpressionByPlanChildren(c, Project(Nil, mergeInto.targetTable))
@@ -1788,15 +1796,37 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
       case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
-        groups.exists(_.isInstanceOf[UnresolvedOrdinal]) =>
-        val newGroups = groups.map {
-          case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
-            aggs(index - 1)
-          case ordinal @ UnresolvedOrdinal(index) =>
-            throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
-          case o => o
-        }
+        groups.exists(containUnresolvedOrdinal) =>
+        val newGroups = groups.map(resolveGroupByExpressionOrdinal(_, aggs))
         Aggregate(newGroups, aggs, child)
+    }
+
+    private def containUnresolvedOrdinal(e: Expression): Boolean = e match {
+      case _: UnresolvedOrdinal => true
+      case gs: BaseGroupingSets => gs.children.exists(containUnresolvedOrdinal)
+      case _ => false
+    }
+
+    private def resolveGroupByExpressionOrdinal(
+        expr: Expression,
+        aggs: Seq[Expression]): Expression = expr match {
+      case ordinal @ UnresolvedOrdinal(index) =>
+        withPosition(ordinal) {
+          if (index > 0 && index <= aggs.size) {
+            val ordinalExpr = aggs(index - 1)
+            if (ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
+              throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
+                index, ordinalExpr)
+            } else {
+              ordinalExpr
+            }
+          } else {
+            throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size)
+          }
+        }
+      case gs: BaseGroupingSets =>
+        gs.withNewChildren(gs.children.map(resolveGroupByExpressionOrdinal(_, aggs)))
+      case others => others
     }
   }
 
@@ -1820,9 +1850,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       }}
     }
 
+    // Group by alias is not allowed in ANSI mode.
+    private def allowGroupByAlias: Boolean = conf.groupByAliases && !conf.ansiEnabled
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case agg @ Aggregate(groups, aggs, child)
-          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+          if allowGroupByAlias && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
     }
@@ -2888,9 +2921,11 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveRandomSeed extends Rule[LogicalPlan] {
     private lazy val random = new Random()
 
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(EXPRESSION_WITH_RANDOM_SEED), ruleId) {
       case p if p.resolved => p
-      case p => p transformExpressionsUp {
+      case p => p.transformExpressionsUpWithPruning(
+        _.containsPattern(EXPRESSION_WITH_RANDOM_SEED), ruleId) {
         case e: ExpressionWithRandomSeed if e.seedExpression == UnresolvedSeed =>
           e.withNewSeed(random.nextLong())
       }
@@ -2980,7 +3015,8 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Check and add proper window frames for all window functions.
    */
   object ResolveWindowFrame extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+      _.containsPattern(WINDOW_EXPRESSION), ruleId) {
       case WindowExpression(wf: FrameLessOffsetWindowFunction,
         WindowSpecDefinition(_, _, f: SpecifiedWindowFrame)) if wf.frame != f =>
         throw QueryCompilationErrors.cannotSpecifyWindowFrameError(wf.prettyName)
@@ -3005,7 +3041,8 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Check and add order to [[AggregateWindowFunction]]s.
    */
   object ResolveWindowOrder extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+      _.containsPattern(WINDOW_EXPRESSION), ruleId) {
       case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
         throw QueryCompilationErrors.windowFunctionWithWindowFrameNotOrderedError(wf)
       case WindowExpression(rank: RankLike, spec) if spec.resolved =>
@@ -3019,7 +3056,8 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Then apply a Project on a normal Join to eliminate natural or using join.
    */
   object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(NATURAL_LIKE_JOIN), ruleId) {
       case j @ Join(left, right, UsingJoin(joinType, usingCols), _, hint)
           if left.resolved && right.resolved && j.duplicateResolved =>
         commonNaturalJoinProcessing(left, right, joinType, usingCols, None, hint)

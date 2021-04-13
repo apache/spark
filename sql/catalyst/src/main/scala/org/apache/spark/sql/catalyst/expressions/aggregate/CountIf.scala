@@ -56,4 +56,7 @@ case class CountIf(predicate: Expression) extends UnevaluableAggregate with Impl
         s"function $prettyName requires boolean type, not ${predicate.dataType.catalogString}"
       )
   }
+
+  override protected def withNewChildInternal(newChild: Expression): CountIf =
+    copy(predicate = newChild)
 }
