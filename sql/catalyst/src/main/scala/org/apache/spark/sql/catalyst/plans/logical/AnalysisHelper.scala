@@ -141,7 +141,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
             rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
           }
         }
-        if (afterRule eq self) {
+        if (self eq afterRule) {
           self.markRuleAsIneffective(ruleId)
           self
         } else {
@@ -239,7 +239,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    */
   def resolveExpressionsWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression]): LogicalPlan = {
-    resolveOperatorsUpWithPruning(cond, ruleId) {
+    resolveOperatorsWithPruning(cond, ruleId) {
       case p => p.transformExpressionsWithPruning(cond, ruleId)(rule)
     }
   }
