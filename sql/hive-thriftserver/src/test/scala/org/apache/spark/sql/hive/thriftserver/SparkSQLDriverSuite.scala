@@ -38,33 +38,32 @@ class SparkSQLDriverSuite extends SparkFunSuite {
     SparkSQLEnv.stop()
   }
 
-  test("SPARK-34873: Avoid wrapped in withNewExecutionId twice when run SQL with side effects") {
-    val sqlStartEvents = new ListBuffer[SparkListenerSQLExecutionStart]()
-    val listener = new SparkListener {
-      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-        case e: SparkListenerSQLExecutionStart => sqlStartEvents += e
-        case _ =>
-      }
-    }
-
-    val sqls = Seq(
-      "CREATE TABLE t AS SELECT 1 AS i",
-      "SELECT * FROM t",
-      "DROP TABLE t")
-
-    val sparkContext = driver.context.sparkContext
-    sparkContext.listenerBus.waitUntilEmpty()
-    sparkContext.addSparkListener(listener)
+  test("Avoid wrapped in withNewExecutionId twice when run SQL with side effects") {
+    val listener = new TestListener
+    driver.context.sparkContext.addSparkListener(listener)
     try {
+      val sqls = Seq(
+        "CREATE TABLE t AS SELECT 1 AS i",
+        "SELECT * FROM t",
+        "DROP TABLE t")
       sqls.foreach(driver.run)
-      sparkContext.listenerBus.waitUntilEmpty()
-    } finally {
-      sparkContext.removeSparkListener(listener)
-    }
 
-    assert(sqls.size === sqlStartEvents.size)
-    sqls.zip(sqlStartEvents).foreach { case (sql, event) =>
-      assert(sql === event.description)
+      assert(sqls.size === listener.sqlStartEvents.size)
+      sqls.zip(listener.sqlStartEvents).foreach { case (sql, event) =>
+        assert(sql === event.description)
+      }
+    } finally {
+      driver.context.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  class TestListener extends SparkListener {
+    val sqlStartEvents = new ListBuffer[SparkListenerSQLExecutionStart]()
+
+    override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+      case e: SparkListenerSQLExecutionStart =>
+        sqlStartEvents += e
+      case _ =>
     }
   }
 }

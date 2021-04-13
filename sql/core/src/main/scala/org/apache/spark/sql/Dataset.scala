@@ -221,7 +221,21 @@ class Dataset[T] private[sql](
   }
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
-    val plan = queryExecution.analyzed
+    // For various commands (like DDL) and queries with side effects, we force query execution
+    // to happen right away to let these side effects take place eagerly.
+    def runCommand(plan: LogicalPlan): LogicalPlan = {
+      LocalRelation(plan.output, withAction("command", queryExecution)(_.executeCollect()),
+        fromCommand = true)
+    }
+
+    val plan = queryExecution.analyzed match {
+      case c: Command =>
+        runCommand(c)
+      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
+        runCommand(u)
+      case _ =>
+        queryExecution.analyzed
+    }
     if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) &&
         plan.getTagValue(Dataset.DATASET_ID_TAG).isEmpty) {
       plan.setTagValue(Dataset.DATASET_ID_TAG, id)
@@ -442,11 +456,7 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = if (encoder.clsTag.runtimeClass == classOf[Row]) {
-    this.asInstanceOf[Dataset[Row]]
-  } else {
-    new Dataset[Row](queryExecution, RowEncoder(schema))
-  }
+  def toDF(): DataFrame = new Dataset[Row](queryExecution, RowEncoder(schema))
 
   /**
    * Returns a new Dataset where each record has been mapped on to the specified type. The

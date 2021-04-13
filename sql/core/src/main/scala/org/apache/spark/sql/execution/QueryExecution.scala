@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LocalRelation, LogicalPlan, ReturnAnswer, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -54,8 +54,7 @@ import org.apache.spark.util.Utils
 class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
-    val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val isCommand: Boolean = false) extends Logging {
+    val tracker: QueryPlanningTracker = new QueryPlanningTracker) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -72,26 +71,7 @@ class QueryExecution(
 
   lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
     // We can't clone `logical` here, which will reset the `_analyzed` flag.
-    val plan = sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
-
-    // For various commands (like DDL) and queries with side effects, we force query execution
-    // to happen right away to let these side effects take place eagerly.
-    def runCommand(plan: LogicalPlan): LogicalPlan = {
-      val qe = new QueryExecution(sparkSession, plan, isCommand = true)
-      LocalRelation(plan.output,
-        SQLExecution.withNewExecutionId(qe)(qe.executedPlan.executeCollect()),
-        fromCommand = true)
-    }
-
-    if (isCommand) {
-      plan
-    } else {
-      plan.transformUp {
-        case c: Command => runCommand(c)
-        case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) => runCommand(u)
-        case other => other
-      }
-    }
+    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
   lazy val withCachedData: LogicalPlan = sparkSession.withActive {

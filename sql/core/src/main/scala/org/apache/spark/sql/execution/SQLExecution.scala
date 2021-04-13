@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicLong
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
 import org.apache.spark.util.Utils
@@ -63,13 +62,6 @@ object SQLExecution {
   def withNewExecutionId[T](
       queryExecution: QueryExecution,
       name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
-    if (queryExecution.analyzed.find {
-      case _ @ LocalRelation(_, _, _, fromCommand) => fromCommand
-      case _ => false
-    }.isDefined) {
-      return body
-    }
-
     val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)

@@ -20,12 +20,12 @@ package org.apache.spark.sql
 import java.io.File
 import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
@@ -42,7 +42,6 @@ import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
-import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
@@ -4140,42 +4139,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
     }
-  }
-
-  test("SPARK-34873: Avoid wrapped in withNewExecutionId twice when run SQL with side effects" +
-    " - sql(\"show tables\")") {
-    testTriggerSQLExecutionOnce(sql("show tables"))
-  }
-
-  test("SPARK-34873: Avoid wrapped in withNewExecutionId twice when run SQL with side effects" +
-    " - sql(\"show tables\").show()") {
-    testTriggerSQLExecutionOnce(sql("show tables").show())
-  }
-
-  test("SPARK-34873: Avoid wrapped in withNewExecutionId twice when run SQL with side effects" +
-    " - sql(\"show tables\").collect()") {
-    testTriggerSQLExecutionOnce(sql("show tables").collect())
-  }
-
-  private def testTriggerSQLExecutionOnce(body: => Unit): Unit = {
-    val sqlStartEventCount = new AtomicInteger()
-    val listener = new SparkListener {
-      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-        case _: SparkListenerSQLExecutionStart => sqlStartEventCount.incrementAndGet()
-        case _ =>
-      }
-    }
-
-    sparkContext.listenerBus.waitUntilEmpty()
-    sparkContext.addSparkListener(listener)
-    try {
-      body
-      sparkContext.listenerBus.waitUntilEmpty()
-    } finally {
-      sparkContext.removeSparkListener(listener)
-    }
-
-    assert(sqlStartEventCount.get() === 1)
   }
 }
 
