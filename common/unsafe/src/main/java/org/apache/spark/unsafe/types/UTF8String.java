@@ -29,7 +29,6 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.google.common.primitives.Ints;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -764,7 +763,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    byte[] newBytes = new byte[numBytes * times];
+    int resultSize = Math.toIntExact((long)numBytes * times);
+    byte[] newBytes = new byte[resultSize];
     copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
 
     int copied = 1;
@@ -973,7 +973,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     // Allocate a new byte array, and copy the inputs one by one into it.
-    final byte[] result = new byte[Ints.checkedCast(totalLength)];
+    final byte[] result = new byte[Math.toIntExact(totalLength)];
     int offset = 0;
     for (int i = 0; i < inputs.length; i++) {
       int len = inputs[i].numBytes;
