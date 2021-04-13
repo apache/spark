@@ -91,7 +91,7 @@ class QueryExecution(
     }
   }
 
-  protected def analyze(): LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
+  protected def analyze() = executePhase(QueryPlanningTracker.ANALYSIS) {
     // We can't clone `logical` here, which will reset the `_analyzed` flag.
     val plan = sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
     if (eagerRunCommand && eagerRunCommandExecution.isEmpty) {
@@ -102,66 +102,53 @@ class QueryExecution(
 
   lazy val analyzed: LogicalPlan = analyze()
 
-  lazy val withCachedData: LogicalPlan = {
-    this.analyzed
-    eagerRunCommandExecution.map(_.withCachedData).getOrElse {
-      sparkSession.withActive {
-        assertAnalyzed()
-        assertSupported()
-        // clone the plan to avoid sharing the plan instance between different stages like
-        // analyzing, optimizing and planning.
-        sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
-      }
+  lazy val withCachedData: LogicalPlan = eagerRunCommandExecution.map(_.withCachedData).getOrElse {
+    sparkSession.withActive {
+      assertAnalyzed()
+      assertSupported()
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
     }
   }
 
-  lazy val optimizedPlan: LogicalPlan = {
-    this.withCachedData
-    eagerRunCommandExecution.map(_.optimizedPlan).getOrElse {
-      executePhase(QueryPlanningTracker.OPTIMIZATION) {
-        // clone the plan to avoid sharing the plan instance between different stages like
-        // analyzing, optimizing and planning.
-        val plan = sparkSession.sessionState.optimizer
-          .executeAndTrack(withCachedData.clone(), tracker)
-        // We do not want optimized plans to be re-analyzed as literals that have been constant
-        // folded and such can cause issues during analysis. While `clone` should maintain the
-        // `analyzed` state of the LogicalPlan, we set the plan as analyzed here as well out of
-        // paranoia.
-        plan.setAnalyzed()
-        plan
-      }
+  lazy val optimizedPlan: LogicalPlan = eagerRunCommandExecution.map(_.optimizedPlan).getOrElse {
+    executePhase(QueryPlanningTracker.OPTIMIZATION) {
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      val plan = sparkSession.sessionState.optimizer
+        .executeAndTrack(withCachedData.clone(), tracker)
+      // We do not want optimized plans to be re-analyzed as literals that have been constant folded
+      // and such can cause issues during analysis. While `clone` should maintain the `analyzed`
+      // state of the LogicalPlan, we set the plan as analyzed here as well out of paranoia.
+      plan.setAnalyzed()
+      plan
     }
   }
 
   private def assertOptimized(): Unit = optimizedPlan
 
-  lazy val sparkPlan: SparkPlan = {
-    this.optimizedPlan
-    eagerRunCommandExecution.map(_.sparkPlan).getOrElse {
-      // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
-      // the planning phase
-      assertOptimized()
-      executePhase(QueryPlanningTracker.PLANNING) {
-        // Clone the logical plan here, in case the planner rules change the states of the logical
-        // plan.
-        QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
-      }
+  lazy val sparkPlan: SparkPlan = eagerRunCommandExecution.map(_.sparkPlan).getOrElse {
+    // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
+    // the planning phase
+    assertOptimized()
+    executePhase(QueryPlanningTracker.PLANNING) {
+      // Clone the logical plan here, in case the planner rules change the states of the logical
+      // plan.
+      QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
     }
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = {
-    this.sparkPlan
-    eagerRunCommandExecution.map(_.executedPlan).getOrElse {
-      // We need to materialize the optimizedPlan here, before tracking the planning phase,
-      // to ensure that the optimization time is not counted as part of the planning phase.
-      assertOptimized()
-      executePhase(QueryPlanningTracker.PLANNING) {
-        // clone the plan to avoid sharing the plan instance between different stages like
-        // analyzing, optimizing and planning.
-        QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
-      }
+  lazy val executedPlan: SparkPlan = eagerRunCommandExecution.map(_.executedPlan).getOrElse {
+    // We need to materialize the optimizedPlan here, before tracking the planning phase, to ensure
+    // that the optimization time is not counted as part of the planning phase.
+    assertOptimized()
+    executePhase(QueryPlanningTracker.PLANNING) {
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
     }
   }
 
