@@ -187,6 +187,22 @@ sealed trait BufferSetterGetterUtils {
               row.setNullAt(ordinal)
             }
 
+        case YearMonthIntervalType =>
+          (row: InternalRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setInt(ordinal, value.asInstanceOf[Int])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case DayTimeIntervalType =>
+          (row: InternalRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setLong(ordinal, value.asInstanceOf[Long])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
         case other =>
           (row: InternalRow, ordinal: Int, value: Any) =>
             if (value != null) {
