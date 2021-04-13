@@ -62,9 +62,17 @@ While `row_format` are defined as
 
     Spark uses the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
 
+* **SERDE**
+
+    Specifies a custom SerDe for one table.
+
 * **serde_class**
 
     Specifies a fully-qualified class name of a custom SerDe.
+
+* **DELIMITED**
+
+    The `DELIMITED` clause can be used to specify the native SerDe and state the delimiter, escape character, null character and so on.
 
 * **FIELDS TERMINATED BY**
 
