@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveStrin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+// scalastyle:off line.size.limit
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
  *
@@ -46,9 +47,7 @@ import org.apache.spark.sql.types._
  *
  * To run a single test file upon change:
  * {{{
- *   build/sbt -Phive-thriftserver \
- *     "hive-thriftserver/testOnly *ThriftServerQueryTestSuite -- -z inline-table.sql"
- *
+ *   build/sbt -Phive-thriftserver "hive-thriftserver/testOnly *ThriftServerQueryTestSuite -- -z inline-table.sql"
  * }}}
  *
  * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
@@ -66,6 +65,7 @@ import org.apache.spark.sql.types._
  *   2. Support DESC command.
  *   3. Support SHOW command.
  */
+// scalastyle:on line.size.limit
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
 
 
