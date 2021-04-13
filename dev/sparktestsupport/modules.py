@@ -616,6 +616,10 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_expanding",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_rolling",
+        "pyspark.pandas.tests.test_series",
+        "pyspark.pandas.tests.test_series_conversion",
+        "pyspark.pandas.tests.test_series_datetime",
+        "pyspark.pandas.tests.test_series_string",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
