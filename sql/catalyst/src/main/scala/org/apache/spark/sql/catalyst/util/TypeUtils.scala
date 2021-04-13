@@ -101,16 +101,16 @@ object TypeUtils {
   }
 
   def failWithIntervalType(dataType: DataType): Unit = {
-    dataType match {
-      case CalendarIntervalType =>
-        throw new AnalysisException("Cannot use interval type in the table schema.")
-      case ArrayType(et, _) => failWithIntervalType(et)
-      case MapType(kt, vt, _) =>
-        failWithIntervalType(kt)
-        failWithIntervalType(vt)
-      case s: StructType => s.foreach(f => failWithIntervalType(f.dataType))
-      case u: UserDefinedType[_] => failWithIntervalType(u.sqlType)
-      case _ =>
+    invokeOnceForInterval(dataType) {
+      throw new AnalysisException("Cannot use interval type in the table schema.")
     }
+  }
+
+  def invokeOnceForInterval(dataType: DataType)(f: => Unit): Unit = {
+    def isInterval(dataType: DataType): Boolean = dataType match {
+      case CalendarIntervalType | DayTimeIntervalType | YearMonthIntervalType => true
+      case _ => false
+    }
+    if (dataType.existsRecursively(isInterval)) f
   }
 }

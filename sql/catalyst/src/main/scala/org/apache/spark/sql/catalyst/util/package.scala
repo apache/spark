@@ -129,6 +129,7 @@ package object util extends Logging {
     case a: Attribute => new PrettyAttribute(a)
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
+    case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
     case e: GetStructField =>
       val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
       PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
@@ -136,12 +137,22 @@ package object util extends Logging {
       PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
     case r: RuntimeReplaceable =>
       PrettyAttribute(r.mkString(r.exprsReplaced.map(toPrettySQL)), r.dataType)
+    case c: CastBase if !c.getTagValue(Cast.USER_SPECIFIED_CAST).getOrElse(false) =>
+      PrettyAttribute(usePrettyExpression(c.child).sql, c.dataType)
   }
 
   def quoteIdentifier(name: String): String = {
     // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
     // identifier with back-ticks.
     "`" + name.replace("`", "``") + "`"
+  }
+
+  def quoteIfNeeded(part: String): String = {
+    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
+      part
+    } else {
+      s"`${part.replace("`", "``")}`"
+    }
   }
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql

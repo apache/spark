@@ -290,7 +290,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     Trigger.Continuous(1000))
 
   private def testPositiveCase(readFormat: String, writeFormat: String, trigger: Trigger): Unit = {
-    testPositiveCaseWithQuery(readFormat, writeFormat, trigger)(() => _)
+    testPositiveCaseWithQuery(readFormat, writeFormat, trigger)(_ => ())
   }
 
   private def testPositiveCaseWithQuery(

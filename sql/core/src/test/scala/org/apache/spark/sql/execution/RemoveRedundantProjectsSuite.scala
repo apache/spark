@@ -39,10 +39,13 @@ abstract class RemoveRedundantProjectsSuiteBase
 
   private def assertProjectExec(query: String, enabled: Int, disabled: Int): Unit = {
     val df = sql(query)
+    // When enabling AQE, the DPP subquery filters is replaced in runtime.
+    df.collect()
     assertProjectExecCount(df, enabled)
     val result = df.collect()
     withSQLConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED.key -> "false") {
       val df2 = sql(query)
+      df2.collect()
       assertProjectExecCount(df2, disabled)
       checkAnswer(df2, result)
     }
@@ -165,6 +168,53 @@ abstract class RemoveRedundantProjectsSuiteBase
         "(select sum(a) from testView where a > 5 group by key)"
       assertProjectExec(query, 0, 1)
     }
+  }
+
+  test("SPARK-33697: UnionExec should require column ordering") {
+    withTable("t1", "t2") {
+      spark.range(-10, 20)
+        .selectExpr(
+          "id",
+          "date_add(date '1950-01-01', cast(id as int)) as datecol",
+          "cast(id as string) strcol")
+        .write.mode("overwrite").format("parquet").saveAsTable("t1")
+      spark.range(-10, 20)
+        .selectExpr(
+          "cast(id as string) strcol",
+          "id",
+          "date_add(date '1950-01-01', cast(id as int)) as datecol")
+        .write.mode("overwrite").format("parquet").saveAsTable("t2")
+
+      val queryTemplate =
+        """
+          |SELECT DISTINCT datecol, strcol FROM
+          |(
+          |(SELECT datecol, id, strcol from t1)
+          | %s
+          |(SELECT datecol, id, strcol from t2)
+          |)
+          |""".stripMargin
+
+      Seq(("UNION", 1, 2), ("UNION ALL", 1, 2)).foreach { case (setOperation, enabled, disabled) =>
+        val query = queryTemplate.format(setOperation)
+        assertProjectExec(query, enabled = enabled, disabled = disabled)
+      }
+    }
+  }
+
+  test("SPARK-33697: remove redundant projects under expand") {
+    val query =
+      """
+        |SELECT t1.key, t2.key, sum(t1.a) AS s1, sum(t2.b) AS s2 FROM
+        |(SELECT a, key FROM testView) t1
+        |JOIN
+        |(SELECT b, key FROM testView) t2
+        |ON t1.key = t2.key
+        |GROUP BY t1.key, t2.key GROUPING SETS(t1.key, t2.key)
+        |ORDER BY t1.key, t2.key, s1, s2
+        |LIMIT 10
+        |""".stripMargin
+    assertProjectExec(query, 0, 3)
   }
 }
 

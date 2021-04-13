@@ -34,6 +34,7 @@ import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
 
@@ -223,24 +224,37 @@ private[spark] object TestUtils {
 
   /**
    * Asserts that exception message contains the message. Please note this checks all
-   * exceptions in the tree.
+   * exceptions in the tree. If a type parameter `E` is supplied, this will additionally confirm
+   * that the exception is a subtype of the exception provided in the type parameter.
    */
-  def assertExceptionMsg(exception: Throwable, msg: String, ignoreCase: Boolean = false): Unit = {
-    def contain(msg1: String, msg2: String): Boolean = {
+  def assertExceptionMsg[E <: Throwable : ClassTag](
+      exception: Throwable,
+      msg: String,
+      ignoreCase: Boolean = false): Unit = {
+
+    val (typeMsg, typeCheck) = if (classTag[E] == classTag[Nothing]) {
+      ("", (_: Throwable) => true)
+    } else {
+      val clazz = classTag[E].runtimeClass
+      (s"of type ${clazz.getName} ", (e: Throwable) => clazz.isAssignableFrom(e.getClass))
+    }
+
+    def contain(e: Throwable, msg: String): Boolean = {
       if (ignoreCase) {
-        msg1.toLowerCase(Locale.ROOT).contains(msg2.toLowerCase(Locale.ROOT))
+        e.getMessage.toLowerCase(Locale.ROOT).contains(msg.toLowerCase(Locale.ROOT))
       } else {
-        msg1.contains(msg2)
-      }
+        e.getMessage.contains(msg)
+      } && typeCheck(e)
     }
 
     var e = exception
-    var contains = contain(e.getMessage, msg)
+    var contains = contain(e, msg)
     while (e.getCause != null && !contains) {
       e = e.getCause
-      contains = contain(e.getMessage, msg)
+      contains = contain(e, msg)
     }
-    assert(contains, s"Exception tree doesn't contain the expected message: $msg")
+    assert(contains,
+      s"Exception tree doesn't contain the expected exception ${typeMsg}with message: $msg")
   }
 
   /**

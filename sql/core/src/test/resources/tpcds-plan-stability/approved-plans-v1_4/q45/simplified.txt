@@ -12,30 +12,32 @@ TakeOrderedAndProject [ca_zip,ca_city,sum(ws_sales_price)]
                       BroadcastHashJoin [ws_item_sk,i_item_sk]
                         Project [ws_item_sk,ws_sales_price,ca_city,ca_zip]
                           BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                            Project [ws_sold_date_sk,ws_item_sk,ws_sales_price,ca_city,ca_zip]
+                            Project [ws_item_sk,ws_sales_price,ws_sold_date_sk,ca_city,ca_zip]
                               BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
-                                Project [ws_sold_date_sk,ws_item_sk,ws_sales_price,c_current_addr_sk]
+                                Project [ws_item_sk,ws_sales_price,ws_sold_date_sk,c_current_addr_sk]
                                   BroadcastHashJoin [ws_bill_customer_sk,c_customer_sk]
-                                    Filter [ws_bill_customer_sk,ws_sold_date_sk,ws_item_sk]
+                                    Filter [ws_bill_customer_sk,ws_item_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_bill_customer_sk,ws_sales_price]
+                                          Scan parquet default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_sales_price,ws_sold_date_sk]
+                                            SubqueryBroadcast [d_date_sk] #1
+                                              ReusedExchange [d_date_sk] #2
                                     InputAdapter
-                                      BroadcastExchange #2
+                                      BroadcastExchange #3
                                         WholeStageCodegen (1)
                                           Filter [c_customer_sk,c_current_addr_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.customer [c_customer_sk,c_current_addr_sk]
                                 InputAdapter
-                                  BroadcastExchange #3
+                                  BroadcastExchange #4
                                     WholeStageCodegen (2)
                                       Filter [ca_address_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.customer_address [ca_address_sk,ca_city,ca_zip]
                             InputAdapter
-                              BroadcastExchange #4
+                              BroadcastExchange #2
                                 WholeStageCodegen (3)
                                   Project [d_date_sk]
                                     Filter [d_qoy,d_year,d_date_sk]

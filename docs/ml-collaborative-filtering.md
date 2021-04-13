@@ -177,7 +177,7 @@ explicit (`implicitPrefs` is `False`).
 We evaluate the recommendation model by measuring the root-mean-square error of
 rating prediction.
 
-Refer to the [`ALS` Python docs](api/python/pyspark.ml.html#pyspark.ml.recommendation.ALS)
+Refer to the [`ALS` Python docs](api/python/reference/api/pyspark.ml.recommendation.ALS.html)
 for more details on the API.
 
 {% include_example python/ml/als_example.py %}

@@ -120,8 +120,8 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
     val df2 = spark.range(10).agg(sum($"id"))
     assert(df1.queryExecution.executedPlan.sameResult(df2.queryExecution.executedPlan))
 
-    val df3 = spark.range(10).agg(sumDistinct($"id"))
-    val df4 = spark.range(10).agg(sumDistinct($"id"))
+    val df3 = spark.range(10).agg(sum_distinct($"id"))
+    val df4 = spark.range(10).agg(sum_distinct($"id"))
     assert(df3.queryExecution.executedPlan.sameResult(df4.queryExecution.executedPlan))
   }
 

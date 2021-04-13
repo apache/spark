@@ -72,6 +72,7 @@ object ArrowWriter {
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new StructWriter(vector, children.toArray)
+      case (NullType, vector: NullVector) => new NullWriter(vector)
       case (dt, _) =>
         throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
     }
@@ -80,9 +81,7 @@ object ArrowWriter {
 
 class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
 
-  def schema: StructType = StructType(fields.map { f =>
-    StructField(f.name, f.dataType, f.nullable)
-  })
+  def schema: StructType = ArrowUtils.fromArrowSchema(root.getSchema())
 
   private var count: Int = 0
 
@@ -383,5 +382,14 @@ private[arrow] class MapWriter(
     super.reset()
     keyWriter.reset()
     valueWriter.reset()
+  }
+}
+
+private[arrow] class NullWriter(val valueVector: NullVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
   }
 }

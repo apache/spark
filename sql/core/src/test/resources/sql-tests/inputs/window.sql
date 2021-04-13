@@ -36,6 +36,18 @@ CREATE OR REPLACE TEMPORARY VIEW basic_pays AS SELECT * FROM VALUES
 ('Barry Jones','SCM',10586)
 AS basic_pays(employee_name, department, salary);
 
+CREATE OR REPLACE TEMPORARY VIEW test_ignore_null AS SELECT * FROM VALUES
+('a', 0, null),
+('a', 1, 'x'),
+('b', 2, null),
+('c', 3, null),
+('a', 4, 'y'),
+('b', 5, null),
+('a', 6, 'z'),
+('a', 7, 'v'),
+('a', 8, null)
+AS test_ignore_null(content, id, v);
+
 -- RowsBetween
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val ROWS CURRENT ROW) FROM testData
 ORDER BY cate, val;
@@ -263,3 +275,137 @@ WINDOW
     w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
     w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)
 ORDER BY salary DESC;
+
+SELECT
+    content,
+    id,
+    v,
+    lead(v, 0) IGNORE NULLS OVER w lead_0,
+    lead(v, 1) IGNORE NULLS OVER w lead_1,
+    lead(v, 2) IGNORE NULLS OVER w lead_2,
+    lead(v, 3) IGNORE NULLS OVER w lead_3,
+    lag(v, 0) IGNORE NULLS OVER w lag_0,
+    lag(v, 1) IGNORE NULLS OVER w lag_1,
+    lag(v, 2) IGNORE NULLS OVER w lag_2,
+    lag(v, 3) IGNORE NULLS OVER w lag_3,
+    nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
+    nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
+    nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
+    first_value(v) IGNORE NULLS OVER w first_value,
+    last_value(v) IGNORE NULLS OVER w last_value
+FROM
+    test_ignore_null
+WINDOW w AS (ORDER BY id)
+ORDER BY id;
+
+SELECT
+    content,
+    id,
+    v,
+    nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
+    nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
+    nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
+    first_value(v) IGNORE NULLS OVER w first_value,
+    last_value(v) IGNORE NULLS OVER w last_value
+FROM
+    test_ignore_null
+WINDOW w AS (ORDER BY id RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+ORDER BY id;
+
+SELECT
+    content,
+    id,
+    v,
+    nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
+    nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
+    nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
+    first_value(v) IGNORE NULLS OVER w first_value,
+    last_value(v) IGNORE NULLS OVER w last_value
+FROM
+    test_ignore_null
+WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+ORDER BY id;
+
+SELECT
+    content,
+    id,
+    v,
+    nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
+    nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
+    nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
+    first_value(v) IGNORE NULLS OVER w first_value,
+    last_value(v) IGNORE NULLS OVER w last_value
+FROM
+    test_ignore_null
+WINDOW w AS (ORDER BY id RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING)
+ORDER BY id;
+
+SELECT
+    content,
+    id,
+    v,
+    nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
+    nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
+    nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
+    first_value(v) IGNORE NULLS OVER w first_value,
+    last_value(v) IGNORE NULLS OVER w last_value
+FROM
+    test_ignore_null
+WINDOW w AS (ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)
+ORDER BY id;
+
+SELECT
+    content,
+    id,
+    v,
+    nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
+    nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
+    nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
+    first_value(v) IGNORE NULLS OVER w first_value,
+    last_value(v) IGNORE NULLS OVER w last_value
+FROM
+    test_ignore_null
+WINDOW w AS (ORDER BY id RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+ORDER BY id;
+
+SELECT
+    content,
+    id,
+    v,
+    nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
+    nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
+    nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
+    first_value(v) IGNORE NULLS OVER w first_value,
+    last_value(v) IGNORE NULLS OVER w last_value
+FROM
+    test_ignore_null
+WINDOW w AS (ORDER BY id RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+ORDER BY id;
+
+SELECT
+    content,
+    id,
+    v,
+    nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
+    nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
+    nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
+    first_value(v) IGNORE NULLS OVER w first_value,
+    last_value(v) IGNORE NULLS OVER w last_value
+FROM
+    test_ignore_null
+WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+ORDER BY id;
+
+SELECT
+    content,
+    id,
+    v,
+    nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
+    nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
+    nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
+    first_value(v) IGNORE NULLS OVER w first_value,
+    last_value(v) IGNORE NULLS OVER w last_value
+FROM
+    test_ignore_null
+WINDOW w AS (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
+ORDER BY id;

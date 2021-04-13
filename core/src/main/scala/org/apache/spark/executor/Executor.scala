@@ -47,7 +47,7 @@ import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
-import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -325,6 +325,7 @@ private[spark] class Executor(
         case NonFatal(e) =>
           logWarning("Unable to stop heartbeater", e)
       }
+      ShuffleBlockPusher.stop()
       threadPool.shutdown()
 
       // Notify plugins that executor is shutting down so they can terminate cleanly
@@ -924,7 +925,7 @@ private[spark] class Executor(
         logInfo(s"Fetching $name with timestamp $timestamp")
         // Fetch file with useCache mode, close cache for local mode.
         Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
-          env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
+          hadoopConf, timestamp, useCache = !isLocal)
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newArchives if currentArchives.getOrElse(name, -1L) < timestamp) {
@@ -932,7 +933,7 @@ private[spark] class Executor(
         val sourceURI = new URI(name)
         val uriToDownload = UriBuilder.fromUri(sourceURI).fragment(null).build()
         val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
-          env.securityManager, hadoopConf, timestamp, useCache = !isLocal, shouldUntar = false)
+          hadoopConf, timestamp, useCache = !isLocal, shouldUntar = false)
         val dest = new File(
           SparkFiles.getRootDirectory(),
           if (sourceURI.getFragment != null) sourceURI.getFragment else source.getName)
@@ -951,7 +952,7 @@ private[spark] class Executor(
           logInfo(s"Fetching $name with timestamp $timestamp")
           // Fetch file with useCache mode, close cache for local mode.
           Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
-            env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
+            hadoopConf, timestamp, useCache = !isLocal)
           currentJars(name) = timestamp
           // Add it to our class loader
           val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
@@ -995,7 +996,7 @@ private[spark] class Executor(
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
         message, new RpcTimeout(HEARTBEAT_INTERVAL_MS.millis, EXECUTOR_HEARTBEAT_INTERVAL.key))
-      if (response.reregisterBlockManager) {
+      if (!executorShutdown.get && response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }

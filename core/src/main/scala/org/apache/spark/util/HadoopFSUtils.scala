@@ -249,8 +249,11 @@ private[spark] object HadoopFSUtils extends Logging {
         Array.empty[FileStatus]
     }
 
+    val filteredStatuses =
+      statuses.filterNot(status => shouldFilterOutPathName(status.getPath.getName))
+
     val allLeafStatuses = {
-      val (dirs, topLevelFiles) = statuses.partition(_.isDirectory)
+      val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
       val nestedFiles: Seq[FileStatus] = contextOpt match {
         case Some(context) if dirs.size > parallelismThreshold =>
           parallelListLeafFilesInternal(
@@ -350,4 +353,18 @@ private[spark] object HadoopFSUtils extends Logging {
     modificationTime: Long,
     accessTime: Long,
     blockLocations: Array[SerializableBlockLocation])
+
+  /** Checks if we should filter out this path name. */
+  def shouldFilterOutPathName(pathName: String): Boolean = {
+    // We filter follow paths:
+    // 1. everything that starts with _ and ., except _common_metadata and _metadata
+    // because Parquet needs to find those metadata files from leaf files returned by this method.
+    // We should refactor this logic to not mix metadata files with data files.
+    // 2. everything that ends with `._COPYING_`, because this is a intermediate state of file. we
+    // should skip this file in case of double reading.
+    val exclude = (pathName.startsWith("_") && !pathName.contains("=")) ||
+      pathName.startsWith(".") || pathName.endsWith("._COPYING_")
+    val include = pathName.startsWith("_common_metadata") || pathName.startsWith("_metadata")
+    exclude && !include
+  }
 }

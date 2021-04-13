@@ -57,14 +57,15 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             4, 5, 1.1,
             2.2, Decimal(1.123),
             [1, 2, 2], True, 'hello',
-            bytearray([0x01, 0x02])
+            bytearray([0x01, 0x02]),
+            None
         ]
         output_fields = [
             ('id', IntegerType()), ('byte', ByteType()), ('short', ShortType()),
             ('int', IntegerType()), ('long', LongType()), ('float', FloatType()),
             ('double', DoubleType()), ('decim', DecimalType(10, 3)),
             ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType()),
-            ('bin', BinaryType())
+            ('bin', BinaryType()), ('null', NullType())
         ]
 
         output_schema = StructType([StructField(*x) for x in output_fields])
@@ -83,7 +84,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
-                bin=pdf.bin
+                bin=pdf.bin,
+                null=pdf.null
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -101,7 +103,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
-                bin=pdf.bin
+                bin=pdf.bin,
+                null=pdf.null
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -120,7 +123,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
-                bin=pdf.bin
+                bin=pdf.bin,
+                null=pdf.null
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -277,7 +281,6 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         common_err_msg = 'Invalid return type.*grouped map Pandas UDF.*'
         unsupported_types = [
             StructField('arr_ts', ArrayType(TimestampType())),
-            StructField('null', NullType()),
             StructField('struct', StructType([StructField('l', LongType())])),
         ]
 

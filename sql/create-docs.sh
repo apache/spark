@@ -27,14 +27,14 @@ set -e
 FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
 SPARK_HOME="$(cd "`dirname "${BASH_SOURCE[0]}"`"/..; pwd)"
 
-if ! hash python 2>/dev/null; then
-  echo "Missing python in your path, skipping SQL documentation generation."
+if ! hash python3 2>/dev/null; then
+  echo "Missing python3 in your path, skipping SQL documentation generation."
   exit 0
 fi
 
 if ! hash mkdocs 2>/dev/null; then
   echo "Missing mkdocs in your path, trying to install mkdocs for SQL documentation generation."
-  pip install mkdocs
+  pip3 install mkdocs
 fi
 
 pushd "$FWDIR" > /dev/null

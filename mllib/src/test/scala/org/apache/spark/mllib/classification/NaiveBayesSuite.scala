@@ -107,9 +107,9 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val modelIndex = piData.indices.zip(model.labels.map(_.toInt))
     try {
       for (i <- modelIndex) {
-        assert(math.exp(piData(i._2)) ~== math.exp(model.pi(i._1)) absTol 0.05)
+        assert(piData(i._2) ~== model.pi(i._1) relTol 0.35)
         for (j <- thetaData(i._2).indices) {
-          assert(math.exp(thetaData(i._2)(j)) ~== math.exp(model.theta(i._1)(j)) absTol 0.05)
+          assert(thetaData(i._2)(j) ~== model.theta(i._1)(j) relTol 0.35)
         }
       }
     } catch {

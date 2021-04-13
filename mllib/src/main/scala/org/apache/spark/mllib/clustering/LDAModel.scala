@@ -212,7 +212,7 @@ class LocalLDAModel private[spark] (
       val topic = normalize(brzTopics(::, topicIndex), 1.0)
       val (termWeights, terms) =
         topic.toArray.zipWithIndex.sortBy(-_._1).take(maxTermsPerTopic).unzip
-      (terms.toArray, termWeights.toArray)
+      (terms, termWeights)
     }.toArray
   }
 
@@ -606,7 +606,7 @@ class DistributedLDAModel private[clustering] (
       }
     topicsInQueues.map { q =>
       val (termWeights, terms) = q.toArray.sortBy(-_._1).unzip
-      (terms.toArray, termWeights.toArray)
+      (terms, termWeights)
     }
   }
 
@@ -641,7 +641,7 @@ class DistributedLDAModel private[clustering] (
       }
     topicsInQueues.map { q =>
       val (docTopics, docs) = q.toArray.sortBy(-_._1).unzip
-      (docs.toArray, docTopics.toArray)
+      (docs, docTopics)
     }
   }
 
@@ -681,7 +681,7 @@ class DistributedLDAModel private[clustering] (
     perDocAssignments.map { case (docID: Long, (terms: Array[Int], topics: Array[Int])) =>
       // TODO: Avoid zip, which is inefficient.
       val (sortedTerms, sortedTopics) = terms.zip(topics).sortBy(_._1).unzip
-      (docID, sortedTerms.toArray, sortedTopics.toArray)
+      (docID, sortedTerms, sortedTopics)
     }
   }
 

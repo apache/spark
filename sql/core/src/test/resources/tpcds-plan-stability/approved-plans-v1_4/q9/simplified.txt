@@ -11,7 +11,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity]
+                          Scan parquet default.store_sales [ss_quantity,ss_sold_date_sk]
     Subquery #2
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_ext_discount_amt)),avg(ss_ext_discount_amt),sum,count]
@@ -23,7 +23,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt]
+                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_sold_date_sk]
     Subquery #3
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_net_paid)),avg(ss_net_paid),sum,count]
@@ -35,7 +35,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_net_paid]
+                          Scan parquet default.store_sales [ss_quantity,ss_net_paid,ss_sold_date_sk]
     Subquery #4
       WholeStageCodegen (2)
         HashAggregate [count] [count(1),count(1),count]
@@ -47,7 +47,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity]
+                          Scan parquet default.store_sales [ss_quantity,ss_sold_date_sk]
     Subquery #5
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_ext_discount_amt)),avg(ss_ext_discount_amt),sum,count]
@@ -59,7 +59,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt]
+                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_sold_date_sk]
     Subquery #6
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_net_paid)),avg(ss_net_paid),sum,count]
@@ -71,7 +71,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_net_paid]
+                          Scan parquet default.store_sales [ss_quantity,ss_net_paid,ss_sold_date_sk]
     Subquery #7
       WholeStageCodegen (2)
         HashAggregate [count] [count(1),count(1),count]
@@ -83,7 +83,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity]
+                          Scan parquet default.store_sales [ss_quantity,ss_sold_date_sk]
     Subquery #8
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_ext_discount_amt)),avg(ss_ext_discount_amt),sum,count]
@@ -95,7 +95,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt]
+                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_sold_date_sk]
     Subquery #9
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_net_paid)),avg(ss_net_paid),sum,count]
@@ -107,7 +107,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_net_paid]
+                          Scan parquet default.store_sales [ss_quantity,ss_net_paid,ss_sold_date_sk]
     Subquery #10
       WholeStageCodegen (2)
         HashAggregate [count] [count(1),count(1),count]
@@ -119,7 +119,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity]
+                          Scan parquet default.store_sales [ss_quantity,ss_sold_date_sk]
     Subquery #11
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_ext_discount_amt)),avg(ss_ext_discount_amt),sum,count]
@@ -131,7 +131,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt]
+                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_sold_date_sk]
     Subquery #12
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_net_paid)),avg(ss_net_paid),sum,count]
@@ -143,7 +143,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_net_paid]
+                          Scan parquet default.store_sales [ss_quantity,ss_net_paid,ss_sold_date_sk]
     Subquery #13
       WholeStageCodegen (2)
         HashAggregate [count] [count(1),count(1),count]
@@ -155,7 +155,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity]
+                          Scan parquet default.store_sales [ss_quantity,ss_sold_date_sk]
     Subquery #14
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_ext_discount_amt)),avg(ss_ext_discount_amt),sum,count]
@@ -167,7 +167,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt]
+                          Scan parquet default.store_sales [ss_quantity,ss_ext_discount_amt,ss_sold_date_sk]
     Subquery #15
       WholeStageCodegen (2)
         HashAggregate [sum,count] [avg(UnscaledValue(ss_net_paid)),avg(ss_net_paid),sum,count]
@@ -179,7 +179,7 @@ WholeStageCodegen (1)
                     Filter [ss_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.store_sales [ss_quantity,ss_net_paid]
+                          Scan parquet default.store_sales [ss_quantity,ss_net_paid,ss_sold_date_sk]
     Filter [r_reason_sk]
       ColumnarToRow
         InputAdapter

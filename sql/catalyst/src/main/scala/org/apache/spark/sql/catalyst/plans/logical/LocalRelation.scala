@@ -91,4 +91,6 @@ case class LocalRelation(
       " AS " + inlineTableName +
       output.map(_.name).mkString("(", ", ", ")")
   }
+
+  override def maxRows: Option[Long] = Some(data.length.toLong)
 }

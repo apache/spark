@@ -19,14 +19,33 @@ package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Experimental;
 
+import static org.apache.spark.sql.connector.expressions.NullOrdering.NULLS_FIRST;
+import static org.apache.spark.sql.connector.expressions.NullOrdering.NULLS_LAST;
+
 /**
  * A sort direction used in sorting expressions.
+ * <p>
+ * Each direction has a default null ordering that is implied if no null ordering is specified
+ * explicitly.
  *
  * @since 3.2.0
  */
 @Experimental
 public enum SortDirection {
-  ASCENDING, DESCENDING;
+  ASCENDING(NULLS_FIRST), DESCENDING(NULLS_LAST);
+
+  private final NullOrdering defaultNullOrdering;
+
+  SortDirection(NullOrdering defaultNullOrdering) {
+    this.defaultNullOrdering = defaultNullOrdering;
+  }
+
+  /**
+   * Returns the default null ordering to use if no null ordering is specified explicitly.
+   */
+  public NullOrdering defaultNullOrdering() {
+    return defaultNullOrdering;
+  }
 
   @Override
   public String toString() {

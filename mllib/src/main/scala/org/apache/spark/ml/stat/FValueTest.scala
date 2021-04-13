@@ -30,7 +30,7 @@ import org.apache.spark.sql.functions._
  * FValue test for continuous data.
  */
 @Since("3.1.0")
-object FValueTest {
+private[ml] object FValueTest {
 
   /** Used to construct output schema of tests */
   private  case class FValueResult(

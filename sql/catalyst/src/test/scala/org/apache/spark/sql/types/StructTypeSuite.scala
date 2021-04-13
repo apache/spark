@@ -73,6 +73,44 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(struct.toDDL == """`b` BOOLEAN COMMENT 'Field\'s comment'""")
   }
 
+  private val nestedStruct = new StructType()
+    .add(StructField("a", new StructType()
+      .add(StructField("b", new StructType()
+        .add(StructField("c", StringType
+        ).withComment("Deep Nested comment"))
+      ).withComment("Nested comment"))
+    ).withComment("comment"))
+
+  test("SPARK-33846: toDDL should output nested field's comment") {
+    val ddl = "`a` STRUCT<`b`: STRUCT<`c`: STRING COMMENT 'Deep Nested comment'> " +
+      "COMMENT 'Nested comment'> COMMENT 'comment'"
+    assert(nestedStruct.toDDL == ddl)
+  }
+
+  test("SPARK-33846: fromDDL should parse nested field's comment") {
+    val ddl = "`a` STRUCT<`b`: STRUCT<`c`: STRING COMMENT 'Deep Nested comment'> " +
+      "COMMENT 'Nested comment'> COMMENT 'comment'"
+    assert(StructType.fromDDL(ddl) == nestedStruct)
+  }
+
+  test("SPARK-33846: round trip toDDL -> fromDDL - nested struct") {
+    assert(StructType.fromDDL(nestedStruct.toDDL) == nestedStruct)
+  }
+
+  private val structWithEmptyString = new StructType()
+    .add(StructField("a b", StringType).withComment("comment"))
+
+  test("SPARK-33846: empty string in a column's name should be respected by toDDL") {
+    val ddl = "`a b` STRING COMMENT 'comment'"
+
+    assert(structWithEmptyString.toDDL == ddl)
+  }
+
+  test("SPARK-33846: empty string in a column's name should be respected by fromDDL") {
+    val ddl = "`a b` STRING COMMENT 'comment'"
+
+    assert(StructType.fromDDL(ddl) == structWithEmptyString)
+  }
 
   test("Print up to the given level") {
     val schema = StructType.fromDDL(

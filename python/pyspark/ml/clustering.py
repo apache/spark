@@ -821,7 +821,7 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
         """
         warnings.warn("Deprecated in 3.0.0. It will be removed in future versions. Use "
                       "ClusteringEvaluator instead. You can also get the cost on the training "
-                      "dataset in the summary.", DeprecationWarning)
+                      "dataset in the summary.", FutureWarning)
         return self._call_java("computeCost", dataset)
 
     @property

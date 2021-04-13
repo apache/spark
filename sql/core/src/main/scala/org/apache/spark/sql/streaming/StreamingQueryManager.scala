@@ -24,13 +24,11 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
@@ -239,82 +237,39 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       recoverFromCheckpointLocation: Boolean,
       trigger: Trigger,
       triggerClock: Clock): StreamingQueryWrapper = {
-    var deleteCheckpointOnStop = false
-    val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
-      new Path(userSpecified).toString
-    }.orElse {
-      df.sparkSession.sessionState.conf.checkpointLocation.map { location =>
-        new Path(location, userSpecifiedName.getOrElse(UUID.randomUUID().toString)).toString
-      }
-    }.getOrElse {
-      if (useTempCheckpointLocation) {
-        deleteCheckpointOnStop = true
-        val tempDir = Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
-        logWarning("Temporary checkpoint location created which is deleted normally when" +
-          s" the query didn't fail: $tempDir. If it's required to delete it under any" +
-          s" circumstances, please set ${SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key} to" +
-          s" true. Important to know deleting temp checkpoint folder is best effort.")
-        tempDir
-      } else {
-        throw new AnalysisException(
-          "checkpointLocation must be specified either " +
-            """through option("checkpointLocation", ...) or """ +
-            s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
-      }
-    }
-
-    // If offsets have already been created, we trying to resume a query.
-    if (!recoverFromCheckpointLocation) {
-      val checkpointPath = new Path(checkpointLocation, "offsets")
-      val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
-      if (fs.exists(checkpointPath)) {
-        throw new AnalysisException(
-          s"This query does not support recovering from checkpoint location. " +
-            s"Delete $checkpointPath to start over.")
-      }
-    }
-
     val analyzedPlan = df.queryExecution.analyzed
     df.queryExecution.assertAnalyzed()
 
-    val operationCheckEnabled = sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled
+    val dataStreamWritePlan = WriteToStreamStatement(
+      userSpecifiedName,
+      userSpecifiedCheckpointLocation,
+      useTempCheckpointLocation,
+      recoverFromCheckpointLocation,
+      sink,
+      outputMode,
+      df.sparkSession.sessionState.newHadoopConf(),
+      trigger.isInstanceOf[ContinuousTrigger],
+      analyzedPlan)
 
-    if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
-      logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
-          "is not supported in streaming DataFrames/Datasets and will be disabled.")
-    }
+    val analyzedStreamWritePlan =
+      sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
+        .asInstanceOf[WriteToStream]
 
     (sink, trigger) match {
-      case (table: SupportsWrite, trigger: ContinuousTrigger) =>
-        if (operationCheckEnabled) {
-          UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
-        }
+      case (_: SupportsWrite, trigger: ContinuousTrigger) =>
         new StreamingQueryWrapper(new ContinuousExecution(
           sparkSession,
-          userSpecifiedName.orNull,
-          checkpointLocation,
-          analyzedPlan,
-          table,
           trigger,
           triggerClock,
-          outputMode,
           extraOptions,
-          deleteCheckpointOnStop))
+          analyzedStreamWritePlan))
       case _ =>
-        if (operationCheckEnabled) {
-          UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
-        }
         new StreamingQueryWrapper(new MicroBatchExecution(
           sparkSession,
-          userSpecifiedName.orNull,
-          checkpointLocation,
-          analyzedPlan,
-          sink,
           trigger,
           triggerClock,
-          outputMode,
           extraOptions,
-          deleteCheckpointOnStop))
+          analyzedStreamWritePlan))
     }
   }
 

@@ -778,7 +778,7 @@ struct<extract(second FROM c):decimal(8,6)>
 -- !query
 select c - i from t
 -- !query schema
-struct<CAST(c - i AS STRING):string>
+struct<c - i:string>
 -- !query output
 1999-08-05 14:18:02.334456
 
@@ -786,7 +786,7 @@ struct<CAST(c - i AS STRING):string>
 -- !query
 select year(c - i) from t
 -- !query schema
-struct<year(CAST(CAST(c - i AS STRING) AS DATE)):int>
+struct<year(c - i):int>
 -- !query output
 1999
 
@@ -794,7 +794,7 @@ struct<year(CAST(CAST(c - i AS STRING) AS DATE)):int>
 -- !query
 select extract(year from c - i) from t
 -- !query schema
-struct<extract(year FROM CAST(c - i AS STRING)):int>
+struct<extract(year FROM c - i):int>
 -- !query output
 1999
 
@@ -802,6 +802,6 @@ struct<extract(year FROM CAST(c - i AS STRING)):int>
 -- !query
 select extract(month from to_timestamp(c) - i) from t
 -- !query schema
-struct<extract(month FROM CAST(to_timestamp(c) - i AS TIMESTAMP)):int>
+struct<extract(month FROM to_timestamp(c) - i):int>
 -- !query output
 8

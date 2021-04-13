@@ -135,7 +135,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> spark.catalog.dropTempView("people")
         """
         warnings.warn(
-            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
+            "Deprecated in 2.0, use createOrReplaceTempView instead.",
+            FutureWarning
+        )
         self._jdf.createOrReplaceTempView(name)
 
     def createTempView(self, name):
@@ -586,7 +588,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        eventTime : str or :class:`Column`
+        eventTime : str
             the name of the column that contains the event time of the row.
         delayThreshold : str
             the minimum delay to wait to data to arrive late, relative to the
@@ -1297,6 +1299,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         The following performs a full outer join between ``df1`` and ``df2``.
+
         >>> from pyspark.sql.functions import desc
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height) \
                 .sort(desc("name")).collect()

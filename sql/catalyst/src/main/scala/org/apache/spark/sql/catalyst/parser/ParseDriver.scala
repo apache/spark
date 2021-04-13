@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -77,7 +78,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
       case plan: LogicalPlan => plan
       case _ =>
         val position = Origin(None, None)
-        throw new ParseException(Option(sqlText), "Unsupported SQL statement", position, position)
+        throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
     }
   }
 
@@ -265,8 +266,7 @@ case object PostProcessor extends SqlBaseBaseListener {
   override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
     val ident = ctx.getParent.getText
 
-    throw new ParseException(s"Possibly unquoted identifier $ident detected. " +
-      s"Please consider quoting it with back-quotes as `$ident`", ctx)
+    throw QueryParsingErrors.unquotedIdentifierError(ident, ctx)
   }
 
   /** Remove the back ticks from an Identifier. */

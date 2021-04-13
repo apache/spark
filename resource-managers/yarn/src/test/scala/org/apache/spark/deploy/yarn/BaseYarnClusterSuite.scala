@@ -80,6 +80,16 @@ abstract class BaseYarnClusterSuite
     yarnConf.set("yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage",
       "100.0")
 
+    // capacity-scheduler.xml is missing in hadoop-client-minicluster so this is a workaround
+    yarnConf.set("yarn.scheduler.capacity.root.queues", "default")
+    yarnConf.setInt("yarn.scheduler.capacity.root.default.capacity", 100)
+    yarnConf.setFloat("yarn.scheduler.capacity.root.default.user-limit-factor", 1)
+    yarnConf.setInt("yarn.scheduler.capacity.root.default.maximum-capacity", 100)
+    yarnConf.set("yarn.scheduler.capacity.root.default.state", "RUNNING")
+    yarnConf.set("yarn.scheduler.capacity.root.default.acl_submit_applications", "*")
+    yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
+    yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
+
     yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
     yarnCluster.init(yarnConf)
     yarnCluster.start()

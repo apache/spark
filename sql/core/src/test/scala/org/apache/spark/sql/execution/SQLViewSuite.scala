@@ -140,30 +140,50 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     val viewName = "testView"
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
-      assertNoSuchTable(s"ALTER TABLE $viewName SET SERDE 'whatever'")
-      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
-      assertNoSuchTable(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
-      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
-      assertAnalysisError(
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName SET SERDE 'whatever'",
+        viewName,
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'",
+        viewName,
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')",
+        viewName,
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')",
+        viewName,
+        "ALTER TABLE ... RENAME TO PARTITION")
+      assertErrorForAlterTableOnTempView(
         s"ALTER TABLE $viewName RECOVER PARTITIONS",
-        s"$viewName is a temp view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table")
-
-      // For v2 ALTER TABLE statements, we have better error message saying view is not supported.
-      assertAnalysisError(
+        viewName,
+        "ALTER TABLE ... RECOVER PARTITIONS")
+      assertErrorForAlterTableOnTempView(
         s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
-        s"'$viewName' is a view not a table")
-      assertAnalysisError(
-        s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
-        s"$viewName is a temp view. 'ALTER TABLE ... ADD PARTITION ...' expects a table")
-      assertAnalysisError(
-        s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')",
-        s"$viewName is a temp view. 'ALTER TABLE ... DROP PARTITION ...' expects a table")
-
-      // For the following v2 ALERT TABLE statements, unsupported operations are checked first
-      // before resolving the relations.
-      assertAnalysisError(
+        viewName,
+        "ALTER TABLE ... SET LOCATION ...")
+      assertErrorForAlterTableOnTempView(
         s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'",
-        "ALTER TABLE SET LOCATION does not support partition for v2 tables")
+        viewName,
+        "ALTER TABLE ... SET LOCATION ...")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
+        viewName,
+        "ALTER TABLE ... ADD PARTITION ...")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')",
+        viewName,
+        "ALTER TABLE ... DROP PARTITION ...")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName SET TBLPROPERTIES ('p' = 'an')",
+        viewName,
+        "ALTER TABLE ... SET TBLPROPERTIES")
+      assertErrorForAlterTableOnTempView(
+        s"ALTER TABLE $viewName UNSET TBLPROPERTIES ('p')",
+        viewName,
+        "ALTER TABLE ... UNSET TBLPROPERTIES")
     }
   }
 
@@ -184,23 +204,19 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }.getMessage
       assert(e2.contains(s"$viewName is a temp view. 'LOAD DATA' expects a table"))
       val e3 = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $viewName")
-      }.getMessage
-      assert(e3.contains(s"$viewName is a temp view. 'TRUNCATE TABLE' expects a table"))
-      val e4 = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }.getMessage
-      assert(e4.contains(
+      assert(e3.contains(
         s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
-      val e5 = intercept[AnalysisException] {
+      val e4 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
       }.getMessage
-      assert(e5.contains(
+      assert(e4.contains(
         s"$viewName is a temp view. 'ANALYZE TABLE' expects a table or permanent view."))
-      val e6 = intercept[AnalysisException] {
+      val e5 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(e6.contains(s"Temporary view `$viewName` is not cached for analyzing columns."))
+      assert(e5.contains(s"Temporary view `$viewName` is not cached for analyzing columns."))
     }
   }
 
@@ -215,7 +231,14 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assert(e.message.contains(message))
   }
 
-  test("error handling: insert/load/truncate table commands against a view") {
+  private def assertErrorForAlterTableOnTempView(
+    sqlText: String, viewName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$viewName is a temp view. '$cmdName' expects a table. Please use ALTER VIEW instead.")
+  }
+
+  test("error handling: insert/load table commands against a view") {
     val viewName = "testView"
     withView(viewName) {
       sql(s"CREATE VIEW $viewName AS SELECT id FROM jt")
@@ -230,11 +253,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
       }.getMessage
       assert(e.contains("default.testView is a view. 'LOAD DATA' expects a table"))
-
-      e = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $viewName")
-      }.getMessage
-      assert(e.contains("default.testView is a view. 'TRUNCATE TABLE' expects a table"))
     }
   }
 
@@ -852,7 +870,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v1")
             }.getMessage
-            assert(e.contains("cannot resolve '`C1`' given input columns: " +
+            assert(e.contains("cannot resolve 'C1' given input columns: " +
               "[spark_catalog.default.t.c1]"))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
@@ -862,7 +880,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v3")
             }.getMessage
-            assert(e.contains("expression 'spark_catalog.default.t.`c1`' is neither present " +
+            assert(e.contains(
+              "expression 'spark_catalog.default.t.c1' is neither present " +
               "in the group by, nor is it an aggregate function. Add to group by or wrap in " +
               "first() (or first_value) if you don't care which value you get."))
           }
@@ -870,7 +889,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v4")
             }.getMessage
-            assert(e.contains("cannot resolve '`a`' given input columns: " +
+            assert(e.contains("cannot resolve 'a' given input columns: " +
               "[spark_catalog.default.t.c1]"))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {

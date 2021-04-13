@@ -43,3 +43,11 @@ SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', 26);
 SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', 27);
 SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', 30);
 SELECT regexp_replace('healthy, wealthy, and wise', '\\w', 'something', null);
+
+-- regexp_like
+SELECT regexp_like('1a 2b 14m', '\\d+b');
+SELECT regexp_like('1a 2b 14m', '[a-z]+b');
+SELECT regexp('1a 2b 14m', '\\d+b');
+SELECT regexp('1a 2b 14m', '[a-z]+b');
+SELECT rlike('1a 2b 14m', '\\d+b');
+SELECT rlike('1a 2b 14m', '[a-z]+b');
