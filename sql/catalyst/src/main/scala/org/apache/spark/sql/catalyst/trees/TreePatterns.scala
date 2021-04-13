@@ -15,22 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.rules
+package org.apache.spark.sql.catalyst.trees
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.trees.TreeNode
+// Enums for commonly encountered tree patterns in rewrite rules.
+object TreePattern extends Enumeration  {
+  type TreePattern = Value
 
-abstract class Rule[TreeType <: TreeNode[_]] extends SQLConfHelper with Logging {
+  // Enum Ids start from 0.
+  // Expression patterns (alphabetically ordered)
+  val IN: Value = Value(0)
 
-  // The integer id of a rule, for pruning unnecessary tree traversals.
-  protected lazy val ruleId = RuleIdCollection.getRuleId(this.ruleName)
-
-  /** Name for this rule, automatically inferred based on class name. */
-  val ruleName: String = {
-    val className = getClass.getName
-    if (className endsWith "$") className.dropRight(1) else className
-  }
-
-  def apply(plan: TreeType): TreeType
+  // Logical plan patterns (alphabetically ordered)
+  val INNER_LIKE_JOIN: Value = Value
+  val JOIN: Value = Value
+  val LEFT_SEMI_OR_ANTI_JOIN: Value = Value
+  val OUTER_JOIN: Value = Value
 }

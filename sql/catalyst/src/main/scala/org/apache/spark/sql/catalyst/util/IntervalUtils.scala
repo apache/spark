@@ -25,9 +25,16 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+
+// The style of textual representation of intervals
+object IntervalStringStyles extends Enumeration {
+  type IntervalStyle = Value
+  val ANSI_STYLE, HIVE_STYLE = Value
+}
 
 object IntervalUtils {
 
@@ -840,16 +847,21 @@ object IntervalUtils {
    * which conforms to the ANSI SQL standard.
    *
    * @param months The number of months, positive or negative
+   * @param style The style of textual representation of the interval
    * @return Year-month interval string
    */
-  def toYearMonthIntervalString(months: Int): String = {
+  def toYearMonthIntervalString(months: Int, style: IntervalStyle): String = {
     var sign = ""
     var absMonths: Long = months
     if (months < 0) {
       sign = "-"
       absMonths = -absMonths
     }
-    s"INTERVAL '$sign${absMonths / MONTHS_PER_YEAR}-${absMonths % MONTHS_PER_YEAR}' YEAR TO MONTH"
+    val payload = s"$sign${absMonths / MONTHS_PER_YEAR}-${absMonths % MONTHS_PER_YEAR}"
+    style match {
+      case ANSI_STYLE => s"INTERVAL '$payload' YEAR TO MONTH"
+      case HIVE_STYLE => payload
+    }
   }
 
   /**
@@ -857,9 +869,10 @@ object IntervalUtils {
    * which conforms to the ANSI SQL standard.
    *
    * @param micros The number of microseconds, positive or negative
+   * @param style The style of textual representation of the interval
    * @return Day-time interval string
    */
-  def toDayTimeIntervalString(micros: Long): String = {
+  def toDayTimeIntervalString(micros: Long, style: IntervalStyle): String = {
     var sign = ""
     var rest = micros
     if (micros < 0) {
@@ -867,20 +880,34 @@ object IntervalUtils {
         // Especial handling of minimum `Long` value because negate op overflows `Long`.
         // seconds = 106751991 * (24 * 60 * 60) + 4 * 60 * 60 + 54 = 9223372036854
         // microseconds = -9223372036854000000L-775808 == Long.MinValue
-        return "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND"
+        val minIntervalString = style match {
+          case ANSI_STYLE => "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND"
+          case HIVE_STYLE => "-106751991 04:00:54.775808000"
+        }
+        return minIntervalString
       } else {
         sign = "-"
         rest = -rest
       }
     }
-    val seconds = rest % MICROS_PER_MINUTE
+    val secondsWithFraction = rest % MICROS_PER_MINUTE
     rest /= MICROS_PER_MINUTE
     val minutes = rest % MINUTES_PER_HOUR
     rest /= MINUTES_PER_HOUR
     val hours = rest % HOURS_PER_DAY
     val days = rest / HOURS_PER_DAY
-    val leadSecZero = if (seconds < 10 * MICROS_PER_SECOND) "0" else ""
-    val secStr = java.math.BigDecimal.valueOf(seconds, 6).stripTrailingZeros().toPlainString()
-    f"INTERVAL '$sign$days $hours%02d:$minutes%02d:$leadSecZero$secStr' DAY TO SECOND"
+    val leadSecZero = if (secondsWithFraction < 10 * MICROS_PER_SECOND) "0" else ""
+    val intervalString = style match {
+      case ANSI_STYLE =>
+        val secStr = java.math.BigDecimal.valueOf(secondsWithFraction, 6)
+          .stripTrailingZeros()
+          .toPlainString()
+        f"INTERVAL '$sign$days $hours%02d:$minutes%02d:$leadSecZero$secStr' DAY TO SECOND"
+      case HIVE_STYLE =>
+        val seconds = secondsWithFraction / MICROS_PER_SECOND
+        val nanos = (secondsWithFraction % MICROS_PER_SECOND) * NANOS_PER_MICROS
+        f"$sign$days $hours%02d:$minutes%02d:$seconds%02d.$nanos%09d"
+    }
+    intervalString
   }
 }

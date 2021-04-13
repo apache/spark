@@ -20,7 +20,7 @@ from typing import Any
 import pandas as pd
 from pandas.api.types import is_hashable
 
-from pyspark import pandas as pp
+from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeCategoricalIndex
 from pyspark.pandas.series import Series
@@ -62,20 +62,20 @@ class CategoricalIndex(Index):
 
     Examples
     --------
-    >>> pp.CategoricalIndex(["a", "b", "c", "a", "b", "c"])  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.CategoricalIndex(["a", "b", "c", "a", "b", "c"])  # doctest: +NORMALIZE_WHITESPACE
     CategoricalIndex(['a', 'b', 'c', 'a', 'b', 'c'],
                      categories=['a', 'b', 'c'], ordered=False, dtype='category')
 
     ``CategoricalIndex`` can also be instantiated from a ``Categorical``:
 
     >>> c = pd.Categorical(["a", "b", "c", "a", "b", "c"])
-    >>> pp.CategoricalIndex(c)  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.CategoricalIndex(c)  # doctest: +NORMALIZE_WHITESPACE
     CategoricalIndex(['a', 'b', 'c', 'a', 'b', 'c'],
                      categories=['a', 'b', 'c'], ordered=False, dtype='category')
 
     Ordered ``CategoricalIndex`` can have a min and max value.
 
-    >>> ci = pp.CategoricalIndex(
+    >>> ci = ps.CategoricalIndex(
     ...     ["a", "b", "c", "a", "b", "c"], ordered=True, categories=["c", "b", "a"]
     ... )
     >>> ci  # doctest: +NORMALIZE_WHITESPACE
@@ -84,15 +84,15 @@ class CategoricalIndex(Index):
 
     From a Series:
 
-    >>> s = pp.Series(["a", "b", "c", "a", "b", "c"], index=[10, 20, 30, 40, 50, 60])
-    >>> pp.CategoricalIndex(s)  # doctest: +NORMALIZE_WHITESPACE
+    >>> s = ps.Series(["a", "b", "c", "a", "b", "c"], index=[10, 20, 30, 40, 50, 60])
+    >>> ps.CategoricalIndex(s)  # doctest: +NORMALIZE_WHITESPACE
     CategoricalIndex(['a', 'b', 'c', 'a', 'b', 'c'],
                      categories=['a', 'b', 'c'], ordered=False, dtype='category')
 
     From an Index:
 
-    >>> idx = pp.Index(["a", "b", "c", "a", "b", "c"])
-    >>> pp.CategoricalIndex(idx)  # doctest: +NORMALIZE_WHITESPACE
+    >>> idx = ps.Index(["a", "b", "c", "a", "b", "c"])
+    >>> ps.CategoricalIndex(idx)  # doctest: +NORMALIZE_WHITESPACE
     CategoricalIndex(['a', 'b', 'c', 'a', 'b', 'c'],
                      categories=['a', 'b', 'c'], ordered=False, dtype='category')
     """
@@ -106,7 +106,7 @@ class CategoricalIndex(Index):
                 dtype = "category"
             return Index(data, dtype=dtype, copy=copy, name=name)
 
-        return pp.from_pandas(
+        return ps.from_pandas(
             pd.CategoricalIndex(
                 data=data, categories=categories, ordered=ordered, dtype=dtype, name=name
             )
@@ -130,7 +130,7 @@ class CategoricalIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.CategoricalIndex(list("abbccc"))
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
         >>> idx  # doctest: +NORMALIZE_WHITESPACE
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
@@ -147,7 +147,7 @@ class CategoricalIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.CategoricalIndex(list("abbccc"))
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
         >>> idx  # doctest: +NORMALIZE_WHITESPACE
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
@@ -168,7 +168,7 @@ class CategoricalIndex(Index):
 
         Examples
         --------
-        >>> idx = pp.CategoricalIndex(list("abbccc"))
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
         >>> idx  # doctest: +NORMALIZE_WHITESPACE
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
@@ -198,7 +198,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.indexes.category.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.indexes.category tests")

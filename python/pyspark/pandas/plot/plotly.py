@@ -27,10 +27,10 @@ from pyspark.pandas.plot import (
 )
 
 if TYPE_CHECKING:
-    import pyspark.pandas as pp  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
 
 
-def plot_koalas(data: Union["pp.DataFrame", "pp.Series"], kind: str, **kwargs):
+def plot_koalas(data: Union["ps.DataFrame", "ps.Series"], kind: str, **kwargs):
     import plotly
 
     # Koalas specific plots
@@ -47,7 +47,7 @@ def plot_koalas(data: Union["pp.DataFrame", "pp.Series"], kind: str, **kwargs):
     return plotly.plot(KoalasPlotAccessor.pandas_plot_data_map[kind](data), kind, **kwargs)
 
 
-def plot_pie(data: Union["pp.DataFrame", "pp.Series"], **kwargs):
+def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     from plotly import express
 
     data = KoalasPlotAccessor.pandas_plot_data_map["pie"](data)
@@ -71,7 +71,7 @@ def plot_pie(data: Union["pp.DataFrame", "pp.Series"], **kwargs):
         raise RuntimeError("Unexpected type: [%s]" % type(data))
 
 
-def plot_histogram(data: Union["pp.DataFrame", "pp.Series"], **kwargs):
+def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
 
     bins = kwargs.get("bins", 10)
@@ -109,11 +109,11 @@ def plot_histogram(data: Union["pp.DataFrame", "pp.Series"], **kwargs):
     return fig
 
 
-def plot_box(data: Union["pp.DataFrame", "pp.Series"], **kwargs):
+def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
-    import pyspark.pandas as pp
+    import pyspark.pandas as ps
 
-    if isinstance(data, pp.DataFrame):
+    if isinstance(data, ps.DataFrame):
         raise RuntimeError(
             "plotly does not support a box plot with Koalas DataFrame. Use Series instead."
         )
@@ -177,11 +177,11 @@ def plot_box(data: Union["pp.DataFrame", "pp.Series"], **kwargs):
     return fig
 
 
-def plot_kde(data: Union["pp.DataFrame", "pp.Series"], **kwargs):
+def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     from plotly import express
-    import pyspark.pandas as pp
+    import pyspark.pandas as ps
 
-    if isinstance(data, pp.DataFrame) and "color" not in kwargs:
+    if isinstance(data, ps.DataFrame) and "color" not in kwargs:
         kwargs["color"] = "names"
 
     kdf = KdePlotBase.prepare_kde_data(data)

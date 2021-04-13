@@ -158,7 +158,7 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     >>> from pyspark.pandas.mlflow import load_model
     >>> run_info = client.list_run_infos(exp)[-1]
     >>> model = load_model("runs:/{run_id}/model".format(run_id=run_info.run_uuid))
-    >>> prediction_df = pp.DataFrame({"x1": [2.0], "x2": [4.0]})
+    >>> prediction_df = ps.DataFrame({"x1": [2.0], "x2": [4.0]})
     >>> prediction_df["prediction"] = model.predict(prediction_df)
     >>> prediction_df
         x1   x2  prediction
@@ -175,7 +175,7 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     Other columns have to be manually joined.
     For example, this code will not work:
 
-    >>> df = pp.DataFrame({"x1": [2.0], "x2": [3.0], "z": [-1]})
+    >>> df = ps.DataFrame({"x1": [2.0], "x2": [3.0], "z": [-1]})
     >>> features = df[["x1", "x2"]]
     >>> y = model.predict(features)
     >>> # Works:
@@ -205,7 +205,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.mlflow.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.mlflow tests").getOrCreate()
     )

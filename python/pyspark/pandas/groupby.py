@@ -43,7 +43,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.functions import PandasUDFType, pandas_udf, Column
 
-from pyspark import pandas as pp  # For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.internal import (
@@ -148,7 +148,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 2],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 2],
         ...                    'B': [1, 2, 3, 4],
         ...                    'C': [0.362, 0.227, 1.267, -0.562]},
         ...                   columns=['A', 'B', 'C'])
@@ -196,7 +196,7 @@ class GroupBy(object, metaclass=ABCMeta):
         also supports 'named aggregation' or nested renaming in .agg. It can also be
         used when applying multiple aggregation functions to specific columns.
 
-        >>> aggregated = df.groupby('A').agg(b_max=pp.NamedAgg(column='B', aggfunc='max'))
+        >>> aggregated = df.groupby('A').agg(b_max=ps.NamedAgg(column='B', aggfunc='max'))
         >>> aggregated.sort_index()  # doctest: +NORMALIZE_WHITESPACE
              b_max
         A
@@ -344,7 +344,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 1, 2],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 1, 2],
         ...                    'B': [np.nan, 2, 3, 4, 5],
         ...                    'C': [1, 2, 1, 1, 2]}, columns=['A', 'B', 'C'])
         >>> df.groupby('A').count().sort_index()  # doctest: +NORMALIZE_WHITESPACE
@@ -407,7 +407,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 1, 2],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 1, 2],
         ...                    'B': [np.nan, 2, 3, 4, 5],
         ...                    'C': [1, 2, 1, 1, 2]}, columns=['A', 'B', 'C'])
 
@@ -501,7 +501,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
         ...                    'B': [True, True, True, False, False,
         ...                          False, None, True, None, False]},
         ...                   columns=['A', 'B'])
@@ -543,7 +543,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
         ...                    'B': [True, True, True, False, False,
         ...                          False, None, True, None, False]},
         ...                   columns=['A', 'B'])
@@ -585,7 +585,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'A': [1, 2, 2, 3, 3, 3],
         ...                    'B': [1, 1, 2, 3, 3, 3]},
         ...                   columns=['A', 'B'])
         >>> df
@@ -668,7 +668,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4, 5, 6],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4, 5, 6],
         ...                    'b': [1, 1, 2, 3, 5, 8],
         ...                    'c': [1, 4, 9, 16, 25, 36]}, columns=['a', 'b', 'c'])
         >>> df
@@ -727,7 +727,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame([['a'], ['a'], ['a'], ['b'], ['b'], ['a']],
+        >>> df = ps.DataFrame([['a'], ['a'], ['a'], ['b'], ['b'], ['a']],
         ...                   columns=['A'])
         >>> df
            A
@@ -779,7 +779,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     [[1, None, 4], [1, 0.1, 3], [1, 20.0, 2], [4, 10.0, 1]],
         ...     columns=list('ABC'))
         >>> df
@@ -828,7 +828,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     [[1, None, 4], [1, 0.1, 3], [1, 20.0, 2], [4, 10.0, 1]],
         ...     columns=list('ABC'))
         >>> df
@@ -877,7 +877,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     [[1, None, 4], [1, 0.1, 3], [1, 20.0, 2], [4, 10.0, 1]],
         ...     columns=list('ABC'))
         >>> df
@@ -926,7 +926,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     [[1, None, 4], [1, 0.1, 3], [1, 20.0, 2], [4, 10.0, 1]],
         ...     columns=list('ABC'))
         >>> df
@@ -982,7 +982,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def pandas_div(x) -> pp.DataFrame[float, float]:
+            >>> def pandas_div(x) -> ps.DataFrame[float, float]:
             ...     return x[['B', 'C']] / x[['B', 'C']]
 
             If the return type is specified, the output column names become
@@ -991,11 +991,11 @@ class GroupBy(object, metaclass=ABCMeta):
 
             To specify the column names, you can assign them in a pandas friendly style as below:
 
-            >>> def pandas_div(x) -> pp.DataFrame["a": float, "b": float]:
+            >>> def pandas_div(x) -> ps.DataFrame["a": float, "b": float]:
             ...     return x[['B', 'C']] / x[['B', 'C']]
 
             >>> pdf = pd.DataFrame({'B': [1.], 'C': [3.]})
-            >>> def plus_one(x) -> pp.DataFrame[zip(pdf.columns, pdf.dtypes)]:
+            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]:
             ...     return x[['B', 'C']] / x[['B', 'C']]
 
             When the given function has the return type annotated, the original index of the
@@ -1028,7 +1028,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': 'a a b'.split(),
+        >>> df = ps.DataFrame({'A': 'a a b'.split(),
         ...                    'B': [1, 2, 3],
         ...                    'C': [4, 6, 5]}, columns=['A', 'B', 'C'])
         >>> g = df.groupby('A')
@@ -1062,7 +1062,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         You can specify the type hint and prevent schema inference for better performance.
 
-        >>> def pandas_div(x) -> pp.DataFrame[float, float]:
+        >>> def pandas_div(x) -> ps.DataFrame[float, float]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
         >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
             c0   c1
@@ -1072,9 +1072,9 @@ class GroupBy(object, metaclass=ABCMeta):
 
         In case of Series, it works as below.
 
-        >>> def plus_max(x) -> pp.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[np.int]:
         ...     return x + x.max()
-        >>> df.B.groupby(df.A).apply(plus_max).sort_index()
+        >>> df.B.groupby(df.A).apply(plus_max).sort_index()  # doctest: +SKIP
         0    6
         1    3
         2    4
@@ -1092,7 +1092,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         >>> def plus_length(x) -> np.int:
         ...     return len(x)
-        >>> df.B.groupby(df.A).apply(plus_length).sort_index()
+        >>> df.B.groupby(df.A).apply(plus_length).sort_index()  # doctest: +SKIP
         0    1
         1    2
         Name: B, dtype: int64
@@ -1101,7 +1101,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         >>> def calculation(x, y, z) -> np.int:
         ...     return len(x) + y * z
-        >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()
+        >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()  # doctest: +SKIP
         0    51
         1    52
         Name: B, dtype: int64
@@ -1155,10 +1155,10 @@ class GroupBy(object, metaclass=ABCMeta):
                 pser_or_pdf = pdf.groupby(groupkeys)[name].apply(pandas_apply, *args, **kwargs)
             else:
                 pser_or_pdf = pdf.groupby(groupkeys).apply(pandas_apply, *args, **kwargs)
-            kser_or_kdf = pp.from_pandas(pser_or_pdf)
+            kser_or_kdf = ps.from_pandas(pser_or_pdf)
 
             if len(pdf) <= limit:
-                if isinstance(kser_or_kdf, pp.Series) and is_series_groupby:
+                if isinstance(kser_or_kdf, ps.Series) and is_series_groupby:
                     kser_or_kdf = kser_or_kdf.rename(cast(SeriesGroupBy, self)._kser.name)
                 return cast(Union[Series, DataFrame], kser_or_kdf)
 
@@ -1276,7 +1276,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A' : ['foo', 'bar', 'foo', 'bar',
+        >>> df = ps.DataFrame({'A' : ['foo', 'bar', 'foo', 'bar',
         ...                           'foo', 'bar'],
         ...                    'B' : [1, 2, 3, 4, 5, 6],
         ...                    'C' : [2.0, 5., 8., 1., 2., 9.]}, columns=['A', 'B', 'C'])
@@ -1413,7 +1413,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...     'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
         >>> df
@@ -1478,7 +1478,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 2, 2, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 2, 2, 3],
         ...                    'b': [1, 2, 3, 4, 5],
         ...                    'c': [5, 4, 3, 2, 1]}, columns=['a', 'b', 'c'])
 
@@ -1557,7 +1557,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 2, 2, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 2, 2, 3],
         ...                    'b': [1, 2, 3, 4, 5],
         ...                    'c': [5, 4, 3, 2, 1]}, columns=['a', 'b', 'c'])
 
@@ -1648,7 +1648,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'A': [1, 1, 2, 2],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
@@ -1709,7 +1709,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'A': [1, 1, 2, 2],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
@@ -1760,7 +1760,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'A': [1, 1, 2, 2],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
@@ -1837,7 +1837,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [2, 3, 1, 4, 6, 9, 8, 10, 7, 5],
         ...                    'c': [3, 5, 2, 5, 1, 2, 6, 4, 3, 6]},
         ...                   columns=['a', 'b', 'c'],
@@ -1890,7 +1890,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [2, 3, 1, 4, 6, 9, 8, 10, 7, 5],
         ...                    'c': [3, 5, 2, 5, 1, 2, 6, 4, 3, 6]},
         ...                   columns=['a', 'b', 'c'],
@@ -1946,7 +1946,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...     'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
         >>> df
@@ -2010,7 +2010,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
              To avoid this, specify return type in ``func``, for instance, as below:
 
-             >>> def convert_to_string(x) -> pp.Series[str]:
+             >>> def convert_to_string(x) -> ps.Series[str]:
              ...     return x.apply("a string {}".format)
 
             When the given function has the return type annotated, the original index of the
@@ -2044,7 +2044,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'A': [0, 0, 1],
+        >>> df = ps.DataFrame({'A': [0, 0, 1],
         ...                    'B': [1, 2, 3],
         ...                    'C': [4, 6, 5]}, columns=['A', 'B', 'C'])
 
@@ -2056,7 +2056,7 @@ class GroupBy(object, metaclass=ABCMeta):
         its argument and returns a Series. `transform` applies the function on each series
         in each grouped data, and combine them into a new DataFrame:
 
-        >>> def convert_to_string(x) -> pp.Series[str]:
+        >>> def convert_to_string(x) -> ps.Series[str]:
         ...     return x.apply("a string {}".format)
         >>> g.transform(convert_to_string)  # doctest: +NORMALIZE_WHITESPACE
                     B           C
@@ -2064,7 +2064,7 @@ class GroupBy(object, metaclass=ABCMeta):
         1  a string 2  a string 6
         2  a string 3  a string 5
 
-        >>> def plus_max(x) -> pp.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[np.int]:
         ...     return x + x.max()
         >>> g.transform(plus_max)  # doctest: +NORMALIZE_WHITESPACE
            B   C
@@ -2098,7 +2098,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         You can also specify extra arguments to pass to the function.
 
-        >>> def calculation(x, y, z) -> pp.Series[np.int]:
+        >>> def calculation(x, y, z) -> ps.Series[np.int]:
         ...     return x + x.min() + y + z
         >>> g.transform(calculation, 5, z=20)  # doctest: +NORMALIZE_WHITESPACE
             B   C
@@ -2192,7 +2192,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'id': ['spam', 'egg', 'egg', 'spam',
+        >>> df = ps.DataFrame({'id': ['spam', 'egg', 'egg', 'spam',
         ...                           'ham', 'ham'],
         ...                    'value1': [1, 5, 5, 2, 5, 5],
         ...                    'value2': list('abbaxy')}, columns=['id', 'value1', 'value2'])
@@ -2293,7 +2293,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame([('falcon', 'bird', 389.0),
+        >>> kdf = ps.DataFrame([('falcon', 'bird', 389.0),
         ...                     ('parrot', 'bird', 24.0),
         ...                     ('lion', 'mammal', 80.5),
         ...                     ('monkey', 'mammal', np.nan)],
@@ -2380,7 +2380,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({'a': [1., 1., 1., 1., 2., 2., 2., 3., 3., 3.],
+        >>> kdf = ps.DataFrame({'a': [1., 1., 1., 1., 2., 2., 2., 3., 3., 3.],
         ...                     'b': [2., 3., 1., 4., 6., 9., 8., 10., 7., 5.],
         ...                     'c': [3., 5., 2., 5., 1., 2., 6., 4., 3., 6.]},
         ...                    columns=['a', 'b', 'c'],
@@ -2715,7 +2715,7 @@ class DataFrameGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
+        >>> df = ps.DataFrame({'a': [1, 1, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
         >>> df
            a  b  c
         0  1  4  7
@@ -2885,7 +2885,7 @@ class SeriesGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
 
         >>> df.groupby(['a'])['b'].nsmallest(1).sort_index()  # doctest: +NORMALIZE_WHITESPACE
@@ -2962,7 +2962,7 @@ class SeriesGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
 
         >>> df.groupby(['a'])['b'].nlargest(1).sort_index()  # doctest: +NORMALIZE_WHITESPACE
@@ -3040,7 +3040,7 @@ class SeriesGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'A': [1, 2, 2, 3, 3, 3],
         ...                    'B': [1, 1, 2, 3, 3, 3]},
         ...                   columns=['A', 'B'])
         >>> df
@@ -3097,7 +3097,7 @@ class SeriesGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
 
         >>> df.groupby(['a'])['b'].unique().sort_index()  # doctest: +SKIP
@@ -3198,7 +3198,7 @@ def _test():
 
     globs = pyspark.pandas.groupby.__dict__.copy()
     globs["np"] = numpy
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.groupby tests")

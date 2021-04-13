@@ -27,7 +27,7 @@ from pyspark.pandas.missing.window import (
 )
 
 # For running doctests and reference resolution in PyCharm.
-from pyspark import pandas as pp  # noqa: F401
+from pyspark import pandas as ps  # noqa: F401
 
 from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
 from pyspark.pandas.utils import scol_for
@@ -176,7 +176,7 @@ class Rolling(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([2, 3, float("nan"), 10])
+        >>> s = ps.Series([2, 3, float("nan"), 10])
         >>> s.rolling(1).count()
         0    1.0
         1    1.0
@@ -231,7 +231,7 @@ class Rolling(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([4, 3, 5, 2, 6])
+        >>> s = ps.Series([4, 3, 5, 2, 6])
         >>> s
         0    4
         1    3
@@ -258,7 +258,7 @@ class Rolling(RollingAndExpanding):
 
         For DataFrame, each rolling summation is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df
            A   B
         0  4  16
@@ -309,7 +309,7 @@ class Rolling(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([4, 3, 5, 2, 6])
+        >>> s = ps.Series([4, 3, 5, 2, 6])
         >>> s
         0    4
         1    3
@@ -336,7 +336,7 @@ class Rolling(RollingAndExpanding):
 
         For DataFrame, each rolling minimum is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df
            A   B
         0  4  16
@@ -386,7 +386,7 @@ class Rolling(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([4, 3, 5, 2, 6])
+        >>> s = ps.Series([4, 3, 5, 2, 6])
         >>> s
         0    4
         1    3
@@ -413,7 +413,7 @@ class Rolling(RollingAndExpanding):
 
         For DataFrame, each rolling maximum is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df
            A   B
         0  4  16
@@ -464,7 +464,7 @@ class Rolling(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([4, 3, 5, 2, 6])
+        >>> s = ps.Series([4, 3, 5, 2, 6])
         >>> s
         0    4
         1    3
@@ -491,7 +491,7 @@ class Rolling(RollingAndExpanding):
 
         For DataFrame, each rolling mean is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df
            A   B
         0  4  16
@@ -542,7 +542,7 @@ class Rolling(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([5, 5, 6, 7, 5, 5, 5])
+        >>> s = ps.Series([5, 5, 6, 7, 5, 5, 5])
         >>> s.rolling(3).std()
         0         NaN
         1         NaN
@@ -555,7 +555,7 @@ class Rolling(RollingAndExpanding):
 
         For DataFrame, each rolling standard deviation is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.rolling(2).std()
                   A          B
         0       NaN        NaN
@@ -592,7 +592,7 @@ class Rolling(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([5, 5, 6, 7, 5, 5, 5])
+        >>> s = ps.Series([5, 5, 6, 7, 5, 5, 5])
         >>> s.rolling(3).var()
         0         NaN
         1         NaN
@@ -605,7 +605,7 @@ class Rolling(RollingAndExpanding):
 
         For DataFrame, each unbiased rolling variance is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.rolling(2).var()
              A      B
         0  NaN    NaN
@@ -745,7 +745,7 @@ class RollingGroupby(Rolling):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).rolling(3).count().sort_index()
         2  0     1.0
            1     2.0
@@ -762,7 +762,7 @@ class RollingGroupby(Rolling):
 
         For DataFrame, each rolling count is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).count().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                 A    B
         A
@@ -799,7 +799,7 @@ class RollingGroupby(Rolling):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).rolling(3).sum().sort_index()
         2  0      NaN
            1      NaN
@@ -816,7 +816,7 @@ class RollingGroupby(Rolling):
 
         For DataFrame, each rolling summation is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).sum().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                  A     B
         A
@@ -853,7 +853,7 @@ class RollingGroupby(Rolling):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).rolling(3).min().sort_index()
         2  0     NaN
            1     NaN
@@ -870,7 +870,7 @@ class RollingGroupby(Rolling):
 
         For DataFrame, each rolling minimum is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).min().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                 A     B
         A
@@ -907,7 +907,7 @@ class RollingGroupby(Rolling):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).rolling(3).max().sort_index()
         2  0     NaN
            1     NaN
@@ -924,7 +924,7 @@ class RollingGroupby(Rolling):
 
         For DataFrame, each rolling maximum is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).max().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                 A     B
         A
@@ -961,7 +961,7 @@ class RollingGroupby(Rolling):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).rolling(3).mean().sort_index()
         2  0     NaN
            1     NaN
@@ -978,7 +978,7 @@ class RollingGroupby(Rolling):
 
         For DataFrame, each rolling mean is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).mean().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                 A     B
         A
@@ -1092,7 +1092,7 @@ class Expanding(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([2, 3, float("nan"), 10])
+        >>> s = ps.Series([2, 3, float("nan"), 10])
         >>> s.expanding().count()
         0    1.0
         1    2.0
@@ -1140,7 +1140,7 @@ class Expanding(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3, 4, 5])
+        >>> s = ps.Series([1, 2, 3, 4, 5])
         >>> s
         0    1
         1    2
@@ -1159,7 +1159,7 @@ class Expanding(RollingAndExpanding):
 
         For DataFrame, each expanding summation is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df
            A   B
         0  1   1
@@ -1204,7 +1204,7 @@ class Expanding(RollingAndExpanding):
         --------
         Performing a expanding minimum with a window size of 3.
 
-        >>> s = pp.Series([4, 3, 5, 2, 6])
+        >>> s = ps.Series([4, 3, 5, 2, 6])
         >>> s.expanding(3).min()
         0    NaN
         1    NaN
@@ -1240,7 +1240,7 @@ class Expanding(RollingAndExpanding):
         --------
         Performing a expanding minimum with a window size of 3.
 
-        >>> s = pp.Series([4, 3, 5, 2, 6])
+        >>> s = ps.Series([4, 3, 5, 2, 6])
         >>> s.expanding(3).max()
         0    NaN
         1    NaN
@@ -1278,7 +1278,7 @@ class Expanding(RollingAndExpanding):
         The below examples will show expanding mean calculations with window sizes of
         two and three, respectively.
 
-        >>> s = pp.Series([1, 2, 3, 4])
+        >>> s = ps.Series([1, 2, 3, 4])
         >>> s.expanding(2).mean()
         0    NaN
         1    1.5
@@ -1319,7 +1319,7 @@ class Expanding(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([5, 5, 6, 7, 5, 5, 5])
+        >>> s = ps.Series([5, 5, 6, 7, 5, 5, 5])
         >>> s.expanding(3).std()
         0         NaN
         1         NaN
@@ -1332,7 +1332,7 @@ class Expanding(RollingAndExpanding):
 
         For DataFrame, each expanding standard deviation variance is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.expanding(2).std()
                   A          B
         0       NaN        NaN
@@ -1369,7 +1369,7 @@ class Expanding(RollingAndExpanding):
 
         Examples
         --------
-        >>> s = pp.Series([5, 5, 6, 7, 5, 5, 5])
+        >>> s = ps.Series([5, 5, 6, 7, 5, 5, 5])
         >>> s.expanding(3).var()
         0         NaN
         1         NaN
@@ -1382,7 +1382,7 @@ class Expanding(RollingAndExpanding):
 
         For DataFrame, each unbiased expanding variance is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.expanding(2).var()
                   A           B
         0       NaN         NaN
@@ -1449,7 +1449,7 @@ class ExpandingGroupby(Expanding):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).expanding(3).count().sort_index()
         2  0     NaN
            1     NaN
@@ -1466,7 +1466,7 @@ class ExpandingGroupby(Expanding):
 
         For DataFrame, each expanding count is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).count().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                 A    B
         A
@@ -1503,7 +1503,7 @@ class ExpandingGroupby(Expanding):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).expanding(3).sum().sort_index()
         2  0      NaN
            1      NaN
@@ -1520,7 +1520,7 @@ class ExpandingGroupby(Expanding):
 
         For DataFrame, each expanding summation is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).sum().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                  A     B
         A
@@ -1557,7 +1557,7 @@ class ExpandingGroupby(Expanding):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).expanding(3).min().sort_index()
         2  0     NaN
            1     NaN
@@ -1574,7 +1574,7 @@ class ExpandingGroupby(Expanding):
 
         For DataFrame, each expanding minimum is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).min().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                 A     B
         A
@@ -1610,7 +1610,7 @@ class ExpandingGroupby(Expanding):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).expanding(3).max().sort_index()
         2  0     NaN
            1     NaN
@@ -1627,7 +1627,7 @@ class ExpandingGroupby(Expanding):
 
         For DataFrame, each expanding maximum is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).max().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                 A     B
         A
@@ -1664,7 +1664,7 @@ class ExpandingGroupby(Expanding):
 
         Examples
         --------
-        >>> s = pp.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
+        >>> s = ps.Series([2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5])
         >>> s.groupby(s).expanding(3).mean().sort_index()
         2  0     NaN
            1     NaN
@@ -1681,7 +1681,7 @@ class ExpandingGroupby(Expanding):
 
         For DataFrame, each expanding mean is computed column-wise.
 
-        >>> df = pp.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).mean().sort_index()  # doctest: +NORMALIZE_WHITESPACE
                 A     B
         A
@@ -1749,7 +1749,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.window.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.window tests").getOrCreate()
     )

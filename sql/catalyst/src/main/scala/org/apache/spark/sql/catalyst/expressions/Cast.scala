@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -407,9 +408,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case udt: UserDefinedType[_] =>
       buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
     case YearMonthIntervalType =>
-      buildCast[Int](_, i => UTF8String.fromString(IntervalUtils.toYearMonthIntervalString(i)))
+      buildCast[Int](_, i => UTF8String.fromString(
+        IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE)))
     case DayTimeIntervalType =>
-      buildCast[Long](_, i => UTF8String.fromString(IntervalUtils.toDayTimeIntervalString(i)))
+      buildCast[Long](_, i => UTF8String.fromString(
+        IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -1125,14 +1128,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) => {
           code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
         }
-      case YearMonthIntervalType =>
+      case i @ (YearMonthIntervalType | DayTimeIntervalType) =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        (c, evPrim, _) =>
-          code"""$evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c));"""
-      case DayTimeIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        (c, evPrim, _) =>
-          code"""$evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c));"""
+        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
+        val subType = if (i.isInstanceOf[YearMonthIntervalType]) "YearMonth" else "DayTime"
+        val f = s"to${subType}IntervalString"
+        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
+        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.$f($c, $style));"""
       case _ =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
