@@ -40,7 +40,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.AccumulatorV2
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
