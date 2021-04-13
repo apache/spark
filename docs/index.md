@@ -99,7 +99,7 @@ Spark can run both by itself, or over several existing cluster managers. It curr
 options for deployment:
 
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
-* [Apache Mesos](running-on-mesos.html)
+* [Apache Mesos](running-on-mesos.html) (deprecated)
 * [Hadoop YARN](running-on-yarn.html)
 * [Kubernetes](running-on-kubernetes.html)
 
