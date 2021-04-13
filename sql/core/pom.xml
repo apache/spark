@@ -109,7 +109,6 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlet</artifactId>
     </dependency>
-
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
@@ -118,7 +117,6 @@
       <groupId>org.codehaus.jackson</groupId>
       <artifactId>jackson-mapper-asl</artifactId>
     </dependency>
-
     <dependency>
       <groupId>org.apache.xbean</groupId>
       <artifactId>xbean-asm7-shaded</artifactId>
