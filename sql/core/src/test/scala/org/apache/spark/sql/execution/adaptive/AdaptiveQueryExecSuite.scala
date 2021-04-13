@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -1578,48 +1578,83 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-34980: Support coalesce partition through union") {
     def checkResultPartition(
-      df: Dataset[Row], shuffleReaderNumber: Int, partitionNumber: Int): Unit = {
+      df: Dataset[Row], unionNumber: Int, shuffleReaderNumber: Int, partitionNumber: Int): Unit = {
       df.collect()
+      assert(collect(df.queryExecution.executedPlan) {
+        case u: UnionExec => u
+      }.size == unionNumber)
       assert(
         collect(df.queryExecution.executedPlan) {
           case s: CustomShuffleReaderExec => s
-        }.size === shuffleReaderNumber
-      )
+        }.size === shuffleReaderNumber)
       assert(df.rdd.partitions.length === partitionNumber)
     }
 
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
-      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
-      val df1 = spark.sparkContext.parallelize(
-        (1 to 10).map(i => TestData(i, i.toString)), 2).toDF()
-      val df2 = spark.sparkContext.parallelize(
-        (1 to 10).map(i => TestData(i, i.toString)), 4).toDF()
+    Seq(true, false).foreach { combineUnionEnabled =>
+      val combineUnionConfig = if (combineUnionEnabled) {
+        "" -> ""
+      } else {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.CombineUnions"
+      }
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+        combineUnionConfig) {
+        withView("t1", "t2") {
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
+            .toDF().createOrReplaceTempView("t1")
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)
+            .toDF().createOrReplaceTempView("t2")
 
-      // positive test
-      checkResultPartition(
-        df1.groupBy("key").count().unionAll(df2),
-        1,
-        1 + 4)
+          // positive test
+          checkResultPartition(
+            sql("""
+                  |SELECT key, count(*) FROM t1 GROUP BY key
+                  |UNION ALL
+                  |SELECT * FROM t2
+              """.stripMargin),
+            if (combineUnionEnabled) 1 else 1,
+            1,
+            1 + 4)
 
-      checkResultPartition(
-        df1.groupBy("key").count().unionAll(df2).unionAll(df1),
-        1,
-        1 + 4 + 2)
+          checkResultPartition(
+            sql("""
+                  |SELECT key, count(*) FROM t1 GROUP BY key
+                  |UNION ALL
+                  |SELECT * FROM t2
+                  |UNION ALL
+                  |SELECT * FROM t1
+              """.stripMargin),
+            if (combineUnionEnabled) 1 else 2,
+            1,
+            1 + 4 + 2)
 
-      checkResultPartition(
-        df1.groupBy("key").count().unionAll(df2).unionAll(df1.groupBy("key").count()),
-        2,
-        1 + 4 + 1)
+          checkResultPartition(
+            sql("""
+                  |SELECT key, count(*) FROM t1 GROUP BY key
+                  |UNION ALL
+                  |SELECT * FROM t2
+                  |UNION ALL
+                  |SELECT * FROM t1
+                  |UNION ALL
+                  |SELECT key, count(*) FROM t2 GROUP BY key
+              """.stripMargin),
+            if (combineUnionEnabled) 1 else 3,
+            2,
+            1 + 4 + 2 + 1)
 
-      // negative test
-      checkResultPartition(
-        df1.unionAll(df2),
-        0,
-        2 + 4
-      )
+          // negative test
+          checkResultPartition(
+            sql("SELECT * FROM t1 UNION ALL SELECT * FROM t2"),
+            if (combineUnionEnabled) 1 else 1,
+            0,
+            2 + 4
+          )
+        }
+      }
     }
   }
 }
