@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -27,17 +26,13 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 class PhysicalAggregationSuite extends PlanTest {
-
-  val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)
-  val analyzer = new Analyzer(catalog)
-
   val testRelation = LocalRelation('a.int, 'b.int)
 
   test("SPARK-35014: a foldable expression should not be replaced by an AttributeReference") {
     val query = testRelation
       .groupBy('a, Literal.create(1) as 'k)(
         'a, Round(Literal.create(1.2), Literal.create(1)) as 'r, count('b) as 'c)
-    val analyzedQuery = analyzer.execute(query)
+    val analyzedQuery = SimpleAnalyzer.execute(query)
 
     val PhysicalAggregation(
       groupingExpressions,
