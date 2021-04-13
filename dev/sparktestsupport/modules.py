@@ -613,9 +613,9 @@ pyspark_pandas = Module(
         # unittests
         "pyspark.pandas.tests.test_dataframe",
         "pyspark.pandas.tests.test_series",
+        "pyspark.pandas.tests.test_series_conversion",
         "pyspark.pandas.tests.test_series_datetime",
         "pyspark.pandas.tests.test_series_string",
-        "pyspark.pandas.tests.test_series_conversion",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
