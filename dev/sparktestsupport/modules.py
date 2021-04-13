@@ -621,10 +621,10 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_series_datetime",
         "pyspark.pandas.tests.test_series_string",
         "pyspark.pandas.tests.test_frame_plot",
-        "pyspark.pandas.tests.test_series_plot",
         "pyspark.pandas.tests.test_frame_plot_matplotlib",
-        "pyspark.pandas.tests.test_series_plot_matplotlib",
         "pyspark.pandas.tests.test_frame_plot_plotly",
+        "pyspark.pandas.tests.test_series_plot",
+        "pyspark.pandas.tests.test_series_plot_matplotlib",
         "pyspark.pandas.tests.test_series_plot_plotly",
     ],
     excluded_python_implementations=[
