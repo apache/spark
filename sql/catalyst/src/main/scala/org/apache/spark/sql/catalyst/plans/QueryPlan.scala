@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
-import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -55,17 +54,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   // Override `treePatternBits` to propagate bits for its expressions.
   override lazy val treePatternBits: BitSet = {
-    val bits: BitSet = new BitSet(TreePattern.maxId)
-    // Propagate node pattern bits
-    val nodeTypeIterator = nodePatterns.iterator
-    while (nodeTypeIterator.hasNext) {
-      bits.set(nodeTypeIterator.next().id)
-    }
-    // Propagate children's pattern bits
-    val childIterator = children.iterator
-    while (childIterator.hasNext) {
-      bits.union(childIterator.next().treePatternBits)
-    }
+    val bits: BitSet = getDefaultTreePatternBits
     // Propagate expressions' pattern bits
     val exprIterator = expressions.iterator
     while (exprIterator.hasNext) {

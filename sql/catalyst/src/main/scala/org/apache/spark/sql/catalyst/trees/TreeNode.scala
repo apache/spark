@@ -102,10 +102,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
 
   /**
-   * A BitSet of tree patterns for this TreeNode and its subtree. If this TreeNode and its
-   * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
+   * Default tree pattern [[BitSet] for a [[TreeNode]].
    */
-  override lazy val treePatternBits: BitSet = {
+  protected def getDefaultTreePatternBits: BitSet = {
     val bits: BitSet = new BitSet(TreePattern.maxId)
     // Propagate node pattern bits
     val nodePatternIterator = nodePatterns.iterator
@@ -119,6 +118,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     }
     bits
   }
+
+  /**
+   * A BitSet of tree patterns for this TreeNode and its subtree. If this TreeNode and its
+   * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
+   */
+  override lazy val treePatternBits: BitSet = getDefaultTreePatternBits
 
   /**
    * A BitSet of rule ids to record ineffective rules for this TreeNode and its subtree.
