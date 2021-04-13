@@ -85,6 +85,7 @@ jobs:
         repository: apache/spark
         ref: master
     - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
       id: sync-branch
       run: |
         apache_spark_ref=`git rev-parse HEAD`
@@ -180,6 +181,7 @@ jobs:
         repository: apache/spark
         ref: master
     - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
       id: sync-branch
       run: |
         apache_spark_ref=`git rev-parse HEAD`
@@ -254,6 +256,7 @@ jobs:
         repository: apache/spark
         ref: master
     - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
       id: sync-branch
       run: |
         apache_spark_ref=`git rev-parse HEAD`
