@@ -180,10 +180,12 @@ object SubExprUtils extends PredicateHelper {
    * }}}
    * The code below needs to change when we support the above cases.
    */
-  def getOuterReferences(condition: Expression): Seq[Expression] = {
+  def getOuterReferences(expr: Expression): Seq[Expression] = {
     val outerExpressions = ArrayBuffer.empty[Expression]
-    condition transformDown {
+    expr transformDown {
       case a: AggregateExpression if a.collectLeaves.forall(_.isInstanceOf[OuterReference]) =>
+        // Collect and update the sub-tree so that outer references inside this aggregate
+        // expression will not be collected. For example: min(outer(a)) -> min(a).
         val newExpr = stripOuterReference(a)
         outerExpressions += newExpr
         newExpr

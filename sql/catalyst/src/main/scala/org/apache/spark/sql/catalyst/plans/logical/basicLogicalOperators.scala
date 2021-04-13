@@ -1401,4 +1401,6 @@ case class CollectMetrics(
 case class DomainJoin(domainAttrs: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output ++ domainAttrs
   override def producedAttributes: AttributeSet = AttributeSet(domainAttrs)
+  override protected def withNewChildInternal(newChild: LogicalPlan): DomainJoin =
+    copy(child = newChild)
 }
