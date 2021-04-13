@@ -482,8 +482,6 @@ jobs:
       with:
         path: ./tpcds-sf-1
         key: tpcds-556111e35d400f56cb0625dc16e9063d54628320
-        restore-keys: |
-          tpcds-
     - name: Checkout TPC-DS (SF=1) generated data repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       uses: actions/checkout@v2
