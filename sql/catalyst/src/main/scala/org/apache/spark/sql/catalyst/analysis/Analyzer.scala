@@ -948,24 +948,26 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
-      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
       plan.expressions.flatMap(_.collect {
         case a: Attribute if a.isMetadataCol => a
-        case a: Attribute if childMetadataOutput.exists(_.exprId == a.exprId) =>
-          childMetadataOutput.find(_.exprId == a.exprId).get
+        case a: Attribute
+          if plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId)) =>
+          plan.children.collectFirst {
+            case c if c.metadataOutput.exists(_.exprId == a.exprId) =>
+              c.metadataOutput.find(_.exprId == a.exprId).get
+          }.get
       })
     }
 
     private def hasMetadataCol(plan: LogicalPlan): Boolean = {
-      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
-      val hasMetaCol = plan.expressions.exists(_.find {
+      plan.expressions.exists(_.find {
         case a: Attribute =>
           // If an attribute is resolved before being labeled as metadata
           // (i.e. from the originating Dataset), we check with expression ID
-          a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
+          a.isMetadataCol ||
+            plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
         case _ => false
       }.isDefined)
-      hasMetaCol
     }
 
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
@@ -3209,7 +3211,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
     project.setTagValue(
       Project.hiddenOutputTag,
-      hiddenList.map(_.asHiddenCol()) ++ project.child.metadataOutput.filter(_.isHiddenCol))
+      hiddenList.map(_.markAsSupportsQualifiedStar()) ++
+        project.child.metadataOutput.filter(_.supportsQualifiedStar))
     project
   }
 

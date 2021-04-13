@@ -1084,7 +1084,7 @@ case class SubqueryAlias(
 
   override def metadataOutput: Seq[Attribute] = {
     val qualifierList = identifier.qualifier :+ alias
-    child.metadataOutput.filterNot(_.isHiddenCol).map(_.withQualifier(qualifierList))
+    child.metadataOutput.map(_.withQualifier(qualifierList))
   }
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized

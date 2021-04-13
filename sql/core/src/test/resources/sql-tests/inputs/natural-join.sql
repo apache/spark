@@ -42,6 +42,8 @@ SELECT nt2.* FROM nt1 natural join nt2;
 
 SELECT sbq.* from (SELECT * FROM nt1 natural join nt2) sbq;
 
+SELECT sbq.k from (SELECT * FROM nt1 natural join nt2) sbq;
+
 SELECT nt1.*, nt2.* FROM nt1 natural join nt2;
 
 SELECT *, nt2.k FROM nt1 natural join nt2;
