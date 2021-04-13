@@ -224,8 +224,11 @@ class Dataset[T] private[sql](
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
     def runCommand(plan: LogicalPlan): LogicalPlan = {
-      LocalRelation(plan.output, withAction("command", queryExecution)(_.executeCollect()),
+      val relation = LocalRelation(plan.output,
+        withAction("command", queryExecution)(_.executeCollect()),
         fromCommand = true)
+      queryExecution.markCommandExecutionIdGenerated
+      relation
     }
 
     val plan = queryExecution.analyzed match {

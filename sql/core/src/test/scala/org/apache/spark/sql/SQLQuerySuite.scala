@@ -20,7 +20,10 @@ package org.apache.spark.sql
 import java.io.File
 import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+
+import scala.reflect.ClassTag
+import scala.reflect.classTag
 
 import org.apache.commons.io.FileUtils
 
@@ -29,9 +32,9 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LogicalPlan, Project, RepartitionByExpression, ShowTables, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.UnionExec
+import org.apache.spark.sql.execution.{QueryExecution, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -47,6 +50,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ResetSystemProperties
 
@@ -4139,6 +4143,37 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
     }
+  }
+
+  test("SPARK-34873: Avoid wrapped in withNewExecutionId twice when run SQL with side effects") {
+    testTriggerSQLExecutionOnce[ShowTables](sql("show tables"))
+    testTriggerSQLExecutionOnce[ShowTables](sql("show tables").show())
+    testTriggerSQLExecutionOnce[ShowTables](sql("show tables").collect())
+  }
+
+  private def testTriggerSQLExecutionOnce[T: ClassTag](body: => Unit): Unit = {
+    val sqlExecutionCount = new AtomicInteger()
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        sqlExecutionCount.incrementAndGet()
+        plan = qe.logical
+      }
+
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+
+    sparkContext.listenerBus.waitUntilEmpty()
+    spark.listenerManager.register(listener)
+    try {
+      body
+      sparkContext.listenerBus.waitUntilEmpty()
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+
+    assert(sqlExecutionCount.get() === 1)
+    assert(classTag[T].runtimeClass.isInstance(plan))
   }
 }
 

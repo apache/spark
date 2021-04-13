@@ -58,6 +58,12 @@ class QueryExecution(
 
   val id: Long = QueryExecution.nextExecutionId
 
+  private var _commandExecutionIdGenerated = false
+
+  def commandExecutionIdGenerated: Boolean = _commandExecutionIdGenerated
+
+  def markCommandExecutionIdGenerated: Unit = _commandExecutionIdGenerated = true
+
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
