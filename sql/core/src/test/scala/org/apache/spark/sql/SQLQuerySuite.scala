@@ -4142,9 +4142,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-34873: Avoid wrapped in withNewExecutionId twice when run SQL with side effects") {
+  test("SPARK-34873: Avoid wrapped in withNewExecutionId twice when run SQL with side effects" +
+    " - sql(\"show tables\")") {
     testTriggerSQLExecutionOnce(sql("show tables"))
+  }
+
+  test("SPARK-34873: Avoid wrapped in withNewExecutionId twice when run SQL with side effects" +
+    " - sql(\"show tables\").show()") {
     testTriggerSQLExecutionOnce(sql("show tables").show())
+  }
+
+  test("SPARK-34873: Avoid wrapped in withNewExecutionId twice when run SQL with side effects" +
+    " - sql(\"show tables\").collect()") {
     testTriggerSQLExecutionOnce(sql("show tables").collect())
   }
 
