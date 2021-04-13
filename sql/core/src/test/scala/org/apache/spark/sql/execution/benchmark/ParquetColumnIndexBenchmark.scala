@@ -28,15 +28,15 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
-  * Benchmark to measure read performance with Parquet column index.
-  * To run this benchmark:
-  * {{{
-  *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
-  *   2. build/sbt "sql/test:runMain <this class>"
-  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
-  *      Results will be written to "benchmarks/ParquetFilterPushdownBenchmark-results.txt".
-  * }}}
-  */
+ * Benchmark to measure read performance with Parquet column index.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/ParquetFilterPushdownBenchmark-results.txt".
+ * }}}
+ */
 object ParquetColumnIndexBenchmark extends SqlBasedBenchmark {
 
   override def getSparkSession: SparkSession = {
@@ -120,7 +120,8 @@ object ParquetColumnIndexBenchmark extends SqlBasedBenchmark {
           prepareTable(dir, numRows)
           filterPushDownBenchmark(numRows,
             "multi range filters",
-            s" (_1 > ($numRows - 3000000) and _1 < ($numRows - 2000000)) or ( _1 > ($numRows - 1000000) and _1 < ($numRows - 1000))")
+            s" (_1 > ($numRows - 3000000) and _1 < ($numRows - 2000000))" +
+              s" or ( _1 > ($numRows - 1000000) and _1 < ($numRows - 1000))")
         }
       }
     }

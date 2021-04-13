@@ -26,13 +26,13 @@ class ParquetColumnIndexSuite extends QueryTest with ParquetTest with SharedSpar
   import testImplicits._
 
   /**
-    * create parquet file with two columns and unaligned pages
-    * pages will be of the following layout
-    * col_1     500       500       500       500
-    *  |---------|---------|---------|---------|
-    *  |-------|-----|-----|---|---|---|---|---|
-    * col_2   400   300   200 200 200 200 200 200
-    */
+   * create parquet file with two columns and unaligned pages
+   * pages will be of the following layout
+   * col_1     500       500       500       500
+   *  |---------|---------|---------|---------|
+   *  |-------|-----|-----|---|---|---|---|---|
+   * col_2   400   300   200 200 200 200 200 200
+   */
   def checkUnalignedPages(actions: (DataFrame => DataFrame)*): Unit = {
     withTempPath(file => {
       val ds = spark.range(0, 2000).map(i => (i, i + ":" + "o" * (i / 100).toInt))
