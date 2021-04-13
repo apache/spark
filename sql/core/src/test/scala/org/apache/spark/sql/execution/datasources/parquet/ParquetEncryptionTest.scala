@@ -78,6 +78,8 @@ class ParquetEncryptionTest extends QueryTest with SharedSparkSession {
  * This is a mock class, built just for parquet encryption testing in Spark
  * and based on InMemoryKMS in parquet-hadoop tests.
  * Don't use it as an example of a KmsClient implementation.
+ * Use parquet-hadoop/src/test/java/org/apache/parquet/crypto/keytools/samples/VaultClient.java
+ * as a sample implementation instead.
  */
 class InMemoryKMS extends KmsClient {
   private var masterKeyMap: Map[String, Array[Byte]] = null
@@ -104,8 +106,7 @@ class InMemoryKMS extends KmsClient {
     if (null == masterKey) {
       throw new ParquetCryptoRuntimeException("Key not found: " + masterKeyIdentifier)
     }
-    val AAD: Array[Byte] = masterKeyIdentifier.getBytes(StandardCharsets.UTF_8)
-    KeyToolkit.encryptKeyLocally(keyBytes, masterKey, AAD)
+    KeyToolkit.encryptKeyLocally(keyBytes, masterKey, null /*AAD*/ )
   }
 
   @throws[KeyAccessDeniedException]
@@ -116,8 +117,7 @@ class InMemoryKMS extends KmsClient {
     if (null == masterKey) {
       throw new ParquetCryptoRuntimeException("Key not found: " + masterKeyIdentifier)
     }
-    val AAD: Array[Byte] = masterKeyIdentifier.getBytes(StandardCharsets.UTF_8)
-    KeyToolkit.decryptKeyLocally(wrappedKey, masterKey, AAD)
+    KeyToolkit.decryptKeyLocally(wrappedKey, masterKey, null /*AAD*/ )
   }
 }
 
