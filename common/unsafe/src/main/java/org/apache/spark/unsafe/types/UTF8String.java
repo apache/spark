@@ -763,8 +763,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    int resultSize = Math.toIntExact((long)numBytes * times);
-    byte[] newBytes = new byte[resultSize];
+    byte[] newBytes = new byte[Math.multiplyExact(numBytes, times)];
     copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
 
     int copied = 1;
