@@ -1069,6 +1069,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     spark.sessionState.conf.clear()
   }
 
+  test("Support retrieve hadoop configuration via set command") {
+    val key = "hadoop.this.is.a.test.key"
+    val value = "2018-11-17 13:33:33.333"
+    spark.sharedState.hadoopConf.set(key, value)
+    checkAnswer(sql(s"SET $key"), Row(key, value))
+  }
+
   test("apply schema") {
     withTempView("applySchema1", "applySchema2", "applySchema3") {
       val schema1 = StructType(

@@ -146,7 +146,9 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // Queries a single property.
     case Some((key, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        val value = sparkSession.conf.getOption(key).getOrElse("<undefined>")
+        val value = sparkSession.conf.getOption(key).getOrElse {
+          sparkSession.sharedState.hadoopConf.get(key, "<undefined>")
+        }
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
