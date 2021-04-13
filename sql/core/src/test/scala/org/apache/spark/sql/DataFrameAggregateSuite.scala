@@ -22,6 +22,7 @@ import java.time.{Duration, Period}
 import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
+
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -1113,11 +1114,25 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-34716: Support ANSI SQL intervals by the aggregate function `sum`") {
-    val df = Seq((Period.ofMonths(10), Duration.ofDays(10)),
-      (Period.ofMonths(1), Duration.ofDays(1)))
-      .toDF("year-month", "day-time")
+    val df = Seq((1, Period.ofMonths(10), Duration.ofDays(10)),
+      (2, Period.ofMonths(1), Duration.ofDays(1)),
+      (2, null, null),
+      (3, Period.ofMonths(-3), Duration.ofDays(-6)),
+      (3, Period.ofMonths(21), Duration.ofDays(-5)))
+      .toDF("class", "year-month", "day-time")
+
     val sumDF = df.select(sum($"year-month"), sum($"day-time"))
-    checkAnswer(sumDF, Row(Period.ofMonths(11), Duration.ofDays(11)))
+    checkAnswer(sumDF, Row(Period.of(2, 5, 0), Duration.ofDays(0)))
+    assert(sumDF.schema == StructType(Seq(StructField("sum(year-month)", YearMonthIntervalType),
+      StructField("sum(day-time)", DayTimeIntervalType))))
+
+    val sumDF2 = df.groupBy($"class").agg(sum($"year-month"), sum($"day-time"))
+    checkAnswer(sumDF2, Row(1, Period.ofMonths(10), Duration.ofDays(10)) ::
+      Row(2, Period.ofMonths(1), Duration.ofDays(1)) ::
+      Row(3, Period.of(1, 6, 0), Duration.ofDays(-11)) ::Nil)
+    assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
+      StructField("sum(year-month)", YearMonthIntervalType),
+      StructField("sum(day-time)", DayTimeIntervalType))))
   }
 }
 
