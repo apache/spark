@@ -58,7 +58,7 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
  * referenced grouping expression.
  */
 object UpdateGroupingExprRefNullability extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case a: Aggregate =>
       val nullabilities = a.groupingExpressions.map(_.nullable).toArray
 

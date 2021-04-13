@@ -819,14 +819,16 @@ case class Aggregate(
 
 object Aggregate {
   private def collectComplexGroupingExpressions(groupingExpressions: Seq[Expression]) = {
-    groupingExpressions.zipWithIndex
-      .foldLeft(mutable.Map.empty[Expression, (Expression, Int)]) {
-        case (m, (ge, i)) =>
-          if (!ge.foldable && ge.children.nonEmpty && !m.contains(ge.canonicalized)) {
-            m += ge.canonicalized -> (ge, i)
-          }
-          m
-      }
+    val complexGroupingExpressions = mutable.Map.empty[Expression, (Expression, Int)]
+    var i = 0
+    groupingExpressions.foreach {
+      case ge if !ge.foldable && ge.children.nonEmpty &&
+        !complexGroupingExpressions.contains(ge.canonicalized) =>
+        complexGroupingExpressions += ge.canonicalized -> (ge, i)
+        i += 1
+      case _ =>
+    }
+    complexGroupingExpressions
   }
 
   private def insertGroupingReferences(
@@ -834,9 +836,7 @@ object Aggregate {
       groupingExpressions: collection.Map[Expression, (Expression, Int)]): Seq[NamedExpression] = {
     def insertGroupingExprRefs(e: Expression): Expression = {
       e match {
-        case _ if !e.deterministic => e
-        case _: AggregateExpression => e
-        case _ if PythonUDF.isGroupedAggPandasUDF(e) => e
+        case _ if AggregateExpression.isAggregate(e) => e
         case _ if groupingExpressions.contains(e.canonicalized) =>
           val (groupingExpression, ordinal) = groupingExpressions(e.canonicalized)
           GroupingExprRef(ordinal, groupingExpression.dataType, groupingExpression.nullable)
@@ -851,19 +851,14 @@ object Aggregate {
       groupingExpressions: Seq[Expression],
       aggregateExpressions: Seq[NamedExpression],
       child: LogicalPlan): Aggregate = {
-    val dealiasedGroupingExpressions = groupingExpressions.map {
-      case a: Alias => a.child
-      case o => o
-    }
-    val complexGroupingExpressions =
-      collectComplexGroupingExpressions(dealiasedGroupingExpressions)
+    val complexGroupingExpressions = collectComplexGroupingExpressions(groupingExpressions)
     val aggrExprWithGroupingReferences = if (complexGroupingExpressions.nonEmpty) {
       insertGroupingReferences(aggregateExpressions, complexGroupingExpressions)
     } else {
       aggregateExpressions
     }
 
-    new Aggregate(dealiasedGroupingExpressions, aggrExprWithGroupingReferences, child)
+    new Aggregate(groupingExpressions, aggrExprWithGroupingReferences, child)
   }
 }
 
