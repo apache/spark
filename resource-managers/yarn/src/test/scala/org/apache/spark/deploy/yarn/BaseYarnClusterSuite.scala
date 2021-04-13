@@ -145,7 +145,7 @@ abstract class BaseYarnClusterSuite
 
   override def afterAll(): Unit = {
     try {
-      yarnCluster.stop()
+      if (yarnCluster != null) yarnCluster.stop()
     } finally {
       super.afterAll()
     }
