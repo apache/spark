@@ -32,11 +32,11 @@ import scala.sys.process._
 /**
  * A test suite that tests parquet modular encryption usage in Spark.
  */
-class ParquetEncryptionTest
-  extends QueryTest with SharedSparkSession {
+class ParquetEncryptionTest extends QueryTest with SharedSparkSession {
 
   private val encoder = Base64.getEncoder
-  private val footerKey =  encoder.encodeToString("0123456789012345".getBytes(StandardCharsets.UTF_8))
+  private val footerKey =
+    encoder.encodeToString("0123456789012345".getBytes(StandardCharsets.UTF_8))
   private val key1 = encoder.encodeToString("1234567890123450".getBytes(StandardCharsets.UTF_8))
   private val key2 = encoder.encodeToString("1234567890123451".getBytes(StandardCharsets.UTF_8))
 
@@ -44,11 +44,14 @@ class ParquetEncryptionTest
 
   test("Write and read an encrypted parquet") {
     withTempDir { dir =>
-      spark.conf.set("parquet.crypto.factory.class",
+      spark.conf.set(
+        "parquet.crypto.factory.class",
         "org.apache.parquet.crypto.keytools.PropertiesDrivenCryptoFactory")
-      spark.conf.set("parquet.encryption.kms.client.class",
+      spark.conf.set(
+        "parquet.encryption.kms.client.class",
         "org.apache.spark.sql.execution.datasources.parquet.InMemoryKMS")
-      spark.conf.set("parquet.encryption.key.list",
+      spark.conf.set(
+        "parquet.encryption.key.list",
         s"footerKey: ${footerKey}, key1: ${key1}, key2: ${key2}")
 
       val df = Seq((1, 22, 333)).toDF("a", "b", "c")
@@ -79,8 +82,13 @@ class ParquetEncryptionTest
 class InMemoryKMS extends KmsClient {
   private var masterKeyMap: Map[String, Array[Byte]] = null
 
-  override def initialize(configuration: Configuration, kmsInstanceID: String, kmsInstanceURL: String, accessToken: String) = { // Parse master  keys
-    val masterKeys: Array[String] = configuration.getTrimmedStrings(InMemoryKMS.KEY_LIST_PROPERTY_NAME)
+  override def initialize(
+      configuration: Configuration,
+      kmsInstanceID: String,
+      kmsInstanceURL: String,
+      accessToken: String) = { // Parse master  keys
+    val masterKeys: Array[String] =
+      configuration.getTrimmedStrings(InMemoryKMS.KEY_LIST_PROPERTY_NAME)
     if (null == masterKeys || masterKeys.length == 0) {
       throw new ParquetCryptoRuntimeException("No encryption key list")
     }
