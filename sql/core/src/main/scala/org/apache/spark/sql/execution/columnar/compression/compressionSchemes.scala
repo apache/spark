@@ -348,7 +348,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           decompress0(columnVector, capacity, getInt, putInt)
         case _: LongType =>
           decompress0(columnVector, capacity, getLong, putLong)
-        case _ => throw new IllegalStateException(s"Not supported type in RunLengthEncoding.")
+        case _ => throw new IllegalStateException("Not supported type in RunLengthEncoding.")
       }
     }
   }
@@ -517,7 +517,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
             }
             pos += 1
           }
-        case _ => throw new IllegalStateException(s"Not supported type in DictionaryEncoding.")
+        case _ => throw new IllegalStateException("Not supported type in DictionaryEncoding.")
       }
     }
   }

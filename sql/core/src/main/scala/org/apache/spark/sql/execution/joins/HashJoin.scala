@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
@@ -70,14 +69,16 @@ trait HashJoin extends JoinCodegenSupport {
       joinType match {
         case _: InnerLike | RightOuter => right.outputPartitioning
         case x =>
-          throw QueryExecutionErrors.hashJoinCannotTakeJoinTypeWithBuildLeftError(x)
+          throw new IllegalArgumentException(
+            s"HashJoin should not take $x as the JoinType with building left side")
       }
     case BuildRight =>
       joinType match {
         case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
           left.outputPartitioning
         case x =>
-          throw QueryExecutionErrors.hashJoinCannotTakeJoinTypeWithBuildRightError(x)
+          throw new IllegalArgumentException(
+            s"HashJoin should not take $x as the JoinType with building right side")
       }
   }
 
@@ -86,14 +87,16 @@ trait HashJoin extends JoinCodegenSupport {
       joinType match {
         case _: InnerLike | RightOuter => right.outputOrdering
         case x =>
-          throw QueryExecutionErrors.hashJoinCannotTakeJoinTypeWithBuildLeftError(x)
+          throw new IllegalArgumentException(
+            s"HashJoin should not take $x as the JoinType with building left side")
       }
     case BuildRight =>
       joinType match {
         case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
           left.outputOrdering
         case x =>
-          throw QueryExecutionErrors.hashJoinCannotTakeJoinTypeWithBuildRightError(x)
+          throw new IllegalArgumentException(
+            s"HashJoin should not take $x as the JoinType with building right side")
       }
   }
 

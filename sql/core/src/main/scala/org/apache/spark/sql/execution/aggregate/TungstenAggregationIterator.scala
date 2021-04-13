@@ -456,7 +456,7 @@ class TungstenAggregationIterator(
       hashMap.free()
       resultCopy
     } else {
-      throw  new IllegalStateException(
+      throw new IllegalStateException(
         "This method should not be called when groupingExpressions is not empty.")
     }
   }
