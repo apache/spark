@@ -39,6 +39,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  EXPRESSION_WITH_RANDOM_SEED, NATURAL_LIKE_JOIN, WINDOW_EXPRESSION
+}
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -1383,14 +1386,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
-      // If the script transformation input contains Stars, expand it.
+      // TODO: Remove this logic and see SPARK-34035
       case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(
-          input = t.input.flatMap {
-            case s: Star => s.expand(t.child, resolver)
-            case o => o :: Nil
-          }
-        )
+        t.copy(input = t.child.output)
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
 
@@ -1852,9 +1850,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       }}
     }
 
+    // Group by alias is not allowed in ANSI mode.
+    private def allowGroupByAlias: Boolean = conf.groupByAliases && !conf.ansiEnabled
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case agg @ Aggregate(groups, aggs, child)
-          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+          if allowGroupByAlias && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
     }
@@ -2920,9 +2921,11 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveRandomSeed extends Rule[LogicalPlan] {
     private lazy val random = new Random()
 
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(EXPRESSION_WITH_RANDOM_SEED), ruleId) {
       case p if p.resolved => p
-      case p => p transformExpressionsUp {
+      case p => p.transformExpressionsUpWithPruning(
+        _.containsPattern(EXPRESSION_WITH_RANDOM_SEED), ruleId) {
         case e: ExpressionWithRandomSeed if e.seedExpression == UnresolvedSeed =>
           e.withNewSeed(random.nextLong())
       }
@@ -3012,7 +3015,8 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Check and add proper window frames for all window functions.
    */
   object ResolveWindowFrame extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+      _.containsPattern(WINDOW_EXPRESSION), ruleId) {
       case WindowExpression(wf: FrameLessOffsetWindowFunction,
         WindowSpecDefinition(_, _, f: SpecifiedWindowFrame)) if wf.frame != f =>
         throw QueryCompilationErrors.cannotSpecifyWindowFrameError(wf.prettyName)
@@ -3037,7 +3041,8 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Check and add order to [[AggregateWindowFunction]]s.
    */
   object ResolveWindowOrder extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+      _.containsPattern(WINDOW_EXPRESSION), ruleId) {
       case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
         throw QueryCompilationErrors.windowFunctionWithWindowFrameNotOrderedError(wf)
       case WindowExpression(rank: RankLike, spec) if spec.resolved =>
@@ -3051,7 +3056,8 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Then apply a Project on a normal Join to eliminate natural or using join.
    */
   object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsPattern(NATURAL_LIKE_JOIN), ruleId) {
       case j @ Join(left, right, UsingJoin(joinType, usingCols), _, hint)
           if left.resolved && right.resolved && j.duplicateResolved =>
         commonNaturalJoinProcessing(left, right, joinType, usingCols, None, hint)

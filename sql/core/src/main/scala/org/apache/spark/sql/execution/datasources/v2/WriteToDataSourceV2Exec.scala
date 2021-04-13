@@ -43,8 +43,10 @@ import org.apache.spark.util.{LongAccumulator, Utils}
  * specific logical plans, like [[org.apache.spark.sql.catalyst.plans.logical.AppendData]].
  */
 @deprecated("Use specific logical plans like AppendData instead", "2.4.0")
-case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
-  extends UnaryNode {
+case class WriteToDataSourceV2(
+    relation: Option[DataSourceV2Relation],
+    batchWrite: BatchWrite,
+    query: LogicalPlan) extends UnaryNode {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteToDataSourceV2 =
@@ -273,10 +275,13 @@ case class OverwritePartitionsDynamicExec(
 
 case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
+    refreshCache: () => Unit,
     query: SparkPlan) extends V2TableWriteExec {
 
   override protected def run(): Seq[InternalRow] = {
-    writeWithV2(batchWrite)
+    val writtenRows = writeWithV2(batchWrite)
+    refreshCache()
+    writtenRows
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): WriteToDataSourceV2Exec =

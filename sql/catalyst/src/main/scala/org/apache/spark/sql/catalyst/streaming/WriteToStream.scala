@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.streaming
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -31,7 +31,8 @@ case class WriteToStream(
     sink: Table,
     outputMode: OutputMode,
     deleteCheckpointOnStop: Boolean,
-    inputQuery: LogicalPlan) extends UnaryNode {
+    inputQuery: LogicalPlan,
+    catalogAndIdent: Option[(TableCatalog, Identifier)] = None) extends UnaryNode {
 
   override def isStreaming: Boolean = true
 
