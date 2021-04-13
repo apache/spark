@@ -25,6 +25,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  INNER_LIKE_JOIN, JOIN, LEFT_SEMI_OR_ANTI_JOIN, NATURAL_LIKE_JOIN, OUTER_JOIN, TreePattern
+}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -448,6 +451,18 @@ case class Join(
     case _ => resolvedExceptNatural
   }
 
+  override val nodePatterns : Seq[TreePattern] = {
+    var patterns = Seq(JOIN)
+    joinType match {
+      case _: InnerLike => patterns = patterns :+ INNER_LIKE_JOIN
+      case LeftOuter | FullOuter | RightOuter => patterns = patterns :+ OUTER_JOIN
+      case LeftSemiOrAnti(_) => patterns = patterns :+ LEFT_SEMI_OR_ANTI_JOIN
+      case NaturalJoin(_) | UsingJoin(_, _) => patterns = patterns :+ NATURAL_LIKE_JOIN
+      case _ =>
+    }
+    patterns
+  }
+
   // Ignore hint for canonicalization
   protected override def doCanonicalize(): LogicalPlan =
     super.doCanonicalize().asInstanceOf[Join].copy(hint = JoinHint.NONE)
@@ -721,7 +736,27 @@ case class Range(
   }
 
   override def computeStats(): Statistics = {
-    Statistics(sizeInBytes = LongType.defaultSize * numElements, rowCount = Some(numElements))
+    if (numElements == 0) {
+      Statistics(sizeInBytes = 0, rowCount = Some(0))
+    } else {
+      val (minVal, maxVal) = if (step > 0) {
+        (start, start + (numElements - 1) * step)
+      } else {
+        (start + (numElements - 1) * step, start)
+      }
+      val colStat = ColumnStat(
+        distinctCount = Some(numElements),
+        max = Some(maxVal),
+        min = Some(minVal),
+        nullCount = Some(0),
+        avgLen = Some(LongType.defaultSize),
+        maxLen = Some(LongType.defaultSize))
+
+      Statistics(
+        sizeInBytes = LongType.defaultSize * numElements,
+        rowCount = Some(numElements),
+        attributeStats = AttributeMap(Seq(output.head -> colStat)))
+    }
   }
 
   override def outputOrdering: Seq[SortOrder] = {
@@ -1066,6 +1101,8 @@ case class SubqueryAlias(
     val qualifierList = identifier.qualifier :+ alias
     child.metadataOutput.map(_.withQualifier(qualifierList))
   }
+
+  override def maxRows: Option[Long] = child.maxRows
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 

@@ -51,7 +51,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.window import Window
 
-from pyspark import pandas as pp  # For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.accessors import KoalasSeriesMethods
 from pyspark.pandas.categorical import CategoricalAccessor
 from pyspark.pandas.config import get_option
@@ -125,7 +125,7 @@ Series.{reverse}
 _add_example_SERIES = """
 Examples
 --------
->>> df = pp.DataFrame({'a': [2, 2, 4, np.nan],
+>>> df = ps.DataFrame({'a': [2, 2, 4, np.nan],
 ...                    'b': [2, np.nan, 2, np.nan]},
 ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 >>> df
@@ -153,7 +153,7 @@ dtype: float64
 _sub_example_SERIES = """
 Examples
 --------
->>> df = pp.DataFrame({'a': [2, 2, 4, np.nan],
+>>> df = ps.DataFrame({'a': [2, 2, 4, np.nan],
 ...                    'b': [2, np.nan, 2, np.nan]},
 ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 >>> df
@@ -181,7 +181,7 @@ dtype: float64
 _mul_example_SERIES = """
 Examples
 --------
->>> df = pp.DataFrame({'a': [2, 2, 4, np.nan],
+>>> df = ps.DataFrame({'a': [2, 2, 4, np.nan],
 ...                    'b': [2, np.nan, 2, np.nan]},
 ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 >>> df
@@ -209,7 +209,7 @@ dtype: float64
 _div_example_SERIES = """
 Examples
 --------
->>> df = pp.DataFrame({'a': [2, 2, 4, np.nan],
+>>> df = ps.DataFrame({'a': [2, 2, 4, np.nan],
 ...                    'b': [2, np.nan, 2, np.nan]},
 ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 >>> df
@@ -237,7 +237,7 @@ dtype: float64
 _pow_example_SERIES = """
 Examples
 --------
->>> df = pp.DataFrame({'a': [2, 2, 4, np.nan],
+>>> df = ps.DataFrame({'a': [2, 2, 4, np.nan],
 ...                    'b': [2, np.nan, 2, np.nan]},
 ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 >>> df
@@ -265,7 +265,7 @@ dtype: float64
 _mod_example_SERIES = """
 Examples
 --------
->>> df = pp.DataFrame({'a': [2, 2, 4, np.nan],
+>>> df = ps.DataFrame({'a': [2, 2, 4, np.nan],
 ...                    'b': [2, np.nan, 2, np.nan]},
 ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 >>> df
@@ -293,7 +293,7 @@ dtype: float64
 _floordiv_example_SERIES = """
 Examples
 --------
->>> df = pp.DataFrame({'a': [2, 2, 4, np.nan],
+>>> df = ps.DataFrame({'a': [2, 2, 4, np.nan],
 ...                    'b': [2, np.nan, 2, np.nan]},
 ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 >>> df
@@ -358,7 +358,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     :ivar _internal: an internal immutable Frame to manage metadata.
     :type _internal: InternalFrame
     :ivar _kdf: Parent's Koalas DataFrame
-    :type _kdf: pp.DataFrame
+    :type _kdf: ps.DataFrame
 
     Parameters
     ----------
@@ -450,7 +450,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def dtypes(self) -> np.dtype:
         """Return the dtype object of the underlying data.
 
-        >>> s = pp.Series(list('abc'))
+        >>> s = ps.Series(list('abc'))
         >>> s.dtype == s.dtypes
         True
         """
@@ -464,7 +464,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
 
-        >>> kser = pp.Series([1, 2, 3])
+        >>> kser = ps.Series([1, 2, 3])
         >>> kser.axes
         [Int64Index([0, 1, 2], dtype='int64')]
         """
@@ -672,7 +672,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compare if the current value is equal to the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -698,7 +698,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compare if the current value is greater than the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -722,7 +722,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compare if the current value is greater than or equal to the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -746,7 +746,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compare if the current value is less than the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -770,7 +770,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compare if the current value is less than or equal to the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -794,7 +794,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Compare if the current value is not equal to the other.
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4],
         ...                    'b': [1, np.nan, 1, np.nan]},
         ...                   index=['a', 'b', 'c', 'd'], columns=['a', 'b'])
 
@@ -887,7 +887,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([2, 0, 4, 8, np.nan])
+        >>> s = ps.Series([2, 0, 4, 8, np.nan])
 
         Boundary values are included by default:
 
@@ -911,7 +911,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         `left` and `right` can be any scalar value:
 
-        >>> s = pp.Series(['Alice', 'Bob', 'Carol', 'Eve'])
+        >>> s = ps.Series(['Alice', 'Bob', 'Carol', 'Eve'])
         >>> s.between('Anna', 'Daniel')
         0    False
         1     True
@@ -967,7 +967,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series(['cat', 'dog', None, 'rabbit'])
+        >>> s = ps.Series(['cat', 'dog', None, 'rabbit'])
         >>> s
         0       cat
         1       dog
@@ -1069,7 +1069,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
 
-        >>> s = pp.Series([1, 2, 3])
+        >>> s = ps.Series([1, 2, 3])
         >>> s
         0    1
         1    2
@@ -1128,7 +1128,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series(["dog", "cat", "monkey"], name="animal")
+        >>> s = ps.Series(["dog", "cat", "monkey"], name="animal")
         >>> s  # doctest: +NORMALIZE_WHITESPACE
         0       dog
         1       cat
@@ -1146,7 +1146,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> index = pd.MultiIndex.from_product([['mammal'],
         ...                                        ['dog', 'cat', 'monkey']],
         ...                                       names=['type', 'name'])
-        >>> s = pp.Series([4, 4, 2], index=index, name='num_legs')
+        >>> s = ps.Series([4, 4, 2], index=index, name='num_legs')
         >>> s  # doctest: +NORMALIZE_WHITESPACE
         type    name
         mammal  dog       4
@@ -1174,7 +1174,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return first_series(kdf)
 
     @property
-    def index(self) -> "pp.Index":
+    def index(self) -> "ps.Index":
         """The index (axis labels) Column of the Series.
 
         See Also
@@ -1192,11 +1192,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         -------
         is_unique : boolean
 
-        >>> pp.Series([1, 2, 3]).is_unique
+        >>> ps.Series([1, 2, 3]).is_unique
         True
-        >>> pp.Series([1, 2, 2]).is_unique
+        >>> ps.Series([1, 2, 2]).is_unique
         False
-        >>> pp.Series([1, 2, 3, None]).is_unique
+        >>> ps.Series([1, 2, 3, None]).is_unique
         True
         """
         scol = self.spark.column
@@ -1246,7 +1246,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3, 4], index=pd.Index(['a', 'b', 'c', 'd'], name='idx'))
+        >>> s = ps.Series([1, 2, 3, 4], index=pd.Index(['a', 'b', 'c', 'd'], name='idx'))
 
         Generate a DataFrame with default index.
 
@@ -1324,14 +1324,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series(["a", "b", "c"])
+        >>> s = ps.Series(["a", "b", "c"])
         >>> s.to_frame()
            0
         0  a
         1  b
         2  c
 
-        >>> s = pp.Series(["a", "b", "c"], name="vals")
+        >>> s = ps.Series(["a", "b", "c"], name="vals")
         >>> s.to_frame()
           vals
         0    a
@@ -1396,7 +1396,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)], columns=['dogs', 'cats'])
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)], columns=['dogs', 'cats'])
         >>> print(df['dogs'].to_string())
         0    0.2
         1    0.0
@@ -1451,7 +1451,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3, 4])
+        >>> s = ps.Series([1, 2, 3, 4])
         >>> s_dict = s.to_dict()
         >>> sorted(s_dict.items())
         [(0, 1), (1, 2), (2, 3), (3, 4)]
@@ -1511,7 +1511,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)], columns=['dogs', 'cats'])
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)], columns=['dogs', 'cats'])
         >>> df['dogs'].to_pandas()
         0    0.2
         1    0.0
@@ -1570,7 +1570,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Generate a Series with duplicated entries.
 
-        >>> s = pp.Series(['lama', 'cow', 'lama', 'beetle', 'lama', 'hippo'],
+        >>> s = ps.Series(['lama', 'cow', 'lama', 'beetle', 'lama', 'hippo'],
         ...               name='animal')
         >>> s.sort_index()
         0      lama
@@ -1651,7 +1651,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Create a series with some fictional data.
 
         >>> index = ['Firefox', 'Chrome', 'Safari', 'IE10', 'Konqueror']
-        >>> ser = pp.Series([200, 200, 404, 404, 301],
+        >>> ser = ps.Series([200, 200, 404, 404, 301],
         ...                 index=index, name='http_status')
         >>> ser
         Firefox      200
@@ -1692,7 +1692,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         of dates).
 
         >>> date_index = pd.date_range('1/1/2010', periods=6, freq='D')
-        >>> ser2 = pp.Series([100, 101, np.nan, 100, 89, 88],
+        >>> ser2 = ps.Series([100, 101, np.nan, 100, 89, 88],
         ...                  name='prices', index=date_index)
         >>> ser2.sort_index()
         2010-01-01    100.0
@@ -1757,7 +1757,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
 
-        >>> s1 = pp.Series([24.3, 31.0, 22.0, 35.0],
+        >>> s1 = ps.Series([24.3, 31.0, 22.0, 35.0],
         ...                index=pd.date_range(start='2014-02-12',
         ...                                    end='2014-02-15', freq='D'),
         ...                name="temp_celsius")
@@ -1768,7 +1768,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2014-02-15    35.0
         Name: temp_celsius, dtype: float64
 
-        >>> s2 = pp.Series(["low", "low", "medium"],
+        >>> s2 = ps.Series(["low", "low", "medium"],
         ...                index=pd.DatetimeIndex(['2014-02-12', '2014-02-13',
         ...                                        '2014-02-15']),
         ...                name="winspeed")
@@ -1828,7 +1828,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([np.nan, 2, 3, 4, np.nan, 6], name='x')
+        >>> s = ps.Series([np.nan, 2, 3, 4, np.nan, 6], name='x')
         >>> s
         0    NaN
         1    2.0
@@ -1860,7 +1860,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         5    6.0
         Name: x, dtype: float64
 
-        >>> s = pp.Series([np.nan, 'a', 'b', 'c', np.nan], name='x')
+        >>> s = ps.Series([np.nan, 'a', 'b', 'c', np.nan], name='x')
         >>> s.fillna(method='ffill')
         0    None
         1       a
@@ -1954,7 +1954,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> ser = pp.Series([1., 2., np.nan])
+        >>> ser = ps.Series([1., 2., np.nan])
         >>> ser
         0    1.0
         1    2.0
@@ -2005,7 +2005,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> pp.Series([0, 2, 4]).clip(1, 3)
+        >>> ps.Series([0, 2, 4]).clip(1, 3)
         0    1
         1    2
         2    3
@@ -2015,7 +2015,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         -----
         One difference between this implementation and pandas is that running
         `pd.Series(['a', 'b']).clip(0, 1)` will crash with "TypeError: '<=' not supported between
-        instances of 'str' and 'int'" while `pp.Series(['a', 'b']).clip(0, 1)` will output the
+        instances of 'str' and 'int'" while `ps.Series(['a', 'b']).clip(0, 1)` will output the
         original Series, simply ignoring the incompatible types.
         """
         if is_list_like(lower) or is_list_like(upper):
@@ -2065,7 +2065,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series(data=np.arange(3), index=['A', 'B', 'C'])
+        >>> s = ps.Series(data=np.arange(3), index=['A', 'B', 'C'])
         >>> s
         A    0
         B    1
@@ -2102,7 +2102,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ...                       ['speed', 'weight', 'length']],
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [0, 1, 2, 0, 1, 2, 0, 1, 2]])
-        >>> s = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
+        >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
         ...               index=midx)
         >>> s
         lama    speed      45.0
@@ -2213,7 +2213,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'animal':['alligator', 'bee', 'falcon', 'lion']})
+        >>> df = ps.DataFrame({'animal':['alligator', 'bee', 'falcon', 'lion']})
         >>> df.animal.head(2)  # doctest: +NORMALIZE_WHITESPACE
         0     alligator
         1     bee
@@ -2247,7 +2247,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> index = pd.date_range('2018-04-09', periods=4, freq='2D')
-        >>> kser = pp.Series([1, 2, 3, 4], index=index)
+        >>> kser = ps.Series([1, 2, 3, 4], index=index)
         >>> kser
         2018-04-09    1
         2018-04-11    2
@@ -2294,7 +2294,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> index = pd.date_range('2018-04-09', periods=4, freq='2D')
-        >>> kser = pp.Series([1, 2, 3, 4], index=index)
+        >>> kser = ps.Series([1, 2, 3, 4], index=index)
         >>> kser
         2018-04-09    1
         2018-04-11    2
@@ -2338,7 +2338,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> kser = pp.Series([2, 1, 3, 3], name='A')
+        >>> kser = ps.Series([2, 1, 3, 3], name='A')
         >>> kser.unique().sort_values()  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
         <BLANKLINE>
         ...  1
@@ -2346,7 +2346,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ...  3
         Name: A, dtype: int64
 
-        >>> pp.Series([pd.Timestamp('2016-01-01') for _ in range(3)]).unique()
+        >>> ps.Series([pd.Timestamp('2016-01-01') for _ in range(3)]).unique()
         0   2016-01-01
         dtype: datetime64[ns]
 
@@ -2394,7 +2394,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([np.nan, 1, 3, 10, 5])
+        >>> s = ps.Series([np.nan, 1, 3, 10, 5])
         >>> s
         0     NaN
         1     1.0
@@ -2446,7 +2446,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Sort a series of strings
 
-        >>> s = pp.Series(['z', 'b', 'd', 'a', 'c'])
+        >>> s = ps.Series(['z', 'b', 'd', 'a', 'c'])
         >>> s
         0    z
         1    b
@@ -2507,7 +2507,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.Series([2, 1, np.nan], index=['b', 'a', np.nan])
+        >>> df = ps.Series([2, 1, np.nan], index=['b', 'a', np.nan])
 
         >>> df.sort_index()
         a      1.0
@@ -2534,7 +2534,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         NaN    NaN
         dtype: float64
 
-        >>> df = pp.Series(range(4), index=[['b', 'b', 'a', 'a'], [1, 0, 1, 0]], name='0')
+        >>> df = ps.Series(range(4), index=[['b', 'b', 'a', 'a'], [1, 0, 1, 0]], name='0')
 
         >>> df.sort_index()
         a  0    3
@@ -2592,7 +2592,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         MultiIndex([('a', 1),
                     ('b', 2)],
                    names=['word', 'number'])
-        >>> kser = pp.Series(['x', 'y'], index=midx)
+        >>> kser = ps.Series(['x', 'y'], index=midx)
         >>> kser
         word  number
         a     1         x
@@ -2634,7 +2634,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> kser = pp.Series([1, 2, 3], index=["x", "y", "z"])
+        >>> kser = ps.Series([1, 2, 3], index=["x", "y", "z"])
         >>> kser
         x    1
         y    2
@@ -2681,7 +2681,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3, 4])
+        >>> s = ps.Series([1, 2, 3, 4])
         >>> s
         0    1
         1    2
@@ -2736,7 +2736,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3, 4])
+        >>> s = ps.Series([1, 2, 3, 4])
         >>> s
         0    1
         1    2
@@ -2783,7 +2783,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'s1': [.2, .0, .6, .2],
+        >>> df = ps.DataFrame({'s1': [.2, .0, .6, .2],
         ...                    's2': [.3, .6, .0, .1]})
         >>> s1 = df.s1
         >>> s2 = df.s2
@@ -2841,7 +2841,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> data = [1, 2, 3, 4, np.nan ,6, 7, 8]
-        >>> s = pp.Series(data)
+        >>> s = ps.Series(data)
         >>> s
         0    1.0
         1    2.0
@@ -2901,7 +2901,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> data = [1, 2, 3, 4, np.nan ,6, 7, 8]
-        >>> s = pp.Series(data)
+        >>> s = ps.Series(data)
         >>> s
         0    1.0
         1    2.0
@@ -2953,9 +2953,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s1 = pp.Series([1, 2, 3])
-        >>> s2 = pp.Series([4, 5, 6])
-        >>> s3 = pp.Series([4, 5, 6], index=[3,4,5])
+        >>> s1 = ps.Series([1, 2, 3])
+        >>> s2 = ps.Series([4, 5, 6])
+        >>> s3 = ps.Series([4, 5, 6], index=[3,4,5])
 
         >>> s1.append(s2)
         0    1
@@ -3048,7 +3048,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Create a Series with typical summer temperatures for each city.
 
-        >>> s = pp.Series([20, 21, 12],
+        >>> s = ps.Series([20, 21, 12],
         ...               index=['London', 'New York', 'Helsinki'])
         >>> s
         London      20
@@ -3170,7 +3170,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3, 4])
+        >>> s = ps.Series([1, 2, 3, 4])
         >>> s.agg('min')
         1
 
@@ -3197,7 +3197,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         It returns the same object as the transpose of the given series object, which is by
         definition self.
 
-        >>> s = pp.Series([1, 2, 3])
+        >>> s = ps.Series([1, 2, 3])
         >>> s
         0    1
         1    2
@@ -3254,7 +3254,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
 
-        >>> s = pp.Series(range(3))
+        >>> s = ps.Series(range(3))
         >>> s
         0    0
         1    1
@@ -3302,7 +3302,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return self.apply(func, args=args, **kwargs)
 
-    def transform_batch(self, func, *args, **kwargs) -> "pp.Series":
+    def transform_batch(self, func, *args, **kwargs) -> "ps.Series":
         warnings.warn(
             "Series.transform_batch is deprecated as of Series.koalas.transform_batch. "
             "Please use the API instead.",
@@ -3333,7 +3333,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.Series([0.028208, 0.038683, 0.877076], name='x')
+        >>> df = ps.Series([0.028208, 0.038683, 0.877076], name='x')
         >>> df
         0    0.028208
         1    0.038683
@@ -3379,7 +3379,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3, 4, 5])
+        >>> s = ps.Series([1, 2, 3, 4, 5])
         >>> s.quantile(.5)
         3.0
 
@@ -3455,7 +3455,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 2, 3], name='A')
+        >>> s = ps.Series([1, 2, 2, 3], name='A')
         >>> s
         0    1
         1    2
@@ -3594,7 +3594,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4, 5, 6],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4, 5, 6],
         ...                    'b': [1, 1, 2, 3, 5, 8],
         ...                    'c': [1, 4, 9, 16, 25, 36]}, columns=['a', 'b', 'c'])
         >>> df
@@ -3680,7 +3680,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series(data=[1, None, 4, 3, 5],
+        >>> s = ps.Series(data=[1, None, 4, 3, 5],
         ...               index=['A', 'B', 'C', 'D', 'E'])
         >>> s
         A    1.0
@@ -3703,7 +3703,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> index = pd.MultiIndex.from_arrays([
         ...     ['a', 'a', 'b', 'b'], ['c', 'd', 'e', 'f']], names=('first', 'second'))
-        >>> s = pp.Series(data=[1, None, 4, 5], index=index)
+        >>> s = ps.Series(data=[1, None, 4, 5], index=index)
         >>> s
         first  second
         a      c         1.0
@@ -3718,7 +3718,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         If multiple values equal the maximum, the first row label with that
         value is returned.
 
-        >>> s = pp.Series([1, 100, 1, 100, 1, 100], index=[10, 3, 5, 2, 1, 8])
+        >>> s = ps.Series([1, 100, 1, 100, 1, 100], index=[10, 3, 5, 2, 1, 8])
         >>> s
         10      1
         3     100
@@ -3789,7 +3789,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series(data=[1, None, 4, 0],
+        >>> s = ps.Series(data=[1, None, 4, 0],
         ...               index=['A', 'B', 'C', 'D'])
         >>> s
         A    1.0
@@ -3811,7 +3811,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> index = pd.MultiIndex.from_arrays([
         ...     ['a', 'a', 'b', 'b'], ['c', 'd', 'e', 'f']], names=('first', 'second'))
-        >>> s = pp.Series(data=[1, None, 4, 0], index=index)
+        >>> s = ps.Series(data=[1, None, 4, 0], index=index)
         >>> s
         first  second
         a      c         1.0
@@ -3826,7 +3826,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         If multiple values equal the minimum, the first row label with that
         value is returned.
 
-        >>> s = pp.Series([1, 100, 1, 100, 1, 100], index=[10, 3, 5, 2, 1, 8])
+        >>> s = ps.Series([1, 100, 1, 100, 1, 100], index=[10, 3, 5, 2, 1, 8])
         >>> s
         10      1
         3     100
@@ -3876,7 +3876,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series(data=np.arange(3), index=['A', 'B', 'C'])
+        >>> s = ps.Series(data=np.arange(3), index=['A', 'B', 'C'])
         >>> s
         A    0
         B    1
@@ -3891,7 +3891,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         C    2
         dtype: int64
 
-        >>> s = pp.Series(data=np.arange(3), index=['A', 'A', 'C'])
+        >>> s = ps.Series(data=np.arange(3), index=['A', 'A', 'C'])
         >>> s
         A    0
         A    1
@@ -3913,7 +3913,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ...                       ['speed', 'weight', 'length']],
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [0, 1, 2, 0, 1, 2, 0, 1, 2]])
-        >>> s = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
+        >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
         ...               index=midx)
         >>> s
         lama    speed      45.0
@@ -3951,7 +3951,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ...                       [0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [0, 1, 2, 0, 1, 2, 0, 0, 2]]
         ...  )
-        >>> s = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
+        >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
         ...              index=midx)
         >>> s
         a  lama    speed      45.0
@@ -4047,7 +4047,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2], index=["a", "b"])
+        >>> s = ps.Series([1, 2], index=["a", "b"])
         >>> s
         a    1
         b    2
@@ -4078,7 +4078,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([0, 0, 1, 1, 1, np.nan, np.nan, np.nan])
+        >>> s = ps.Series([0, 0, 1, 1, 1, np.nan, np.nan, np.nan])
         >>> s
         0    0.0
         1    0.0
@@ -4096,7 +4096,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         If there are several same modes, all items are shown
 
-        >>> s = pp.Series([0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3,
+        >>> s = ps.Series([0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3,
         ...                np.nan, np.nan, np.nan])
         >>> s
         0     0.0
@@ -4143,7 +4143,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return first_series(DataFrame(internal))
 
-    def keys(self) -> "pp.Index":
+    def keys(self) -> "ps.Index":
         """
         Return alias for index.
 
@@ -4158,7 +4158,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ...                       ['speed', 'weight', 'length']],
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [0, 1, 2, 0, 1, 2, 0, 1, 2]])
-        >>> kser = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
+        >>> kser = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
 
         >>> kser.keys()  # doctest: +SKIP
         MultiIndex([(  'lama',  'speed'),
@@ -4226,7 +4226,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Scalar `to_replace` and `value`
 
-        >>> s = pp.Series([0, 1, 2, 3, 4])
+        >>> s = ps.Series([0, 1, 2, 3, 4])
         >>> s
         0    0
         1    1
@@ -4277,7 +4277,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ...                       ['speed', 'weight', 'length']],
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [0, 1, 2, 0, 1, 2, 0, 1, 2]])
-        >>> s = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
+        >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
         ...               index=midx)
         >>> s
         lama    speed      45.0
@@ -4381,45 +4381,45 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
-        >>> s = pp.Series([1, 2, 3])
-        >>> s.update(pp.Series([4, 5, 6]))
+        >>> s = ps.Series([1, 2, 3])
+        >>> s.update(ps.Series([4, 5, 6]))
         >>> s.sort_index()
         0    4
         1    5
         2    6
         dtype: int64
 
-        >>> s = pp.Series(['a', 'b', 'c'])
-        >>> s.update(pp.Series(['d', 'e'], index=[0, 2]))
+        >>> s = ps.Series(['a', 'b', 'c'])
+        >>> s.update(ps.Series(['d', 'e'], index=[0, 2]))
         >>> s.sort_index()
         0    d
         1    b
         2    e
         dtype: object
 
-        >>> s = pp.Series([1, 2, 3])
-        >>> s.update(pp.Series([4, 5, 6, 7, 8]))
+        >>> s = ps.Series([1, 2, 3])
+        >>> s.update(ps.Series([4, 5, 6, 7, 8]))
         >>> s.sort_index()
         0    4
         1    5
         2    6
         dtype: int64
 
-        >>> s = pp.Series([1, 2, 3], index=[10, 11, 12])
+        >>> s = ps.Series([1, 2, 3], index=[10, 11, 12])
         >>> s
         10    1
         11    2
         12    3
         dtype: int64
 
-        >>> s.update(pp.Series([4, 5, 6]))
+        >>> s.update(ps.Series([4, 5, 6]))
         >>> s.sort_index()
         10    1
         11    2
         12    3
         dtype: int64
 
-        >>> s.update(pp.Series([4, 5, 6], index=[11, 12, 13]))
+        >>> s.update(ps.Series([4, 5, 6], index=[11, 12, 13]))
         >>> s.sort_index()
         10    1
         11    4
@@ -4429,8 +4429,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         If ``other`` contains NaNs the corresponding values are not updated
         in the original Series.
 
-        >>> s = pp.Series([1, 2, 3])
-        >>> s.update(pp.Series([4, np.nan, 6]))
+        >>> s = ps.Series([1, 2, 3])
+        >>> s.update(ps.Series([4, np.nan, 6]))
         >>> s.sort_index()
         0    4.0
         1    2.0
@@ -4480,8 +4480,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
-        >>> s1 = pp.Series([0, 1, 2, 3, 4])
-        >>> s2 = pp.Series([100, 200, 300, 400, 500])
+        >>> s1 = ps.Series([0, 1, 2, 3, 4])
+        >>> s2 = ps.Series([100, 200, 300, 400, 500])
         >>> s1.where(s1 > 0).sort_index()
         0    NaN
         1    1.0
@@ -4586,8 +4586,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
-        >>> s1 = pp.Series([0, 1, 2, 3, 4])
-        >>> s2 = pp.Series([100, 200, 300, 400, 500])
+        >>> s1 = ps.Series([0, 1, 2, 3, 4])
+        >>> s2 = ps.Series([100, 200, 300, 400, 500])
         >>> s1.mask(s1 > 0).sort_index()
         0    0.0
         1    NaN
@@ -4653,7 +4653,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [0, 1, 2, 0, 1, 2, 0, 1, 2]])
-        >>> s = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
+        >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
         ...               index=midx)
         >>> s
         a  lama    speed      45.0
@@ -4749,7 +4749,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
 
-        >>> kser = pp.Series([90, 91, 85], index=[2, 4, 1])
+        >>> kser = ps.Series([90, 91, 85], index=[2, 4, 1])
         >>> kser
         2    90
         4    91
@@ -4806,15 +4806,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s1 = pp.Series([1, np.nan])
-        >>> s2 = pp.Series([3, 4])
-        >>> with pp.option_context("compute.ops_on_diff_frames", True):
+        >>> s1 = ps.Series([1, np.nan])
+        >>> s2 = ps.Series([3, 4])
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
         ...     s1.combine_first(s2)
         0    1.0
         1    4.0
         dtype: float64
         """
-        if not isinstance(other, pp.Series):
+        if not isinstance(other, ps.Series):
             raise ValueError("`combine_first` only allows `Series` for parameter `other`")
         if same_anchor(self, other):
             this = self.spark.column
@@ -4856,8 +4856,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             ...
             ValueError: matrices are not aligned
 
-            >>> kdf1 = pp.Series([1, 2, 3], index=[0, 1, 2])
-            >>> kdf2 = pp.Series([1, 2, 3], index=[0, 1, 3])
+            >>> kdf1 = ps.Series([1, 2, 3], index=[0, 1, 2])
+            >>> kdf2 = ps.Series([1, 2, 3], index=[0, 1, 3])
             >>> kdf1.dot(kdf2)  # doctest: +SKIP
             5
 
@@ -4880,7 +4880,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([0, 1, 2, 3])
+        >>> s = ps.Series([0, 1, 2, 3])
 
         >>> s.dot(s)
         14
@@ -4888,7 +4888,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s @ s
         14
 
-        >>> kdf = pp.DataFrame({'x': [0, 1, 2, 3], 'y': [0, -1, -2, -3]})
+        >>> kdf = ps.DataFrame({'x': [0, 1, 2, 3], 'y': [0, -1, -2, -3]})
         >>> kdf
            x  y
         0  0  0
@@ -4896,7 +4896,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2  2 -2
         3  3 -3
 
-        >>> with pp.option_context("compute.ops_on_diff_frames", True):
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
         ...     s.dot(kdf)
         ...
         x    14
@@ -4961,7 +4961,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series(['a', 'b', 'c'])
+        >>> s = ps.Series(['a', 'b', 'c'])
         >>> s
         0    a
         1    b
@@ -4975,7 +4975,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         1    b
         2    c
         dtype: object
-        >>> pp.Series([1, 2, 3]).repeat(0)
+        >>> ps.Series([1, 2, 3]).repeat(0)
         Series([], dtype: int64)
         """
         if not isinstance(repeats, (int, Series)):
@@ -5020,7 +5020,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if repeats == 0:
                 return first_series(DataFrame(kdf._internal.with_filter(F.lit(False))))
             else:
-                return first_series(pp.concat([kdf] * repeats))
+                return first_series(ps.concat([kdf] * repeats))
 
     def asof(self, where) -> Union[Scalar, "Series"]:
         """
@@ -5055,7 +5055,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, np.nan, 4], index=[10, 20, 30, 40])
+        >>> s = ps.Series([1, 2, np.nan, 4], index=[10, 20, 30, 40])
         >>> s
         10    1.0
         20    2.0
@@ -5084,9 +5084,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2.0
         """
         should_return_series = True
-        if isinstance(self.index, pp.MultiIndex):
+        if isinstance(self.index, ps.MultiIndex):
             raise ValueError("asof is not supported for a MultiIndex")
-        if isinstance(where, (pp.Index, pp.Series, DataFrame)):
+        if isinstance(where, (ps.Index, ps.Series, DataFrame)):
             raise ValueError("where cannot be an Index, Series or a DataFrame")
         if not self.index.is_monotonic_increasing:
             raise ValueError("asof requires a sorted index")
@@ -5107,8 +5107,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return result if result is not None else np.nan
 
         # The data is expected to be small so it's fine to transpose/use default index.
-        with pp.option_context("compute.default_index_type", "distributed", "compute.max_rows", 1):
-            kdf = pp.DataFrame(sdf)  # type: DataFrame
+        with ps.option_context("compute.default_index_type", "distributed", "compute.max_rows", 1):
+            kdf = ps.DataFrame(sdf)  # type: DataFrame
             kdf.columns = pd.Index(where)
             return first_series(kdf.transpose()).rename(self.name)
 
@@ -5118,7 +5118,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3, 4])
+        >>> s = ps.Series([1, 2, 3, 4])
         >>> s
         0    1
         1    2
@@ -5160,7 +5160,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series([1, 2, 3, 4],
+        >>> s = ps.Series([1, 2, 3, 4],
         ...               index=pd.MultiIndex.from_product([['one', 'two'],
         ...                                                 ['a', 'b']]))
         >>> s
@@ -5180,7 +5180,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         a    1    3
         b    2    4
         """
-        if not isinstance(self.index, pp.MultiIndex):
+        if not isinstance(self.index, ps.MultiIndex):
             raise ValueError("Series.unstack only support for a MultiIndex")
         index_nlevels = self.index.nlevels
         if level > 0 and (level > index_nlevels - 1):
@@ -5227,7 +5227,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> kser = pp.Series([10])
+        >>> kser = ps.Series([10])
         >>> kser.item()
         10
         """
@@ -5255,7 +5255,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> s = pp.Series(['A', 'B', 'C'])
+        >>> s = ps.Series(['A', 'B', 'C'])
         >>> for index, value in s.items():
         ...     print("Index : {}, Value : {}".format(index, value))
         Index : 0, Value : A
@@ -5301,7 +5301,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> kser = pp.Series(
+        >>> kser = ps.Series(
         ...     [1, 2, 3],
         ...     index=pd.MultiIndex.from_tuples(
         ...         [("x", "a"), ("x", "b"), ("y", "c")], names=["level_1", "level_2"]
@@ -5361,7 +5361,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> kser = pp.Series([1, 2, 3, 4, 5])
+        >>> kser = ps.Series([1, 2, 3, 4, 5])
         >>> kser
         0    1
         1    2
@@ -5398,7 +5398,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> kser = pp.Series([[1, 2, 3], [], [3, 4]])
+        >>> kser = ps.Series([[1, 2, 3], [], [3, 4]])
         >>> kser
         0    [1, 2, 3]
         1           []
@@ -5435,7 +5435,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> kser = pp.Series([3, 3, 4, 1, 6, 2, 3, 7, 8, 7, 10])
+        >>> kser = ps.Series([3, 3, 4, 1, 6, 2, 3, 7, 8, 7, 10])
         >>> kser
         0      3
         1      3
@@ -5525,7 +5525,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         kser = first_series(DataFrame(internal))
 
         return cast(
-            Series, pp.concat([kser, self.loc[self.isnull()].spark.transform(lambda _: F.lit(-1))])
+            Series, ps.concat([kser, self.loc[self.isnull()].spark.transform(lambda _: F.lit(-1))])
         )
 
     def argmax(self) -> int:
@@ -5544,7 +5544,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Consider dataset containing cereal calories
 
-        >>> s = pp.Series({'Corn Flakes': 100.0, 'Almond Delight': 110.0,
+        >>> s = ps.Series({'Corn Flakes': 100.0, 'Almond Delight': 110.0,
         ...                'Cinnamon Toast Crunch': 120.0, 'Cocoa Puff': 110.0})
         >>> s  # doctest: +SKIP
         Corn Flakes              100.0
@@ -5591,7 +5591,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
         Consider dataset containing cereal calories
 
-        >>> s = pp.Series({'Corn Flakes': 100.0, 'Almond Delight': 110.0,
+        >>> s = ps.Series({'Corn Flakes': 100.0, 'Almond Delight': 110.0,
         ...                'Cinnamon Toast Crunch': 120.0, 'Cocoa Puff': 110.0})
         >>> s  # doctest: +SKIP
         Corn Flakes              100.0
@@ -5652,8 +5652,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
-        >>> s1 = pp.Series(["a", "b", "c", "d", "e"])
-        >>> s2 = pp.Series(["a", "a", "c", "b", "e"])
+        >>> s1 = ps.Series(["a", "b", "c", "d", "e"])
+        >>> s2 = ps.Series(["a", "a", "c", "b", "e"])
 
         Align the differences on columns
 
@@ -5767,9 +5767,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> pp.set_option("compute.ops_on_diff_frames", True)
-        >>> s1 = pp.Series([7, 8, 9], index=[10, 11, 12])
-        >>> s2 = pp.Series(["g", "h", "i"], index=[10, 20, 30])
+        >>> ps.set_option("compute.ops_on_diff_frames", True)
+        >>> s1 = ps.Series([7, 8, 9], index=[10, 11, 12])
+        >>> s2 = ps.Series(["g", "h", "i"], index=[10, 20, 30])
 
         >>> aligned_l, aligned_r = s1.align(s2)
         >>> aligned_l.sort_index()
@@ -5799,7 +5799,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Align with a DataFrame:
 
-        >>> df = pp.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]}, index=[10, 20, 30])
+        >>> df = ps.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]}, index=[10, 20, 30])
         >>> aligned_l, aligned_r = s1.align(df)
         >>> aligned_l.sort_index()
         10    7.0
@@ -5816,7 +5816,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         20  2.0     b
         30  3.0     c
 
-        >>> pp.reset_option("compute.ops_on_diff_frames")
+        >>> ps.reset_option("compute.ops_on_diff_frames")
         """
         axis = validate_axis(axis)
         if axis == 1:
@@ -5879,7 +5879,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> idx = pd.date_range('2018-04-09', periods=4, freq='1D20min')
-        >>> kser = pp.Series([1, 2, 3, 4], index=idx)
+        >>> kser = ps.Series([1, 2, 3, 4], index=idx)
         >>> kser
         2018-04-09 00:00:00    1
         2018-04-10 00:20:00    2
@@ -5925,7 +5925,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Examples
         --------
         >>> idx = pd.date_range('2018-04-09', periods=4, freq='12H')
-        >>> kser = pp.Series([1, 2, 3, 4], index=idx)
+        >>> kser = ps.Series([1, 2, 3, 4], index=idx)
         >>> kser
         2018-04-09 00:00:00    1
         2018-04-09 12:00:00    2
@@ -6245,7 +6245,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.series.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.series tests").getOrCreate()
     )

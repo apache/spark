@@ -27,7 +27,7 @@ import pandas as pd
 from pandas.api.types import is_list_like
 from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
-from pyspark import pandas as pp
+from pyspark import pandas as ps
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
@@ -302,7 +302,7 @@ class TestUtils(object):
 class ComparisonTestBase(ReusedSQLTestCase):
     @property
     def kdf(self):
-        return pp.from_pandas(self.pdf)
+        return ps.from_pandas(self.pdf)
 
     @property
     def pdf(self):

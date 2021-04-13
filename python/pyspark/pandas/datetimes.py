@@ -26,13 +26,13 @@ import pyspark.sql.functions as F
 from pyspark.sql.types import DateType, TimestampType, LongType
 
 if TYPE_CHECKING:
-    import pyspark.pandas as pp  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
 
 
 class DatetimeMethods(object):
     """Date/Time methods for Koalas Series"""
 
-    def __init__(self, series: "pp.Series"):
+    def __init__(self, series: "ps.Series"):
         if not isinstance(series.spark.data_type, (DateType, TimestampType)):
             raise ValueError(
                 "Cannot call DatetimeMethods on type {}".format(series.spark.data_type)
@@ -41,7 +41,7 @@ class DatetimeMethods(object):
 
     # Properties
     @property
-    def date(self) -> "pp.Series":
+    def date(self) -> "ps.Series":
         """
         Returns a Series of python datetime.date objects (namely, the date
         part of Timestamps without timezone information).
@@ -51,85 +51,85 @@ class DatetimeMethods(object):
         return self._data.spark.transform(F.to_date)
 
     @property
-    def time(self) -> "pp.Series":
+    def time(self) -> "ps.Series":
         raise NotImplementedError()
 
     @property
-    def timetz(self) -> "pp.Series":
+    def timetz(self) -> "ps.Series":
         raise NotImplementedError()
 
     @property
-    def year(self) -> "pp.Series":
+    def year(self) -> "ps.Series":
         """
         The year of the datetime.
         """
         return self._data.spark.transform(lambda c: F.year(c).cast(LongType()))
 
     @property
-    def month(self) -> "pp.Series":
+    def month(self) -> "ps.Series":
         """
         The month of the timestamp as January = 1 December = 12.
         """
         return self._data.spark.transform(lambda c: F.month(c).cast(LongType()))
 
     @property
-    def day(self) -> "pp.Series":
+    def day(self) -> "ps.Series":
         """
         The days of the datetime.
         """
         return self._data.spark.transform(lambda c: F.dayofmonth(c).cast(LongType()))
 
     @property
-    def hour(self) -> "pp.Series":
+    def hour(self) -> "ps.Series":
         """
         The hours of the datetime.
         """
         return self._data.spark.transform(lambda c: F.hour(c).cast(LongType()))
 
     @property
-    def minute(self) -> "pp.Series":
+    def minute(self) -> "ps.Series":
         """
         The minutes of the datetime.
         """
         return self._data.spark.transform(lambda c: F.minute(c).cast(LongType()))
 
     @property
-    def second(self) -> "pp.Series":
+    def second(self) -> "ps.Series":
         """
         The seconds of the datetime.
         """
         return self._data.spark.transform(lambda c: F.second(c).cast(LongType()))
 
     @property
-    def microsecond(self) -> "pp.Series":
+    def microsecond(self) -> "ps.Series":
         """
         The microseconds of the datetime.
         """
 
-        def pandas_microsecond(s) -> "pp.Series[np.int64]":
+        def pandas_microsecond(s) -> "ps.Series[np.int64]":
             return s.dt.microsecond
 
         return self._data.koalas.transform_batch(pandas_microsecond)
 
     @property
-    def nanosecond(self) -> "pp.Series":
+    def nanosecond(self) -> "ps.Series":
         raise NotImplementedError()
 
     @property
-    def week(self) -> "pp.Series":
+    def week(self) -> "ps.Series":
         """
         The week ordinal of the year.
         """
         return self._data.spark.transform(lambda c: F.weekofyear(c).cast(LongType()))
 
     @property
-    def weekofyear(self) -> "pp.Series":
+    def weekofyear(self) -> "ps.Series":
         return self.week
 
     weekofyear.__doc__ = week.__doc__
 
     @property
-    def dayofweek(self) -> "pp.Series":
+    def dayofweek(self) -> "ps.Series":
         """
         The day of the week with Monday=0, Sunday=6.
 
@@ -151,7 +151,7 @@ class DatetimeMethods(object):
 
         Examples
         --------
-        >>> s = pp.from_pandas(pd.date_range('2016-12-31', '2017-01-08', freq='D').to_series())
+        >>> s = ps.from_pandas(pd.date_range('2016-12-31', '2017-01-08', freq='D').to_series())
         >>> s.dt.dayofweek
         2016-12-31    5
         2017-01-01    6
@@ -165,41 +165,41 @@ class DatetimeMethods(object):
         dtype: int64
         """
 
-        def pandas_dayofweek(s) -> "pp.Series[np.int64]":
+        def pandas_dayofweek(s) -> "ps.Series[np.int64]":
             return s.dt.dayofweek
 
         return self._data.koalas.transform_batch(pandas_dayofweek)
 
     @property
-    def weekday(self) -> "pp.Series":
+    def weekday(self) -> "ps.Series":
         return self.dayofweek
 
     weekday.__doc__ = dayofweek.__doc__
 
     @property
-    def dayofyear(self) -> "pp.Series":
+    def dayofyear(self) -> "ps.Series":
         """
         The ordinal day of the year.
         """
 
-        def pandas_dayofyear(s) -> "pp.Series[np.int64]":
+        def pandas_dayofyear(s) -> "ps.Series[np.int64]":
             return s.dt.dayofyear
 
         return self._data.koalas.transform_batch(pandas_dayofyear)
 
     @property
-    def quarter(self) -> "pp.Series":
+    def quarter(self) -> "ps.Series":
         """
         The quarter of the date.
         """
 
-        def pandas_quarter(s) -> "pp.Series[np.int64]":
+        def pandas_quarter(s) -> "ps.Series[np.int64]":
             return s.dt.quarter
 
         return self._data.koalas.transform_batch(pandas_quarter)
 
     @property
-    def is_month_start(self) -> "pp.Series":
+    def is_month_start(self) -> "ps.Series":
         """
         Indicates whether the date is the first day of the month.
 
@@ -218,7 +218,7 @@ class DatetimeMethods(object):
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> s = pp.Series(pd.date_range("2018-02-27", periods=3))
+        >>> s = ps.Series(pd.date_range("2018-02-27", periods=3))
         >>> s
         0   2018-02-27
         1   2018-02-28
@@ -232,13 +232,13 @@ class DatetimeMethods(object):
         dtype: bool
         """
 
-        def pandas_is_month_start(s) -> "pp.Series[bool]":
+        def pandas_is_month_start(s) -> "ps.Series[bool]":
             return s.dt.is_month_start
 
         return self._data.koalas.transform_batch(pandas_is_month_start)
 
     @property
-    def is_month_end(self) -> "pp.Series":
+    def is_month_end(self) -> "ps.Series":
         """
         Indicates whether the date is the last day of the month.
 
@@ -257,7 +257,7 @@ class DatetimeMethods(object):
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> s = pp.Series(pd.date_range("2018-02-27", periods=3))
+        >>> s = ps.Series(pd.date_range("2018-02-27", periods=3))
         >>> s
         0   2018-02-27
         1   2018-02-28
@@ -271,13 +271,13 @@ class DatetimeMethods(object):
         dtype: bool
         """
 
-        def pandas_is_month_end(s) -> "pp.Series[bool]":
+        def pandas_is_month_end(s) -> "ps.Series[bool]":
             return s.dt.is_month_end
 
         return self._data.koalas.transform_batch(pandas_is_month_end)
 
     @property
-    def is_quarter_start(self) -> "pp.Series":
+    def is_quarter_start(self) -> "ps.Series":
         """
         Indicator for whether the date is the first day of a quarter.
 
@@ -297,7 +297,7 @@ class DatetimeMethods(object):
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> df = pp.DataFrame({'dates': pd.date_range("2017-03-30",
+        >>> df = ps.DataFrame({'dates': pd.date_range("2017-03-30",
         ...                   periods=4)})
         >>> df
                dates
@@ -321,13 +321,13 @@ class DatetimeMethods(object):
         Name: dates, dtype: bool
         """
 
-        def pandas_is_quarter_start(s) -> "pp.Series[bool]":
+        def pandas_is_quarter_start(s) -> "ps.Series[bool]":
             return s.dt.is_quarter_start
 
         return self._data.koalas.transform_batch(pandas_is_quarter_start)
 
     @property
-    def is_quarter_end(self) -> "pp.Series":
+    def is_quarter_end(self) -> "ps.Series":
         """
         Indicator for whether the date is the last day of a quarter.
 
@@ -347,7 +347,7 @@ class DatetimeMethods(object):
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> df = pp.DataFrame({'dates': pd.date_range("2017-03-30",
+        >>> df = ps.DataFrame({'dates': pd.date_range("2017-03-30",
         ...                   periods=4)})
         >>> df
                dates
@@ -371,13 +371,13 @@ class DatetimeMethods(object):
         Name: dates, dtype: bool
         """
 
-        def pandas_is_quarter_end(s) -> "pp.Series[bool]":
+        def pandas_is_quarter_end(s) -> "ps.Series[bool]":
             return s.dt.is_quarter_end
 
         return self._data.koalas.transform_batch(pandas_is_quarter_end)
 
     @property
-    def is_year_start(self) -> "pp.Series":
+    def is_year_start(self) -> "ps.Series":
         """
         Indicate whether the date is the first day of a year.
 
@@ -396,7 +396,7 @@ class DatetimeMethods(object):
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> dates = pp.Series(pd.date_range("2017-12-30", periods=3))
+        >>> dates = ps.Series(pd.date_range("2017-12-30", periods=3))
         >>> dates
         0   2017-12-30
         1   2017-12-31
@@ -410,13 +410,13 @@ class DatetimeMethods(object):
         dtype: bool
         """
 
-        def pandas_is_year_start(s) -> "pp.Series[bool]":
+        def pandas_is_year_start(s) -> "ps.Series[bool]":
             return s.dt.is_year_start
 
         return self._data.koalas.transform_batch(pandas_is_year_start)
 
     @property
-    def is_year_end(self) -> "pp.Series":
+    def is_year_end(self) -> "ps.Series":
         """
         Indicate whether the date is the last day of the year.
 
@@ -435,7 +435,7 @@ class DatetimeMethods(object):
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> dates = pp.Series(pd.date_range("2017-12-30", periods=3))
+        >>> dates = ps.Series(pd.date_range("2017-12-30", periods=3))
         >>> dates
         0   2017-12-30
         1   2017-12-31
@@ -449,13 +449,13 @@ class DatetimeMethods(object):
         dtype: bool
         """
 
-        def pandas_is_year_end(s) -> "pp.Series[bool]":
+        def pandas_is_year_end(s) -> "ps.Series[bool]":
             return s.dt.is_year_end
 
         return self._data.koalas.transform_batch(pandas_is_year_end)
 
     @property
-    def is_leap_year(self) -> "pp.Series":
+    def is_leap_year(self) -> "ps.Series":
         """
         Boolean indicator if the date belongs to a leap year.
 
@@ -474,7 +474,7 @@ class DatetimeMethods(object):
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> dates_series = pp.Series(pd.date_range("2012-01-01", "2015-01-01", freq="Y"))
+        >>> dates_series = ps.Series(pd.date_range("2012-01-01", "2015-01-01", freq="Y"))
         >>> dates_series
         0   2012-12-31
         1   2013-12-31
@@ -488,45 +488,45 @@ class DatetimeMethods(object):
         dtype: bool
         """
 
-        def pandas_is_leap_year(s) -> "pp.Series[bool]":
+        def pandas_is_leap_year(s) -> "ps.Series[bool]":
             return s.dt.is_leap_year
 
         return self._data.koalas.transform_batch(pandas_is_leap_year)
 
     @property
-    def daysinmonth(self) -> "pp.Series":
+    def daysinmonth(self) -> "ps.Series":
         """
         The number of days in the month.
         """
 
-        def pandas_daysinmonth(s) -> "pp.Series[np.int64]":
+        def pandas_daysinmonth(s) -> "ps.Series[np.int64]":
             return s.dt.daysinmonth
 
         return self._data.koalas.transform_batch(pandas_daysinmonth)
 
     @property
-    def days_in_month(self) -> "pp.Series":
+    def days_in_month(self) -> "ps.Series":
         return self.daysinmonth
 
     days_in_month.__doc__ = daysinmonth.__doc__
 
     # Methods
 
-    def tz_localize(self, tz) -> "pp.Series":
+    def tz_localize(self, tz) -> "ps.Series":
         """
         Localize tz-naive Datetime column to tz-aware Datetime column.
         """
         # Neither tz-naive or tz-aware datetime exists in Spark
         raise NotImplementedError()
 
-    def tz_convert(self, tz) -> "pp.Series":
+    def tz_convert(self, tz) -> "ps.Series":
         """
         Convert tz-aware Datetime column from one time zone to another.
         """
         # tz-aware datetime doesn't exist in Spark
         raise NotImplementedError()
 
-    def normalize(self) -> "pp.Series":
+    def normalize(self) -> "ps.Series":
         """
         Convert times to midnight.
 
@@ -551,7 +551,7 @@ class DatetimeMethods(object):
 
         Examples
         --------
-        >>> series = pp.Series(pd.Series(pd.date_range('2012-1-1 12:45:31', periods=3, freq='M')))
+        >>> series = ps.Series(pd.Series(pd.date_range('2012-1-1 12:45:31', periods=3, freq='M')))
         >>> series.dt.normalize()
         0   2012-01-31
         1   2012-02-29
@@ -559,12 +559,12 @@ class DatetimeMethods(object):
         dtype: datetime64[ns]
         """
 
-        def pandas_normalize(s) -> "pp.Series[np.datetime64]":
+        def pandas_normalize(s) -> "ps.Series[np.datetime64]":
             return s.dt.normalize()
 
         return self._data.koalas.transform_batch(pandas_normalize)
 
-    def strftime(self, date_format) -> "pp.Series":
+    def strftime(self, date_format) -> "ps.Series":
         """
         Convert to a string Series using specified date_format.
 
@@ -592,7 +592,7 @@ class DatetimeMethods(object):
 
         Examples
         --------
-        >>> series = pp.Series(pd.date_range(pd.Timestamp("2018-03-10 09:00"),
+        >>> series = ps.Series(pd.date_range(pd.Timestamp("2018-03-10 09:00"),
         ...                                  periods=3, freq='s'))
         >>> series
         0   2018-03-10 09:00:00
@@ -607,12 +607,12 @@ class DatetimeMethods(object):
         dtype: object
         """
 
-        def pandas_strftime(s) -> "pp.Series[str]":
+        def pandas_strftime(s) -> "ps.Series[str]":
             return s.dt.strftime(date_format)
 
         return self._data.koalas.transform_batch(pandas_strftime)
 
-    def round(self, freq, *args, **kwargs) -> "pp.Series":
+    def round(self, freq, *args, **kwargs) -> "ps.Series":
         """
         Perform round operation on the data to the specified freq.
 
@@ -648,7 +648,7 @@ class DatetimeMethods(object):
 
         Examples
         --------
-        >>> series = pp.Series(pd.date_range('1/1/2018 11:59:00', periods=3, freq='min'))
+        >>> series = ps.Series(pd.date_range('1/1/2018 11:59:00', periods=3, freq='min'))
         >>> series
         0   2018-01-01 11:59:00
         1   2018-01-01 12:00:00
@@ -662,12 +662,12 @@ class DatetimeMethods(object):
         dtype: datetime64[ns]
         """
 
-        def pandas_round(s) -> "pp.Series[np.datetime64]":
+        def pandas_round(s) -> "ps.Series[np.datetime64]":
             return s.dt.round(freq, *args, **kwargs)
 
         return self._data.koalas.transform_batch(pandas_round)
 
-    def floor(self, freq, *args, **kwargs) -> "pp.Series":
+    def floor(self, freq, *args, **kwargs) -> "ps.Series":
         """
         Perform floor operation on the data to the specified freq.
 
@@ -703,7 +703,7 @@ class DatetimeMethods(object):
 
         Examples
         --------
-        >>> series = pp.Series(pd.date_range('1/1/2018 11:59:00', periods=3, freq='min'))
+        >>> series = ps.Series(pd.date_range('1/1/2018 11:59:00', periods=3, freq='min'))
         >>> series
         0   2018-01-01 11:59:00
         1   2018-01-01 12:00:00
@@ -717,12 +717,12 @@ class DatetimeMethods(object):
         dtype: datetime64[ns]
         """
 
-        def pandas_floor(s) -> "pp.Series[np.datetime64]":
+        def pandas_floor(s) -> "ps.Series[np.datetime64]":
             return s.dt.floor(freq, *args, **kwargs)
 
         return self._data.koalas.transform_batch(pandas_floor)
 
-    def ceil(self, freq, *args, **kwargs) -> "pp.Series":
+    def ceil(self, freq, *args, **kwargs) -> "ps.Series":
         """
         Perform ceil operation on the data to the specified freq.
 
@@ -758,7 +758,7 @@ class DatetimeMethods(object):
 
         Examples
         --------
-        >>> series = pp.Series(pd.date_range('1/1/2018 11:59:00', periods=3, freq='min'))
+        >>> series = ps.Series(pd.date_range('1/1/2018 11:59:00', periods=3, freq='min'))
         >>> series
         0   2018-01-01 11:59:00
         1   2018-01-01 12:00:00
@@ -772,12 +772,12 @@ class DatetimeMethods(object):
         dtype: datetime64[ns]
         """
 
-        def pandas_ceil(s) -> "pp.Series[np.datetime64]":
+        def pandas_ceil(s) -> "ps.Series[np.datetime64]":
             return s.dt.ceil(freq, *args, **kwargs)
 
         return self._data.koalas.transform_batch(pandas_ceil)
 
-    def month_name(self, locale=None) -> "pp.Series":
+    def month_name(self, locale=None) -> "ps.Series":
         """
         Return the month names of the series with specified locale.
 
@@ -794,7 +794,7 @@ class DatetimeMethods(object):
 
         Examples
         --------
-        >>> series = pp.Series(pd.date_range(start='2018-01', freq='M', periods=3))
+        >>> series = ps.Series(pd.date_range(start='2018-01', freq='M', periods=3))
         >>> series
         0   2018-01-31
         1   2018-02-28
@@ -808,12 +808,12 @@ class DatetimeMethods(object):
         dtype: object
         """
 
-        def pandas_month_name(s) -> "pp.Series[str]":
+        def pandas_month_name(s) -> "ps.Series[str]":
             return s.dt.month_name(locale=locale)
 
         return self._data.koalas.transform_batch(pandas_month_name)
 
-    def day_name(self, locale=None) -> "pp.Series":
+    def day_name(self, locale=None) -> "ps.Series":
         """
         Return the day names of the series with specified locale.
 
@@ -830,7 +830,7 @@ class DatetimeMethods(object):
 
         Examples
         --------
-        >>> series = pp.Series(pd.date_range(start='2018-01-01', freq='D', periods=3))
+        >>> series = ps.Series(pd.date_range(start='2018-01-01', freq='D', periods=3))
         >>> series
         0   2018-01-01
         1   2018-01-02
@@ -844,7 +844,7 @@ class DatetimeMethods(object):
         dtype: object
         """
 
-        def pandas_day_name(s) -> "pp.Series[str]":
+        def pandas_day_name(s) -> "ps.Series[str]":
             return s.dt.day_name(locale=locale)
 
         return self._data.koalas.transform_batch(pandas_day_name)
@@ -860,7 +860,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.datetimes.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.datetimes tests")

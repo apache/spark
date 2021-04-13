@@ -29,25 +29,25 @@ from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.pandas.spark import functions as SF
 
 if TYPE_CHECKING:
-    import pyspark.pandas as pp  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
 
 
 class StringMethods(object):
     """String methods for Koalas Series"""
 
-    def __init__(self, series: "pp.Series"):
+    def __init__(self, series: "ps.Series"):
         if not isinstance(series.spark.data_type, (StringType, BinaryType, ArrayType)):
             raise ValueError("Cannot call StringMethods on type {}".format(series.spark.data_type))
         self._data = series
 
     # Methods
-    def capitalize(self) -> "pp.Series":
+    def capitalize(self) -> "ps.Series":
         """
         Convert Strings in the series to be capitalized.
 
         Examples
         --------
-        >>> s = pp.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
+        >>> s = ps.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
         >>> s
         0                 lower
         1              CAPITALS
@@ -63,18 +63,18 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_capitalize(s) -> "pp.Series[str]":
+        def pandas_capitalize(s) -> "ps.Series[str]":
             return s.str.capitalize()
 
         return self._data.koalas.transform_batch(pandas_capitalize)
 
-    def title(self) -> "pp.Series":
+    def title(self) -> "ps.Series":
         """
         Convert Strings in the series to be titlecase.
 
         Examples
         --------
-        >>> s = pp.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
+        >>> s = ps.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
         >>> s
         0                 lower
         1              CAPITALS
@@ -90,18 +90,18 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_title(s) -> "pp.Series[str]":
+        def pandas_title(s) -> "ps.Series[str]":
             return s.str.title()
 
         return self._data.koalas.transform_batch(pandas_title)
 
-    def lower(self) -> "pp.Series":
+    def lower(self) -> "ps.Series":
         """
         Convert strings in the Series/Index to all lowercase.
 
         Examples
         --------
-        >>> s = pp.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
+        >>> s = ps.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
         >>> s
         0                 lower
         1              CAPITALS
@@ -118,13 +118,13 @@ class StringMethods(object):
         """
         return self._data.spark.transform(F.lower)
 
-    def upper(self) -> "pp.Series":
+    def upper(self) -> "ps.Series":
         """
         Convert strings in the Series/Index to all uppercase.
 
         Examples
         --------
-        >>> s = pp.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
+        >>> s = ps.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
         >>> s
         0                 lower
         1              CAPITALS
@@ -141,13 +141,13 @@ class StringMethods(object):
         """
         return self._data.spark.transform(F.upper)
 
-    def swapcase(self) -> "pp.Series":
+    def swapcase(self) -> "ps.Series":
         """
         Convert strings in the Series/Index to be swapcased.
 
         Examples
         --------
-        >>> s = pp.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
+        >>> s = ps.Series(['lower', 'CAPITALS', 'this is a sentence', 'SwApCaSe'])
         >>> s
         0                 lower
         1              CAPITALS
@@ -163,12 +163,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_swapcase(s) -> "pp.Series[str]":
+        def pandas_swapcase(s) -> "ps.Series[str]":
             return s.str.swapcase()
 
         return self._data.koalas.transform_batch(pandas_swapcase)
 
-    def startswith(self, pattern, na=None) -> "pp.Series":
+    def startswith(self, pattern, na=None) -> "ps.Series":
         """
         Test if the start of each string element matches a pattern.
 
@@ -189,7 +189,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['bat', 'Bear', 'cat', np.nan])
+        >>> s = ps.Series(['bat', 'Bear', 'cat', np.nan])
         >>> s
         0     bat
         1    Bear
@@ -214,12 +214,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_startswith(s) -> "pp.Series[bool]":
+        def pandas_startswith(s) -> "ps.Series[bool]":
             return s.str.startswith(pattern, na)
 
         return self._data.koalas.transform_batch(pandas_startswith)
 
-    def endswith(self, pattern, na=None) -> "pp.Series":
+    def endswith(self, pattern, na=None) -> "ps.Series":
         """
         Test if the end of each string element matches a pattern.
 
@@ -240,7 +240,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['bat', 'Bear', 'cat', np.nan])
+        >>> s = ps.Series(['bat', 'Bear', 'cat', np.nan])
         >>> s
         0     bat
         1    Bear
@@ -265,12 +265,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_endswith(s) -> "pp.Series[bool]":
+        def pandas_endswith(s) -> "ps.Series[bool]":
             return s.str.endswith(pattern, na)
 
         return self._data.koalas.transform_batch(pandas_endswith)
 
-    def strip(self, to_strip=None) -> "pp.Series":
+    def strip(self, to_strip=None) -> "ps.Series":
         """
         Remove leading and trailing characters.
 
@@ -291,7 +291,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['1. Ant.', '2. Bee!\\t', None])
+        >>> s = ps.Series(['1. Ant.', '2. Bee!\\t', None])
         >>> s
         0      1. Ant.
         1    2. Bee!\\t
@@ -317,12 +317,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_strip(s) -> "pp.Series[str]":
+        def pandas_strip(s) -> "ps.Series[str]":
             return s.str.strip(to_strip)
 
         return self._data.koalas.transform_batch(pandas_strip)
 
-    def lstrip(self, to_strip=None) -> "pp.Series":
+    def lstrip(self, to_strip=None) -> "ps.Series":
         """
         Remove leading characters.
 
@@ -343,7 +343,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['1. Ant.', '2. Bee!\\t', None])
+        >>> s = ps.Series(['1. Ant.', '2. Bee!\\t', None])
         >>> s
         0      1. Ant.
         1    2. Bee!\\t
@@ -357,12 +357,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_lstrip(s) -> "pp.Series[str]":
+        def pandas_lstrip(s) -> "ps.Series[str]":
             return s.str.lstrip(to_strip)
 
         return self._data.koalas.transform_batch(pandas_lstrip)
 
-    def rstrip(self, to_strip=None) -> "pp.Series":
+    def rstrip(self, to_strip=None) -> "ps.Series":
         """
         Remove trailing characters.
 
@@ -383,7 +383,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['1. Ant.', '2. Bee!\\t', None])
+        >>> s = ps.Series(['1. Ant.', '2. Bee!\\t', None])
         >>> s
         0      1. Ant.
         1    2. Bee!\\t
@@ -397,12 +397,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_rstrip(s) -> "pp.Series[str]":
+        def pandas_rstrip(s) -> "ps.Series[str]":
             return s.str.rstrip(to_strip)
 
         return self._data.koalas.transform_batch(pandas_rstrip)
 
-    def get(self, i) -> "pp.Series":
+    def get(self, i) -> "ps.Series":
         """
         Extract element from each string or string list/tuple in the Series
         at the specified position.
@@ -418,7 +418,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s1 = pp.Series(["String", "123"])
+        >>> s1 = ps.Series(["String", "123"])
         >>> s1
         0    String
         1       123
@@ -434,7 +434,7 @@ class StringMethods(object):
         1    3
         dtype: object
 
-        >>> s2 = pp.Series([["a", "b", "c"], ["x", "y"]])
+        >>> s2 = ps.Series([["a", "b", "c"], ["x", "y"]])
         >>> s2
         0    [a, b, c]
         1       [x, y]
@@ -451,12 +451,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_get(s) -> "pp.Series[str]":
+        def pandas_get(s) -> "ps.Series[str]":
             return s.str.get(i)
 
         return self._data.koalas.transform_batch(pandas_get)
 
-    def isalnum(self) -> "pp.Series":
+    def isalnum(self) -> "ps.Series":
         """
         Check whether all characters in each string are alphanumeric.
 
@@ -466,7 +466,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s1 = pp.Series(['one', 'one1', '1', ''])
+        >>> s1 = ps.Series(['one', 'one1', '1', ''])
 
         >>> s1.str.isalnum()
         0     True
@@ -479,7 +479,7 @@ class StringMethods(object):
         punctuation or whitespace will evaluate to false for an alphanumeric
         check.
 
-        >>> s2 = pp.Series(['A B', '1.5', '3,000'])
+        >>> s2 = ps.Series(['A B', '1.5', '3,000'])
         >>> s2.str.isalnum()
         0    False
         1    False
@@ -487,12 +487,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_isalnum(s) -> "pp.Series[bool]":
+        def pandas_isalnum(s) -> "ps.Series[bool]":
             return s.str.isalnum()
 
         return self._data.koalas.transform_batch(pandas_isalnum)
 
-    def isalpha(self) -> "pp.Series":
+    def isalpha(self) -> "ps.Series":
         """
         Check whether all characters in each string are alphabetic.
 
@@ -502,7 +502,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s1 = pp.Series(['one', 'one1', '1', ''])
+        >>> s1 = ps.Series(['one', 'one1', '1', ''])
 
         >>> s1.str.isalpha()
         0     True
@@ -512,12 +512,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_isalpha(s) -> "pp.Series[bool]":
+        def pandas_isalpha(s) -> "ps.Series[bool]":
             return s.str.isalpha()
 
         return self._data.koalas.transform_batch(pandas_isalpha)
 
-    def isdigit(self) -> "pp.Series":
+    def isdigit(self) -> "ps.Series":
         """
         Check whether all characters in each string are digits.
 
@@ -527,7 +527,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['23', '³', '⅕', ''])
+        >>> s = ps.Series(['23', '³', '⅕', ''])
 
         The s.str.isdecimal method checks for characters used to form numbers
         in base 10.
@@ -562,12 +562,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_isdigit(s) -> "pp.Series[bool]":
+        def pandas_isdigit(s) -> "ps.Series[bool]":
             return s.str.isdigit()
 
         return self._data.koalas.transform_batch(pandas_isdigit)
 
-    def isspace(self) -> "pp.Series":
+    def isspace(self) -> "ps.Series":
         """
         Check whether all characters in each string are whitespaces.
 
@@ -577,7 +577,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series([' ', '\\t\\r\\n ', ''])
+        >>> s = ps.Series([' ', '\\t\\r\\n ', ''])
         >>> s.str.isspace()
         0     True
         1     True
@@ -585,12 +585,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_isspace(s) -> "pp.Series[bool]":
+        def pandas_isspace(s) -> "ps.Series[bool]":
             return s.str.isspace()
 
         return self._data.koalas.transform_batch(pandas_isspace)
 
-    def islower(self) -> "pp.Series":
+    def islower(self) -> "ps.Series":
         """
         Check whether all characters in each string are lowercase.
 
@@ -600,7 +600,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['leopard', 'Golden Eagle', 'SNAKE', ''])
+        >>> s = ps.Series(['leopard', 'Golden Eagle', 'SNAKE', ''])
         >>> s.str.islower()
         0     True
         1    False
@@ -609,12 +609,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_isspace(s) -> "pp.Series[bool]":
+        def pandas_isspace(s) -> "ps.Series[bool]":
             return s.str.islower()
 
         return self._data.koalas.transform_batch(pandas_isspace)
 
-    def isupper(self) -> "pp.Series":
+    def isupper(self) -> "ps.Series":
         """
         Check whether all characters in each string are uppercase.
 
@@ -624,7 +624,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['leopard', 'Golden Eagle', 'SNAKE', ''])
+        >>> s = ps.Series(['leopard', 'Golden Eagle', 'SNAKE', ''])
         >>> s.str.isupper()
         0    False
         1    False
@@ -633,12 +633,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_isspace(s) -> "pp.Series[bool]":
+        def pandas_isspace(s) -> "ps.Series[bool]":
             return s.str.isupper()
 
         return self._data.koalas.transform_batch(pandas_isspace)
 
-    def istitle(self) -> "pp.Series":
+    def istitle(self) -> "ps.Series":
         """
         Check whether all characters in each string are titlecase.
 
@@ -648,7 +648,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['leopard', 'Golden Eagle', 'SNAKE', ''])
+        >>> s = ps.Series(['leopard', 'Golden Eagle', 'SNAKE', ''])
 
         The s.str.istitle method checks for whether all words are in title
         case (whether only the first letter of each word is capitalized).
@@ -663,12 +663,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_istitle(s) -> "pp.Series[bool]":
+        def pandas_istitle(s) -> "ps.Series[bool]":
             return s.str.istitle()
 
         return self._data.koalas.transform_batch(pandas_istitle)
 
-    def isnumeric(self) -> "pp.Series":
+    def isnumeric(self) -> "ps.Series":
         """
         Check whether all characters in each string are numeric.
 
@@ -678,7 +678,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s1 = pp.Series(['one', 'one1', '1', ''])
+        >>> s1 = ps.Series(['one', 'one1', '1', ''])
         >>> s1.str.isnumeric()
         0    False
         1    False
@@ -686,7 +686,7 @@ class StringMethods(object):
         3    False
         dtype: bool
 
-        >>> s2 = pp.Series(['23', '³', '⅕', ''])
+        >>> s2 = ps.Series(['23', '³', '⅕', ''])
 
         The s2.str.isdecimal method checks for characters used to form numbers
         in base 10.
@@ -721,12 +721,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_isnumeric(s) -> "pp.Series[bool]":
+        def pandas_isnumeric(s) -> "ps.Series[bool]":
             return s.str.isnumeric()
 
         return self._data.koalas.transform_batch(pandas_isnumeric)
 
-    def isdecimal(self) -> "pp.Series":
+    def isdecimal(self) -> "ps.Series":
         """
         Check whether all characters in each string are decimals.
 
@@ -736,7 +736,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['23', '³', '⅕', ''])
+        >>> s = ps.Series(['23', '³', '⅕', ''])
 
         The s.str.isdecimal method checks for characters used to form numbers
         in base 10.
@@ -771,18 +771,18 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_isdecimal(s) -> "pp.Series[bool]":
+        def pandas_isdecimal(s) -> "ps.Series[bool]":
             return s.str.isdecimal()
 
         return self._data.koalas.transform_batch(pandas_isdecimal)
 
-    def cat(self, others=None, sep=None, na_rep=None, join=None) -> "pp.Series":
+    def cat(self, others=None, sep=None, na_rep=None, join=None) -> "ps.Series":
         """
         Not supported.
         """
         raise NotImplementedError()
 
-    def center(self, width, fillchar=" ") -> "pp.Series":
+    def center(self, width, fillchar=" ") -> "ps.Series":
         """
         Filling left and right side of strings in the Series/Index with an
         additional character. Equivalent to :func:`str.center`.
@@ -801,7 +801,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(["caribou", "tiger"])
+        >>> s = ps.Series(["caribou", "tiger"])
         >>> s
         0    caribou
         1      tiger
@@ -813,12 +813,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_center(s) -> "pp.Series[str]":
+        def pandas_center(s) -> "ps.Series[str]":
             return s.str.center(width, fillchar)
 
         return self._data.koalas.transform_batch(pandas_center)
 
-    def contains(self, pat, case=True, flags=0, na=None, regex=True) -> "pp.Series":
+    def contains(self, pat, case=True, flags=0, na=None, regex=True) -> "ps.Series":
         """
         Test if pattern or regex is contained within a string of a Series.
 
@@ -853,7 +853,7 @@ class StringMethods(object):
         --------
         Returning a Series of booleans using only a literal pattern.
 
-        >>> s1 = pp.Series(['Mouse', 'dog', 'house and parrot', '23', np.NaN])
+        >>> s1 = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.NaN])
         >>> s1.str.contains('og', regex=False)
         0    False
         1     True
@@ -920,7 +920,7 @@ class StringMethods(object):
         to return True. However, ‘.0’ as a regex matches any character followed
         by a 0.
 
-        >>> s2 = pp.Series(['40','40.0','41','41.0','35'])
+        >>> s2 = ps.Series(['40','40.0','41','41.0','35'])
         >>> s2.str.contains('.0', regex=True)
         0     True
         1     True
@@ -930,12 +930,12 @@ class StringMethods(object):
         dtype: bool
         """
 
-        def pandas_contains(s) -> "pp.Series[bool]":
+        def pandas_contains(s) -> "ps.Series[bool]":
             return s.str.contains(pat, case, flags, na, regex)
 
         return self._data.koalas.transform_batch(pandas_contains)
 
-    def count(self, pat, flags=0) -> "pp.Series":
+    def count(self, pat, flags=0) -> "ps.Series":
         """
         Count occurrences of pattern in each string of the Series.
 
@@ -956,7 +956,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['A', 'B', 'Aaba', 'Baca', np.NaN, 'CABA', 'cat'])
+        >>> s = ps.Series(['A', 'B', 'Aaba', 'Baca', np.NaN, 'CABA', 'cat'])
         >>> s.str.count('a')
         0    0.0
         1    0.0
@@ -969,7 +969,7 @@ class StringMethods(object):
 
         Escape '$' to find the literal dollar sign.
 
-        >>> s = pp.Series(['$', 'B', 'Aab$', '$$ca', 'C$B$', 'cat'])
+        >>> s = ps.Series(['$', 'B', 'Aab$', '$$ca', 'C$B$', 'cat'])
         >>> s.str.count('\\$')
         0    1
         1    0
@@ -980,36 +980,36 @@ class StringMethods(object):
         dtype: int64
         """
 
-        def pandas_count(s) -> "pp.Series[int]":
+        def pandas_count(s) -> "ps.Series[int]":
             return s.str.count(pat, flags)
 
         return self._data.koalas.transform_batch(pandas_count)
 
-    def decode(self, encoding, errors="strict") -> "pp.Series":
+    def decode(self, encoding, errors="strict") -> "ps.Series":
         """
         Not supported.
         """
         raise NotImplementedError()
 
-    def encode(self, encoding, errors="strict") -> "pp.Series":
+    def encode(self, encoding, errors="strict") -> "ps.Series":
         """
         Not supported.
         """
         raise NotImplementedError()
 
-    def extract(self, pat, flags=0, expand=True) -> "pp.Series":
+    def extract(self, pat, flags=0, expand=True) -> "ps.Series":
         """
         Not supported.
         """
         raise NotImplementedError()
 
-    def extractall(self, pat, flags=0) -> "pp.Series":
+    def extractall(self, pat, flags=0) -> "ps.Series":
         """
         Not supported.
         """
         raise NotImplementedError()
 
-    def find(self, sub, start=0, end=None) -> "pp.Series":
+    def find(self, sub, start=0, end=None) -> "ps.Series":
         """
         Return lowest indexes in each strings in the Series where the
         substring is fully contained between [start:end].
@@ -1032,7 +1032,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['apple', 'oranges', 'bananas'])
+        >>> s = ps.Series(['apple', 'oranges', 'bananas'])
 
         >>> s.str.find('a')
         0    0
@@ -1059,12 +1059,12 @@ class StringMethods(object):
         dtype: int64
         """
 
-        def pandas_find(s) -> "pp.Series[int]":
+        def pandas_find(s) -> "ps.Series[int]":
             return s.str.find(sub, start, end)
 
         return self._data.koalas.transform_batch(pandas_find)
 
-    def findall(self, pat, flags=0) -> "pp.Series":
+    def findall(self, pat, flags=0) -> "ps.Series":
         """
         Find all occurrences of pattern or regular expression in the Series.
 
@@ -1086,7 +1086,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['Lion', 'Monkey', 'Rabbit'])
+        >>> s = ps.Series(['Lion', 'Monkey', 'Rabbit'])
 
         The search for the pattern ‘Monkey’ returns one match:
 
@@ -1150,7 +1150,7 @@ class StringMethods(object):
         )
         return self._data._with_new_scol(scol=pudf(self._data.spark.column))
 
-    def index(self, sub, start=0, end=None) -> "pp.Series":
+    def index(self, sub, start=0, end=None) -> "ps.Series":
         """
         Return lowest indexes in each strings where the substring is fully
         contained between [start:end].
@@ -1175,7 +1175,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['apple', 'oranges', 'bananas'])
+        >>> s = ps.Series(['apple', 'oranges', 'bananas'])
 
         >>> s.str.index('a')
         0    0
@@ -1188,12 +1188,12 @@ class StringMethods(object):
         >>> s.str.index('a', start=2) # doctest: +SKIP
         """
 
-        def pandas_index(s) -> "pp.Series[np.int64]":
+        def pandas_index(s) -> "ps.Series[np.int64]":
             return s.str.index(sub, start, end)
 
         return self._data.koalas.transform_batch(pandas_index)
 
-    def join(self, sep) -> "pp.Series":
+    def join(self, sep) -> "ps.Series":
         """
         Join lists contained as elements in the Series with passed delimiter.
 
@@ -1222,7 +1222,7 @@ class StringMethods(object):
         --------
         Example with a list that contains a None element.
 
-        >>> s = pp.Series([['lion', 'elephant', 'zebra'],
+        >>> s = ps.Series([['lion', 'elephant', 'zebra'],
         ...                ['cat', None, 'dog']])
         >>> s
         0    [lion, elephant, zebra]
@@ -1237,12 +1237,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_join(s) -> "pp.Series[str]":
+        def pandas_join(s) -> "ps.Series[str]":
             return s.str.join(sep)
 
         return self._data.koalas.transform_batch(pandas_join)
 
-    def len(self) -> "pp.Series":
+    def len(self) -> "ps.Series":
         """
         Computes the length of each element in the Series.
 
@@ -1259,13 +1259,13 @@ class StringMethods(object):
         Returns the length (number of characters) in a string. Returns the
         number of entries for lists or tuples.
 
-        >>> s1 = pp.Series(['dog', 'monkey'])
+        >>> s1 = ps.Series(['dog', 'monkey'])
         >>> s1.str.len()
         0    3
         1    6
         dtype: int64
 
-        >>> s2 = pp.Series([["a", "b", "c"], []])
+        >>> s2 = ps.Series([["a", "b", "c"], []])
         >>> s2.str.len()
         0    3
         1    0
@@ -1276,7 +1276,7 @@ class StringMethods(object):
         else:
             return self._data.spark.transform(lambda c: F.length(c).cast(LongType()))
 
-    def ljust(self, width, fillchar=" ") -> "pp.Series":
+    def ljust(self, width, fillchar=" ") -> "ps.Series":
         """
         Filling right side of strings in the Series with an additional
         character. Equivalent to :func:`str.ljust`.
@@ -1295,7 +1295,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(["caribou", "tiger"])
+        >>> s = ps.Series(["caribou", "tiger"])
         >>> s
         0    caribou
         1      tiger
@@ -1307,12 +1307,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_ljust(s) -> "pp.Series[str]":
+        def pandas_ljust(s) -> "ps.Series[str]":
             return s.str.ljust(width, fillchar)
 
         return self._data.koalas.transform_batch(pandas_ljust)
 
-    def match(self, pat, case=True, flags=0, na=np.NaN) -> "pp.Series":
+    def match(self, pat, case=True, flags=0, na=np.NaN) -> "ps.Series":
         """
         Determine if each string matches a regular expression.
 
@@ -1338,7 +1338,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['Mouse', 'dog', 'house and parrot', '23', np.NaN])
+        >>> s = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.NaN])
         >>> s.str.match('dog')
         0    False
         1     True
@@ -1373,12 +1373,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_match(s) -> "pp.Series[bool]":
+        def pandas_match(s) -> "ps.Series[bool]":
             return s.str.match(pat, case, flags, na)
 
         return self._data.koalas.transform_batch(pandas_match)
 
-    def normalize(self, form) -> "pp.Series":
+    def normalize(self, form) -> "ps.Series":
         """
         Return the Unicode normal form for the strings in the Series.
 
@@ -1396,12 +1396,12 @@ class StringMethods(object):
             A Series of normalized strings.
         """
 
-        def pandas_normalize(s) -> "pp.Series[str]":
+        def pandas_normalize(s) -> "ps.Series[str]":
             return s.str.normalize(form)
 
         return self._data.koalas.transform_batch(pandas_normalize)
 
-    def pad(self, width, side="left", fillchar=" ") -> "pp.Series":
+    def pad(self, width, side="left", fillchar=" ") -> "ps.Series":
         """
         Pad strings in the Series up to width.
 
@@ -1422,7 +1422,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(["caribou", "tiger"])
+        >>> s = ps.Series(["caribou", "tiger"])
         >>> s
         0    caribou
         1      tiger
@@ -1444,18 +1444,18 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_pad(s) -> "pp.Series[str]":
+        def pandas_pad(s) -> "ps.Series[str]":
             return s.str.pad(width, side, fillchar)
 
         return self._data.koalas.transform_batch(pandas_pad)
 
-    def partition(self, sep=" ", expand=True) -> "pp.Series":
+    def partition(self, sep=" ", expand=True) -> "ps.Series":
         """
         Not supported.
         """
         raise NotImplementedError()
 
-    def repeat(self, repeats) -> "pp.Series":
+    def repeat(self, repeats) -> "ps.Series":
         """
         Duplicate each string in the Series.
 
@@ -1473,7 +1473,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['a', 'b', 'c'])
+        >>> s = ps.Series(['a', 'b', 'c'])
         >>> s
         0    a
         1    b
@@ -1492,7 +1492,7 @@ class StringMethods(object):
             raise ValueError("repeats expects an int parameter")
         return self._data.spark.transform(lambda c: SF.repeat(col=c, n=repeats))
 
-    def replace(self, pat, repl, n=-1, case=None, flags=0, regex=True) -> "pp.Series":
+    def replace(self, pat, repl, n=-1, case=None, flags=0, regex=True) -> "ps.Series":
         """
         Replace occurrences of pattern/regex in the Series with some other
         string. Equivalent to :func:`str.replace` or :func:`re.sub`.
@@ -1533,7 +1533,7 @@ class StringMethods(object):
         patterns as with :func:`re.sub`. NaN value(s) in the Series are changed
         to None:
 
-        >>> pp.Series(['foo', 'fuz', np.nan]).str.replace('f.', 'ba', regex=True)
+        >>> ps.Series(['foo', 'fuz', np.nan]).str.replace('f.', 'ba', regex=True)
         0     bao
         1     baz
         2    None
@@ -1542,7 +1542,7 @@ class StringMethods(object):
         When pat is a string and regex is False, every pat is replaced with
         repl as with :func:`str.replace`:
 
-        >>> pp.Series(['f.o', 'fuz', np.nan]).str.replace('f.', 'ba', regex=False)
+        >>> ps.Series(['f.o', 'fuz', np.nan]).str.replace('f.', 'ba', regex=False)
         0     bao
         1     fuz
         2    None
@@ -1555,7 +1555,7 @@ class StringMethods(object):
         Reverse every lowercase alphabetic word:
 
         >>> repl = lambda m: m.group(0)[::-1]
-        >>> pp.Series(['foo 123', 'bar baz', np.nan]).str.replace(r'[a-z]+', repl)
+        >>> ps.Series(['foo 123', 'bar baz', np.nan]).str.replace(r'[a-z]+', repl)
         0    oof 123
         1    rab zab
         2       None
@@ -1565,7 +1565,7 @@ class StringMethods(object):
 
         >>> pat = r"(?P<one>\\w+) (?P<two>\\w+) (?P<three>\\w+)"
         >>> repl = lambda m: m.group('two').swapcase()
-        >>> pp.Series(['One Two Three', 'Foo Bar Baz']).str.replace(pat, repl)
+        >>> ps.Series(['One Two Three', 'Foo Bar Baz']).str.replace(pat, repl)
         0    tWO
         1    bAR
         dtype: object
@@ -1574,19 +1574,19 @@ class StringMethods(object):
 
         >>> import re
         >>> regex_pat = re.compile(r'FUZ', flags=re.IGNORECASE)
-        >>> pp.Series(['foo', 'fuz', np.nan]).str.replace(regex_pat, 'bar')
+        >>> ps.Series(['foo', 'fuz', np.nan]).str.replace(regex_pat, 'bar')
         0     foo
         1     bar
         2    None
         dtype: object
         """
 
-        def pandas_replace(s) -> "pp.Series[str]":
+        def pandas_replace(s) -> "ps.Series[str]":
             return s.str.replace(pat, repl, n=n, case=case, flags=flags, regex=regex)
 
         return self._data.koalas.transform_batch(pandas_replace)
 
-    def rfind(self, sub, start=0, end=None) -> "pp.Series":
+    def rfind(self, sub, start=0, end=None) -> "ps.Series":
         """
         Return highest indexes in each strings in the Series where the
         substring is fully contained between [start:end].
@@ -1609,7 +1609,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['apple', 'oranges', 'bananas'])
+        >>> s = ps.Series(['apple', 'oranges', 'bananas'])
 
         >>> s.str.rfind('a')
         0    0
@@ -1636,12 +1636,12 @@ class StringMethods(object):
         dtype: int64
         """
 
-        def pandas_rfind(s) -> "pp.Series[int]":
+        def pandas_rfind(s) -> "ps.Series[int]":
             return s.str.rfind(sub, start, end)
 
         return self._data.koalas.transform_batch(pandas_rfind)
 
-    def rindex(self, sub, start=0, end=None) -> "pp.Series":
+    def rindex(self, sub, start=0, end=None) -> "ps.Series":
         """
         Return highest indexes in each strings where the substring is fully
         contained between [start:end].
@@ -1666,7 +1666,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['apple', 'oranges', 'bananas'])
+        >>> s = ps.Series(['apple', 'oranges', 'bananas'])
 
         >>> s.str.rindex('a')
         0    0
@@ -1679,12 +1679,12 @@ class StringMethods(object):
         >>> s.str.rindex('a', start=2) # doctest: +SKIP
         """
 
-        def pandas_rindex(s) -> "pp.Series[np.int64]":
+        def pandas_rindex(s) -> "ps.Series[np.int64]":
             return s.str.rindex(sub, start, end)
 
         return self._data.koalas.transform_batch(pandas_rindex)
 
-    def rjust(self, width, fillchar=" ") -> "pp.Series":
+    def rjust(self, width, fillchar=" ") -> "ps.Series":
         """
         Filling left side of strings in the Series with an additional
         character. Equivalent to :func:`str.rjust`.
@@ -1703,7 +1703,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(["caribou", "tiger"])
+        >>> s = ps.Series(["caribou", "tiger"])
         >>> s
         0    caribou
         1      tiger
@@ -1720,18 +1720,18 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_rjust(s) -> "pp.Series[str]":
+        def pandas_rjust(s) -> "ps.Series[str]":
             return s.str.rjust(width, fillchar)
 
         return self._data.koalas.transform_batch(pandas_rjust)
 
-    def rpartition(self, sep=" ", expand=True) -> "pp.Series":
+    def rpartition(self, sep=" ", expand=True) -> "ps.Series":
         """
         Not supported.
         """
         raise NotImplementedError()
 
-    def slice(self, start=None, stop=None, step=None) -> "pp.Series":
+    def slice(self, start=None, stop=None, step=None) -> "ps.Series":
         """
         Slice substrings from each element in the Series.
 
@@ -1751,7 +1751,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(["koala", "fox", "chameleon"])
+        >>> s = ps.Series(["koala", "fox", "chameleon"])
         >>> s
         0        koala
         1          fox
@@ -1783,12 +1783,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_slice(s) -> "pp.Series[str]":
+        def pandas_slice(s) -> "ps.Series[str]":
             return s.str.slice(start, stop, step)
 
         return self._data.koalas.transform_batch(pandas_slice)
 
-    def slice_replace(self, start=None, stop=None, repl=None) -> "pp.Series":
+    def slice_replace(self, start=None, stop=None, repl=None) -> "ps.Series":
         """
         Slice substrings from each element in the Series.
 
@@ -1813,7 +1813,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['a', 'ab', 'abc', 'abdc', 'abcde'])
+        >>> s = ps.Series(['a', 'ab', 'abc', 'abdc', 'abcde'])
         >>> s
         0        a
         1       ab
@@ -1857,12 +1857,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_slice_replace(s) -> "pp.Series[str]":
+        def pandas_slice_replace(s) -> "ps.Series[str]":
             return s.str.slice_replace(start, stop, repl)
 
         return self._data.koalas.transform_batch(pandas_slice_replace)
 
-    def split(self, pat=None, n=-1, expand=False) -> Union["pp.Series", "pp.DataFrame"]:
+    def split(self, pat=None, n=-1, expand=False) -> Union["ps.Series", "ps.DataFrame"]:
         """
         Split strings around given separator/delimiter.
 
@@ -1912,7 +1912,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(["this is a regular sentence",
+        >>> s = ps.Series(["this is a regular sentence",
         ...                "https://docs.python.org/3/tutorial/index.html",
         ...                np.nan])
 
@@ -1977,7 +1977,7 @@ class StringMethods(object):
         Remember to escape special characters when explicitly using regular
         expressions.
 
-        >>> s = pp.Series(["1+1=2"])
+        >>> s = ps.Series(["1+1=2"])
         >>> s.str.split(r"\\+|=", n=2, expand=True)
            0  1  2
         0  1  1  2
@@ -2009,7 +2009,7 @@ class StringMethods(object):
         else:
             return kser
 
-    def rsplit(self, pat=None, n=-1, expand=False) -> Union["pp.Series", "pp.DataFrame"]:
+    def rsplit(self, pat=None, n=-1, expand=False) -> Union["ps.Series", "ps.DataFrame"]:
         """
         Split strings around given separator/delimiter.
 
@@ -2058,7 +2058,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(["this is a regular sentence",
+        >>> s = ps.Series(["this is a regular sentence",
         ...                "https://docs.python.org/3/tutorial/index.html",
         ...                np.nan])
 
@@ -2115,7 +2115,7 @@ class StringMethods(object):
         Remember to escape special characters when explicitly using regular
         expressions.
 
-        >>> s = pp.Series(["1+1=2"])
+        >>> s = ps.Series(["1+1=2"])
         >>> s.str.split(r"\\+|=", n=2, expand=True)
            0  1  2
         0  1  1  2
@@ -2147,7 +2147,7 @@ class StringMethods(object):
         else:
             return kser
 
-    def translate(self, table) -> "pp.Series":
+    def translate(self, table) -> "ps.Series":
         """
         Map all characters in the string through the given mapping table.
         Equivalent to standard :func:`str.translate`.
@@ -2167,7 +2167,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(["dog", "cat", "bird"])
+        >>> s = ps.Series(["dog", "cat", "bird"])
         >>> m = str.maketrans({'a': 'X', 'i': 'Y', 'o': None})
         >>> s.str.translate(m)
         0      dg
@@ -2176,12 +2176,12 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_translate(s) -> "pp.Series[str]":
+        def pandas_translate(s) -> "ps.Series[str]":
             return s.str.translate(table)
 
         return self._data.koalas.transform_batch(pandas_translate)
 
-    def wrap(self, width, **kwargs) -> "pp.Series":
+    def wrap(self, width, **kwargs) -> "ps.Series":
         """
         Wrap long strings in the Series to be formatted in paragraphs with
         length less than a given width.
@@ -2220,19 +2220,19 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['line to be wrapped', 'another line to be wrapped'])
+        >>> s = ps.Series(['line to be wrapped', 'another line to be wrapped'])
         >>> s.str.wrap(12)
         0             line to be\\nwrapped
         1    another line\\nto be\\nwrapped
         dtype: object
         """
 
-        def pandas_wrap(s) -> "pp.Series[str]":
+        def pandas_wrap(s) -> "ps.Series[str]":
             return s.str.wrap(width, **kwargs)
 
         return self._data.koalas.transform_batch(pandas_wrap)
 
-    def zfill(self, width) -> "pp.Series":
+    def zfill(self, width) -> "ps.Series":
         """
         Pad strings in the Series by prepending ‘0’ characters.
 
@@ -2256,7 +2256,7 @@ class StringMethods(object):
 
         Examples
         --------
-        >>> s = pp.Series(['-1', '1', '1000', np.nan])
+        >>> s = ps.Series(['-1', '1', '1000', np.nan])
         >>> s
         0      -1
         1       1
@@ -2277,7 +2277,7 @@ class StringMethods(object):
         dtype: object
         """
 
-        def pandas_zfill(s) -> "pp.Series[str]":
+        def pandas_zfill(s) -> "ps.Series[str]":
             return s.str.zfill(width)
 
         return self._data.koalas.transform_batch(pandas_zfill)
@@ -2299,7 +2299,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.strings.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.strings tests")

@@ -172,11 +172,11 @@ Input [9]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5,
 
 (26) Exchange
 Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#13, s_store_name#14, i_item_id#18, i_item_desc#19]
-Arguments: hashpartitioning(cast(ss_customer_sk#2 as bigint), cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#4 as bigint), 5), ENSURE_REQUIREMENTS, [id=#21]
+Arguments: hashpartitioning(ss_customer_sk#2, ss_item_sk#1, ss_ticket_number#4, 5), ENSURE_REQUIREMENTS, [id=#21]
 
 (27) Sort [codegen id : 8]
 Input [8]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#4, ss_net_profit#5, s_store_id#13, s_store_name#14, i_item_id#18, i_item_desc#19]
-Arguments: [cast(ss_customer_sk#2 as bigint) ASC NULLS FIRST, cast(ss_item_sk#1 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#4 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [ss_customer_sk#2 ASC NULLS FIRST, ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#4 ASC NULLS FIRST], false, 0
 
 (28) Scan parquet default.store_returns
 Output [5]: [sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24, sr_net_loss#25, sr_returned_date_sk#26]
@@ -184,7 +184,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(sr_returned_date_sk#26), dynamicpruningexpression(sr_returned_date_sk#26 IN dynamicpruning#27)]
 PushedFilters: [IsNotNull(sr_customer_sk), IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
-ReadSchema: struct<sr_item_sk:bigint,sr_customer_sk:bigint,sr_ticket_number:bigint,sr_net_loss:decimal(7,2)>
+ReadSchema: struct<sr_item_sk:int,sr_customer_sk:int,sr_ticket_number:int,sr_net_loss:decimal(7,2)>
 
 (29) ColumnarToRow [codegen id : 10]
 Input [5]: [sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24, sr_net_loss#25, sr_returned_date_sk#26]
@@ -217,7 +217,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 
 (36) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [sr_returned_date_sk#26]
-Right keys [1]: [cast(d_date_sk#28 as bigint)]
+Right keys [1]: [d_date_sk#28]
 Join condition: None
 
 (37) Project [codegen id : 10]
@@ -233,7 +233,7 @@ Input [4]: [sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24, sr_net_loss#2
 Arguments: [sr_customer_sk#23 ASC NULLS FIRST, sr_item_sk#22 ASC NULLS FIRST, sr_ticket_number#24 ASC NULLS FIRST], false, 0
 
 (40) SortMergeJoin [codegen id : 12]
-Left keys [3]: [cast(ss_customer_sk#2 as bigint), cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#4 as bigint)]
+Left keys [3]: [ss_customer_sk#2, ss_item_sk#1, ss_ticket_number#4]
 Right keys [3]: [sr_customer_sk#23, sr_item_sk#22, sr_ticket_number#24]
 Join condition: None
 
@@ -253,7 +253,7 @@ Arguments: [sr_customer_sk#23 ASC NULLS FIRST, sr_item_sk#22 ASC NULLS FIRST], f
 Output [4]: [cs_bill_customer_sk#34, cs_item_sk#35, cs_net_profit#36, cs_sold_date_sk#37]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(cs_sold_date_sk#37), dynamicpruningexpression(cs_sold_date_sk#37 IN dynamicpruning#38)]
+PartitionFilters: [isnotnull(cs_sold_date_sk#37), dynamicpruningexpression(cs_sold_date_sk#37 IN dynamicpruning#27)]
 PushedFilters: [IsNotNull(cs_bill_customer_sk), IsNotNull(cs_item_sk)]
 ReadSchema: struct<cs_bill_customer_sk:int,cs_item_sk:int,cs_net_profit:decimal(7,2)>
 
@@ -265,28 +265,28 @@ Input [4]: [cs_bill_customer_sk#34, cs_item_sk#35, cs_net_profit#36, cs_sold_dat
 Condition : (isnotnull(cs_bill_customer_sk#34) AND isnotnull(cs_item_sk#35))
 
 (47) ReusedExchange [Reuses operator id: 35]
-Output [1]: [d_date_sk#39]
+Output [1]: [d_date_sk#38]
 
 (48) BroadcastHashJoin [codegen id : 15]
 Left keys [1]: [cs_sold_date_sk#37]
-Right keys [1]: [d_date_sk#39]
+Right keys [1]: [d_date_sk#38]
 Join condition: None
 
 (49) Project [codegen id : 15]
 Output [3]: [cs_bill_customer_sk#34, cs_item_sk#35, cs_net_profit#36]
-Input [5]: [cs_bill_customer_sk#34, cs_item_sk#35, cs_net_profit#36, cs_sold_date_sk#37, d_date_sk#39]
+Input [5]: [cs_bill_customer_sk#34, cs_item_sk#35, cs_net_profit#36, cs_sold_date_sk#37, d_date_sk#38]
 
 (50) Exchange
 Input [3]: [cs_bill_customer_sk#34, cs_item_sk#35, cs_net_profit#36]
-Arguments: hashpartitioning(cast(cs_bill_customer_sk#34 as bigint), cast(cs_item_sk#35 as bigint), 5), ENSURE_REQUIREMENTS, [id=#40]
+Arguments: hashpartitioning(cs_bill_customer_sk#34, cs_item_sk#35, 5), ENSURE_REQUIREMENTS, [id=#39]
 
 (51) Sort [codegen id : 16]
 Input [3]: [cs_bill_customer_sk#34, cs_item_sk#35, cs_net_profit#36]
-Arguments: [cast(cs_bill_customer_sk#34 as bigint) ASC NULLS FIRST, cast(cs_item_sk#35 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [cs_bill_customer_sk#34 ASC NULLS FIRST, cs_item_sk#35 ASC NULLS FIRST], false, 0
 
 (52) SortMergeJoin [codegen id : 17]
 Left keys [2]: [sr_customer_sk#23, sr_item_sk#22]
-Right keys [2]: [cast(cs_bill_customer_sk#34 as bigint), cast(cs_item_sk#35 as bigint)]
+Right keys [2]: [cs_bill_customer_sk#34, cs_item_sk#35]
 Join condition: None
 
 (53) Project [codegen id : 17]
@@ -297,23 +297,23 @@ Input [11]: [ss_net_profit#5, s_store_id#13, s_store_name#14, i_item_id#18, i_it
 Input [7]: [ss_net_profit#5, sr_net_loss#25, cs_net_profit#36, s_store_id#13, s_store_name#14, i_item_id#18, i_item_desc#19]
 Keys [4]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14]
 Functions [3]: [partial_sum(UnscaledValue(ss_net_profit#5)), partial_sum(UnscaledValue(sr_net_loss#25)), partial_sum(UnscaledValue(cs_net_profit#36))]
-Aggregate Attributes [3]: [sum#41, sum#42, sum#43]
-Results [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, sum#44, sum#45, sum#46]
+Aggregate Attributes [3]: [sum#40, sum#41, sum#42]
+Results [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, sum#43, sum#44, sum#45]
 
 (55) Exchange
-Input [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, sum#44, sum#45, sum#46]
-Arguments: hashpartitioning(i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, 5), ENSURE_REQUIREMENTS, [id=#47]
+Input [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, sum#43, sum#44, sum#45]
+Arguments: hashpartitioning(i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, 5), ENSURE_REQUIREMENTS, [id=#46]
 
 (56) HashAggregate [codegen id : 18]
-Input [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, sum#44, sum#45, sum#46]
+Input [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, sum#43, sum#44, sum#45]
 Keys [4]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14]
 Functions [3]: [sum(UnscaledValue(ss_net_profit#5)), sum(UnscaledValue(sr_net_loss#25)), sum(UnscaledValue(cs_net_profit#36))]
-Aggregate Attributes [3]: [sum(UnscaledValue(ss_net_profit#5))#48, sum(UnscaledValue(sr_net_loss#25))#49, sum(UnscaledValue(cs_net_profit#36))#50]
-Results [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#48,17,2) AS store_sales_profit#51, MakeDecimal(sum(UnscaledValue(sr_net_loss#25))#49,17,2) AS store_returns_loss#52, MakeDecimal(sum(UnscaledValue(cs_net_profit#36))#50,17,2) AS catalog_sales_profit#53]
+Aggregate Attributes [3]: [sum(UnscaledValue(ss_net_profit#5))#47, sum(UnscaledValue(sr_net_loss#25))#48, sum(UnscaledValue(cs_net_profit#36))#49]
+Results [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#47,17,2) AS store_sales_profit#50, MakeDecimal(sum(UnscaledValue(sr_net_loss#25))#48,17,2) AS store_returns_loss#51, MakeDecimal(sum(UnscaledValue(cs_net_profit#36))#49,17,2) AS catalog_sales_profit#52]
 
 (57) TakeOrderedAndProject
-Input [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, store_sales_profit#51, store_returns_loss#52, catalog_sales_profit#53]
-Arguments: 100, [i_item_id#18 ASC NULLS FIRST, i_item_desc#19 ASC NULLS FIRST, s_store_id#13 ASC NULLS FIRST, s_store_name#14 ASC NULLS FIRST], [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, store_sales_profit#51, store_returns_loss#52, catalog_sales_profit#53]
+Input [7]: [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, store_sales_profit#50, store_returns_loss#51, catalog_sales_profit#52]
+Arguments: 100, [i_item_id#18 ASC NULLS FIRST, i_item_desc#19 ASC NULLS FIRST, s_store_id#13 ASC NULLS FIRST, s_store_name#14 ASC NULLS FIRST], [i_item_id#18, i_item_desc#19, s_store_id#13, s_store_name#14, store_sales_profit#50, store_returns_loss#51, catalog_sales_profit#52]
 
 ===== Subqueries =====
 
@@ -331,11 +331,6 @@ ReusedExchange (59)
 (59) ReusedExchange [Reuses operator id: 35]
 Output [1]: [d_date_sk#28]
 
-Subquery:3 Hosting operator id = 44 Hosting Expression = cs_sold_date_sk#37 IN dynamicpruning#38
-ReusedExchange (60)
-
-
-(60) ReusedExchange [Reuses operator id: 35]
-Output [1]: [d_date_sk#39]
+Subquery:3 Hosting operator id = 44 Hosting Expression = cs_sold_date_sk#37 IN dynamicpruning#27
 
 

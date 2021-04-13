@@ -27,13 +27,13 @@ from pyspark.ml.stat import Correlation
 from pyspark.pandas.utils import column_labels_level
 
 if TYPE_CHECKING:
-    import pyspark.pandas as pp  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
 
 
 CORRELATION_OUTPUT_COLUMN = "__correlation_output__"
 
 
-def corr(kdf: "pp.DataFrame", method: str = "pearson") -> pd.DataFrame:
+def corr(kdf: "ps.DataFrame", method: str = "pearson") -> pd.DataFrame:
     """
     The correlation matrix of all the numerical columns of this dataframe.
 
@@ -45,7 +45,7 @@ def corr(kdf: "pp.DataFrame", method: str = "pearson") -> pd.DataFrame:
                    * spearman : Spearman rank correlation
     :return: :class:`pandas.DataFrame`
 
-    >>> pp.DataFrame({'A': [0, 1], 'B': [1, 0], 'C': ['x', 'y']}).corr()
+    >>> ps.DataFrame({'A': [0, 1], 'B': [1, 0], 'C': ['x', 'y']}).corr()
          A    B
     A  1.0 -1.0
     B -1.0  1.0
@@ -62,7 +62,7 @@ def corr(kdf: "pp.DataFrame", method: str = "pearson") -> pd.DataFrame:
     return pd.DataFrame(arr, columns=idx, index=idx)
 
 
-def to_numeric_df(kdf: "pp.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Tuple]]:
+def to_numeric_df(kdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Tuple]]:
     """
     Takes a dataframe and turns it into a dataframe containing a single numerical
     vector of doubles. This dataframe has a single field called '_1'.
@@ -72,7 +72,7 @@ def to_numeric_df(kdf: "pp.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Tupl
     :return: a pair of dataframe, list of strings (the name of the columns
              that were converted to numerical types)
 
-    >>> to_numeric_df(pp.DataFrame({'A': [0, 1], 'B': [1, 0], 'C': ['x', 'y']}))
+    >>> to_numeric_df(ps.DataFrame({'A': [0, 1], 'B': [1, 0], 'C': ['x', 'y']}))
     (DataFrame[__correlation_output__: vector], [('A',), ('B',)])
     """
     # TODO, it should be more robust.
@@ -101,7 +101,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.ml.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = SparkSession.builder.master("local[4]").appName("pyspark.pandas.ml tests").getOrCreate()
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.ml, globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE

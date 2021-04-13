@@ -1382,6 +1382,16 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           // Have sort on left side before last sort merge join
           assert(collect(plan) { case _: SortExec => true }.size === 6)
       }
+
+      // Test singe partition
+      val fullJoinDF = sql(
+        s"""
+           |SELECT /*+ BROADCAST(t1) */ COUNT(*)
+           |FROM range(0, 10, 1, 1) t1 FULL OUTER JOIN range(0, 10, 1, 1) t2
+           |""".stripMargin)
+      val plan = fullJoinDF.queryExecution.executedPlan
+      assert(collect(plan) { case _: ShuffleExchangeExec => true}.size == 1)
+      checkAnswer(fullJoinDF, Row(100))
     }
   }
 }

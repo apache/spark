@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure,
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, WINDOW_EXPRESSION}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
@@ -308,6 +309,8 @@ case class WindowExpression(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): WindowExpression =
     copy(windowFunction = newLeft, windowSpec = newRight.asInstanceOf[WindowSpecDefinition])
+
+  override val nodePatterns: Seq[TreePattern] = Seq(WINDOW_EXPRESSION)
 }
 
 /**

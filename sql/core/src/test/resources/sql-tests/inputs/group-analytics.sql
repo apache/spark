@@ -69,4 +69,14 @@ SELECT course, year FROM courseSales GROUP BY CUBE(course, year) ORDER BY groupi
 -- Aliases in SELECT could be used in ROLLUP/CUBE/GROUPING SETS
 SELECT a + b AS k1, b AS k2, SUM(a - b) FROM testData GROUP BY CUBE(k1, k2);
 SELECT a + b AS k, b, SUM(a - b) FROM testData GROUP BY ROLLUP(k, b);
-SELECT a + b, b AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)
+SELECT a + b, b AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k);
+
+-- GROUP BY use mixed Separate columns and CUBE/ROLLUP/Gr
+SELECT a, b, count(1) FROM testData GROUP BY a, b, CUBE(a, b);
+SELECT a, b, count(1) FROM testData GROUP BY a, b, ROLLUP(a, b);
+SELECT a, b, count(1) FROM testData GROUP BY CUBE(a, b), ROLLUP(a, b);
+SELECT a, b, count(1) FROM testData GROUP BY a, CUBE(a, b), ROLLUP(b);
+SELECT a, b, count(1) FROM testData GROUP BY a, GROUPING SETS((a, b), (a), ());
+SELECT a, b, count(1) FROM testData GROUP BY a, CUBE(a, b), GROUPING SETS((a, b), (a), ());
+SELECT a, b, count(1) FROM testData GROUP BY a, CUBE(a, b), ROLLUP(a, b), GROUPING SETS((a, b), (a), ());
+

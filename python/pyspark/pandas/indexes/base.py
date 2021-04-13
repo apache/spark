@@ -40,7 +40,7 @@ from pyspark import sql as spark
 from pyspark.sql import functions as F
 from pyspark.sql.types import DataType, FractionalType, IntegralType, TimestampType
 
-from pyspark import pandas as pp  # For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.frame import DataFrame
@@ -94,28 +94,28 @@ class Index(IndexOpsMixin):
 
     Examples
     --------
-    >>> pp.DataFrame({'a': ['a', 'b', 'c']}, index=[1, 2, 3]).index
+    >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[1, 2, 3]).index
     Int64Index([1, 2, 3], dtype='int64')
 
-    >>> pp.DataFrame({'a': [1, 2, 3]}, index=list('abc')).index
+    >>> ps.DataFrame({'a': [1, 2, 3]}, index=list('abc')).index
     Index(['a', 'b', 'c'], dtype='object')
 
-    >>> pp.Index([1, 2, 3])
+    >>> ps.Index([1, 2, 3])
     Int64Index([1, 2, 3], dtype='int64')
 
-    >>> pp.Index(list('abc'))
+    >>> ps.Index(list('abc'))
     Index(['a', 'b', 'c'], dtype='object')
 
     From a Series:
 
-    >>> s = pp.Series([1, 2, 3], index=[10, 20, 30])
-    >>> pp.Index(s)
+    >>> s = ps.Series([1, 2, 3], index=[10, 20, 30])
+    >>> ps.Index(s)
     Int64Index([1, 2, 3], dtype='int64')
 
     From an Index:
 
-    >>> idx = pp.Index([1, 2, 3])
-    >>> pp.Index(idx)
+    >>> idx = ps.Index([1, 2, 3])
+    >>> ps.Index(idx)
     Int64Index([1, 2, 3], dtype='int64')
     """
 
@@ -148,7 +148,7 @@ class Index(IndexOpsMixin):
                 data = data.rename(name)
             return data
 
-        return pp.from_pandas(
+        return ps.from_pandas(
             pd.Index(
                 data=data, dtype=dtype, copy=copy, name=name, tupleize_cols=tupleize_cols, **kwargs
             )
@@ -257,7 +257,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'],
         ...                   index=list('abcd'))
         >>> df.index.size
@@ -275,13 +275,13 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index(['a', 'b', 'c'])
+        >>> idx = ps.Index(['a', 'b', 'c'])
         >>> idx
         Index(['a', 'b', 'c'], dtype='object')
         >>> idx.shape
         (3,)
 
-        >>> midx = pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> midx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
         >>> midx  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
@@ -307,18 +307,18 @@ class Index(IndexOpsMixin):
         --------
 
         >>> from pyspark.pandas.config import option_context
-        >>> idx = pp.Index(['a', 'b', 'c'])
-        >>> midx = pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> idx = ps.Index(['a', 'b', 'c'])
+        >>> midx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
 
         For Index
 
         >>> idx.identical(idx)
         True
         >>> with option_context('compute.ops_on_diff_frames', True):
-        ...     idx.identical(pp.Index(['a', 'b', 'c']))
+        ...     idx.identical(ps.Index(['a', 'b', 'c']))
         True
         >>> with option_context('compute.ops_on_diff_frames', True):
-        ...     idx.identical(pp.Index(['b', 'b', 'a']))
+        ...     idx.identical(ps.Index(['b', 'b', 'a']))
         False
         >>> idx.identical(midx)
         False
@@ -328,10 +328,10 @@ class Index(IndexOpsMixin):
         >>> midx.identical(midx)
         True
         >>> with option_context('compute.ops_on_diff_frames', True):
-        ...     midx.identical(pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')]))
+        ...     midx.identical(ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')]))
         True
         >>> with option_context('compute.ops_on_diff_frames', True):
-        ...     midx.identical(pp.MultiIndex.from_tuples([('c', 'z'), ('b', 'y'), ('a', 'x')]))
+        ...     midx.identical(ps.MultiIndex.from_tuples([('c', 'z'), ('b', 'y'), ('a', 'x')]))
         False
         >>> midx.identical(idx)
         False
@@ -360,9 +360,9 @@ class Index(IndexOpsMixin):
         --------
 
         >>> from pyspark.pandas.config import option_context
-        >>> idx = pp.Index(['a', 'b', 'c'])
+        >>> idx = ps.Index(['a', 'b', 'c'])
         >>> idx.name = "name"
-        >>> midx = pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> midx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
         >>> midx.names = ("nameA", "nameB")
 
         For Index
@@ -370,10 +370,10 @@ class Index(IndexOpsMixin):
         >>> idx.equals(idx)
         True
         >>> with option_context('compute.ops_on_diff_frames', True):
-        ...     idx.equals(pp.Index(['a', 'b', 'c']))
+        ...     idx.equals(ps.Index(['a', 'b', 'c']))
         True
         >>> with option_context('compute.ops_on_diff_frames', True):
-        ...     idx.equals(pp.Index(['b', 'b', 'a']))
+        ...     idx.equals(ps.Index(['b', 'b', 'a']))
         False
         >>> idx.equals(midx)
         False
@@ -383,10 +383,10 @@ class Index(IndexOpsMixin):
         >>> midx.equals(midx)
         True
         >>> with option_context('compute.ops_on_diff_frames', True):
-        ...     midx.equals(pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')]))
+        ...     midx.equals(ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')]))
         True
         >>> with option_context('compute.ops_on_diff_frames', True):
-        ...     midx.equals(pp.MultiIndex.from_tuples([('c', 'z'), ('b', 'y'), ('a', 'x')]))
+        ...     midx.equals(ps.MultiIndex.from_tuples([('c', 'z'), ('b', 'y'), ('a', 'x')]))
         False
         >>> midx.equals(idx)
         False
@@ -415,7 +415,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index(['a', 'b', 'c'])
+        >>> idx = ps.Index(['a', 'b', 'c'])
         >>> idx
         Index(['a', 'b', 'c'], dtype='object')
 
@@ -424,7 +424,7 @@ class Index(IndexOpsMixin):
 
         For MultiIndex
 
-        >>> midx = pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> midx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
         >>> midx  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
@@ -458,7 +458,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'],
         ...                   index=list('abcd'))
         >>> df['dogs'].index.to_pandas()
@@ -498,9 +498,9 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.Series([1, 2, 3, 4]).index.to_numpy()
+        >>> ps.Series([1, 2, 3, 4]).index.to_numpy()
         array([0, 1, 2, 3])
-        >>> pp.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index.to_numpy()
+        >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index.to_numpy()
         array([(1, 4), (2, 5), (3, 6)], dtype=object)
         """
         result = np.asarray(self._to_internal_pandas()._values, dtype=dtype)
@@ -524,9 +524,9 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.Series([1, 2, 3, 4]).index.values
+        >>> ps.Series([1, 2, 3, 4]).index.values
         array([0, 1, 2, 3])
-        >>> pp.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index.values
+        >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index.values
         array([(1, 4), (2, 5), (3, 6)], dtype=object)
         """
         warnings.warn("We recommend using `{}.to_numpy()` instead.".format(type(self).__name__))
@@ -549,12 +549,12 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.Index([1, 2, 3]).asi8
+        >>> ps.Index([1, 2, 3]).asi8
         array([1, 2, 3])
 
         Returns None for non-int64 dtype
 
-        >>> pp.Index(['a', 'b', 'c']).asi8 is None
+        >>> ps.Index(['a', 'b', 'c']).asi8 is None
         True
         """
         warnings.warn("We recommend using `{}.to_numpy()` instead.".format(type(self).__name__))
@@ -582,20 +582,20 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index([1, 5, 7, 7])
+        >>> idx = ps.Index([1, 5, 7, 7])
         >>> idx.has_duplicates
         True
 
-        >>> idx = pp.Index([1, 5, 7])
+        >>> idx = ps.Index([1, 5, 7])
         >>> idx.has_duplicates
         False
 
-        >>> idx = pp.Index(["Watermelon", "Orange", "Apple",
+        >>> idx = ps.Index(["Watermelon", "Orange", "Apple",
         ...                 "Watermelon"])
         >>> idx.has_duplicates
         True
 
-        >>> idx = pp.Index(["Orange", "Apple",
+        >>> idx = ps.Index(["Orange", "Apple",
         ...                 "Watermelon"])
         >>> idx.has_duplicates
         False
@@ -612,20 +612,20 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index([1, 5, 7, 7])
+        >>> idx = ps.Index([1, 5, 7, 7])
         >>> idx.is_unique
         False
 
-        >>> idx = pp.Index([1, 5, 7])
+        >>> idx = ps.Index([1, 5, 7])
         >>> idx.is_unique
         True
 
-        >>> idx = pp.Index(["Watermelon", "Orange", "Apple",
+        >>> idx = ps.Index(["Watermelon", "Orange", "Apple",
         ...                 "Watermelon"])
         >>> idx.is_unique
         False
 
-        >>> idx = pp.Index(["Orange", "Apple",
+        >>> idx = ps.Index(["Orange", "Apple",
         ...                 "Watermelon"])
         >>> idx.is_unique
         True
@@ -671,11 +671,11 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({"a": [1, 2, 3]}, index=pd.Index(['a', 'b', 'c'], name="idx"))
+        >>> kdf = ps.DataFrame({"a": [1, 2, 3]}, index=pd.Index(['a', 'b', 'c'], name="idx"))
         >>> kdf.index.nlevels
         1
 
-        >>> kdf = pp.DataFrame({'a': [1, 2, 3]}, index=[list('abc'), list('def')])
+        >>> kdf = ps.DataFrame({'a': [1, 2, 3]}, index=[list('abc'), list('def')])
         >>> kdf.index.nlevels
         2
         """
@@ -702,7 +702,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': ['A', 'C'], 'b': ['A', 'B']}, columns=['a', 'b'])
+        >>> df = ps.DataFrame({'a': ['A', 'C'], 'b': ['A', 'B']}, columns=['a', 'b'])
         >>> df.index.rename("c")
         Int64Index([0, 1], dtype='int64', name='c')
 
@@ -724,7 +724,7 @@ class Index(IndexOpsMixin):
 
         Support for MultiIndex
 
-        >>> kidx = pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
+        >>> kidx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
         >>> kidx.names = ['hello', 'koalas']
         >>> kidx  # doctest: +SKIP
         MultiIndex([('a', 'x'),
@@ -771,7 +771,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> ki = pp.DataFrame({'a': ['a', 'b', 'c']}, index=[1, 2, None]).index
+        >>> ki = ps.DataFrame({'a': ['a', 'b', 'c']}, index=[1, 2, None]).index
         >>> ki
         Float64Index([1.0, 2.0, nan], dtype='float64')
 
@@ -802,7 +802,7 @@ class Index(IndexOpsMixin):
         --------
         Generate an pandas.Index with duplicate values.
 
-        >>> idx = pp.Index(['lama', 'cow', 'lama', 'beetle', 'lama', 'hippo'])
+        >>> idx = ps.Index(['lama', 'cow', 'lama', 'beetle', 'lama', 'hippo'])
 
         >>> idx.drop_duplicates().sort_values()
         Index(['beetle', 'cow', 'hippo', 'lama'], dtype='object')
@@ -837,7 +837,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'],
         ...                   index=list('abcd'))
         >>> df['dogs'].index.to_series()
@@ -886,7 +886,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index(['Ant', 'Bear', 'Cow'], name='animal')
+        >>> idx = ps.Index(['Ant', 'Bear', 'Cow'], name='animal')
         >>> idx.to_frame()  # doctest: +NORMALIZE_WHITESPACE
                animal
         animal
@@ -951,7 +951,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.DataFrame({'a': [1]}, index=[True]).index.is_boolean()
+        >>> ps.DataFrame({'a': [1]}, index=[True]).index.is_boolean()
         True
         """
         return is_bool_dtype(self.dtype)
@@ -962,7 +962,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.DataFrame({'a': [1]}, index=[1]).index.is_categorical()
+        >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_categorical()
         False
         """
         return is_categorical_dtype(self.dtype)
@@ -973,7 +973,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.DataFrame({'a': [1]}, index=[1]).index.is_floating()
+        >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_floating()
         False
         """
         return is_float_dtype(self.dtype)
@@ -984,7 +984,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.DataFrame({'a': [1]}, index=[1]).index.is_integer()
+        >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_integer()
         True
         """
         return is_integer_dtype(self.dtype)
@@ -995,7 +995,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.DataFrame({'a': [1]}, index=[1]).index.is_interval()
+        >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_interval()
         False
         """
         return is_interval_dtype(self.dtype)
@@ -1006,7 +1006,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.DataFrame({'a': [1]}, index=[1]).index.is_numeric()
+        >>> ps.DataFrame({'a': [1]}, index=[1]).index.is_numeric()
         True
         """
         return is_numeric_dtype(self.dtype)
@@ -1017,7 +1017,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.DataFrame({'a': [1]}, index=["a"]).index.is_object()
+        >>> ps.DataFrame({'a': [1]}, index=["a"]).index.is_object()
         True
         """
         return is_object_dtype(self.dtype)
@@ -1028,11 +1028,11 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> kidx = pp.Index([1, 2, 3])
+        >>> kidx = ps.Index([1, 2, 3])
         >>> kidx.is_type_compatible('integer')
         True
 
-        >>> kidx = pp.Index([1.0, 2.0, 3.0])
+        >>> kidx = ps.Index([1.0, 2.0, 3.0])
         >>> kidx.is_type_compatible('integer')
         False
         >>> kidx.is_type_compatible('floating')
@@ -1047,7 +1047,7 @@ class Index(IndexOpsMixin):
         Examples
         --------
 
-        >>> df = pp.DataFrame([[1, 2], [4, 5], [7, 8]],
+        >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', None],
         ...                   columns=['max_speed', 'shield'])
         >>> df
@@ -1065,7 +1065,7 @@ class Index(IndexOpsMixin):
         ...                       [None, 'weight', 'length']],
         ...                      [[0, 1, 1, 1, 1, 1, 2, 2, 2],
         ...                       [0, 1, 1, 0, 1, 2, 1, 1, 2]])
-        >>> s = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, None],
+        >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, None],
         ...               index=midx)
         >>> s
         lama    NaN        45.0
@@ -1121,15 +1121,15 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> pp.DataFrame({'a': ['a', 'b', 'c']}, index=[1, 1, 3]).index.unique().sort_values()
+        >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[1, 1, 3]).index.unique().sort_values()
         Int64Index([1, 3], dtype='int64')
 
-        >>> pp.DataFrame({'a': ['a', 'b', 'c']}, index=['d', 'e', 'e']).index.unique().sort_values()
+        >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=['d', 'e', 'e']).index.unique().sort_values()
         Index(['d', 'e'], dtype='object')
 
         MultiIndex
 
-        >>> pp.MultiIndex.from_tuples([("A", "X"), ("A", "Y"), ("A", "X")]).unique()
+        >>> ps.MultiIndex.from_tuples([("A", "X"), ("A", "Y"), ("A", "X")]).unique()
         ... # doctest: +SKIP
         MultiIndex([('A', 'X'),
                     ('A', 'Y')],
@@ -1165,7 +1165,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> index = pp.Index([1, 2, 3])
+        >>> index = ps.Index([1, 2, 3])
         >>> index
         Int64Index([1, 2, 3], dtype='int64')
 
@@ -1213,7 +1213,7 @@ class Index(IndexOpsMixin):
 
         Examples:
         --------
-        >>> kidx = pp.Index(['a', 'b', 'c'], name='ks')
+        >>> kidx = ps.Index(['a', 'b', 'c'], name='ks')
         >>> kidx.get_level_values(0)
         Index(['a', 'b', 'c'], dtype='object', name='ks')
 
@@ -1236,7 +1236,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> df = pp.DataFrame([[1, 2], [4, 5], [7, 8]],
+        >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
         ...                   index=['cobra', 'viper', 'sidewinder'],
         ...                   columns=['max_speed', 'shield'])
         >>> df
@@ -1280,7 +1280,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> midx = pp.DataFrame({'a': ['a', 'b']}, index=[['a', 'x'], ['b', 'y'], [1, 2]]).index
+        >>> midx = ps.DataFrame({'a': ['a', 'b']}, index=[['a', 'x'], ['b', 'y'], [1, 2]]).index
         >>> midx  # doctest: +SKIP
         MultiIndex([('a', 'b', 1),
                     ('x', 'y', 2)],
@@ -1379,15 +1379,15 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> s1 = pp.Series([1, 2, 3, 4], index=[1, 2, 3, 4])
-        >>> s2 = pp.Series([1, 2, 3, 4], index=[2, 3, 4, 5])
+        >>> s1 = ps.Series([1, 2, 3, 4], index=[1, 2, 3, 4])
+        >>> s2 = ps.Series([1, 2, 3, 4], index=[2, 3, 4, 5])
 
-        >>> s1.index.symmetric_difference(s2.index)
+        >>> s1.index.symmetric_difference(s2.index)  # doctest: +SKIP
         Int64Index([5, 1], dtype='int64')
 
         You can set name of result Index.
 
-        >>> s1.index.symmetric_difference(s2.index, result_name='koalas')
+        >>> s1.index.symmetric_difference(s2.index, result_name='koalas')  # doctest: +SKIP
         Int64Index([5, 1], dtype='int64', name='koalas')
 
         You can set sort to `True`, if you want to sort the resulting index.
@@ -1397,7 +1397,7 @@ class Index(IndexOpsMixin):
 
         You can also use the ``^`` operator:
 
-        >>> s1.index ^ s2.index
+        >>> s1.index ^ s2.index  # doctest: +SKIP
         Int64Index([5, 1], dtype='int64')
         """
         if type(self) != type(other):
@@ -1444,7 +1444,7 @@ class Index(IndexOpsMixin):
 
         Returns
         -------
-        sorted_index : pp.Index or pp.MultiIndex
+        sorted_index : ps.Index or ps.MultiIndex
             Sorted copy of the index.
 
         See Also
@@ -1454,7 +1454,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index([10, 100, 1, 1000])
+        >>> idx = ps.Index([10, 100, 1, 1000])
         >>> idx
         Int64Index([10, 100, 1, 1000], dtype='int64')
 
@@ -1470,7 +1470,7 @@ class Index(IndexOpsMixin):
 
         Support for MultiIndex.
 
-        >>> kidx = pp.MultiIndex.from_tuples([('a', 'x', 1), ('c', 'y', 2), ('b', 'z', 3)])
+        >>> kidx = ps.MultiIndex.from_tuples([('a', 'x', 1), ('c', 'y', 2), ('b', 'z', 3)])
         >>> kidx  # doctest: +SKIP
         MultiIndex([('a', 'x', 1),
                     ('c', 'y', 2),
@@ -1527,17 +1527,17 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index([3, 2, 1])
+        >>> idx = ps.Index([3, 2, 1])
         >>> idx.min()
         1
 
-        >>> idx = pp.Index(['c', 'b', 'a'])
+        >>> idx = ps.Index(['c', 'b', 'a'])
         >>> idx.min()
         'a'
 
         For a MultiIndex, the maximum is determined lexicographically.
 
-        >>> idx = pp.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2)])
+        >>> idx = ps.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2)])
         >>> idx.min()
         ('a', 'x', 1)
         """
@@ -1568,17 +1568,17 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index([3, 2, 1])
+        >>> idx = ps.Index([3, 2, 1])
         >>> idx.max()
         3
 
-        >>> idx = pp.Index(['c', 'b', 'a'])
+        >>> idx = ps.Index(['c', 'b', 'a'])
         >>> idx.max()
         'c'
 
         For a MultiIndex, the maximum is determined lexicographically.
 
-        >>> idx = pp.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2)])
+        >>> idx = ps.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2)])
         >>> idx.max()
         ('b', 'y', 2)
         """
@@ -1605,7 +1605,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> kidx = pp.Index([10, 10, 9, 8, 4, 2, 4, 4, 2, 2, 10, 10])
+        >>> kidx = ps.Index([10, 10, 9, 8, 4, 2, 4, 4, 2, 2, 10, 10])
         >>> kidx
         Int64Index([10, 10, 9, 8, 4, 2, 4, 4, 2, 2, 10, 10], dtype='int64')
 
@@ -1617,7 +1617,7 @@ class Index(IndexOpsMixin):
 
         MultiIndex
 
-        >>> kidx = pp.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2), ('c', 'z', 3)])
+        >>> kidx = ps.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2), ('c', 'z', 3)])
         >>> kidx  # doctest: +SKIP
         MultiIndex([('a', 'x', 1),
                     ('b', 'y', 2),
@@ -1720,7 +1720,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> kidx = pp.Index([10, 5, 0, 5, 10, 5, 0, 10])
+        >>> kidx = ps.Index([10, 5, 0, 5, 10, 5, 0, 10])
         >>> kidx
         Int64Index([10, 5, 0, 5, 10, 5, 0, 10], dtype='int64')
 
@@ -1729,7 +1729,7 @@ class Index(IndexOpsMixin):
 
         Support for MiltiIndex
 
-        >>> kidx = pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
+        >>> kidx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
         >>> kidx  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y')],
@@ -1783,7 +1783,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> kidx = pp.Index([10, 9, 8, 7, 100, 5, 4, 3, 100, 3])
+        >>> kidx = ps.Index([10, 9, 8, 7, 100, 5, 4, 3, 100, 3])
         >>> kidx
         Int64Index([10, 9, 8, 7, 100, 5, 4, 3, 100, 3], dtype='int64')
 
@@ -1831,7 +1831,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> kidx = pp.Index([10, 9, 8, 7, 100, 5, 4, 3, 100, 3])
+        >>> kidx = ps.Index([10, 9, 8, 7, 100, 5, 4, 3, 100, 3])
         >>> kidx
         Int64Index([10, 9, 8, 7, 100, 5, 4, 3, 100, 3], dtype='int64')
 
@@ -1878,7 +1878,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index([1, 2, 3, 4])
+        >>> idx = ps.Index([1, 2, 3, 4])
         >>> idx
         Int64Index([1, 2, 3, 4], dtype='int64')
 
@@ -1887,7 +1887,7 @@ class Index(IndexOpsMixin):
 
         For MultiIndex
 
-        >>> idx = pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
+        >>> idx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
         >>> idx  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y')],
@@ -1935,15 +1935,15 @@ class Index(IndexOpsMixin):
         Examples
         --------
 
-        >>> idx1 = pp.Index([2, 1, 3, 4])
-        >>> idx2 = pp.Index([3, 4, 5, 6])
+        >>> idx1 = ps.Index([2, 1, 3, 4])
+        >>> idx2 = ps.Index([3, 4, 5, 6])
         >>> idx1.difference(idx2, sort=True)
         Int64Index([1, 2], dtype='int64')
 
         MultiIndex
 
-        >>> midx1 = pp.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2), ('c', 'z', 3)])
-        >>> midx2 = pp.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'z', 2), ('k', 'z', 3)])
+        >>> midx1 = ps.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'y', 2), ('c', 'z', 3)])
+        >>> midx2 = ps.MultiIndex.from_tuples([('a', 'x', 1), ('b', 'z', 2), ('k', 'z', 3)])
         >>> midx1.difference(midx2)  # doctest: +SKIP
         MultiIndex([('b', 'y', 2),
                     ('c', 'z', 3)],
@@ -2002,21 +2002,21 @@ class Index(IndexOpsMixin):
         --------
         >>> from datetime import datetime
 
-        >>> idx = pp.Index([datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 2, 3, 0, 0, 0)])
+        >>> idx = ps.Index([datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 2, 3, 0, 0, 0)])
         >>> idx
         DatetimeIndex(['2019-01-01', '2019-02-03'], dtype='datetime64[ns]', freq=None)
 
         >>> idx.is_all_dates
         True
 
-        >>> idx = pp.Index([datetime(2019, 1, 1, 0, 0, 0), None])
+        >>> idx = ps.Index([datetime(2019, 1, 1, 0, 0, 0), None])
         >>> idx
         DatetimeIndex(['2019-01-01', 'NaT'], dtype='datetime64[ns]', freq=None)
 
         >>> idx.is_all_dates
         True
 
-        >>> idx = pp.Index([0, 1, 2])
+        >>> idx = ps.Index([0, 1, 2])
         >>> idx
         Int64Index([0, 1, 2], dtype='int64')
 
@@ -2050,7 +2050,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx = pp.Index(['a', 'b', 'c'])
+        >>> idx = ps.Index(['a', 'b', 'c'])
         >>> idx
         Index(['a', 'b', 'c'], dtype='object')
         >>> idx.repeat(2)
@@ -2058,7 +2058,7 @@ class Index(IndexOpsMixin):
 
         For MultiIndex,
 
-        >>> midx = pp.MultiIndex.from_tuples([('x', 'a'), ('x', 'b'), ('y', 'c')])
+        >>> midx = ps.MultiIndex.from_tuples([('x', 'a'), ('x', 'b'), ('y', 'c')])
         >>> midx  # doctest: +SKIP
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
@@ -2086,7 +2086,7 @@ class Index(IndexOpsMixin):
         if repeats == 0:
             return DataFrame(kdf._internal.with_filter(F.lit(False))).index
         else:
-            return pp.concat([kdf] * repeats).index
+            return ps.concat([kdf] * repeats).index
 
     def asof(self, label) -> Scalar:
         """
@@ -2115,7 +2115,7 @@ class Index(IndexOpsMixin):
         --------
         `Index.asof` returns the latest index label up to the passed label.
 
-        >>> idx = pp.Index(['2013-12-31', '2014-01-02', '2014-01-03'])
+        >>> idx = ps.Index(['2013-12-31', '2014-01-02', '2014-01-03'])
         >>> idx.asof('2014-01-01')
         '2013-12-31'
 
@@ -2164,15 +2164,15 @@ class Index(IndexOpsMixin):
 
         Index
 
-        >>> idx1 = pp.Index([1, 2, 3, 4])
-        >>> idx2 = pp.Index([3, 4, 5, 6])
+        >>> idx1 = ps.Index([1, 2, 3, 4])
+        >>> idx2 = ps.Index([3, 4, 5, 6])
         >>> idx1.union(idx2).sort_values()
         Int64Index([1, 2, 3, 4, 5, 6], dtype='int64')
 
         MultiIndex
 
-        >>> midx1 = pp.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")])
-        >>> midx2 = pp.MultiIndex.from_tuples([("x", "c"), ("x", "d"), ("x", "e"), ("x", "f")])
+        >>> midx1 = ps.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")])
+        >>> midx2 = ps.MultiIndex.from_tuples([("x", "c"), ("x", "d"), ("x", "e"), ("x", "f")])
         >>> midx1.union(midx2).sort_values()  # doctest: +SKIP
         MultiIndex([('x', 'a'),
                     ('x', 'b'),
@@ -2233,24 +2233,24 @@ class Index(IndexOpsMixin):
         When Index contains null values the result can be different with pandas
         since Koalas cast integer to float when Index contains null values.
 
-        >>> pp.Index([1, 2, 3, None])
+        >>> ps.Index([1, 2, 3, None])
         Float64Index([1.0, 2.0, 3.0, nan], dtype='float64')
 
         Examples
         --------
-        >>> kidx = pp.Index([1, 2, 3, 4])
+        >>> kidx = ps.Index([1, 2, 3, 4])
         >>> kidx.holds_integer()
         True
 
         Returns False for string type.
 
-        >>> kidx = pp.Index(["A", "B", "C", "D"])
+        >>> kidx = ps.Index(["A", "B", "C", "D"])
         >>> kidx.holds_integer()
         False
 
         Returns False for float type.
 
-        >>> kidx = pp.Index([1.1, 2.2, 3.3, 4.4])
+        >>> kidx = ps.Index([1.1, 2.2, 3.3, 4.4])
         >>> kidx.holds_integer()
         False
         """
@@ -2272,8 +2272,8 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> idx1 = pp.Index([1, 2, 3, 4])
-        >>> idx2 = pp.Index([3, 4, 5, 6])
+        >>> idx1 = ps.Index([1, 2, 3, 4])
+        >>> idx2 = ps.Index([3, 4, 5, 6])
         >>> idx1.intersection(idx2).sort_values()
         Int64Index([3, 4], dtype='int64')
         """
@@ -2329,7 +2329,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> kidx = pp.Index([10])
+        >>> kidx = ps.Index([10])
         >>> kidx.item()
         10
         """
@@ -2352,13 +2352,13 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> kidx = pp.Index([1, 2, 3, 4, 5])
+        >>> kidx = ps.Index([1, 2, 3, 4, 5])
         >>> kidx.insert(3, 100)
         Int64Index([1, 2, 3, 100, 4, 5], dtype='int64')
 
         For negative values
 
-        >>> kidx = pp.Index([1, 2, 3, 4, 5])
+        >>> kidx = ps.Index([1, 2, 3, 4, 5])
         >>> kidx.insert(-3, 100)
         Int64Index([1, 2, 100, 3, 4, 5], dtype='int64')
         """
@@ -2397,14 +2397,14 @@ class Index(IndexOpsMixin):
         --------
         Index
 
-        >>> idx = pp.Index([1, 2, 3, 4, 5])
+        >>> idx = ps.Index([1, 2, 3, 4, 5])
         >>> idx.to_list()
         [1, 2, 3, 4, 5]
 
         MultiIndex
 
         >>> tuples = [(1, 'red'), (1, 'blue'), (2, 'red'), (2, 'green')]
-        >>> midx = pp.MultiIndex.from_tuples(tuples)
+        >>> midx = ps.MultiIndex.from_tuples(tuples)
         >>> midx.to_list()
         [(1, 'red'), (1, 'blue'), (2, 'red'), (2, 'green')]
         """
@@ -2420,16 +2420,16 @@ class Index(IndexOpsMixin):
         Examples
         --------
         >>> from datetime import datetime
-        >>> pp.Index([1, 2, 3]).inferred_type
+        >>> ps.Index([1, 2, 3]).inferred_type
         'integer'
 
-        >>> pp.Index([1.0, 2.0, 3.0]).inferred_type
+        >>> ps.Index([1.0, 2.0, 3.0]).inferred_type
         'floating'
 
-        >>> pp.Index(['a', 'b', 'c']).inferred_type
+        >>> ps.Index(['a', 'b', 'c']).inferred_type
         'string'
 
-        >>> pp.Index([True, False, True, False]).inferred_type
+        >>> ps.Index([True, False, True, False]).inferred_type
         'boolean'
         """
         return lib.infer_dtype([self.to_series().head(1).item()])
@@ -2481,7 +2481,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.indexes.base.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.indexes.base tests")

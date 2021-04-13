@@ -23,6 +23,7 @@ import java.time.{Duration, Instant, LocalDate, Period, ZoneOffset}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
@@ -119,9 +120,9 @@ object HiveResult {
         s""""${t.name}":${toHiveString((v, t.dataType), true, formatters)}"""
       }.mkString("{", ",", "}")
     case (period: Period, YearMonthIntervalType) =>
-      toYearMonthIntervalString(periodToMonths(period))
+      toYearMonthIntervalString(periodToMonths(period), HIVE_STYLE)
     case (duration: Duration, DayTimeIntervalType) =>
-      toDayTimeIntervalString(durationToMicros(duration))
+      toDayTimeIntervalString(durationToMicros(duration), HIVE_STYLE)
     case (other, _: UserDefinedType[_]) => other.toString
   }
 }

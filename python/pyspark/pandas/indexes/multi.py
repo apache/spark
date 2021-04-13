@@ -29,7 +29,7 @@ from pyspark import sql as spark
 from pyspark.sql import functions as F, Window
 
 # For running doctests and reference resolution in PyCharm.
-from pyspark import pandas as pp  # noqa: F401
+from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.frame import DataFrame
@@ -84,13 +84,13 @@ class MultiIndex(Index):
 
     Examples
     --------
-    >>> pp.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index  # doctest: +SKIP
+    >>> ps.DataFrame({'a': ['a', 'b', 'c']}, index=[[1, 2, 3], [4, 5, 6]]).index  # doctest: +SKIP
     MultiIndex([(1, 4),
                 (2, 5),
                 (3, 6)],
                )
 
-    >>> pp.DataFrame({'a': [1, 2, 3]}, index=[list('abc'), list('def')]).index  # doctest: +SKIP
+    >>> ps.DataFrame({'a': [1, 2, 3]}, index=[list('abc'), list('def')]).index  # doctest: +SKIP
     MultiIndex([('a', 'd'),
                 ('b', 'e'),
                 ('c', 'f')],
@@ -133,7 +133,7 @@ class MultiIndex(Index):
                 name=name,
                 verify_integrity=verify_integrity,
             )
-        return pp.from_pandas(pidx)
+        return ps.from_pandas(pidx)
 
     @property
     def _internal(self):
@@ -188,7 +188,7 @@ class MultiIndex(Index):
 
         >>> tuples = [(1, 'red'), (1, 'blue'),
         ...           (2, 'red'), (2, 'blue')]
-        >>> pp.MultiIndex.from_tuples(tuples, names=('number', 'color'))  # doctest: +SKIP
+        >>> ps.MultiIndex.from_tuples(tuples, names=('number', 'color'))  # doctest: +SKIP
         MultiIndex([(1,  'red'),
                     (1, 'blue'),
                     (2,  'red'),
@@ -197,7 +197,7 @@ class MultiIndex(Index):
         """
         return cast(
             MultiIndex,
-            pp.from_pandas(
+            ps.from_pandas(
                 pd.MultiIndex.from_tuples(tuples=tuples, sortorder=sortorder, names=names)
             ),
         )
@@ -225,7 +225,7 @@ class MultiIndex(Index):
         --------
 
         >>> arrays = [[1, 1, 2, 2], ['red', 'blue', 'red', 'blue']]
-        >>> pp.MultiIndex.from_arrays(arrays, names=('number', 'color'))  # doctest: +SKIP
+        >>> ps.MultiIndex.from_arrays(arrays, names=('number', 'color'))  # doctest: +SKIP
         MultiIndex([(1,  'red'),
                     (1, 'blue'),
                     (2,  'red'),
@@ -234,7 +234,7 @@ class MultiIndex(Index):
         """
         return cast(
             MultiIndex,
-            pp.from_pandas(
+            ps.from_pandas(
                 pd.MultiIndex.from_arrays(arrays=arrays, sortorder=sortorder, names=names)
             ),
         )
@@ -267,7 +267,7 @@ class MultiIndex(Index):
         --------
         >>> numbers = [0, 1, 2]
         >>> colors = ['green', 'purple']
-        >>> pp.MultiIndex.from_product([numbers, colors],
+        >>> ps.MultiIndex.from_product([numbers, colors],
         ...                            names=['number', 'color'])  # doctest: +SKIP
         MultiIndex([(0,  'green'),
                     (0, 'purple'),
@@ -279,7 +279,7 @@ class MultiIndex(Index):
         """
         return cast(
             MultiIndex,
-            pp.from_pandas(
+            ps.from_pandas(
                 pd.MultiIndex.from_product(iterables=iterables, sortorder=sortorder, names=names)
             ),
         )
@@ -312,7 +312,7 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> df = pp.DataFrame([['HI', 'Temp'], ['HI', 'Precip'],
+        >>> df = ps.DataFrame([['HI', 'Temp'], ['HI', 'Precip'],
         ...                    ['NJ', 'Temp'], ['NJ', 'Precip']],
         ...                   columns=['a', 'b'])
         >>> df  # doctest: +SKIP
@@ -322,7 +322,7 @@ class MultiIndex(Index):
         2    NJ    Temp
         3    NJ  Precip
 
-        >>> pp.MultiIndex.from_frame(df)  # doctest: +SKIP
+        >>> ps.MultiIndex.from_frame(df)  # doctest: +SKIP
         MultiIndex([('HI',   'Temp'),
                     ('HI', 'Precip'),
                     ('NJ',   'Temp'),
@@ -331,7 +331,7 @@ class MultiIndex(Index):
 
         Using explicit names, instead of the column names
 
-        >>> pp.MultiIndex.from_frame(df, names=['state', 'observation'])  # doctest: +SKIP
+        >>> ps.MultiIndex.from_frame(df, names=['state', 'observation'])  # doctest: +SKIP
         MultiIndex([('HI',   'Temp'),
                     ('HI', 'Precip'),
                     ('NJ',   'Temp'),
@@ -399,7 +399,7 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> midx = pp.MultiIndex.from_arrays([['a', 'b'], [1, 2]], names = ['word', 'number'])
+        >>> midx = ps.MultiIndex.from_arrays([['a', 'b'], [1, 2]], names = ['word', 'number'])
         >>> midx  # doctest: +SKIP
         MultiIndex([('a', 1),
                     ('b', 2)],
@@ -455,7 +455,7 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> midx = pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> midx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
         >>> midx  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
@@ -585,7 +585,7 @@ class MultiIndex(Index):
         --------
         >>> tuples = [(1, 'red'), (1, 'blue'),
         ...           (2, 'red'), (2, 'blue')]
-        >>> idx = pp.MultiIndex.from_tuples(tuples, names=('number', 'color'))
+        >>> idx = ps.MultiIndex.from_tuples(tuples, names=('number', 'color'))
         >>> idx  # doctest: +SKIP
         MultiIndex([(1,  'red'),
                     (1, 'blue'),
@@ -642,7 +642,7 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'],
         ...                   index=[list('abcd'), list('efgh')])
         >>> df['dogs'].index.to_pandas()  # doctest: +SKIP
@@ -682,7 +682,7 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
+        >>> df = ps.DataFrame([(.2, .3), (.0, .6), (.6, .0), (.2, .1)],
         ...                   columns=['dogs', 'cats'],
         ...                   index=[list('abcd'), list('efgh')])
         >>> df['dogs'].index  # doctest: +SKIP
@@ -737,9 +737,9 @@ class MultiIndex(Index):
         ...                        ['speed', 'weight', 'length']],
         ...                       [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                        [0, 0, 0, 0, 1, 2, 0, 1, 2]])
-        >>> s1 = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
+        >>> s1 = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
         ...                index=midx1)
-        >>> s2 = pp.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
+        >>> s2 = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3],
         ...              index=midx2)
 
         >>> s1.index.symmetric_difference(s2.index)  # doctest: +SKIP
@@ -812,7 +812,7 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> index = pp.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
+        >>> index = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y'), ('c', 'z')])
         >>> index # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
@@ -904,7 +904,7 @@ class MultiIndex(Index):
         --------
         >>> from datetime import datetime
 
-        >>> idx = pp.MultiIndex.from_tuples(
+        >>> idx = ps.MultiIndex.from_tuples(
         ...     [(datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 1, 1, 0, 0, 0)),
         ...      (datetime(2019, 1, 1, 0, 0, 0), datetime(2019, 1, 1, 0, 0, 0))])
         >>> idx  # doctest: +SKIP
@@ -977,7 +977,7 @@ class MultiIndex(Index):
 
         Create a MultiIndex:
 
-        >>> mi = pp.MultiIndex.from_tuples([('x', 'a'), ('x', 'b'), ('y', 'a')])
+        >>> mi = ps.MultiIndex.from_tuples([('x', 'a'), ('x', 'b'), ('y', 'a')])
         >>> mi.names = ['level_1', 'level_2']
 
         Get level values by supplying level as either integer or name:
@@ -1019,7 +1019,7 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> kmidx = pp.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        >>> kmidx = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
         >>> kmidx.insert(3, ("h", "j"))  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y'),
@@ -1082,7 +1082,7 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> kmidx = pp.MultiIndex.from_tuples([('a', 'x')])
+        >>> kmidx = ps.MultiIndex.from_tuples([('a', 'x')])
         >>> kmidx.item()
         ('a', 'x')
         """
@@ -1104,8 +1104,8 @@ class MultiIndex(Index):
 
         Examples
         --------
-        >>> midx1 = pp.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
-        >>> midx2 = pp.MultiIndex.from_tuples([("c", "z"), ("d", "w")])
+        >>> midx1 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        >>> midx2 = ps.MultiIndex.from_tuples([("c", "z"), ("d", "w")])
         >>> midx1.intersection(midx2).sort_values()  # doctest: +SKIP
         MultiIndex([('c', 'z')],
                    )
@@ -1182,7 +1182,7 @@ def _test():
 
     globs = pyspark.pandas.indexes.multi.__dict__.copy()
     globs["np"] = numpy
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.indexes.multi tests")

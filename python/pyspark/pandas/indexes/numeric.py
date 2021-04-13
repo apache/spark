@@ -17,7 +17,7 @@
 import pandas as pd
 from pandas.api.types import is_hashable
 
-from pyspark import pandas as pp
+from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.series import Series
 
@@ -65,19 +65,19 @@ class Int64Index(IntegerIndex):
 
     Examples
     --------
-    >>> pp.Int64Index([1, 2, 3])
+    >>> ps.Int64Index([1, 2, 3])
     Int64Index([1, 2, 3], dtype='int64')
 
     From a Series:
 
-    >>> s = pp.Series([1, 2, 3], index=[10, 20, 30])
-    >>> pp.Int64Index(s)
+    >>> s = ps.Series([1, 2, 3], index=[10, 20, 30])
+    >>> ps.Int64Index(s)
     Int64Index([1, 2, 3], dtype='int64')
 
     From an Index:
 
-    >>> idx = pp.Index([1, 2, 3])
-    >>> pp.Int64Index(idx)
+    >>> idx = ps.Index([1, 2, 3])
+    >>> ps.Int64Index(idx)
     Int64Index([1, 2, 3], dtype='int64')
     """
 
@@ -90,7 +90,7 @@ class Int64Index(IntegerIndex):
                 dtype = "int64"
             return Index(data, dtype=dtype, copy=copy, name=name)
 
-        return pp.from_pandas(pd.Int64Index(data=data, dtype=dtype, copy=copy, name=name))
+        return ps.from_pandas(pd.Int64Index(data=data, dtype=dtype, copy=copy, name=name))
 
 
 class Float64Index(NumericIndex):
@@ -119,19 +119,19 @@ class Float64Index(NumericIndex):
 
     Examples
     --------
-    >>> pp.Float64Index([1.0, 2.0, 3.0])
+    >>> ps.Float64Index([1.0, 2.0, 3.0])
     Float64Index([1.0, 2.0, 3.0], dtype='float64')
 
     From a Series:
 
-    >>> s = pp.Series([1, 2, 3], index=[10, 20, 30])
-    >>> pp.Float64Index(s)
+    >>> s = ps.Series([1, 2, 3], index=[10, 20, 30])
+    >>> ps.Float64Index(s)
     Float64Index([1.0, 2.0, 3.0], dtype='float64')
 
     From an Index:
 
-    >>> idx = pp.Index([1, 2, 3])
-    >>> pp.Float64Index(idx)
+    >>> idx = ps.Index([1, 2, 3])
+    >>> ps.Float64Index(idx)
     Float64Index([1.0, 2.0, 3.0], dtype='float64')
     """
 
@@ -144,7 +144,7 @@ class Float64Index(NumericIndex):
                 dtype = "float64"
             return Index(data, dtype=dtype, copy=copy, name=name)
 
-        return pp.from_pandas(pd.Float64Index(data=data, dtype=dtype, copy=copy, name=name))
+        return ps.from_pandas(pd.Float64Index(data=data, dtype=dtype, copy=copy, name=name))
 
 
 def _test():
@@ -157,7 +157,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.indexes.numeric.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.indexes.numeric tests")
