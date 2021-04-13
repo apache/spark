@@ -70,7 +70,10 @@ class QueryExecution(
     }
   }
 
-  protected def rumCommand(plan: LogicalPlan): LogicalPlan = {
+  lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
+    // We can't clone `logical` here, which will reset the `_analyzed` flag.
+    val plan = sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
     def runCommand(plan: LogicalPlan): LogicalPlan = {
@@ -83,17 +86,12 @@ class QueryExecution(
     if (isCommand) {
       plan
     } else {
-      plan match {
+      plan.transformUp {
         case c: Command => runCommand(c)
         case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) => runCommand(u)
-        case _ => plan
+        case other => other
       }
     }
-  }
-
-  lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
-    // We can't clone `logical` here, which will reset the `_analyzed` flag.
-    rumCommand(sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker))
   }
 
   lazy val withCachedData: LogicalPlan = sparkSession.withActive {
