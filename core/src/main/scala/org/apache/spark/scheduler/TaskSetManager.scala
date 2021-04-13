@@ -304,7 +304,7 @@ private[spark] class TaskSetManager(
       list: ArrayBuffer[Int],
       speculative: Boolean = false): Option[Int] = {
     // Gets preferred task ranking. Otherwise, dequeue from the tail of the list.
-    val rankedIndexOffsets = schedulingPlungin.map(_.rankTasks(execId, host, tasks, list))
+    val rankedIndexOffsets = schedulingPlungin.map(_.rankTasks(execId, host, tasks, list.toSeq))
       .getOrElse(Range(list.size - 1, -1, -1))
 
     rankedIndexOffsets.foreach { indexOffset =>
