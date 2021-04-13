@@ -1069,8 +1069,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     spark.sessionState.conf.clear()
   }
 
-  test("SPARK-35044: `SET propertyKey` shall lookup sharedState.hadoopConf to display the" +
-      " effective default hive/hadoop configs") {
+  test("SPARK-35044: SET command shall display default value for hadoop conf correctly") {
     val key = "hadoop.this.is.a.test.key"
     val value = "2018-11-17 13:33:33.333"
     // these keys are located at `src/test/resources/hive-site.xml`
