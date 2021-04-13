@@ -95,7 +95,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   def resolveOperatorsWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
   : LogicalPlan = {
-    resolveOperatorsDownWithPruning()(rule)
+    resolveOperatorsDownWithPruning(cond, ruleId)(rule)
   }
 
   /**
@@ -159,7 +159,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /** Similar to [[resolveOperatorsUpWithPruning]], but does it top-down. */
-  def resolveOperatorsDownWithPruning(cond: TreePatternBits => Boolean = AlwaysProcess.fn,
+  def resolveOperatorsDownWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[LogicalPlan, LogicalPlan])
   : LogicalPlan = {
     if (!analyzed && cond.apply(self) && !isRuleIneffective(ruleId)) {
