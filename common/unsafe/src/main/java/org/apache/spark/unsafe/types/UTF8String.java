@@ -29,7 +29,6 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.google.common.primitives.Ints;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -764,7 +763,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    byte[] newBytes = new byte[numBytes * times];
+    byte[] newBytes = new byte[Math.multiplyExact(numBytes, times)];
     copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
 
     int copied = 1;
@@ -907,7 +906,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // the partial string of the padding
       UTF8String remain = pad.substring(0, spaces - padChars * count);
 
-      byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
+      int resultSize = Math.toIntExact((long)numBytes + pad.numBytes * count + remain.numBytes);
+      byte[] data = new byte[resultSize];
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
       int offset = this.numBytes;
       int idx = 0;
@@ -939,7 +939,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // the partial string of the padding
       UTF8String remain = pad.substring(0, spaces - padChars * count);
 
-      byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
+      int resultSize = Math.toIntExact((long)numBytes + pad.numBytes * count + remain.numBytes);
+      byte[] data = new byte[resultSize];
 
       int offset = 0;
       int idx = 0;
@@ -971,7 +972,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     // Allocate a new byte array, and copy the inputs one by one into it.
-    final byte[] result = new byte[Ints.checkedCast(totalLength)];
+    final byte[] result = new byte[Math.toIntExact(totalLength)];
     int offset = 0;
     for (int i = 0; i < inputs.length; i++) {
       int len = inputs[i].numBytes;
