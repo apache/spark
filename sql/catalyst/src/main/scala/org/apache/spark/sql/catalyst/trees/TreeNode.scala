@@ -140,7 +140,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    *
    * @param ruleId the unique identifier of the rule. If `ruleId` is UnknownId, it is a no-op.
    */
-  private def markRuleAsIneffective(ruleId : RuleId): Unit = {
+  protected def markRuleAsIneffective(ruleId : RuleId): Unit = {
     if (ruleId eq UnknownRuleId) {
       return
     }
@@ -155,7 +155,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * @return true if the rule has been marked as ineffective; false otherwise. If `ruleId` is
    *         UnknownId, it returns false.
    */
-  private def isRuleIneffective(ruleId : RuleId): Boolean = {
+  protected def isRuleIneffective(ruleId : RuleId): Boolean = {
     if (ruleId eq UnknownRuleId) {
       return false
     }
