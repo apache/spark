@@ -211,7 +211,7 @@ class CSVOptions(
   }
   val lineSeparatorInWrite: Option[String] = lineSeparator
 
-  val inputBuffer: Option[Int] = parameters.get("inputBuffer").map(_.toInt)
+  val inputBufferSize: Option[Int] = parameters.get("inputBuffer").map(_.toInt)
 
   /**
    * The handling method to be used when unescaped quotes are found in the input.
