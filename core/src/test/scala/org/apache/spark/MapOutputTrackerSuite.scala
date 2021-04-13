@@ -588,4 +588,33 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       assert(err.getMessage.contains("Unable to deserialize broadcasted output statuses"))
     }
   }
+
+  test("SPARK-32921: unregister merge result if it is present and contains the map Id") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    tracker.registerShuffle(10, 4, 2)
+    assert(tracker.containsShuffle(10))
+    val bitmap1 = new RoaringBitmap()
+    bitmap1.add(0)
+    bitmap1.add(1)
+    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
+      bitmap1, 1000L))
+
+    val bitmap2 = new RoaringBitmap()
+    bitmap2.add(5)
+    bitmap2.add(6)
+    tracker.registerMergeResult(10, 1, MergeStatus(BlockManagerId("b", "hostB", 1000),
+      bitmap2, 1000L))
+    assert(tracker.getNumAvailableMergeResults(10) == 2)
+    tracker.unregisterMergeResult(10, 0, BlockManagerId("a", "hostA", 1000), Option(0))
+    assert(tracker.getNumAvailableMergeResults(10) == 1)
+    tracker.unregisterMergeResult(10, 1, BlockManagerId("b", "hostB", 1000), Option(1))
+    assert(tracker.getNumAvailableMergeResults(10) == 1)
+    tracker.unregisterMergeResult(10, 1, BlockManagerId("b", "hostB", 1000), Option(5))
+    assert(tracker.getNumAvailableMergeResults(10) == 0)
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
 }
