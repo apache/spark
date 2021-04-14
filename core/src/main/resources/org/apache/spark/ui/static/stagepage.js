@@ -562,6 +562,9 @@ $(document).ready(function () {
                         }
                     ],
                     "columnDefs": [
+                        // Reuse the duration-related sorting methods defined in [stagapage.js#33]
+                        // to ensure that strings like '12345678 / 123456', '9999 / 1234' in tables
+                        // can be sorted as numerical-order instead of lexicographical-order.
                         { "type": "duration", "targets": 9 },
                         { "type": "duration", "targets": 10 },
                         { "type": "duration", "targets": 11 },
