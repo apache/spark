@@ -16,7 +16,7 @@
 #
 
 """
-A loc indexer for Koalas DataFrame/Series.
+A loc indexer for pandas-on-Spark DataFrame/Series.
 """
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
@@ -101,7 +101,8 @@ class AtIndexer(IndexerLike):
     Similar to ``loc``, in that both provide label-based lookups. Use ``at`` if you only need to
     get a single value in a DataFrame or Series.
 
-    .. note:: Unlike pandas, Koalas only allows using ``at`` to get values but not to set them.
+    .. note:: Unlike pandas, pandas-on-Spark only allows using ``at`` to get values but not to
+        set them.
 
     .. note:: Warning: If ``row_index`` matches a lot of rows, large amounts of data will be
         fetched, potentially causing your machine to run out of memory.
@@ -779,7 +780,7 @@ class LocIndexer(LocIndexerLike):
         start and the stop are included, and the step of the slice is not allowed.
 
     .. note:: With a list or array of labels for row selection,
-        Koalas behaves as a filter without reordering by the labels.
+        pandas-on-Spark behaves as a filter without reordering by the labels.
 
     See Also
     --------
@@ -806,7 +807,7 @@ class LocIndexer(LocIndexerLike):
     Name: viper, dtype: int64
 
     List of labels. Note using ``[[]]`` returns a DataFrame.
-    Also note that Koalas behaves just a filter without reordering by the labels.
+    Also note that pandas-on-Spark behaves just a filter without reordering by the labels.
 
     >>> df.loc[['viper', 'sidewinder']]
                 max_speed  shield

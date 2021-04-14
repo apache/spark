@@ -51,8 +51,8 @@ from pyspark.pandas.typedef import Scalar
 
 class MultiIndex(Index):
     """
-    Koalas MultiIndex that corresponds to pandas MultiIndex logically. This might hold Spark Column
-    internally.
+    pandas-on-Spark MultiIndex that corresponds to pandas MultiIndex logically. This might hold
+    Spark Column internally.
 
     Parameters
     ----------

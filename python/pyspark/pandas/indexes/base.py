@@ -68,7 +68,7 @@ from pyspark.pandas.typedef import Scalar
 
 class Index(IndexOpsMixin):
     """
-    Koalas Index that corresponds to pandas Index logically. This might hold Spark Column
+    pandas-on-Spark Index that corresponds to pandas Index logically. This might hold Spark Column
     internally.
 
     Parameters
@@ -203,7 +203,7 @@ class Index(IndexOpsMixin):
 
     def _with_new_scol(self, scol: spark.Column, *, dtype=None) -> "Index":
         """
-        Copy Koalas Index with the new Spark Column.
+        Copy pandas-on-Spark Index with the new Spark Column.
 
         :param scol: the new Spark Column
         :return: the copied Index
@@ -1995,7 +1995,7 @@ class Index(IndexOpsMixin):
     def is_all_dates(self) -> bool:
         """
         Return if all data types of the index are datetime.
-        remember that since Koalas does not support multiple data types in an index,
+        remember that since pandas-on-Spark does not support multiple data types in an index,
         so it returns True if any type of data is datetime.
 
         Examples
@@ -2231,7 +2231,7 @@ class Index(IndexOpsMixin):
         Notes
         -----
         When Index contains null values the result can be different with pandas
-        since Koalas cast integer to float when Index contains null values.
+        since pandas-on-Spark cast integer to float when Index contains null values.
 
         >>> ps.Index([1, 2, 3, None])
         Float64Index([1.0, 2.0, 3.0, nan], dtype='float64')
