@@ -1223,7 +1223,8 @@ class DataFrameWriter(OptionUtils):
         encoding : str, optional
             specifies encoding (charset) of saved json files. If None is set,
             the default UTF-8 charset will be used.
-        lineSep : str, optional defines the line separator that should be used for writing. If None is
+        lineSep : str, optional
+            defines the line separator that should be used for writing. If None is
             set, it uses the default value, ``\\n``.
         ignoreNullFields : str or bool, optional
             Whether to ignore null fields when generating JSON objects.
