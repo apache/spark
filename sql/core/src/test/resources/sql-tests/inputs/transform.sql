@@ -322,7 +322,12 @@ WITH temp AS (
 )
 SELECT t1.b FROM temp t1 JOIN temp t2 ON t1.b = t2.b;
 
-SELECT TRANSFORM(distinct b, a, c)
+SELECT TRANSFORM(DISTINCT b, a, c)
+  USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 4;
+
+SELECT TRANSFORM(ALL b, a, c)
   USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;

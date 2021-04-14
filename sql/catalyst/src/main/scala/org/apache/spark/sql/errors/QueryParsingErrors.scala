@@ -88,6 +88,11 @@ object QueryParsingErrors {
     new ParseException("DISTRIBUTE BY is not supported", ctx)
   }
 
+  def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
+    new ParseException("TRANSFORM not support quantifier DISTINCT/ALL " +
+      "for input expression seq", ctx)
+  }
+
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException("TRANSFORM with serde is only supported in hive mode", ctx)
   }
