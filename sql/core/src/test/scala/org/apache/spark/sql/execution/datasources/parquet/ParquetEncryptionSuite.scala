@@ -30,9 +30,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import scala.sys.process._
 
 /**
- * A test suite that tests parquet modular encryption usage in Spark.
+ * A test suite that tests parquet modular encryption usage.
  */
-class ParquetEncryptionTest extends QueryTest with SharedSparkSession {
+class ParquetEncryptionSuite extends QueryTest with SharedSparkSession {
 
   private val encoder = Base64.getEncoder
   private val footerKey =
@@ -42,7 +42,7 @@ class ParquetEncryptionTest extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
-  test("Write and read an encrypted parquet") {
+  test("SPARK-34990: Write and read an encrypted parquet") {
     withTempDir { dir =>
       spark.conf.set(
         "parquet.crypto.factory.class",
@@ -54,23 +54,27 @@ class ParquetEncryptionTest extends QueryTest with SharedSparkSession {
         "parquet.encryption.key.list",
         s"footerKey: ${footerKey}, key1: ${key1}, key2: ${key2}")
 
-      val df = Seq((1, 22, 333)).toDF("a", "b", "c")
+      val inputDF = Seq((1, 22, 333)).toDF("a", "b", "c")
       val parquetDir = new File(dir, "parquet").getCanonicalPath
-      df.write
+      inputDF.write
         .option("parquet.encryption.column.keys", "key1: a, b; key2: c")
         .option("parquet.encryption.footer.key", "footerKey")
         .parquet(parquetDir)
 
-      val parquetPartitionFile = Seq("ls", "-tr", parquetDir).!!.split("\\s+")(0)
-      val fullFilename = parquetDir + "/" + parquetPartitionFile
-      val magic = Seq("tail", "-c", "4", fullFilename).!!
-      assert(magic.stripLineEnd.trim() == "PARE")
+      verifyParquetEncrypted(parquetDir)
 
       val parquetDF = spark.read.parquet(parquetDir)
       assert(parquetDF.inputFiles.nonEmpty)
-      val ds = parquetDF.select("a", "b", "c")
-      ds.show()
+      val readDataset = parquetDF.select("a", "b", "c")
+      checkAnswer(readDataset, inputDF)
     }
+  }
+
+  private def verifyParquetEncrypted(parquetDir: String) = {
+    val parquetPartitionFile = Seq("ls", "-tr", parquetDir).!!.split("\\s+")(0)
+    val fullFilename = parquetDir + "/" + parquetPartitionFile
+    val magic = Seq("tail", "-c", "4", fullFilename).!!
+    assert(magic.stripLineEnd.trim() == "PARE")
   }
 }
 
@@ -100,7 +104,6 @@ class InMemoryKMS extends KmsClient {
   @throws[KeyAccessDeniedException]
   @throws[UnsupportedOperationException]
   override def wrapKey(keyBytes: Array[Byte], masterKeyIdentifier: String): String = {
-    println(s"Wrap Key ${masterKeyIdentifier}")
     // Always use the latest key version for writing
     val masterKey = masterKeyMap.get(masterKeyIdentifier)
     if (null == masterKey) {
@@ -112,7 +115,6 @@ class InMemoryKMS extends KmsClient {
   @throws[KeyAccessDeniedException]
   @throws[UnsupportedOperationException]
   override def unwrapKey(wrappedKey: String, masterKeyIdentifier: String): Array[Byte] = {
-    println(s"Unwrap Key ${masterKeyIdentifier}")
     val masterKey: Array[Byte] = masterKeyMap.get(masterKeyIdentifier)
     if (null == masterKey) {
       throw new ParquetCryptoRuntimeException("Key not found: " + masterKeyIdentifier)
