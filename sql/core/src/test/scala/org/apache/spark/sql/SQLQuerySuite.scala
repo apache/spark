@@ -404,6 +404,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(
       sql("SELECT COALESCE(null, null, null)"),
       Row(null))
+    checkAnswer(
+      sql("SELECT COALESCE(s, n) FROM nullStrings"),
+      Seq(Row("abc"), Row("ABC"), Row("3")))
   }
 
   test("SPARK-3176 Added Parser of SQL LAST()") {
