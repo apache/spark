@@ -761,6 +761,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           cleanQueryInScalarSubquery(query) match {
             case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
             case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
             case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
           }
 

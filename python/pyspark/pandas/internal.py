@@ -18,7 +18,6 @@
 """
 An internal immutable DataFrame with some metadata to manage indexes.
 """
-from distutils.version import LooseVersion
 import re
 from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 from itertools import accumulate
@@ -27,12 +26,11 @@ import py4j
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype, is_datetime64_dtype, is_datetime64tz_dtype
-import pyspark
 from pyspark import sql as spark
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import functions as F, Window
 from pyspark.sql.functions import PandasUDFType, pandas_udf
-from pyspark.sql.types import BooleanType, DataType, IntegralType, StructField, StructType, LongType
+from pyspark.sql.types import BooleanType, DataType, StructField, StructType, LongType
 
 try:
     from pyspark.sql.types import to_arrow_type
@@ -936,17 +934,6 @@ class InternalFrame(object):
             pdf = pdf.astype(
                 {field.name: spark_type_to_pandas_dtype(field.dataType) for field in sdf.schema}
             )
-        elif LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-            for field in sdf.schema:
-                if field.nullable and pdf[field.name].isnull().all():
-                    if isinstance(field.dataType, BooleanType):
-                        pdf[field.name] = pdf[field.name].astype(np.object)
-                    elif isinstance(field.dataType, IntegralType):
-                        pdf[field.name] = pdf[field.name].astype(np.float64)
-                    else:
-                        pdf[field.name] = pdf[field.name].astype(
-                            spark_type_to_pandas_dtype(field.dataType)
-                        )
 
         return InternalFrame.restore_index(pdf, **self.arguments_for_restore_index)
 

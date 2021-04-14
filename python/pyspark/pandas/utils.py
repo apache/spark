@@ -21,13 +21,10 @@ Commonly used utils in Koalas.
 import functools
 from collections import OrderedDict
 from contextlib import contextmanager
-from distutils.version import LooseVersion
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 import warnings
 
-import pyarrow
-import pyspark
 from pyspark import sql as spark
 from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType
@@ -55,10 +52,7 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 )
 
 
-if LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-    SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.enabled"
-else:
-    SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
+SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
 
 
 def same_anchor(
@@ -427,22 +421,13 @@ def align_diff_frames(
 
 
 def is_testing():
-    """ Indicates whether Koalas is currently running tests. """
-    return "KOALAS_TESTING" in os.environ
+    """ Indicates whether Spark is currently running tests. """
+    return "SPARK_TESTING" in os.environ
 
 
 def default_session(conf=None):
     if conf is None:
         conf = dict()
-    should_use_legacy_ipc = False
-    if LooseVersion(pyarrow.__version__) >= LooseVersion("0.15") and LooseVersion(
-        pyspark.__version__
-    ) < LooseVersion("3.0"):
-        conf["spark.executorEnv.ARROW_PRE_0_15_IPC_FORMAT"] = "1"
-        conf["spark.yarn.appMasterEnv.ARROW_PRE_0_15_IPC_FORMAT"] = "1"
-        conf["spark.mesos.driverEnv.ARROW_PRE_0_15_IPC_FORMAT"] = "1"
-        conf["spark.kubernetes.driverEnv.ARROW_PRE_0_15_IPC_FORMAT"] = "1"
-        should_use_legacy_ipc = True
 
     builder = spark.SparkSession.builder.appName("Koalas")
     for key, value in conf.items():
@@ -451,30 +436,10 @@ def default_session(conf=None):
     # configuration. This is needed with Spark 3.0+.
     builder.config("spark.sql.analyzer.failAmbiguousSelfJoin", False)
 
-    if LooseVersion(pyspark.__version__) >= LooseVersion("3.0.1") and is_testing():
+    if is_testing():
         builder.config("spark.executor.allowSparkContext", False)
 
-    session = builder.getOrCreate()
-
-    if not should_use_legacy_ipc:
-        is_legacy_ipc_set = any(
-            v == "1"
-            for v in [
-                session.conf.get("spark.executorEnv.ARROW_PRE_0_15_IPC_FORMAT", None),
-                session.conf.get("spark.yarn.appMasterEnv.ARROW_PRE_0_15_IPC_FORMAT", None),
-                session.conf.get("spark.mesos.driverEnv.ARROW_PRE_0_15_IPC_FORMAT", None),
-                session.conf.get("spark.kubernetes.driverEnv.ARROW_PRE_0_15_IPC_FORMAT", None),
-            ]
-        )
-        if is_legacy_ipc_set:
-            raise RuntimeError(
-                "Please explicitly unset 'ARROW_PRE_0_15_IPC_FORMAT' environment variable in "
-                "both driver and executor sides. Check your spark.executorEnv.*, "
-                "spark.yarn.appMasterEnv.*, spark.mesos.driverEnv.* and "
-                "spark.kubernetes.driverEnv.* configurations. It is required to set this "
-                "environment variable only when you use pyarrow>=0.15 and pyspark<3.0."
-            )
-    return session
+    return builder.getOrCreate()
 
 
 @contextmanager
