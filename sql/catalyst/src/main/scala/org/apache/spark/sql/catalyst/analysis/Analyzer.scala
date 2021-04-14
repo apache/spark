@@ -345,6 +345,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformExpressionsUp {
         case a @ Add(l, r, f) if a.childrenResolved => (l.dataType, r.dataType) match {
+          case (DateType, DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
+          case (DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
           case (DateType, YearMonthIntervalType) => DateAddYMInterval(l, r)
           case (YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
           case (TimestampType, YearMonthIntervalType) => TimestampAddYMInterval(l, r)
@@ -360,6 +362,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case _ => a
         }
         case s @ Subtract(l, r, f) if s.childrenResolved => (l.dataType, r.dataType) match {
+          case (DateType, DayTimeIntervalType) =>
+            DatetimeSub(l, r, TimeAdd(Cast(l, TimestampType), UnaryMinus(r, f)))
           case (DateType, YearMonthIntervalType) =>
             DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
           case (TimestampType, YearMonthIntervalType) =>
