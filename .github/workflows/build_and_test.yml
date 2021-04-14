@@ -84,6 +84,8 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: master
+    - name: Tune Runner VM
+      uses: ./.github/actions/tune-runner-vm        
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -387,6 +389,8 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Tune Runner VM
+      uses: ./.github/actions/tune-runner-vm        
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -423,6 +427,8 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Tune Runner VM
+      uses: ./.github/actions/tune-runner-vm        
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -456,6 +462,8 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Tune Runner VM
+      uses: ./.github/actions/tune-runner-vm        
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -490,6 +498,8 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    - name: Tune Runner VM
+      uses: ./.github/actions/tune-runner-vm        
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v2

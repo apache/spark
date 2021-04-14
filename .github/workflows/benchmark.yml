@@ -54,6 +54,8 @@ jobs:
       # In order to get diff files
       with:
         fetch-depth: 0
+    - name: Tune Runner VM
+      uses: ./.github/actions/tune-runner-vm        
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:

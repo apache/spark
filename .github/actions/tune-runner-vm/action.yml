@@ -1,0 +1,13 @@
+name: Tune Runner VM
+description: tunes the GitHub Runner VM operation system
+runs:
+  using: composite
+  steps:
+    - run: |
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            # workaround for https://github.com/actions/virtual-environments/issues/3185
+            # Ensure that reverse lookups for current hostname are handled properly
+            # Add the current IP address, long hostname and short hostname record to /etc/hosts file
+            echo -e "$(ip addr show eth0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)\t$(hostname -f) $(hostname -s)" | sudo tee -a /etc/hosts
+        fi
+      shell: bash
