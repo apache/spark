@@ -309,7 +309,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases)
+      CleanupAliases),
+    Batch("HandleAnalysisOnlyCommand", Once,
+      HandleAnalysisOnlyCommand)
   )
 
   /**
@@ -3541,6 +3543,18 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
         case other => other
       }
+    }
+  }
+
+  /**
+   * A rule that marks a command as analyzed so that its children are removed to avoid
+   * being optimized. This rule should run after all other analysis rules are run.
+   */
+  object HandleAnalysisOnlyCommand extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case c: AnalysisOnlyCommand if c.resolved =>
+        checkAnalysis(c)
+        c.markAsAnalyzed()
     }
   }
 }
