@@ -26,7 +26,7 @@ import pyarrow as pa
 import pyspark
 
 from pyspark import pandas as pp
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.utils import ReusedSQLTestCase, TestUtils
 
 
 class DataFrameSparkIOTest(ReusedSQLTestCase, TestUtils):

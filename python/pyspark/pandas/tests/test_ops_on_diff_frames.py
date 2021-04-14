@@ -27,7 +27,7 @@ import pyspark
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.pandas.frame import DataFrame
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes,
     extension_dtypes_available,

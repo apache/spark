@@ -21,7 +21,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
 class OpsOnDiffFramesGroupByTest(ReusedSQLTestCase, SQLTestUtils):

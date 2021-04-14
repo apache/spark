@@ -24,7 +24,7 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils, have_plotly
+from pyspark.testing.utils import ReusedSQLTestCase, TestUtils, have_plotly
 from pyspark.pandas.utils import name_like_string
 
 if have_plotly:

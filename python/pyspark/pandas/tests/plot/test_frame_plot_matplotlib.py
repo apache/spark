@@ -25,7 +25,7 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import have_matplotlib, ReusedSQLTestCase, TestUtils
+from pyspark.testing.utils import have_matplotlib, ReusedSQLTestCase, TestUtils
 
 if have_matplotlib:
     import matplotlib

@@ -21,7 +21,7 @@ from distutils.version import LooseVersion
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
 class SeriesConversionTest(ReusedSQLTestCase, SQLTestUtils):

@@ -17,12 +17,12 @@
 
 import pandas as pd
 
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.pandas.utils import (
     lazy_property,
     validate_arguments_and_invoke_function,
     validate_bool_kwarg,
 )
+from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 some_global_variable = 0
 

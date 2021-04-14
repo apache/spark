@@ -22,7 +22,7 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
 class InternalFrameTest(ReusedSQLTestCase, SQLTestUtils):

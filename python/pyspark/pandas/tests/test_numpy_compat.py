@@ -23,7 +23,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
 from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
 class NumPyCompatTest(ReusedSQLTestCase, SQLTestUtils):

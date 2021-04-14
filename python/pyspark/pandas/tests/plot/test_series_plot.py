@@ -22,7 +22,7 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor, BoxPlotBase
-from pyspark.pandas.testing.utils import have_plotly
+from pyspark.pandas.pandasutils import have_plotly
 
 
 class SeriesPlotTest(unittest.TestCase):

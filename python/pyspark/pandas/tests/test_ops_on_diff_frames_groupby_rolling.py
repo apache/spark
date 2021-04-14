@@ -19,7 +19,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.utils import ReusedSQLTestCase, TestUtils
 
 
 class OpsOnDiffFramesGroupByRollingTest(ReusedSQLTestCase, TestUtils):

@@ -24,8 +24,8 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import have_plotly, ReusedSQLTestCase, TestUtils
 from pyspark.pandas.utils import name_like_string
+from pyspark.testing.utils import have_plotly, ReusedSQLTestCase, TestUtils
 
 if have_plotly:
     from plotly import express

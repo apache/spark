@@ -41,7 +41,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
-from pyspark.pandas.testing.utils import (
+from pyspark.testing.utils import (
     have_tabulate,
     ReusedSQLTestCase,
     SQLTestUtils,

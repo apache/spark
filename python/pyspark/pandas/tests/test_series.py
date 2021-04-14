@@ -29,7 +29,7 @@ from pyspark.ml.linalg import SparseVector
 from pyspark.sql import functions as F
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import (
+from pyspark.testing.utils import (
     have_tabulate,
     ReusedSQLTestCase,
     SQLTestUtils,
