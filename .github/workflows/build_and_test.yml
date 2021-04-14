@@ -3,8 +3,8 @@ name: Build and test
 on:
   push:
     branches:
-      - '**'
-      - '!branch-*.*'
+    - '**'
+    - '!branch-*.*'
 
 jobs:
   # Build: build Spark and run the tests for specified modules.
