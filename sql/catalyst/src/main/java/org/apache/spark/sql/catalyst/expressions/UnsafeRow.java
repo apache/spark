@@ -90,9 +90,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
           FloatType,
           DoubleType,
           DateType,
-          TimestampType,
-          YearMonthIntervalType,
-          DayTimeIntervalType
+          TimestampType
         })));
   }
 
@@ -103,6 +101,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
     if (dt instanceof DecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
+    } else if (dt instanceof YearMonthIntervalType || dt instanceof DayTimeIntervalType) {
+      return true;
     } else {
       return mutableFieldTypes.contains(dt);
     }
@@ -114,7 +114,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
 
     return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
-      dt instanceof CalendarIntervalType;
+      dt instanceof CalendarIntervalType || dt instanceof YearMonthIntervalType ||
+        dt instanceof DayTimeIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
