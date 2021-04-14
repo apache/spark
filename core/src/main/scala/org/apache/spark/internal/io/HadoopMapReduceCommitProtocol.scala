@@ -183,6 +183,18 @@ class HadoopMapReduceCommitProtocol(
     jobContext.getConfiguration.setBoolean("mapreduce.task.ismap", true)
     jobContext.getConfiguration.setInt("mapreduce.task.partition", 0)
 
+    // Automatically set conflict-mode based on value of dynamicPartitionOverwrite,
+    // unless configuration auto-staging-conflict-mode exists with value false.
+    val autoConflictMode = jobContext.getConfiguration.get(
+      "spark.internal.io.hmrcp.auto-staging-conflict-mode")
+    if (autoConflictMode == null || autoConflictMode != "false") {
+      if (dynamicPartitionOverwrite) {
+        jobContext.getConfiguration.set("fs.s3a.committer.staging.conflict-mode", "replace")
+      } else {
+        jobContext.getConfiguration.set("fs.s3a.committer.staging.conflict-mode", "append")
+      }
+    }
+
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
     committer.setupJob(jobContext)

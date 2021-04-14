@@ -17,8 +17,6 @@
 
 package org.apache.spark.internal.io.cloud
 
-import java.io.IOException
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
@@ -51,13 +49,15 @@ class PathOutputCommitProtocol(
     jobId: String,
     dest: String,
     dynamicPartitionOverwrite: Boolean = false)
-  extends HadoopMapReduceCommitProtocol(jobId, dest, false) with Serializable {
+  extends HadoopMapReduceCommitProtocol(jobId, dest, dynamicPartitionOverwrite) with Serializable {
 
   if (dynamicPartitionOverwrite) {
     // until there's explicit extensions to the PathOutputCommitProtocols
     // to support the spark mechanism, it's left to the individual committer
     // choice to handle partitioning.
-    throw new IOException(PathOutputCommitProtocol.UNSUPPORTED)
+    // throw new IOException(PathOutputCommitProtocol.UNSUPPORTED)
+    // The above exception is disabled with automatic value of fs.s3a.committer.staging.conflict-mode
+    // in HadoopMapReduceCommitProtocol.
   }
 
   /** The committer created. */
