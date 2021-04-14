@@ -30,7 +30,7 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.{SQLMetricInfo, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{AccumulatorMetadata, LongAccumulator, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
@@ -60,8 +60,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
     val store = new SQLAppStatusStore(kvstore, Some(listener))
 
     val metrics = (0 until numMetrics).map { i =>
-      new SQLMetricInfo(s"metric$i", i.toLong, "average",
-        SQLMetrics.defaultAggregateMethod("average"))
+      new SQLMetricInfo(s"metric$i", i.toLong, "average")
     }
 
     val planInfo = new SparkPlanInfo(

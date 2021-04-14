@@ -628,7 +628,7 @@ case class AdaptiveSparkPlanExec(
       // and display SQL metrics correctly.
       val newMetrics = newSubPlans.flatMap { p =>
         p.flatMap(_.metrics.values.map(m =>
-          SQLPlanMetric(m.name.get, m.id, m.metricType, m.aggregateMethod)))
+          SQLPlanMetric(m.name.get, m.id, m.metricType)))
       }
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveSQLMetricUpdates(
         executionId.toLong, newMetrics))

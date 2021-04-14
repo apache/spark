@@ -61,8 +61,7 @@ private[execution] object SparkPlanInfo {
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
-      new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType,
-        metric.aggregateMethod)
+      new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
     }
 
     // dump the file scan metadata (e.g file path) to event log

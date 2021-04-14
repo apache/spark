@@ -27,10 +27,12 @@ import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.connector.CustomMetric
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashMap
 
 class SQLAppStatusListener(
@@ -199,8 +201,20 @@ class SQLAppStatusListener(
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
     val accumIds = exec.metrics.map(_.accumulatorId).toSet
+
+    val metricAggregationMap = new mutable.HashMap[String, CustomMetric]()
     val metricAggregationMethods = exec.metrics.map { m =>
-      (m.accumulatorId, m.aggregateMethod)
+      val className = CustomMetrics.parseV2CustomMetricType(m.metricType)
+      val customMetric = if (metricAggregationMap.contains(className)) {
+        metricAggregationMap(className)
+      } else {
+        // Try to initiate custom metric object
+        val metric = Utils.loadExtensions(classOf[CustomMetric], Seq(className), conf).head
+        metricAggregationMap.put(className, metric)
+        metric
+      }
+      (m.accumulatorId,
+        (metrics: Array[Long], _: Array[Long]) => customMetric.aggregateTaskMetrics(metrics))
     }.toMap
 
     val liveStageMetrics = exec.stages.toSeq

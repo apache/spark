@@ -24,7 +24,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
-import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
 
 object SqlResourceSuite {
@@ -42,19 +41,18 @@ object SqlResourceSuite {
 
   val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map(1L -> Some(1L))
 
-  val defaultAggregateMethod = SQLMetrics.defaultAggregateMethod("")
   val filterNode = new SparkPlanGraphNode(1, FILTER, "",
-    metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "", defaultAggregateMethod)))
+    metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "")))
   val nodes: Seq[SparkPlanGraphNode] = Seq(
     new SparkPlanGraphCluster(0, WHOLE_STAGE_CODEGEN_1, "",
       nodes = ArrayBuffer(filterNode),
-      metrics = Seq(SQLPlanMetric(DURATION, 0, "", defaultAggregateMethod))),
+      metrics = Seq(SQLPlanMetric(DURATION, 0, ""))),
     new SparkPlanGraphNode(2, SCAN_TEXT, "",
       metrics = Seq(
-      SQLPlanMetric(METADATA_TIME, 2, "", defaultAggregateMethod),
-      SQLPlanMetric(NUMBER_OF_FILES_READ, 3, "", defaultAggregateMethod),
-      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, "", defaultAggregateMethod),
-      SQLPlanMetric(SIZE_OF_FILES_READ, 5, "", defaultAggregateMethod))))
+      SQLPlanMetric(METADATA_TIME, 2, ""),
+      SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
+      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, ""),
+      SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))))
 
   val edges: Seq[SparkPlanGraphEdge] = Seq(SparkPlanGraphEdge(3, 2))
 
@@ -62,12 +60,12 @@ object SqlResourceSuite {
     SparkPlanGraph(nodes, edges).allNodes.filterNot(_.name == WHOLE_STAGE_CODEGEN_1)
 
   val metrics: Seq[SQLPlanMetric] = {
-    Seq(SQLPlanMetric(DURATION, 0, "", defaultAggregateMethod),
-      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "", defaultAggregateMethod),
-      SQLPlanMetric(METADATA_TIME, 2, "", defaultAggregateMethod),
-      SQLPlanMetric(NUMBER_OF_FILES_READ, 3, "", defaultAggregateMethod),
-      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, "", defaultAggregateMethod),
-      SQLPlanMetric(SIZE_OF_FILES_READ, 5, "", defaultAggregateMethod))
+    Seq(SQLPlanMetric(DURATION, 0, ""),
+      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, ""),
+      SQLPlanMetric(METADATA_TIME, 2, ""),
+      SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
+      SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, ""),
+      SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))
   }
 
   val sqlExecutionUIData: SQLExecutionUIData = {
