@@ -9,7 +9,7 @@ jobs:
     steps:
       - name: "Notify test workflow"
         uses: actions/github-script@v3
-        if: ${{ github.base_ref == 'master' }}
+        if: github.base_ref == 'master' && github.repository == 'apache/spark'
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
