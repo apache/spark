@@ -553,7 +553,12 @@ private[spark] class Client(
           val localPath = getQualifiedLocalPath(localURI, hadoopConf)
           val linkname = targetDir.map(_ + "/").getOrElse("") +
             destName.orElse(Option(localURI.getFragment())).getOrElse(localPath.getName())
-          val destPath = copyFileToRemote(destDir, localPath, replication, symlinkCache)
+            var destPath = localPath
+          if (!localPath.toUri.getScheme.startsWith("s3")) {
+            destPath = copyFileToRemote(destDir, localPath, replication, symlinkCache)
+          } else {
+            logInfo(s"Adding binary from location: $destPath to the distributed cache")
+          }
           val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
           distCacheMgr.addResource(
             destFs, hadoopConf, destPath, localResources, resType, linkname, statCache,
@@ -730,7 +735,7 @@ private[spark] class Client(
     pySparkArchives.foreach { f =>
       val uri = Utils.resolveURI(f)
       if (uri.getScheme != Utils.LOCAL_SCHEME) {
-        distribute(f)
+        distribute(f, LocalResourceType.ARCHIVE)
       }
     }
 
