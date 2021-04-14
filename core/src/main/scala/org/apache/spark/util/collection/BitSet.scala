@@ -240,7 +240,7 @@ class BitSet(numBits: Int) extends Serializable {
    * Compute bit-wise union with another BitSet and overwrite bits in this BitSet with the result.
    */
   def union(other: BitSet): Unit = {
-    require(this.numWords <= other.numWords)
+    require(this.numWords >= other.numWords)
     var ind = 0
     while( ind < this.numWords ) {
       this.words(ind) = this.words(ind) | other.words(ind)
