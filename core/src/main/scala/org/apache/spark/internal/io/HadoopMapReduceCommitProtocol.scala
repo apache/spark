@@ -70,6 +70,14 @@ class HadoopMapReduceCommitProtocol(
     dynamicPartitionOverwrite: Boolean = false)
   extends FileCommitProtocol with Serializable with Logging {
 
+  logError(s"HadoopMapReduceCommitProtocol constructor DPO: $dynamicPartitionOverwrite")
+
+  try {
+    throw new Exception("trace")
+  } catch {
+    case e: Exception => logError(s"HadoopMapReduceCommitProtocol constructor ", e)
+  }
+
   import FileCommitProtocol._
 
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
@@ -161,6 +169,13 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
+
+    try {
+      throw new Exception("trace")
+    } catch {
+      case e: Exception => logError(s"HadoopMapReduceCommitProtocol setupJob", e)
+    }
+
     // Setup IDs
     val jobId = SparkHadoopWriterUtils.createJobID(new Date, 0)
     val taskId = new TaskID(jobId, TaskType.MAP, 0)
@@ -173,14 +188,27 @@ class HadoopMapReduceCommitProtocol(
     jobContext.getConfiguration.setBoolean("mapreduce.task.ismap", true)
     jobContext.getConfiguration.setInt("mapreduce.task.partition", 0)
 
+    // Dynamically set conflict-mode based on value of dynamicPartitionOverwrite,
+    // unless disable-dynamic-conflict-mode is true.
+    val disabled = jobContext.getConfiguration.get(
+      "spark.internal.io.hmrcp.disable-dynamic-conflict-mode")
+    if (disabled == null || disabled != "true") {
+      logError("dynamic-conflict-mode is true")
+      if (dynamicPartitionOverwrite) {
+        jobContext.getConfiguration.set("fs.s3a.committer.staging.conflict-mode", "replace")
+      } else {
+        jobContext.getConfiguration.set("fs.s3a.committer.staging.conflict-mode", "append")
+      }
+    }
+
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
     committer.setupJob(jobContext)
   }
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
+    logError(s"HadoopMapReduceCommitProtocol commitJob entered")
     committer.commitJob(jobContext)
-
     if (hasValidPath) {
       val (allAbsPathFiles, allPartitionPaths) =
         taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])]).unzip
