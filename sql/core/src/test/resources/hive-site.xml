@@ -31,5 +31,6 @@
   <property>
     <name>hadoop.this.is.a.test.key</name>
     <value>2018-11-17 13:33:33.333</value>
+    <description>for test only</description>
   </property>
 </configuration>
