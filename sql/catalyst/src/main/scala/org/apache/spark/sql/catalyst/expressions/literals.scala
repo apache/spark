@@ -41,6 +41,8 @@ import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BOOLEAN_LITERAL, LITERAL, NULL}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths}
@@ -49,6 +51,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 object Literal {
   val TrueLiteral: Literal = Literal(true, BooleanType)
@@ -295,6 +298,31 @@ object DecimalLiteral {
   def smallerThanSmallestLong(v: Decimal): Boolean = v < Decimal(Long.MinValue)
 }
 
+object LiteralTreeBits {
+  // Singleton tree pattern BitSet for all Literals that are not true, false, or null.
+  val literalBits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    bits.set(LITERAL.id)
+    bits
+  }
+
+  // Singleton tree pattern BitSet for all Literals that are true or false.
+  val booleanLiteralBits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    bits.set(LITERAL.id)
+    bits.set(BOOLEAN_LITERAL.id)
+    bits
+  }
+
+  // Singleton tree pattern BitSet for all Literals that are nulls.
+  val nullLiteralBits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    bits.set(LITERAL.id)
+    bits.set(NULL.id)
+    bits
+  }
+}
+
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
@@ -306,6 +334,14 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def nullable: Boolean = value == null
 
   private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+
+  protected override def getDefaultTreePatternBits: BitSet = {
+    value match {
+      case null => LiteralTreeBits.nullLiteralBits
+      case true | false => LiteralTreeBits.booleanLiteralBits
+      case _ => LiteralTreeBits.literalBits
+    }
+  }
 
   override def toString: String = value match {
     case null => "null"

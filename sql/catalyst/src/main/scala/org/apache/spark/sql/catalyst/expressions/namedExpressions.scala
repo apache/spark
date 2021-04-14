@@ -23,9 +23,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern.ATTRIBUTE_REFERENCE
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.BitSet
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -231,6 +234,15 @@ case class Alias(child: Expression, name: String)(
     copy(child = newChild)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
 }
 
+// Singleton tree pattern BitSet for all AttributeReference instances.
+object AttributeReferenceTreeBits {
+  val bits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    bits.set(ATTRIBUTE_REFERENCE.id)
+    bits
+  }
+}
+
 /**
  * A reference to an attribute produced by another operator in the tree.
  *
@@ -252,6 +264,8 @@ case class AttributeReference(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
+
+  protected override  def getDefaultTreePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
   /**
    * Returns true iff the expression id is the same for both attributes.
