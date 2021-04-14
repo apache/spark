@@ -24,11 +24,11 @@ object TreePattern extends Enumeration  {
   // Enum Ids start from 0.
   // Expression patterns (alphabetically ordered)
   val ATTRIBUTE_REFERENCE = Value(0)
-  val BOOLEAN_LITERAL: Value = Value
   val EXPRESSION_WITH_RANDOM_SEED = Value
   val IN: Value = Value
   val LITERAL: Value = Value
   val NULL: Value = Value
+  val TRUE_OR_FALSE: Value = Value
   val WINDOW_EXPRESSION: Value = Value
 
   // Logical plan patterns (alphabetically ordered)

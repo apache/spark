@@ -42,7 +42,7 @@ import org.json4s.JsonAST._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreePattern
-import org.apache.spark.sql.catalyst.trees.TreePattern.{BOOLEAN_LITERAL, LITERAL, NULL}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL, TRUE_OR_FALSE}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths}
@@ -310,7 +310,7 @@ object LiteralTreeBits {
   val booleanLiteralBits: BitSet = {
     val bits: BitSet = new BitSet(TreePattern.maxId)
     bits.set(LITERAL.id)
-    bits.set(BOOLEAN_LITERAL.id)
+    bits.set(TRUE_OR_FALSE.id)
     bits
   }
 
