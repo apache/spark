@@ -188,6 +188,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({} bytes) since it is not outstanding",
           resp.requestId, getRemoteAddress(channel), resp.body().size());
+        resp.body().release();
       } else {
         outstandingRpcs.remove(resp.requestId);
         try {
