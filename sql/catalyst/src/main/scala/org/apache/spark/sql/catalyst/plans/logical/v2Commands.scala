@@ -1025,8 +1025,10 @@ case class CacheTableAsSelect(
     options: Map[String, String],
     isAnalyzed: Boolean = false) extends AnalysisOnlyCommand {
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect =
+      newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
+    assert(!isAnalyzed)
     copy(plan = newChildren.head)
+  }
 
   override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
 

@@ -72,8 +72,10 @@ case class CreateViewCommand(
   import ViewHelper._
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): CreateViewCommand =
+      newChildren: IndexedSeq[LogicalPlan]): CreateViewCommand = {
+    assert(!isAnalyzed)
     copy(plan = newChildren.head)
+  }
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(plan)
 
@@ -249,8 +251,10 @@ case class AlterViewAsCommand(
   import ViewHelper._
 
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): AlterViewAsCommand =
+      newChildren: IndexedSeq[LogicalPlan]): AlterViewAsCommand = {
+    assert(!isAnalyzed)
     copy(query = newChildren.head)
+  }
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
