@@ -183,4 +183,8 @@ SELECT AVG(DISTINCT decimal_col), SUM(DISTINCT decimal_col) FROM VALUES (CAST(1 
 -- SPARK-34581: Don't optimize out grouping expressions from aggregate expressions without aggregate function
 SELECT not(a IS NULL), count(*) AS c
 FROM testData
-GROUP BY a IS NULL
+GROUP BY a IS NULL;
+
+SELECT a + b + rand(0), count(*) AS c
+FROM testData
+GROUP BY a + b;

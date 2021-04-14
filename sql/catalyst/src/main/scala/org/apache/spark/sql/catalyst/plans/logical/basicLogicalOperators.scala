@@ -797,8 +797,7 @@ case class Aggregate(
 
   private def expandGroupingReferences(e: Expression): Expression = {
     e match {
-      case _: AggregateExpression => e
-      case _ if PythonUDF.isGroupedAggPandasUDF(e) => e
+      case _ if AggregateExpression.isAggregate(e) => e
       case g: GroupingExprRef => groupingExpressions(g.ordinal)
       case _ => e.mapChildren(expandGroupingReferences)
     }
@@ -821,12 +820,12 @@ object Aggregate {
   private def collectComplexGroupingExpressions(groupingExpressions: Seq[Expression]) = {
     val complexGroupingExpressions = mutable.Map.empty[Expression, (Expression, Int)]
     var i = 0
-    groupingExpressions.foreach {
-      case ge if !ge.foldable && ge.children.nonEmpty &&
-        !complexGroupingExpressions.contains(ge.canonicalized) =>
+    groupingExpressions.foreach { ge =>
+      if (!ge.foldable && ge.children.nonEmpty &&
+        !complexGroupingExpressions.contains(ge.canonicalized)) {
         complexGroupingExpressions += ge.canonicalized -> (ge, i)
-        i += 1
-      case _ =>
+      }
+      i += 1
     }
     complexGroupingExpressions
   }
