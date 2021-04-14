@@ -1072,7 +1072,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("apply schema") {
     withTempView("applySchema1", "applySchema2", "applySchema3") {
       val schema1 = StructType(
-        StructField("f1", IntegerType, false) ::
+        StructField("f0", IntegerType, false) ::
         StructField("f2", StringType, false) ::
         StructField("f3", BooleanType, false) ::
         StructField("f4", IntegerType, true) :: Nil)
