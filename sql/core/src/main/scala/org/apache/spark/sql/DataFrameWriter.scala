@@ -860,13 +860,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   format("parquet").save(path)
    * }}}
    *
-   * You can set the following Parquet-specific option(s) for writing Parquet files:
-   * <ul>
-   * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
-   * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `uncompressed`, `snappy`, `gzip`, `lzo`, `brotli`, `lz4`, and `zstd`).
-   * This will override `spark.sql.parquet.compression.codec`.</li>
-   * </ul>
+   * Parquet-specific option(s) for writing Parquet files can be found in
+   * <a href="http://127.0.0.1:4000/sql-data-sources-parquet.html#data-source-option">
+   *   Data Source Option</a>.
    *
    * @since 1.4.0
    */
