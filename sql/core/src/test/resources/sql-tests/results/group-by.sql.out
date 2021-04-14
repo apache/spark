@@ -656,14 +656,11 @@ true	7
 
 
 -- !query
-SELECT a + b + rand(0), count(*) AS c
+SELECT if(not(a IS NULL), rand(0), 1), count(*) AS c
 FROM testData
-GROUP BY a + b
+GROUP BY a IS NULL
 -- !query schema
-struct<((a + b) + rand(0)):double,c:bigint>
+struct<(IF((NOT (a IS NULL)), rand(0), 1)):double,c:bigint>
 -- !query output
-2.7604953758285915	1
-3.6363787615254752	2
-4.523419425688557	2
-5.095347282642472	1
-NULL	3
+0.7604953758285915	7
+1.0	2

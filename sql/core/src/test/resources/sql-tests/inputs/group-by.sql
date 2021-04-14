@@ -185,6 +185,6 @@ SELECT not(a IS NULL), count(*) AS c
 FROM testData
 GROUP BY a IS NULL;
 
-SELECT a + b + rand(0), count(*) AS c
+SELECT if(not(a IS NULL), rand(0), 1), count(*) AS c
 FROM testData
-GROUP BY a + b;
+GROUP BY a IS NULL;
