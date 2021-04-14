@@ -627,6 +627,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       .map(typedVisit[Expression])
   }
 
+  override def visitExpressionSeq(
+    ctx: ExpressionSeqContext): Seq[Expression] = {
+    Option(ctx).toSeq
+      .flatMap(_.expression.asScala)
+      .map(typedVisit[Expression])
+  }
+
   /**
    * Create a logical plan using a having clause.
    */
@@ -677,8 +684,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val plan = visitCommonSelectQueryClausePlan(
       relation,
+      visitExpressionSeq(transformClause.expressionSeq),
       lateralView,
-      transformClause.namedExpressionSeq,
       whereClause,
       aggregationClause,
       havingClause,
@@ -723,8 +730,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val plan = visitCommonSelectQueryClausePlan(
       relation,
+      visitNamedExpressionSeq(selectClause.namedExpressionSeq),
       lateralView,
-      selectClause.namedExpressionSeq,
       whereClause,
       aggregationClause,
       havingClause,
@@ -737,8 +744,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
   def visitCommonSelectQueryClausePlan(
       relation: LogicalPlan,
+      expressions: Seq[Expression],
       lateralView: java.util.List[LateralViewContext],
-      namedExpressionSeq: NamedExpressionSeqContext,
       whereClause: WhereClauseContext,
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
@@ -749,8 +756,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     // Add where.
     val withFilter = withLateralView.optionalMap(whereClause)(withWhereClause)
-
-    val expressions = visitNamedExpressionSeq(namedExpressionSeq)
 
     // Add aggregation or a project.
     val namedExpressions = expressions.map {
