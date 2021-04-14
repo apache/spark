@@ -1076,7 +1076,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql(s"SET $key"), Row(key, value))
     checkAnswer(sql("SET hadoop.tmp.dir"), Row("hadoop.tmp.dir", "/tmp/hive_one"))
 
-    // this key does not exist
+    // these keys does not exist as default yet
     checkAnswer(sql(s"SET ${key}no"), Row(key + "no", "<undefined>"))
     checkAnswer(sql("SET dfs.replication"), Row("dfs.replication", "<undefined>"))
 
