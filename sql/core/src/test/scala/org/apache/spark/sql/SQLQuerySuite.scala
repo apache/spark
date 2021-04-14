@@ -1069,6 +1069,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     spark.sessionState.conf.clear()
   }
 
+  test("SPARK-35044: SET command shall display default value for hadoop conf correctly") {
+    val key = "hadoop.this.is.a.test.key"
+    val value = "2018-11-17 13:33:33.333"
+    // these keys are located at `src/test/resources/hive-site.xml`
+    checkAnswer(sql(s"SET $key"), Row(key, value))
+    checkAnswer(sql("SET hadoop.tmp.dir"), Row("hadoop.tmp.dir", "/tmp/hive_one"))
+
+    // these keys does not exist as default yet
+    checkAnswer(sql(s"SET ${key}no"), Row(key + "no", "<undefined>"))
+    checkAnswer(sql("SET dfs.replication"), Row("dfs.replication", "<undefined>"))
+
+    // io.file.buffer.size has a default value from `SparkHadoopUtil.newConfiguration`
+    checkAnswer(sql("SET io.file.buffer.size"), Row("io.file.buffer.size", "65536"))
+  }
+
   test("apply schema") {
     withTempView("applySchema1", "applySchema2", "applySchema3") {
       val schema1 = StructType(

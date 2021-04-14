@@ -24,7 +24,6 @@ import inspect
 import sys
 import warnings
 from collections.abc import Mapping
-from distutils.version import LooseVersion
 from functools import partial, wraps, reduce
 from typing import Any, Generic, Iterable, List, Optional, Tuple, TypeVar, Union, cast
 
@@ -35,7 +34,6 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import is_list_like, is_hashable
 from pandas.api.extensions import ExtensionDtype
 from pandas.tseries.frequencies import DateOffset
-import pyspark
 from pyspark import sql as spark
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import (
@@ -84,7 +82,6 @@ from pyspark.pandas.utils import (
     SPARK_CONF_ARROW_ENABLED,
 )
 from pyspark.pandas.datetimes import DatetimeMethods
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkSeriesMethods
 from pyspark.pandas.strings import StringMethods
 from pyspark.pandas.typedef import (
@@ -3417,7 +3414,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             def quantile(spark_column, spark_type):
                 if isinstance(spark_type, (BooleanType, NumericType)):
-                    return SF.percentile_approx(spark_column.cast(DoubleType()), q, accuracy)
+                    return F.percentile_approx(spark_column.cast(DoubleType()), q, accuracy)
                 else:
                     raise TypeError(
                         "Could not convert {} ({}) to numeric".format(
@@ -4984,12 +4981,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
 
         if isinstance(repeats, Series):
-            if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
-                raise ValueError(
-                    "`repeats` argument must be integer with Spark<2.4, but got {}".format(
-                        type(repeats)
-                    )
-                )
             if not same_anchor(self, repeats):
                 kdf = self.to_frame()
                 temp_repeats = verify_temp_column_name(kdf, "__temp_repeats__")
@@ -5001,7 +4992,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
             else:
                 scol = F.explode(
-                    SF.array_repeat(self.spark.column, repeats.astype("int32").spark.column)
+                    F.array_repeat(self.spark.column, repeats.astype("int32").spark.column)
                 ).alias(name_like_string(self.name))
                 sdf = self._internal.spark_frame.select(self._internal.index_spark_columns + [scol])
                 internal = self._internal.copy(

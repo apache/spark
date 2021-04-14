@@ -309,7 +309,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases)
+      CleanupAliases),
+    Batch("HandleAnalysisOnlyCommand", Once,
+      HandleAnalysisOnlyCommand)
   )
 
   /**
@@ -343,6 +345,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformExpressionsUp {
         case a @ Add(l, r, f) if a.childrenResolved => (l.dataType, r.dataType) match {
+          case (DateType, DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
+          case (DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
           case (DateType, YearMonthIntervalType) => DateAddYMInterval(l, r)
           case (YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
           case (TimestampType, YearMonthIntervalType) => TimestampAddYMInterval(l, r)
@@ -358,6 +362,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case _ => a
         }
         case s @ Subtract(l, r, f) if s.childrenResolved => (l.dataType, r.dataType) match {
+          case (DateType, DayTimeIntervalType) =>
+            DatetimeSub(l, r, TimeAdd(Cast(l, TimestampType), UnaryMinus(r, f)))
           case (DateType, YearMonthIntervalType) =>
             DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
           case (TimestampType, YearMonthIntervalType) =>
@@ -917,41 +923,30 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Adds metadata columns to output for child relations when nodes are missing resolved attributes.
    *
    * References to metadata columns are resolved using columns from [[LogicalPlan.metadataOutput]],
-   * but the relation's output does not include the metadata columns until the relation is replaced
-   * using [[DataSourceV2Relation.withMetadataColumns()]]. Unless this rule adds metadata to the
-   * relation's output, the analyzer will detect that nothing produces the columns.
+   * but the relation's output does not include the metadata columns until the relation is replaced.
+   * Unless this rule adds metadata to the relation's output, the analyzer will detect that nothing
+   * produces the columns.
    *
    * This rule only adds metadata columns when a node is resolved but is missing input from its
    * children. This ensures that metadata columns are not added to the plan unless they are used. By
    * checking only resolved nodes, this ensures that * expansion is already done so that metadata
-   * columns are not accidentally selected by *.
+   * columns are not accidentally selected by *. This rule resolves operators downwards to avoid
+   * projecting away metadata columns prematurely.
    */
   object AddMetadataColumns extends Rule[LogicalPlan] {
-    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
-    private def hasMetadataCol(plan: LogicalPlan): Boolean = {
-      plan.expressions.exists(_.find {
-        case a: Attribute => a.isMetadataCol
-        case _ => false
-      }.isDefined)
-    }
+    import org.apache.spark.sql.catalyst.util._
 
-    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
-      case r: DataSourceV2Relation => r.withMetadataColumns()
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDown {
+      // Add metadata output to all node types
       case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
-        val metaCols = node.expressions.flatMap(_.collect {
-          case a: Attribute if a.isMetadataCol && !inputAttrs.contains(a) => a
-        })
+        val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
         if (metaCols.isEmpty) {
           node
         } else {
           val newNode = addMetadataCol(node)
-          // We should not change the output schema of the plan. We should project away the extr
+          // We should not change the output schema of the plan. We should project away the extra
           // metadata columns if necessary.
           if (newNode.sameOutput(node)) {
             newNode
@@ -959,6 +954,38 @@ class Analyzer(override val catalogManager: CatalogManager)
             Project(node.output, newNode)
           }
         }
+    }
+
+    private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
+      plan.expressions.flatMap(_.collect {
+        case a: Attribute if a.isMetadataCol => a
+        case a: Attribute
+          if plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId)) =>
+          plan.children.collectFirst {
+            case c if c.metadataOutput.exists(_.exprId == a.exprId) =>
+              c.metadataOutput.find(_.exprId == a.exprId).get
+          }.get
+      })
+    }
+
+    private def hasMetadataCol(plan: LogicalPlan): Boolean = {
+      plan.expressions.exists(_.find {
+        case a: Attribute =>
+          // If an attribute is resolved before being labeled as metadata
+          // (i.e. from the originating Dataset), we check with expression ID
+          a.isMetadataCol ||
+            plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
+        case _ => false
+      }.isDefined)
+    }
+
+    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
+      case r: DataSourceV2Relation => r.withMetadataColumns()
+      case p: Project =>
+        p.copy(
+          projectList = p.metadataOutput ++ p.projectList,
+          child = addMetadataCol(p.child))
+      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
     }
   }
 
@@ -1898,10 +1925,10 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     /**
-     * This method tries to resolve expressions and find missing attributes recursively. Specially,
-     * when the expressions used in `Sort` or `Filter` contain unresolved attributes or resolved
-     * attributes which are missed from child output. This method tries to find the missing
-     * attributes out and add into the projection.
+     * This method tries to resolve expressions and find missing attributes recursively.
+     * Specifically, when the expressions used in `Sort` or `Filter` contain unresolved attributes
+     * or resolved attributes which are missing from child output. This method tries to find the
+     * missing attributes and add them into the projection.
      */
     private def resolveExprsAndAddMissingAttrs(
         exprs: Seq[Expression], plan: LogicalPlan): (Seq[Expression], LogicalPlan) = {
@@ -3150,7 +3177,9 @@ class Analyzer(override val catalogManager: CatalogManager)
       joinType: JoinType,
       joinNames: Seq[String],
       condition: Option[Expression],
-      hint: JoinHint) = {
+      hint: JoinHint): LogicalPlan = {
+    import org.apache.spark.sql.catalyst.util._
+
     val leftKeys = joinNames.map { keyName =>
       left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
         throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, left, "left")
@@ -3170,26 +3199,33 @@ class Analyzer(override val catalogManager: CatalogManager)
     val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
 
     // the output list looks like: join keys, columns from left, columns from right
-    val projectList = joinType match {
+    val (projectList, hiddenList) = joinType match {
       case LeftOuter =>
-        leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
+        (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)), rightKeys)
       case LeftExistence(_) =>
-        leftKeys ++ lUniqueOutput
+        (leftKeys ++ lUniqueOutput, Seq.empty)
       case RightOuter =>
-        rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
+        (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput, leftKeys)
       case FullOuter =>
         // in full outer join, joinCols should be non-null if there is.
         val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
-        joinedCols ++
+        (joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
-          rUniqueOutput.map(_.withNullability(true))
+          rUniqueOutput.map(_.withNullability(true)),
+          leftKeys ++ rightKeys)
       case _ : InnerLike =>
-        leftKeys ++ lUniqueOutput ++ rUniqueOutput
+        (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
       case _ =>
         sys.error("Unsupported natural join type " + joinType)
     }
-    // use Project to trim unnecessary fields
-    Project(projectList, Join(left, right, joinType, newCondition, hint))
+    // use Project to hide duplicated common keys
+    // propagate hidden columns from nested USING/NATURAL JOINs
+    val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
+    project.setTagValue(
+      Project.hiddenOutputTag,
+      hiddenList.map(_.markAsSupportsQualifiedStar()) ++
+        project.child.metadataOutput.filter(_.supportsQualifiedStar))
+    project
   }
 
   /**
@@ -3511,6 +3547,18 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
         case other => other
       }
+    }
+  }
+
+  /**
+   * A rule that marks a command as analyzed so that its children are removed to avoid
+   * being optimized. This rule should run after all other analysis rules are run.
+   */
+  object HandleAnalysisOnlyCommand extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case c: AnalysisOnlyCommand if c.resolved =>
+        checkAnalysis(c)
+        c.markAsAnalyzed()
     }
   }
 }
