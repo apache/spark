@@ -1,0 +1,26 @@
+---
+# set up the required system packages for a host
+- name: install base build/compilation tools
+  apt:
+    pkg:
+      - autoconf
+      - maven
+      - gcc
+      - make
+      - cmake
+      - g++
+      - libssl-dev
+      - nodejs
+      - node-gyp
+      - npm
+      - libhiredis-dev
+      - libev-dev
+      - libevent-dev
+      - libffi-dev
+      - curl
+      - python-dev
+      - clang-format
+      - rpm
+      - pkg-config
+    state: present
+    update_cache: yes
