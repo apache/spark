@@ -60,7 +60,7 @@ from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
-from pyspark.version import __version__  # noqa: F401
+from pyspark.version import __version__
 from pyspark._globals import _NoValue  # noqa: F401
 
 
@@ -125,4 +125,5 @@ __all__ = [
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
     "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
     "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "InheritableThread",
+    "__version__",
 ]
