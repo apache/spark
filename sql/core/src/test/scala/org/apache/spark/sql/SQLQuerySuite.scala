@@ -1075,6 +1075,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     // these keys are located at `src/test/resources/hive-site.xml`
     checkAnswer(sql(s"SET $key"), Row(key, value))
     checkAnswer(sql("SET hadoop.tmp.dir"), Row("hadoop.tmp.dir", "/tmp/hive_one"))
+
+    // this key does not exist
+    checkAnswer(sql(s"SET ${key}no"), Row(key + "no", "<undefined>"))
+    checkAnswer(sql("SET dfs.replication"), Row("dfs.replication", "<undefined>"))
+
+    // io.file.buffer.size has a default value from `SparkHadoopUtil.newConfiguration`
+    checkAnswer(sql("SET io.file.buffer.size"), Row("io.file.buffer.size", "65536"))
   }
 
   test("apply schema") {
