@@ -651,7 +651,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-TRANSFORM not support quantifier DISTINCT/ALL for input expression seq(line 1, pos 17)
+TRANSFORM does not support DISTINCT/ALL in inputs(line 1, pos 17)
 
 == SQL ==
 SELECT TRANSFORM(DISTINCT b, a, c)
@@ -671,7 +671,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-TRANSFORM not support quantifier DISTINCT/ALL for input expression seq(line 1, pos 17)
+TRANSFORM does not support DISTINCT/ALL in inputs(line 1, pos 17)
 
 == SQL ==
 SELECT TRANSFORM(ALL b, a, c)

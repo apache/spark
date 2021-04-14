@@ -89,8 +89,7 @@ object QueryParsingErrors {
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("TRANSFORM not support quantifier DISTINCT/ALL " +
-      "for input expression seq", ctx)
+    new ParseException("TRANSFORM does not support DISTINCT/ALL in inputs", ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
