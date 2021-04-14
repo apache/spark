@@ -562,10 +562,14 @@ $(document).ready(function () {
                         }
                     ],
                     "columnDefs": [
-                        { "visible": false, "targets": 15 },
-                        { "visible": false, "targets": 16 },
-                        { "visible": false, "targets": 17 },
-                        { "visible": false, "targets": 18 }
+                        { "type": "duration", "targets": 9 },
+                        { "type": "duration", "targets": 10 },
+                        { "type": "duration", "targets": 11 },
+                        { "type": "duration", "targets": 12 },
+                        { "type": "duration", "visible": false, "targets": 15 },
+                        { "type": "duration", "visible": false, "targets": 16 },
+                        { "type": "duration", "visible": false, "targets": 17 },
+                        { "type": "duration", "visible": false, "targets": 18 }
                     ],
                     "deferRender": true,
                     "order": [[0, "asc"]],
