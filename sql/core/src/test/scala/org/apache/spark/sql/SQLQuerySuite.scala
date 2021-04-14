@@ -64,7 +64,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val queryCoalesce = sql("select coalesce(null, 1, '1') from src ")
 
       checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
-      checkAnswer(queryCoalesce, Row("1") :: Nil)
+      checkAnswer(queryCoalesce, Row("2") :: Nil)
     }
   }
 
