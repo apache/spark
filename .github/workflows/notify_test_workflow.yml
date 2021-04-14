@@ -1,0 +1,40 @@
+name: Notify test workflow
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  notify:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: "Notify test workflow"
+        uses: actions/github-script@v3
+        if: ${{ github.base_ref == 'master' }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const endpoint = "GET /repos/:owner/:repo/actions/workflows/:id/runs?&branch=:branch"
+            const params = {
+              owner: context.payload.pull_request.head.repo.owner.login,
+              repo: context.payload.pull_request.head.repo.name,
+              id: "build_and_test.yml",
+              branch: context.payload.pull_request.head.ref,
+            }
+
+            const runs = await github.request(endpoint, params)
+            var runID = runs.data.workflow_runs[0].id
+
+            var msg = "**[Test build #" + runID + "]"
+              + "(https://github.com/" +  context.payload.pull_request.head.repo.full_name
+              + "/actions/runs/" + runID + ")** "
+              + "for PR " + context.issue.number
+              + " at commit [`" + context.payload.pull_request.head.sha.substring(0, 7) + "`]"
+              + "(https://github.com/" + context.payload.pull_request.head.repo.full_name
+              + "/commit/" + context.payload.pull_request.head.sha + ")."
+
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.payload.repository.owner.login,
+              repo: context.payload.repository.name,
+              body: msg
+            })
