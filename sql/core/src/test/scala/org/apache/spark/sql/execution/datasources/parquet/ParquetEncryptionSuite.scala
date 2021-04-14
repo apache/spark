@@ -21,13 +21,14 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.{Base64, HashMap, Map}
 
+import scala.sys.process._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.crypto.{KeyAccessDeniedException, ParquetCryptoRuntimeException}
 import org.apache.parquet.crypto.keytools.{KeyToolkit, KmsClient}
+
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
-
-import scala.sys.process._
 
 /**
  * A test suite that tests parquet modular encryption usage.
@@ -92,7 +93,7 @@ class InMemoryKMS extends KmsClient {
       configuration: Configuration,
       kmsInstanceID: String,
       kmsInstanceURL: String,
-      accessToken: String) = { // Parse master  keys
+      accessToken: String): Unit = { // Parse master  keys
     val masterKeys: Array[String] =
       configuration.getTrimmedStrings(InMemoryKMS.KEY_LIST_PROPERTY_NAME)
     if (null == masterKeys || masterKeys.length == 0) {
@@ -109,7 +110,7 @@ class InMemoryKMS extends KmsClient {
     if (null == masterKey) {
       throw new ParquetCryptoRuntimeException("Key not found: " + masterKeyIdentifier)
     }
-    KeyToolkit.encryptKeyLocally(keyBytes, masterKey, null /*AAD*/ )
+    KeyToolkit.encryptKeyLocally(keyBytes, masterKey, null /* AAD */ )
   }
 
   @throws[KeyAccessDeniedException]
@@ -119,7 +120,7 @@ class InMemoryKMS extends KmsClient {
     if (null == masterKey) {
       throw new ParquetCryptoRuntimeException("Key not found: " + masterKeyIdentifier)
     }
-    KeyToolkit.decryptKeyLocally(wrappedKey, masterKey, null /*AAD*/ )
+    KeyToolkit.decryptKeyLocally(wrappedKey, masterKey, null /* AAD */ )
   }
 }
 
