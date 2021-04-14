@@ -526,7 +526,7 @@ private[spark] class Client(
         val uri = new URI(ivySettingsPath)
         Option(uri.getScheme).getOrElse("file") match {
           case "file" =>
-            val ivySettingsFile = new File(ivySettingsPath)
+            val ivySettingsFile = new File(uri.getPath)
             require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
             require(ivySettingsFile.isFile(), s"Ivy settings file $ivySettingsFile is not a" +
               "normal file")
@@ -534,11 +534,11 @@ private[spark] class Client(
             // conflict with any user file.
             val localizedFileName = Some(ivySettingsFile.getName() + "-" +
               UUID.randomUUID().toString)
-            val (_, localizedPath) = distribute(ivySettings.get, destName = localizedFileName)
+            val (_, localizedPath) = distribute(ivySettingsPath, destName = localizedFileName)
             require(localizedPath != null, "IvySettings file already distributed.")
             Some(localizedPath)
           case scheme =>
-            throw new IllegalArgumentException(s"Scheme $scheme not supported in" +
+            throw new IllegalArgumentException(s"Scheme $scheme not supported in " +
               "spark.jars.ivySettings")
         }
       case _ => None

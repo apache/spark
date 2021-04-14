@@ -1279,7 +1279,7 @@ private[spark] object SparkSubmitUtils {
       ivyPath: Option[String]): IvySettings = {
     val uri = new URI(settingsFile)
     val file = Option(uri.getScheme).getOrElse("file") match {
-      case "file" => new File(settingsFile)
+      case "file" => new File(uri.getPath)
       case scheme => throw new IllegalArgumentException(s"Scheme $scheme not supported in " +
         "spark.jars.ivySettings")
     }
