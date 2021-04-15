@@ -500,10 +500,10 @@ def compare_both(f=None, almost=True):
 
 @contextmanager
 def assert_produces_warning(
-        expected_warning=Warning,
-        filter_level="always",
-        check_stacklevel=True,
-        raise_on_extra_warnings=True,
+    expected_warning=Warning,
+    filter_level="always",
+    check_stacklevel=True,
+    raise_on_extra_warnings=True,
 ):
     """
     Context manager for running code expected to either raise a specific
