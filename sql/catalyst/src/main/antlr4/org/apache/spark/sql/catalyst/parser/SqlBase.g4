@@ -524,9 +524,9 @@ querySpecification
     ;
 
 transformClause
-    : (SELECT kind=TRANSFORM '(' setQuantifier? namedExpressionSeq ')'
-            | kind=MAP setQuantifier? namedExpressionSeq
-            | kind=REDUCE setQuantifier? namedExpressionSeq)
+    : (SELECT kind=TRANSFORM '(' setQuantifier? expressionSeq ')'
+            | kind=MAP setQuantifier? expressionSeq
+            | kind=REDUCE setQuantifier? expressionSeq)
       inRowFormat=rowFormat?
       (RECORDWRITER recordWriter=STRING)?
       USING script=STRING
@@ -772,6 +772,10 @@ transformArgument
 
 expression
     : booleanExpression
+    ;
+
+expressionSeq
+    : expression (',' expression)*
     ;
 
 booleanExpression
