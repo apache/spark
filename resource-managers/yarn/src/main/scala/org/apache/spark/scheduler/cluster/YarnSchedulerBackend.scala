@@ -336,10 +336,9 @@ private[spark] abstract class YarnSchedulerBackend(
 
       // In case of yarn Miscellaneous Process is Spark AM Container
       // Launched for the deploy mode client
-      case processInfo @ MiscellaneousProcessInfo(_, _) =>
-        logInfo(s"Sending the Spark AM info for yarn client mode")
+      case processInfo @ MiscellaneousProcessInfo(_, _, _) =>
+        logDebug(s"Sending the Spark AM info for yarn client mode")
         driverEndpoint.send(processInfo)
-
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

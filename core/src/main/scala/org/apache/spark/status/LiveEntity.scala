@@ -920,7 +920,6 @@ private[spark] class LiveMiscellaneousProcess(val processId: String,
     creationTime: Long) extends LiveEntity {
 
   var hostPort: String = null
-  var host: String = null
   var isActive = true
   var totalCores = 0
   val addTime = new Date(creationTime)
@@ -929,13 +928,11 @@ private[spark] class LiveMiscellaneousProcess(val processId: String,
   var maxMemory = 0L
   var processLogs = Map[String, String]()
 
-  def hostname: String = if (host != null) host else Utils.parseHostPort(hostPort)._1
-
   override protected def doUpdate(): Any = {
 
     val info = new v1.ProcessSummary(
       processId,
-      if (hostPort != null) hostPort else host,
+      hostPort,
       isActive,
       totalCores,
       memoryUsed,

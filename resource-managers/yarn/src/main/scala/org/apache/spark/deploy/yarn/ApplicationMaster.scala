@@ -787,9 +787,9 @@ private[spark] class ApplicationMaster(
       if (!isClusterMode) {
         val hostPort = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
         val yarnAMID = "yarn-am"
-        val info = new MiscellaneousProcessDetails(yarnAMID, hostPort,
+        val info = new MiscellaneousProcessDetails(hostPort,
           sparkConf.get(AM_CORES), Runtime.getRuntime().maxMemory(), extractLogUrls)
-        driver.send(MiscellaneousProcessInfo(System.currentTimeMillis(), info))
+        driver.send(MiscellaneousProcessInfo(System.currentTimeMillis(), yarnAMID, info))
       }
     }
 

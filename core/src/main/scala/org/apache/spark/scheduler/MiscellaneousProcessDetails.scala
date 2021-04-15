@@ -24,8 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
  */
 
 @DeveloperApi
-private[spark] class MiscellaneousProcessDetails(
-    val processName: String,
+class MiscellaneousProcessDetails(
     val hostPort: String,
     val cores: Int,
     val memory: Long,

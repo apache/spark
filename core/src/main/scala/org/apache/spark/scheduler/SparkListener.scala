@@ -228,8 +228,8 @@ case class SparkListenerUnschedulableTaskSetRemoved(
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
 
 @DeveloperApi
-case class MiscellaneousProcessInfoEvent(time: Long,
-  info: MiscellaneousProcessDetails) extends SparkListenerEvent
+case class MiscellaneousProcessAdded(time: Long, processId: String,
+    info: MiscellaneousProcessDetails) extends SparkListenerEvent
 
 /**
  * Periodic updates from executors.

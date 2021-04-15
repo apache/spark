@@ -125,7 +125,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
   // Send Miscellaneous Process information to the driver
-  case class MiscellaneousProcessInfo(time: Long, info: MiscellaneousProcessDetails)
+  case class MiscellaneousProcessInfo(
+      time: Long, processId: String, info: MiscellaneousProcessDetails)
     extends CoarseGrainedClusterMessage
 
   // Used by YARN's client mode AM to retrieve the current set of delegation tokens.

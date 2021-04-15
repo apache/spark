@@ -108,7 +108,7 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
-    case processInfoEvent: MiscellaneousProcessInfoEvent =>
+    case processInfoEvent: MiscellaneousProcessAdded =>
       onMiscellaneousProcessAdded(processInfoEvent)
     case _ =>
   }
@@ -1369,10 +1369,10 @@ private[spark] class AppStatusListener(
    *
    */
   private def onMiscellaneousProcessAdded(
-      processInfoEvent: MiscellaneousProcessInfoEvent): Unit = {
+      processInfoEvent: MiscellaneousProcessAdded): Unit = {
     val processInfo = processInfoEvent.info
     val miscellaneousProcess =
-      getOrCreateOtherProcess(processInfo.processName, processInfoEvent.time)
+      getOrCreateOtherProcess(processInfoEvent.processId, processInfoEvent.time)
     miscellaneousProcess.processLogs = processInfo.logUrlInfo
     miscellaneousProcess.hostPort = processInfo.hostPort
     miscellaneousProcess.isActive = true

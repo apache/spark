@@ -1798,30 +1798,30 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-34877 - check YarnAmInfoEvent is populated correctly") {
     def checkInfoPopulated(listener: AppStatusListener,
-      logUrlMap: Map[String, String], processName: String): Unit = {
-      val yarnAmInfo = listener.liveMiscellaneousProcess.get(processName)
+       logUrlMap: Map[String, String], processId: String): Unit = {
+      val yarnAmInfo = listener.liveMiscellaneousProcess.get(processId)
       assert(yarnAmInfo.isDefined)
       yarnAmInfo.foreach { info =>
-        assert(info.processId == processName)
+        assert(info.processId == processId)
         assert(info.isActive)
         assert(info.processLogs == logUrlMap)
       }
-      check[ProcessSummaryWrapper](processName) { process =>
-        assert(process.info.id === processName)
+      check[ProcessSummaryWrapper](processId) { process =>
+        assert(process.info.id === processId)
         assert(process.info.isActive)
         assert(process.info.processLogs == logUrlMap)
       }
     }
-    val processName = "yarn-am"
+    val processId = "yarn-am"
     val listener = new AppStatusListener(store, conf, true)
     var stdout = "http:yarnAmHost:2453/con1/stdout"
     var stderr = "http:yarnAmHost:2453/con2/stderr"
     var logUrlMap: Map[String, String] = Map("stdout" -> stdout,
       "stderr" -> stderr)
     var hostport = "yarnAmHost:2453"
-    var info = new MiscellaneousProcessDetails(processName, hostport, 1, 512, logUrlMap)
-    listener.onOtherEvent(MiscellaneousProcessInfoEvent(123678L, info))
-    checkInfoPopulated(listener, logUrlMap, processName)
+    var info = new MiscellaneousProcessDetails(hostport, 1, 512, logUrlMap)
+    listener.onOtherEvent(MiscellaneousProcessAdded(123678L, processId, info))
+    checkInfoPopulated(listener, logUrlMap, processId)
 
     // Launch new AM in case of failure
     // New container entry will be updated in this scenario
@@ -1830,9 +1830,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     logUrlMap = Map("stdout" -> stdout,
       "stderr" -> stderr)
     hostport = "yarnAmHost:2451"
-    info = new MiscellaneousProcessDetails(processName, hostport, 1, 512, logUrlMap)
-    listener.onOtherEvent(MiscellaneousProcessInfoEvent(123678L, info))
-    checkInfoPopulated(listener, logUrlMap, processName)
+    info = new MiscellaneousProcessDetails(hostport, 1, 512, logUrlMap)
+    listener.onOtherEvent(MiscellaneousProcessAdded(123678L, processId, info))
+    checkInfoPopulated(listener, logUrlMap, processId)
   }
 
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
