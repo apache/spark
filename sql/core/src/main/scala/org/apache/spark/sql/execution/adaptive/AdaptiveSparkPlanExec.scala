@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -94,7 +94,7 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    PlanAdaptiveDynamicPruningFilters(context.stageCache),
+    PlanAdaptiveDynamicPruningFilters(inputPlan),
     ReuseAdaptiveSubquery(context.subqueryCache),
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
@@ -310,6 +310,11 @@ case class AdaptiveSparkPlanExec(
     rdd
   }
 
+  override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    val broadcastPlan = getFinalPhysicalPlan()
+    broadcastPlan.doExecuteBroadcast()
+  }
+
   protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")
 
   override def generateTreeString(
@@ -476,7 +481,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform shuffle node to something else.")
         }
-        ShuffleQueryStageExec(currentStageId, newShuffle, s.canonicalized)
+        ShuffleQueryStageExec(currentStageId, newShuffle, s.child.canonicalized)
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)),
@@ -486,7 +491,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform broadcast node to something else.")
         }
-        BroadcastQueryStageExec(currentStageId, newBroadcast, b.canonicalized)
+        BroadcastQueryStageExec(currentStageId, newBroadcast, b.child.canonicalized)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, e)
