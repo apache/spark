@@ -130,7 +130,7 @@ Input [7]: [cs_warehouse_sk#1, cs_item_sk#2, cs_sales_price#4, cs_sold_date_sk#5
 Output [2]: [d_date_sk#17, d_date#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-10), LessThanOrEqual(d_date,2000-04-10), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (22) ColumnarToRow [codegen id : 6]
@@ -138,7 +138,7 @@ Input [2]: [d_date_sk#17, d_date#18]
 
 (23) Filter [codegen id : 6]
 Input [2]: [d_date_sk#17, d_date#18]
-Condition : (((isnotnull(d_date#18) AND (d_date#18 >= 2000-02-10)) AND (d_date#18 <= 2000-04-10)) AND isnotnull(d_date_sk#17))
+Condition : (((isnotnull(d_date#18) AND (cast(d_date#18 as timestamp) >= 2000-02-10 00:00:00)) AND (cast(d_date#18 as timestamp) <= 2000-04-10 00:00:00)) AND isnotnull(d_date_sk#17))
 
 (24) BroadcastExchange
 Input [2]: [d_date_sk#17, d_date#18]

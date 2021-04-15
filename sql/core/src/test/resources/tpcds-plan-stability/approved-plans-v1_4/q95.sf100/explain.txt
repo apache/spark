@@ -257,7 +257,7 @@ Input [6]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_
 Output [2]: [d_date_sk#28, d_date#29]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (47) ColumnarToRow [codegen id : 18]
@@ -265,7 +265,7 @@ Input [2]: [d_date_sk#28, d_date#29]
 
 (48) Filter [codegen id : 18]
 Input [2]: [d_date_sk#28, d_date#29]
-Condition : (((isnotnull(d_date#29) AND (d_date#29 >= 1999-02-01)) AND (d_date#29 <= 1999-04-02)) AND isnotnull(d_date_sk#28))
+Condition : (((isnotnull(d_date#29) AND (d_date#29 >= 1999-02-01)) AND (cast(d_date#29 as timestamp) <= 1999-04-02 00:00:00)) AND isnotnull(d_date_sk#28))
 
 (49) Project [codegen id : 18]
 Output [1]: [d_date_sk#28]
