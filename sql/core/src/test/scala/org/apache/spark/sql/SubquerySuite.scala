@@ -1827,4 +1827,15 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
     }
   }
+
+  test("SPARK-35080: correlated predicates in subquery contain only outer references") {
+    // Equality
+    checkAnswer(
+      sql("select c, d, (select count(*) from l where c + 1 = d) from t"),
+      Row(2, 3.0, 8) :: Row(2, 3.0, 8) :: Row(3, 2.0, 0) :: Row(4, 1.0, 0) :: Nil)
+    // Non-equality
+    checkAnswer(
+      sql("select c, d, (select count(*) from l where c > d) from t"),
+      Row(2, 3.0, 0) :: Row(2, 3.0, 0) :: Row(3, 2.0, 8) :: Row(4, 1.0, 8) :: Nil)
+  }
 }

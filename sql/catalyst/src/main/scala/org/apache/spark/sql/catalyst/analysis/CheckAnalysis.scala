@@ -939,10 +939,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
+    def containsAttribute(e: Expression): Boolean = {
+      e.find(_.isInstanceOf[Attribute]).isDefined
+    }
+
     // Given a correlated predicate, check if it is either a non-equality predicate or
     // equality predicate that does not guarantee one-on-one mapping between inner and
-    // outer attributes. E.G.:
+    // outer attributes. When the correlated predicate does not contain any attribute
+    // (i.e. only has outer references), it is supported and should return false. E.G.:
     //   (a = outer(c)) -> false
+    //   (outer(c) = outer(d)) -> false
     //   (a > outer(c)) -> true
     //   (a + b = outer(c)) -> true
     // The last one is true because there can be multiple combinations of (a, b) that
@@ -952,9 +958,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // Only allow equality condition with one side being an attribute and another
       // side being an expression without attributes from the inner query. Note
       // OuterReference is a leaf node and will not be found here.
-      case Equality(_: Attribute, b) => b.find(_.isInstanceOf[Attribute]).isDefined
-      case Equality(a, _: Attribute) => a.find(_.isInstanceOf[Attribute]).isDefined
-      case _ => true
+      case Equality(_: Attribute, b) => containsAttribute(b)
+      case Equality(a, _: Attribute) => containsAttribute(a)
+      case o => containsAttribute(o)
     }
 
     val unsupportedPredicates = mutable.ArrayBuffer.empty[Expression]
