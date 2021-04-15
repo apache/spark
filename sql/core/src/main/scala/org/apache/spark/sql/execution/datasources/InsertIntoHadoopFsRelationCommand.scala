@@ -274,6 +274,7 @@ case class InsertIntoHadoopFsRelationCommand(
     }.toMap
   }
 
+
   private def isSubDir(
       src: Path,
       dest: Path,
@@ -329,4 +330,7 @@ case class InsertIntoHadoopFsRelationCommand(
       }
     }
   }
+
+  override protected def withNewChildInternal(
+    newChild: LogicalPlan): InsertIntoHadoopFsRelationCommand = copy(query = newChild)
 }

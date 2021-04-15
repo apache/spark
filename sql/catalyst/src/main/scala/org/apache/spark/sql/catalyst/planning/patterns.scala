@@ -333,7 +333,7 @@ object PhysicalAggregation {
           case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
             equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
               .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
-          case expression =>
+          case expression if !expression.foldable =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding
             // attributes. We do not rely on the equality check at here since attributes may

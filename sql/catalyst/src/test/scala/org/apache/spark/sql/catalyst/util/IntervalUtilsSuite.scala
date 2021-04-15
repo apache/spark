@@ -24,6 +24,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
@@ -439,6 +440,38 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       Long.MinValue).foreach { micros =>
       val duration = microsToDuration(micros)
       assert(durationToMicros(duration) === micros)
+    }
+  }
+
+  test("SPARK-35016: format year-month intervals") {
+    Seq(
+      0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),
+      -11 -> ("-0-11", "INTERVAL '-0-11' YEAR TO MONTH"),
+      11 -> ("0-11", "INTERVAL '0-11' YEAR TO MONTH"),
+      -13 -> ("-1-1", "INTERVAL '-1-1' YEAR TO MONTH"),
+      13 -> ("1-1", "INTERVAL '1-1' YEAR TO MONTH"),
+      -24 -> ("-2-0", "INTERVAL '-2-0' YEAR TO MONTH"),
+      24 -> ("2-0", "INTERVAL '2-0' YEAR TO MONTH"),
+      Int.MinValue -> ("-178956970-8", "INTERVAL '-178956970-8' YEAR TO MONTH"),
+      Int.MaxValue -> ("178956970-7", "INTERVAL '178956970-7' YEAR TO MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE) === hiveIntervalStr)
+    }
+  }
+
+  test("SPARK-35016: format day-time intervals") {
+    Seq(
+      0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
+      -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
+      10 * MICROS_PER_MILLIS -> ("0 00:00:00.010000000", "INTERVAL '0 00:00:00.01' DAY TO SECOND"),
+      (-123 * MICROS_PER_DAY - 3 * MICROS_PER_SECOND) ->
+        ("-123 00:00:03.000000000", "INTERVAL '-123 00:00:03' DAY TO SECOND"),
+      Long.MinValue -> ("-106751991 04:00:54.775808000",
+        "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND")
+    ).foreach { case (micros, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toDayTimeIntervalString(micros, ANSI_STYLE) === ansiIntervalStr)
+      assert(toDayTimeIntervalString(micros, HIVE_STYLE) === hiveIntervalStr)
     }
   }
 }

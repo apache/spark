@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{File, PrintStream}
+import java.io.PrintStream
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets.UTF_8
@@ -292,15 +292,17 @@ private[hive] class HiveClientImpl(
   def withHiveState[A](f: => A): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
     val originalConfLoader = state.getConf.getClassLoader
-    // The classloader in clientLoader could be changed after addJar, always use the latest
-    // classloader. We explicitly set the context class loader since "conf.setClassLoader" does
+    // We explicitly set the context class loader since "conf.setClassLoader" does
     // not do that, and the Hive client libraries may need to load classes defined by the client's
-    // class loader.
+    // class loader. See SPARK-19804 for more details.
     Thread.currentThread().setContextClassLoader(clientLoader.classLoader)
     state.getConf.setClassLoader(clientLoader.classLoader)
     // Set the thread local metastore client to the client associated with this HiveClientImpl.
     Hive.set(client)
     // Replace conf in the thread local Hive with current conf
+    // with the side-effect of Hive.get(conf) to avoid using out-of-date HiveConf.
+    // See discussion in https://github.com/apache/spark/pull/16826/files#r104606859
+    // for more details.
     Hive.get(conf)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
@@ -954,16 +956,8 @@ private[hive] class HiveClientImpl(
   }
 
   def addJar(path: String): Unit = {
-    val uri = new Path(path).toUri
-    val jarURL = if (uri.getScheme == null) {
-      // `path` is a local file path without a URL scheme
-      new File(path).toURI.toURL
-    } else {
-      // `path` is a URL with a scheme
-      uri.toURL
-    }
-    clientLoader.addJar(jarURL)
-    runSqlHive(s"ADD JAR $path")
+    val jarURI = Utils.resolveURI(path)
+    clientLoader.addJar(jarURI.toURL)
   }
 
   def newSession(): HiveClientImpl = {

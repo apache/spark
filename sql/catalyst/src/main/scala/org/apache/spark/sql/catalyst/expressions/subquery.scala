@@ -23,11 +23,21 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.BitSet
 
 /**
  * An interface for expressions that contain a [[QueryPlan]].
  */
 abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
+
+  // Override `treePatternBits` to propagate bits for its internal plan.
+  override lazy val treePatternBits: BitSet = {
+    val bits: BitSet = getDefaultTreePatternBits
+    // Propagate its query plan's pattern bits
+    bits.union(plan.treePatternBits)
+    bits
+  }
+
   /**  The id of the subquery expression. */
   def exprId: ExprId
 
@@ -238,6 +248,9 @@ case class ScalarSubquery(
       children.map(_.canonicalized),
       ExprId(0))
   }
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): ScalarSubquery = copy(children = newChildren)
 }
 
 object ScalarSubquery {
@@ -283,6 +296,9 @@ case class ListQuery(
       ExprId(0),
       childOutputs.map(_.canonicalized.asInstanceOf[Attribute]))
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ListQuery =
+    copy(children = newChildren)
 }
 
 /**
@@ -325,4 +341,7 @@ case class Exists(
       children.map(_.canonicalized),
       ExprId(0))
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Exists =
+    copy(children = newChildren)
 }

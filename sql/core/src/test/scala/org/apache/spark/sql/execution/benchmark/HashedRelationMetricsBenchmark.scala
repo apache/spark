@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import org.scalatest.Assertions._
-
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
@@ -32,7 +30,8 @@ import org.apache.spark.sql.types.LongType
  * Benchmark to measure metrics performance at HashedRelation.
  * To run this benchmark:
  * {{{
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   1. without sbt: bin/spark-submit --class <this class>
+ *      --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *      Results will be written to "benchmarks/HashedRelationMetricsBenchmark-results.txt".

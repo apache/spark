@@ -23,6 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
@@ -33,11 +34,10 @@ import org.apache.spark.sql.types._
  * We have to store all the collected elements in memory, and so notice that too many elements
  * can cause GC paused and eventually OutOfMemory Errors.
  */
-abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImperativeAggregate[T] {
+abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImperativeAggregate[T]
+  with UnaryLike[Expression] {
 
   val child: Expression
-
-  override def children: Seq[Expression] = child :: Nil
 
   override def nullable: Boolean = false
 
@@ -125,6 +125,9 @@ case class CollectList(
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     new GenericArrayData(buffer.toArray)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): CollectList =
+    copy(child = newChild)
 }
 
 /**
@@ -191,4 +194,7 @@ case class CollectSet(
   override def prettyName: String = "collect_set"
 
   override def createAggregationBuffer(): mutable.HashSet[Any] = mutable.HashSet.empty
+
+  override protected def withNewChildInternal(newChild: Expression): CollectSet =
+    copy(child = newChild)
 }

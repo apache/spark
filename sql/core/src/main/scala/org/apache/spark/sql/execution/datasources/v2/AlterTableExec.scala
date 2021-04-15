@@ -28,7 +28,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 case class AlterTableExec(
     catalog: TableCatalog,
     ident: Identifier,
-    changes: Seq[TableChange]) extends V2CommandExec {
+    changes: Seq[TableChange]) extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 

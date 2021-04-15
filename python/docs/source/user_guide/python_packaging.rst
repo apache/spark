@@ -107,7 +107,7 @@ In the case of a ``spark-submit`` script, you can use it as follows:
 
 Note that ``PYSPARK_DRIVER_PYTHON`` above should not be set for cluster modes in YARN or Kubernetes.
 
-If you’re on a regular Python shell or notebook, you can try it as shown below:
+If you're on a regular Python shell or notebook, you can try it as shown below:
 
 .. code-block:: python
 

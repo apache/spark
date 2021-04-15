@@ -18,7 +18,7 @@ SELECT a, COUNT(b) FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '(count(testdata.b) AS count(b))' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get.
+grouping expressions sequence is empty, and 'testdata.a' is not an aggregate function. Wrap '(count(testdata.b) AS `count(b)`)' in windowing function(s) or wrap 'testdata.a' in first() (or first_value) if you don't care which value you get.
 
 
 -- !query

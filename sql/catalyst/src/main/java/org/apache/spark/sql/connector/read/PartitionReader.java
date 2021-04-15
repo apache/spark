@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.CustomTaskMetric;
  * A partition reader returned by {@link PartitionReaderFactory#createReader(InputPartition)} or
  * {@link PartitionReaderFactory#createColumnarReader(InputPartition)}. It's responsible for
  * outputting data for a RDD partition.
- *
+ * <p>
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}
  * for normal data sources, or {@link org.apache.spark.sql.vectorized.ColumnarBatch} for columnar
  * data sources(whose {@link PartitionReaderFactory#supportColumnarReads(InputPartition)}

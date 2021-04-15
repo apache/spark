@@ -773,7 +773,27 @@ The following extra configuration options are available when the shuffle service
     NodeManagers where the Spark Shuffle Service is not running.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.shuffle.service.metrics.namespace</code></td>
+  <td><code>sparkShuffleService</code></td>
+  <td>
+    The namespace to use when emitting shuffle service metrics into Hadoop metrics2 system of the
+    NodeManager.
+  </td>
+</tr>
 </table>
+
+Please note that the instructions above assume that the default shuffle service name,
+`spark_shuffle`, has been used. It is possible to use any name here, but the values used in the
+YARN NodeManager configurations must match the value of `spark.shuffle.service.name` in the
+Spark application.
+
+The shuffle service will, by default, take all of its configurations from the Hadoop Configuration
+used by the NodeManager (e.g. `yarn-site.xml`). However, it is also possible to configure the
+shuffle service independently using a file named `spark-shuffle-site.xml` which should be placed
+onto the classpath of the shuffle service (which is, by default, shared with the classpath of the
+NodeManager). The shuffle service will treat this as a standard Hadoop Configuration resource and
+overlay it on top of the NodeManager's configuration.
 
 # Launching your application with Apache Oozie
 
@@ -823,3 +843,54 @@ do the following:
   to the list of filters in the <code>spark.ui.filters</code> configuration.
 
 Be aware that the history server information may not be up-to-date with the application's state.
+
+# Running multiple versions of the Spark Shuffle Service
+
+Please note that this section only applies when running on YARN versions >= 2.9.0.
+
+In some cases it may be desirable to run multiple instances of the Spark Shuffle Service which are
+using different versions of Spark. This can be helpful, for example, when running a YARN cluster
+with a mixed workload of applications running multiple Spark versions, since a given version of
+the shuffle service is not always compatible with other versions of Spark. YARN versions since 2.9.0
+support the ability to run shuffle services within an isolated classloader
+(see [YARN-4577](https://issues.apache.org/jira/browse/YARN-4577)), meaning multiple Spark versions
+can coexist within a single NodeManager. The
+`yarn.nodemanager.aux-services.<service-name>.classpath` and, starting from YARN 2.10.2/3.1.1/3.2.0,
+`yarn.nodemanager.aux-services.<service-name>.remote-classpath` options can be used to configure
+this. In addition to setting up separate classpaths, it's necessary to ensure the two versions
+advertise to different ports. This can be achieved using the `spark-shuffle-site.xml` file described
+above. For example, you may have configuration like:
+
+```properties
+  yarn.nodemanager.aux-services = spark_shuffle_x,spark_shuffle_y
+  yarn.nodemanager.aux-services.spark_shuffle_x.classpath = /path/to/spark-x-yarn-shuffle.jar,/path/to/spark-x-config
+  yarn.nodemanager.aux-services.spark_shuffle_y.classpath = /path/to/spark-y-yarn-shuffle.jar,/path/to/spark-y-config
+```
+
+The two `spark-*-config` directories each contain one file, `spark-shuffle-site.xml`. These are XML
+files in the [Hadoop Configuration format](https://hadoop.apache.org/docs/r3.2.2/api/org/apache/hadoop/conf/Configuration.html)
+which each contain a few configurations to adjust the port number and metrics name prefix used:
+```xml
+<configuration>
+  <property>
+    <name>spark.shuffle.service.port</name>
+    <value>7001</value>
+  </property>
+  <property>
+    <name>spark.yarn.shuffle.service.metrics.namespace</name>
+    <value>sparkShuffleServiceX</value>
+  </property>
+</configuration>
+```
+The values should both be different for the two different services.
+
+Then, in the configuration of the Spark applications, one should be configured with:
+```properties
+  spark.shuffle.service.name = spark_shuffle_x
+  spark.shuffle.service.port = 7001
+```
+and one should be configured with:
+```properties
+  spark.shuffle.service.name = spark_shuffle_y
+  spark.shuffle.service.port = <other value>
+```

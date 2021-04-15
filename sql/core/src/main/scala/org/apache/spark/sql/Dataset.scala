@@ -3370,10 +3370,11 @@ class Dataset[T] private[sql](
       comment = None,
       properties = Map.empty,
       originalText = None,
-      child = logicalPlan,
+      plan = logicalPlan,
       allowExisting = false,
       replace = replace,
-      viewType = viewType)
+      viewType = viewType,
+      isAnalyzed = true)
   }
 
   /**

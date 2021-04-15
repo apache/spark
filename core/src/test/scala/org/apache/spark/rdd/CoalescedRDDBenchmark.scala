@@ -29,7 +29,7 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar>
+ *      bin/spark-submit --class <this class> <spark core test jar>
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
@@ -76,6 +76,12 @@ object CoalescedRDDBenchmark extends BenchmarkBase {
     val numIters = 3
     runBenchmark("Coalesced RDD , large scale") {
       coalescedRDD(numIters)
+    }
+  }
+
+  override def afterAll(): Unit = {
+    if (sc != null) {
+      sc.stop()
     }
   }
 }

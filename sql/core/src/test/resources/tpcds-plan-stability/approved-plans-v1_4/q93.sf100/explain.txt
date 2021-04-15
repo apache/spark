@@ -30,7 +30,7 @@ Output [5]: [sr_item_sk#1, sr_reason_sk#2, sr_ticket_number#3, sr_return_quantit
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)]
-ReadSchema: struct<sr_item_sk:bigint,sr_reason_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int>
+ReadSchema: struct<sr_item_sk:int,sr_reason_sk:int,sr_ticket_number:int,sr_return_quantity:int>
 
 (2) ColumnarToRow [codegen id : 2]
 Input [5]: [sr_item_sk#1, sr_reason_sk#2, sr_ticket_number#3, sr_return_quantity#4, sr_returned_date_sk#5]
@@ -67,7 +67,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 
 (10) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [sr_reason_sk#2]
-Right keys [1]: [cast(r_reason_sk#6 as bigint)]
+Right keys [1]: [r_reason_sk#6]
 Join condition: None
 
 (11) Project [codegen id : 2]
@@ -97,15 +97,15 @@ Input [6]: [ss_item_sk#10, ss_customer_sk#11, ss_ticket_number#12, ss_quantity#1
 
 (17) Exchange
 Input [5]: [ss_item_sk#10, ss_customer_sk#11, ss_ticket_number#12, ss_quantity#13, ss_sales_price#14]
-Arguments: hashpartitioning(cast(ss_item_sk#10 as bigint), cast(ss_ticket_number#12 as bigint), 5), ENSURE_REQUIREMENTS, [id=#16]
+Arguments: hashpartitioning(ss_item_sk#10, ss_ticket_number#12, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (18) Sort [codegen id : 5]
 Input [5]: [ss_item_sk#10, ss_customer_sk#11, ss_ticket_number#12, ss_quantity#13, ss_sales_price#14]
-Arguments: [cast(ss_item_sk#10 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#12 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [ss_item_sk#10 ASC NULLS FIRST, ss_ticket_number#12 ASC NULLS FIRST], false, 0
 
 (19) SortMergeJoin [codegen id : 6]
 Left keys [2]: [sr_item_sk#1, sr_ticket_number#3]
-Right keys [2]: [cast(ss_item_sk#10 as bigint), cast(ss_ticket_number#12 as bigint)]
+Right keys [2]: [ss_item_sk#10, ss_ticket_number#12]
 Join condition: None
 
 (20) Project [codegen id : 6]

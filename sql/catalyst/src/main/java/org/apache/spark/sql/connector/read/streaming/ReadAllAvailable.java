@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Evolving;
 /**
  * Represents a {@link ReadLimit} where the {@link MicroBatchStream} must scan all the data
  * available at the streaming source. This is meant to be a hard specification as being able
- * to return all available data is necessary for Trigger.Once() to work correctly.
+ * to return all available data is necessary for {@code Trigger.Once()} to work correctly.
  * If a source is unable to scan all available data, then it must throw an error.
  *
  * @see SupportsAdmissionControl#latestOffset(Offset, ReadLimit)
