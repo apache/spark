@@ -21,17 +21,14 @@ license: |
 
 ### Description
 
-The `TRANSFORM` clause is used to specify a Hive-style transform (`SELECT TRANSFORM`/`MAP`/`REDUCE`)
-query specification to transform the input by running a specified script. Users can
-plug in their own custom mappers or reducers in the data stream by using features natively supported
-in the Spark SQL. In order to run a custom mapper script `map_script` or a custom
-reducer script `reduce_script` the user can issue the command which uses the `TRANSFORM`
-clause to embed the mapper or the reducer scripts.
+The `TRANSFORM` clause is used to specify a Hive-style transform query specification 
+to transform the inputs by running a specified script. Users can plug in their own custom 
+scripts in the data stream by using features natively supported in the Spark SQL.
 
 ### Syntax
 
 ```sql
-{ SELECT TRANSFORM ( named_expression [ , ... ] ) | { MAP | REDUCE } named_expression [ , ... ] }
+SELECT TRANSFORM ( named_expression [ , ... ] )
     [ ROW FORMAT row_format ]
     [ RECORDWRITER record_writer_class ]
     USING script [ AS ( [ col_name [ col_type ] ] [ , ... ] ) ]
