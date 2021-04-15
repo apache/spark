@@ -68,7 +68,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   }
 
   test("show tables") {
-    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
+    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people", false)))
     // Check not existing namespace
     checkAnswer(sql("SHOW TABLES IN h2.bad_test"), Seq())
   }
@@ -77,9 +77,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     withConnection { conn =>
       conn.prepareStatement("""CREATE TABLE "test"."to_drop" (id INTEGER)""").executeUpdate()
     }
-    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "to_drop"), Row("test", "people")))
+    checkAnswer(sql("SHOW TABLES IN h2.test"),
+      Seq(Row("test", "to_drop", false), Row("test", "people", false)))
     sql("DROP TABLE h2.test.to_drop")
-    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
+    checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people", false)))
     Seq(
       "h2.test.not_existing_table" ->
         "Table or view not found: h2.test.not_existing_table",
@@ -100,11 +101,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
-        Seq(Row("test", "src_table"), Row("test", "people")))
+        Seq(Row("test", "src_table", false), Row("test", "people", false)))
       sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
-        Seq(Row("test", "dst_table"), Row("test", "people")))
+        Seq(Row("test", "dst_table", false), Row("test", "people", false)))
     }
     // Rename not existing table or namespace
     val exp1 = intercept[AnalysisException] {
@@ -155,7 +156,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
-        Seq(Row("test", "people"), Row("test", "new_table")))
+        Seq(Row("test", "people", false), Row("test", "new_table", false)))
     }
     withTable("h2.test.new_table") {
       sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")

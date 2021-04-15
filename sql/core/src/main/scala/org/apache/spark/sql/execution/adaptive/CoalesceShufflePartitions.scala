@@ -72,14 +72,20 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
           validMetrics.toArray,
           advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
           minNumPartitions = minPartitionNum)
-        // This transformation adds new nodes, so we must use `transformUp` here.
-        val stageIds = shuffleStages.map(_.id).toSet
-        plan.transformUp {
-          // even for shuffle exchange whose input RDD has 0 partition, we should still update its
-          // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
-          // number of output partitions.
-          case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
-            CustomShuffleReaderExec(stage, partitionSpecs)
+        // We can never extend the shuffle partition number, so if we get the same number here,
+        // that means we can not coalesce shuffle partition. Just return the origin plan.
+        if (partitionSpecs.length == distinctNumPreShufflePartitions.head) {
+          plan
+        } else {
+          // This transformation adds new nodes, so we must use `transformUp` here.
+          val stageIds = shuffleStages.map(_.id).toSet
+          plan.transformUp {
+            // even for shuffle exchange whose input RDD has 0 partition, we should still update its
+            // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
+            // number of output partitions.
+            case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
+              CustomShuffleReaderExec(stage, partitionSpecs)
+          }
         }
       } else {
         plan

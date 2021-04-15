@@ -49,5 +49,6 @@ ADD FILE "/path/to/some/directory";
 
 * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
 * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
+* [LIST ARCHIVE](sql-ref-syntax-aux-resource-mgmt-list-archive.html)
 * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
-
+* [ADD ARCHIVE](sql-ref-syntax-aux-resource-mgmt-add-archive.html)

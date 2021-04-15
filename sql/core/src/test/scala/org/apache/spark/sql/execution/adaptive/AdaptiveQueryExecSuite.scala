@@ -21,6 +21,7 @@ import java.io.File
 import java.net.URI
 
 import org.apache.log4j.Level
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
@@ -30,7 +31,7 @@ import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecuti
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, REPARTITION, REPARTITION_WITH_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION, REPARTITION_WITH_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -38,6 +39,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
@@ -45,7 +47,8 @@ import org.apache.spark.util.Utils
 class AdaptiveQueryExecSuite
   extends QueryTest
   with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper
+  with PrivateMethodTester {
 
   import testImplicits._
 
@@ -113,8 +116,8 @@ class AdaptiveQueryExecSuite
 
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectWithSubqueries(plan) {
-      case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
-      case BroadcastQueryStageExec(_, e: ReusedExchangeExec) => e
+      case ShuffleQueryStageExec(_, e: ReusedExchangeExec, _) => e
+      case BroadcastQueryStageExec(_, e: ReusedExchangeExec, _) => e
     }
   }
 
@@ -760,7 +763,7 @@ class AdaptiveQueryExecSuite
         val error = intercept[Exception] {
           aggregated.count()
         }
-        assert(error.getCause().toString contains "Invalid bucket file")
+        assert(error.toString contains "Invalid bucket file")
         assert(error.getSuppressed.size === 0)
       }
     }
@@ -866,6 +869,25 @@ class AdaptiveQueryExecSuite
         // should run successfully without NPE
         runAdaptiveAndVerifyResult("SELECT * FROM testData2 t1 left semi join t2 ON t1.a=t2.b")
       }
+    }
+  }
+
+  test("SPARK-34682: CustomShuffleReaderExec operating on canonicalized plan") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT key FROM testData GROUP BY key")
+      val readers = collect(adaptivePlan) {
+        case r: CustomShuffleReaderExec => r
+      }
+      assert(readers.length == 1)
+      val reader = readers.head
+      val c = reader.canonicalized.asInstanceOf[CustomShuffleReaderExec]
+      // we can't just call execute() because that has separate checks for canonicalized plans
+      val ex = intercept[IllegalStateException] {
+        val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
+        c.invokePrivate(doExecute())
+      }
+      assert(ex.getMessage === "operating on canonicalized plan")
     }
   }
 
@@ -1195,14 +1217,14 @@ class AdaptiveQueryExecSuite
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
       // This test is a copy of test(SPARK-32573), in order to test the configuration
       // `spark.sql.adaptive.optimizer.excludedRules` works as expect.
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> EliminateJoinToEmptyRelation.ruleName) {
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> EliminateUnnecessaryJoin.ruleName) {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData2 t1 WHERE t1.b NOT IN (SELECT b FROM testData3)")
       val bhj = findTopLevelBroadcastHashJoin(plan)
       assert(bhj.size == 1)
       val join = findTopLevelBaseJoin(adaptivePlan)
       // this is different compares to test(SPARK-32573) due to the rule
-      // `EliminateJoinToEmptyRelation` has been excluded.
+      // `EliminateUnnecessaryJoin` has been excluded.
       assert(join.nonEmpty)
       checkNumLocalShuffleReaders(adaptivePlan)
     }
@@ -1227,6 +1249,45 @@ class AdaptiveQueryExecSuite
         assert(join.isEmpty)
         checkNumLocalShuffleReaders(adaptivePlan)
       })
+    }
+  }
+
+  test("SPARK-34533: Eliminate left anti join to empty relation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      Seq(
+        // broadcast non-empty right side
+        ("SELECT /*+ broadcast(testData3) */ * FROM testData LEFT ANTI JOIN testData3", true),
+        // broadcast empty right side
+        ("SELECT /*+ broadcast(emptyTestData) */ * FROM testData LEFT ANTI JOIN emptyTestData",
+          true),
+        // broadcast left side
+        ("SELECT /*+ broadcast(testData) */ * FROM testData LEFT ANTI JOIN testData3", false)
+      ).foreach { case (query, isEliminated) =>
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelBaseJoin(plan).size == 1)
+        assert(findTopLevelBaseJoin(adaptivePlan).isEmpty == isEliminated)
+      }
+    }
+  }
+
+  test("SPARK-34781: Eliminate left semi/anti join to its left side") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      Seq(
+        // left semi join and non-empty right side
+        ("SELECT * FROM testData LEFT SEMI JOIN testData3", true),
+        // left semi join, non-empty right side and non-empty join condition
+        ("SELECT * FROM testData t1 LEFT SEMI JOIN testData3 t2 ON t1.key = t2.a", false),
+        // left anti join and empty right side
+        ("SELECT * FROM testData LEFT ANTI JOIN emptyTestData", true),
+        // left anti join, empty right side and non-empty join condition
+        ("SELECT * FROM testData t1 LEFT ANTI JOIN emptyTestData t2 ON t1.key = t2.key", true)
+      ).foreach { case (query, isEliminated) =>
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelBaseJoin(plan).size == 1)
+        assert(findTopLevelBaseJoin(adaptivePlan).isEmpty == isEliminated)
+      }
     }
   }
 
@@ -1482,5 +1543,36 @@ class AdaptiveQueryExecSuite
       .toArray
     assert(materializeLogs(0).startsWith("Materialize query stage BroadcastQueryStageExec"))
     assert(materializeLogs(1).startsWith("Materialize query stage ShuffleQueryStageExec"))
+  }
+
+  test("SPARK-34899: Use origin plan if we can not coalesce shuffle partition") {
+    def checkNoCoalescePartitions(ds: Dataset[Row], origin: ShuffleOrigin): Unit = {
+      assert(collect(ds.queryExecution.executedPlan) {
+        case s: ShuffleExchangeExec if s.shuffleOrigin == origin && s.numPartitions == 2 => s
+      }.size == 1)
+      ds.collect()
+      val plan = ds.queryExecution.executedPlan
+      assert(collect(plan) {
+        case c: CustomShuffleReaderExec => c
+      }.isEmpty)
+      assert(collect(plan) {
+        case s: ShuffleExchangeExec if s.shuffleOrigin == origin && s.numPartitions == 2 => s
+      }.size == 1)
+      checkAnswer(ds, testData)
+    }
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2258",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val df = spark.sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString)), 10).toDF()
+
+      // partition size [1420, 1420]
+      checkNoCoalescePartitions(df.repartition(), REPARTITION)
+      // partition size [1140, 1119]
+      checkNoCoalescePartitions(df.sort($"key"), ENSURE_REQUIREMENTS)
+    }
   }
 }

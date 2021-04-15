@@ -43,7 +43,7 @@ import org.apache.spark.sql.util.PartitioningUtils
 case class AnalyzePartitionCommand(
     tableIdent: TableIdentifier,
     partitionSpec: Map[String, Option[String]],
-    noscan: Boolean = true) extends RunnableCommand {
+    noscan: Boolean = true) extends LeafRunnableCommand {
 
   private def getPartitionSpec(table: CatalogTable): Option[TablePartitionSpec] = {
     val normalizedPartitionSpec =

@@ -364,7 +364,6 @@ private[spark] class TaskSchedulerImpl(
    * @param availableResources remaining resources per offer,
    *                           value at index 'i' corresponds to shuffledOffers[i]
    * @param tasks tasks scheduled per offer, value at index 'i' corresponds to shuffledOffers[i]
-   * @param addressesWithDescs tasks scheduler per host:port, used for barrier tasks
    * @return tuple of (no delay schedule rejects?, option of min locality of launched task)
    */
   private def resourceOfferSingleTaskSet(
@@ -373,8 +372,7 @@ private[spark] class TaskSchedulerImpl(
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
       availableResources: Array[Map[String, Buffer[String]]],
-      tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
-      addressesWithDescs: ArrayBuffer[(String, TaskDescription)])
+      tasks: IndexedSeq[ArrayBuffer[TaskDescription]])
     : (Boolean, Option[TaskLocality]) = {
     var noDelayScheduleRejects = true
     var minLaunchedLocality: Option[TaskLocality] = None
@@ -393,30 +391,31 @@ private[spark] class TaskSchedulerImpl(
           try {
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
-            val (taskDescOption, didReject) =
+            val (taskDescOption, didReject, index) =
               taskSet.resourceOffer(execId, host, maxLocality, taskResAssignments)
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
-              tasks(i) += task
-              val tid = task.taskId
-              val locality = taskSet.taskInfos(task.taskId).taskLocality
+              val (locality, resources) = if (task != null) {
+                tasks(i) += task
+                addRunningTask(task.taskId, execId, taskSet)
+                (taskSet.taskInfos(task.taskId).taskLocality, task.resources)
+              } else {
+                assert(taskSet.isBarrier, "TaskDescription can only be null for barrier task")
+                val barrierTask = taskSet.barrierPendingLaunchTasks(index)
+                barrierTask.assignedOfferIndex = i
+                barrierTask.assignedCores = taskCpus
+                (barrierTask.taskLocality, barrierTask.assignedResources)
+              }
+
               minLaunchedLocality = minTaskLocality(minLaunchedLocality, Some(locality))
-              taskIdToTaskSetManager.put(tid, taskSet)
-              taskIdToExecutorId(tid) = execId
-              executorIdToRunningTaskIds(execId).add(tid)
               availableCpus(i) -= taskCpus
               assert(availableCpus(i) >= 0)
-              task.resources.foreach { case (rName, rInfo) =>
+              resources.foreach { case (rName, rInfo) =>
                 // Remove the first n elements from availableResources addresses, these removed
                 // addresses are the same as that we allocated in taskResourceAssignments since it's
                 // synchronized. We don't remove the exact addresses allocated because the current
                 // approach produces the identical result with less time complexity.
                 availableResources(i)(rName).remove(0, rInfo.addresses.size)
-              }
-              // Only update hosts for a barrier task.
-              if (taskSet.isBarrier) {
-                // The executor address is expected to be non empty.
-                addressesWithDescs += (shuffledOffers(i).address.get -> task)
               }
             }
           } catch {
@@ -430,6 +429,15 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     (noDelayScheduleRejects, minLaunchedLocality)
+  }
+
+  /**
+   * Add the running task to TaskScheduler's related structures
+   */
+  private def addRunningTask(tid: Long, execId: String, taskSet: TaskSetManager): Unit = {
+    taskIdToTaskSetManager.put(tid, taskSet)
+    taskIdToExecutorId(tid) = execId
+    executorIdToRunningTaskIds(execId).add(tid)
   }
 
   /**
@@ -571,14 +579,12 @@ private[spark] class TaskSchedulerImpl(
         var launchedAnyTask = false
         var noDelaySchedulingRejects = true
         var globalMinLocality: Option[TaskLocality] = None
-        // Record all the executor IDs assigned barrier tasks on.
-        val addressesWithDescs = ArrayBuffer[(String, TaskDescription)]()
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
             val (noDelayScheduleReject, minLocality) = resourceOfferSingleTaskSet(
               taskSet, currentMaxLocality, shuffledOffers, availableCpus,
-              availableResources, tasks, addressesWithDescs)
+              availableResources, tasks)
             launchedTaskAtCurrentMaxLocality = minLocality.isDefined
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
             noDelaySchedulingRejects &= noDelayScheduleReject
@@ -661,35 +667,75 @@ private[spark] class TaskSchedulerImpl(
         }
 
         if (launchedAnyTask && taskSet.isBarrier) {
+          val barrierPendingLaunchTasks = taskSet.barrierPendingLaunchTasks.values.toArray
           // Check whether the barrier tasks are partially launched.
-          // TODO SPARK-24818 handle the assert failure case (that can happen when some locality
-          // requirements are not fulfilled, and we should revert the launched tasks).
-          if (addressesWithDescs.size != taskSet.numTasks) {
-            val errorMsg =
-              s"Fail resource offers for barrier stage ${taskSet.stageId} because only " +
-                s"${addressesWithDescs.size} out of a total number of ${taskSet.numTasks}" +
-                s" tasks got resource offers. This happens because barrier execution currently " +
-                s"does not work gracefully with delay scheduling. We highly recommend you to " +
-                s"disable delay scheduling by setting spark.locality.wait=0 as a workaround if " +
-                s"you see this error frequently."
-            logWarning(errorMsg)
-            taskSet.abort(errorMsg)
-            throw new SparkException(errorMsg)
+          if (barrierPendingLaunchTasks.length != taskSet.numTasks) {
+            if (legacyLocalityWaitReset) {
+              // Legacy delay scheduling always reset the timer when there's a task that is able
+              // to be scheduled. Thus, whenever there's a timer reset could happen during a single
+              // round resourceOffer, tasks that don't get or have the preferred locations would
+              // always reject the offered resources. As a result, the barrier taskset can't get
+              // launched. And if we retry the resourceOffer, we'd go through the same path again
+              // and get into the endless loop in the end.
+              val errorMsg = s"Fail resource offers for barrier stage ${taskSet.stageId} " +
+                s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
+                s"of ${taskSet.numTasks} tasks got resource offers. We highly recommend " +
+                "you to use the non-legacy delay scheduling by setting " +
+                s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
+              logWarning(errorMsg)
+              taskSet.abort(errorMsg)
+              throw new SparkException(errorMsg)
+            } else {
+              val curTime = clock.getTimeMillis()
+              if (curTime - taskSet.lastResourceOfferFailLogTime >
+                TaskSetManager.BARRIER_LOGGING_INTERVAL) {
+                logInfo("Releasing the assigned resource offers since only partial tasks can " +
+                  "be launched. Waiting for later round resource offers.")
+                taskSet.lastResourceOfferFailLogTime = curTime
+              }
+              barrierPendingLaunchTasks.foreach { task =>
+                // revert all assigned resources
+                availableCpus(task.assignedOfferIndex) += task.assignedCores
+                task.assignedResources.foreach { case (rName, rInfo) =>
+                  availableResources(task.assignedOfferIndex)(rName).appendAll(rInfo.addresses)
+                }
+                // re-add the task to the schedule pending list
+                taskSet.addPendingTask(task.index)
+              }
+            }
+          } else {
+            // All tasks are able to launch in this barrier task set. Let's do
+            // some preparation work before launching them.
+            val launchTime = clock.getTimeMillis()
+            val addressesWithDescs = barrierPendingLaunchTasks.map { task =>
+              val taskDesc = taskSet.prepareLaunchingTask(
+                task.execId,
+                task.host,
+                task.index,
+                task.taskLocality,
+                false,
+                task.assignedResources,
+                launchTime)
+              addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
+              tasks(task.assignedOfferIndex) += taskDesc
+              shuffledOffers(task.assignedOfferIndex).address.get -> taskDesc
+            }
+
+            // materialize the barrier coordinator.
+            maybeInitBarrierCoordinator()
+
+            // Update the taskInfos into all the barrier task properties.
+            val addressesStr = addressesWithDescs
+              // Addresses ordered by partitionId
+              .sortBy(_._2.partitionId)
+              .map(_._1)
+              .mkString(",")
+            addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
+
+            logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for " +
+              s"barrier stage ${taskSet.stageId}.")
           }
-
-          // materialize the barrier coordinator.
-          maybeInitBarrierCoordinator()
-
-          // Update the taskInfos into all the barrier task properties.
-          val addressesStr = addressesWithDescs
-            // Addresses ordered by partitionId
-            .sortBy(_._2.partitionId)
-            .map(_._1)
-            .mkString(",")
-          addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
-
-          logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +
-            s"stage ${taskSet.stageId}.")
+          taskSet.barrierPendingLaunchTasks.clear()
         }
       }
     }

@@ -35,8 +35,8 @@ import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransfor
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
-import org.apache.spark.sql.sources.{And, EqualNullSafe, EqualTo, Filter, IsNotNull, IsNull}
-import org.apache.spark.sql.types.{DataType, DateType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.sources.{AlwaysTrue, And, EqualNullSafe, EqualTo, Filter, IsNotNull, IsNull}
+import org.apache.spark.sql.types.{DataType, DateType, IntegerType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -49,7 +49,8 @@ class InMemoryTable(
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String],
     val distribution: Distribution = Distributions.unspecified(),
-    val ordering: Array[SortOrder] = Array.empty)
+    val ordering: Array[SortOrder] = Array.empty,
+    val numPartitions: Option[Int] = None)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
@@ -61,7 +62,7 @@ class InMemoryTable(
 
   private object IndexColumn extends MetadataColumn {
     override def name: String = "index"
-    override def dataType: DataType = StringType
+    override def dataType: DataType = IntegerType
     override def comment: String = "Metadata column used to conflict with a data column"
   }
 
@@ -204,6 +205,11 @@ class InMemoryTable(
     }
   }
 
+  protected def clearPartition(key: Seq[Any]): Unit = dataMap.synchronized {
+    assert(dataMap.contains(key))
+    dataMap(key).clear()
+  }
+
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row)
@@ -291,6 +297,10 @@ class InMemoryTable(
         override def requiredDistribution: Distribution = distribution
 
         override def requiredOrdering: Array[SortOrder] = ordering
+
+        override def requiredNumPartitions(): Int = {
+          numPartitions.getOrElse(0)
+        }
 
         override def toBatch: BatchWrite = writer
 
@@ -414,6 +424,7 @@ object InMemoryTable {
           null == extractValue(attr, partitionNames, partValues)
         case IsNotNull(attr) =>
           null != extractValue(attr, partitionNames, partValues)
+        case AlwaysTrue() => true
         case f =>
           throw new IllegalArgumentException(s"Unsupported filter type: $f")
       }
@@ -426,6 +437,7 @@ object InMemoryTable {
       case _: EqualNullSafe => true
       case _: IsNull => true
       case _: IsNotNull => true
+      case _: AlwaysTrue => true
       case _ => false
     }
   }
@@ -464,6 +476,8 @@ class BufferedRows(
     rows.append(row)
     this
   }
+
+  def clear(): Unit = rows.clear()
 }
 
 private class BufferedRowsReaderFactory(

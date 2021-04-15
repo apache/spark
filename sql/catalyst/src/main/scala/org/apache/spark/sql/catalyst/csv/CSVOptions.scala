@@ -166,8 +166,6 @@ class CSVOptions(
 
   val quoteAll = getBool("quoteAll", false)
 
-  val inputBufferSize = 128
-
   /**
    * The max error content length in CSV parser/writer exception message.
    */
@@ -212,6 +210,8 @@ class CSVOptions(
     lineSep.getBytes(charset)
   }
   val lineSeparatorInWrite: Option[String] = lineSeparator
+
+  val inputBufferSize: Option[Int] = parameters.get("inputBufferSize").map(_.toInt)
 
   /**
    * The handling method to be used when unescaped quotes are found in the input.
@@ -259,7 +259,7 @@ class CSVOptions(
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
-    settings.setInputBufferSize(inputBufferSize)
+    inputBufferSize.foreach(settings.setInputBufferSize)
     settings.setMaxColumns(maxColumns)
     settings.setNullValue(nullValue)
     settings.setEmptyValue(emptyValueInRead)

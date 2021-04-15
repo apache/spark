@@ -38,7 +38,9 @@ private[spark] class ExecutorMonitor(
     conf: SparkConf,
     client: ExecutorAllocationClient,
     listenerBus: LiveListenerBus,
-    clock: Clock) extends SparkListener with CleanerListener with Logging {
+    clock: Clock,
+    metrics: ExecutorAllocationManagerSource = null)
+  extends SparkListener with CleanerListener with Logging {
 
   private val idleTimeoutNs = TimeUnit.SECONDS.toNanos(
     conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT))
@@ -352,6 +354,22 @@ private[spark] class ExecutorMonitor(
     val removed = executors.remove(event.executorId)
     if (removed != null) {
       decrementExecResourceProfileCount(removed.resourceProfileId)
+      if (removed.decommissioning) {
+        if (event.reason == ExecutorLossMessage.decommissionFinished) {
+          metrics.gracefullyDecommissioned.inc()
+        } else {
+          metrics.decommissionUnfinished.inc()
+        }
+      } else if (removed.pendingRemoval) {
+        metrics.driverKilled.inc()
+      } else {
+        metrics.exitedUnexpectedly.inc()
+      }
+      logInfo(s"Executor ${event.executorId} is removed. Remove reason statistics: (" +
+        s"gracefully decommissioned: ${metrics.gracefullyDecommissioned.getCount()}, " +
+        s"decommision unfinished: ${metrics.decommissionUnfinished.getCount()}, " +
+        s"driver killed: ${metrics.driverKilled.getCount()}, " +
+        s"unexpectedly exited: ${metrics.exitedUnexpectedly.getCount()}).")
       if (!removed.pendingRemoval || !removed.decommissioning) {
         nextTimeout.set(Long.MinValue)
       }

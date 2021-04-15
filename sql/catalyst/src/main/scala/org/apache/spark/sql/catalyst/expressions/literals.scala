@@ -28,7 +28,7 @@ import java.lang.{Short => JavaShort}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate, Period}
 import java.util
 import java.util.Objects
 import javax.xml.bind.DatatypeConverter
@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Scala
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -76,6 +77,8 @@ object Literal {
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
+    case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType)
+    case p: Period => Literal(periodToMonths(p), YearMonthIntervalType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case a: collection.mutable.WrappedArray[_] => apply(a.array)
     case a: Array[_] =>
@@ -111,6 +114,8 @@ object Literal {
     case _ if clz == classOf[Date] => DateType
     case _ if clz == classOf[Instant] => TimestampType
     case _ if clz == classOf[Timestamp] => TimestampType
+    case _ if clz == classOf[Duration] => DayTimeIntervalType
+    case _ if clz == classOf[Period] => YearMonthIntervalType
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
     case _ if clz == classOf[Array[Char]] => StringType
@@ -167,6 +172,8 @@ object Literal {
     case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
+    case DayTimeIntervalType => create(0L, DayTimeIntervalType)
+    case YearMonthIntervalType => create(0, YearMonthIntervalType)
     case StringType => Literal("")
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
@@ -185,8 +192,8 @@ object Literal {
       case BooleanType => v.isInstanceOf[Boolean]
       case ByteType => v.isInstanceOf[Byte]
       case ShortType => v.isInstanceOf[Short]
-      case IntegerType | DateType => v.isInstanceOf[Int]
-      case LongType | TimestampType => v.isInstanceOf[Long]
+      case IntegerType | DateType | YearMonthIntervalType => v.isInstanceOf[Int]
+      case LongType | TimestampType | DayTimeIntervalType => v.isInstanceOf[Long]
       case FloatType => v.isInstanceOf[Float]
       case DoubleType => v.isInstanceOf[Double]
       case _: DecimalType => v.isInstanceOf[Decimal]
@@ -298,11 +305,21 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
+  private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+
   override def toString: String = value match {
     case null => "null"
     case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
     case d: ArrayBasedMapData => s"map(${d.toString})"
-    case other => other.toString
+    case other =>
+      dataType match {
+        case DateType =>
+          DateFormatter(timeZoneId).format(value.asInstanceOf[Int])
+        case TimestampType =>
+          TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
+        case _ =>
+          other.toString
+      }
   }
 
   override def hashCode(): Int = {
@@ -334,8 +351,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     // retain in json format, e.g. {"a": 123} can be an int, or double, or decimal, etc.
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
-      case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
-      case (l: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(l).toString)
+      case (i: Int, DateType) => JString(toString)
+      case (l: Long, TimestampType) => JString(toString)
       case (other, _) => JString(other.toString)
     }
     ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
@@ -352,7 +369,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
       }
       dataType match {
-        case BooleanType | IntegerType | DateType =>
+        case BooleanType | IntegerType | DateType | YearMonthIntervalType =>
           toExprCode(value.toString)
         case FloatType =>
           value.asInstanceOf[Float] match {
@@ -378,7 +395,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           }
         case ByteType | ShortType =>
           ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
-        case TimestampType | LongType =>
+        case TimestampType | LongType | DayTimeIntervalType =>
           toExprCode(s"${value}L")
         case _ =>
           val constRef = ctx.addReferenceObj("literal", value, javaType)
@@ -414,12 +431,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       }
     case (v: Decimal, t: DecimalType) => v + "BD"
     case (v: Int, DateType) =>
-      val formatter = DateFormatter(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"DATE '${formatter.format(v)}'"
+      s"DATE '$toString'"
     case (v: Long, TimestampType) =>
-      val formatter = TimestampFormatter.getFractionFormatter(
-        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"TIMESTAMP '${formatter.format(v)}'"
+      s"TIMESTAMP '$toString'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"

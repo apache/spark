@@ -45,7 +45,7 @@ private[avro] class AvroOutputWriter(
 
   // Whether to rebase datetimes from Gregorian to Julian calendar in write
   private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
-    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE))
+    SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE))
 
   // The input rows will never be null.
   private lazy val serializer =

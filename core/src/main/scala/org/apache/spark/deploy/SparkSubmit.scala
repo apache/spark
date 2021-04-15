@@ -366,7 +366,6 @@ private[spark] class SparkSubmit extends Logging {
     args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
     args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
 
-    lazy val secMgr = new SecurityManager(sparkConf)
 
     // In client mode, download remote files.
     var localPrimaryResource: String = null
@@ -853,6 +852,9 @@ private[spark] class SparkSubmit extends Logging {
     }
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
+    if (args.verbose) {
+      childArgs ++= Seq("--verbose")
+    }
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
@@ -1089,7 +1091,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[spark] object SparkSubmitUtils {
+private[spark] object SparkSubmitUtils extends Logging {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream
@@ -1203,9 +1205,16 @@ private[spark] object SparkSubmitUtils {
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): Seq[String] = {
-    artifacts.map { artifactInfo =>
-      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
-      val extraAttrs = artifactInfo.asInstanceOf[Artifact].getExtraAttributes
+    artifacts.map(_.asInstanceOf[Artifact]).filter { artifactInfo =>
+      if (artifactInfo.getExt == "jar") {
+        true
+      } else {
+        logInfo(s"Skipping non-jar dependency ${artifactInfo.getId}")
+        false
+      }
+    }.map { artifactInfo =>
+      val artifact = artifactInfo.getModuleRevisionId
+      val extraAttrs = artifactInfo.getExtraAttributes
       val classifier = if (extraAttrs.containsKey("classifier")) {
         "-" + extraAttrs.get("classifier")
       } else {

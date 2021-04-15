@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataCo
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
-    isExtended: Boolean) extends V2CommandExec {
+    isExtended: Boolean) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)

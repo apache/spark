@@ -24,7 +24,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
@@ -171,34 +171,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("bitwiseNOT") {
+  test("bitwise_not") {
     checkAnswer(
-      testData2.select(bitwiseNOT($"a")),
-      testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
-  }
-
-  test("bitwiseGet") {
-    val df = Seq(
-      (11L, 3),
-      (11L, 2),
-      (11L, 1),
-      (11L, 0),
-      (11L, 63)
-    ).toDF("a", "b")
-    checkAnswer(df.select(bitwiseGet($"a", $"b")),
-      Seq(Row(1.toByte), Row(0.toByte), Row(1.toByte), Row(1.toByte), Row(0.toByte)))
-
-    val df2 = Seq((11L, 64)).toDF("a", "b")
-    val msg = intercept[Exception] {
-      df2.select(bitwiseGet($"a", $"b")).collect
-    }.getMessage
-    assert(msg.contains("Invalid bit position: 64 exceeds the bit upper limit"))
-
-    val df3 = Seq((11L, -1)).toDF("a", "b")
-    val msg2 = intercept[Exception] {
-      df3.select(bitwiseGet($"a", $"b")).collect
-    }.getMessage
-    assert(msg2.contains("Invalid bit position: -1 is less than zero"))
+      testData2.select(bitwiseNOT($"a"), bitwise_not($"a")),
+      testData2.collect().toSeq.map(r => Row(~r.getInt(0), ~r.getInt(0))))
   }
 
   test("bin") {
@@ -487,7 +463,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     assert(intercept[AnalysisException] {
       df3.selectExpr("array_sort(a)").collect()
-    }.getMessage().contains("argument 1 requires array type, however, '`a`' is of string type"))
+    }.getMessage().contains("argument 1 requires array type, however, 'a' is of string type"))
   }
 
   def testSizeOfArray(sizeOfNull: Any): Unit = {
@@ -2282,7 +2258,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("transform(a, x -> x)")
     }
-    assert(ex3.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex3.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("map_filter") {
@@ -2353,7 +2329,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("map_filter(a, (k, v) -> k > v)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -2512,7 +2488,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("filter(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2644,7 +2620,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("exists(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("forall function - array for primitive type not containing null") {
@@ -2790,12 +2766,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("forall(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
 
     val ex4a = intercept[AnalysisException] {
       df.select(forall(col("a"), x => x))
     }
-    assert(ex4a.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4a.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -2972,7 +2948,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex5 = intercept[AnalysisException] {
       df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
     }
-    assert(ex5.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex5.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("map_zip_with function - map of primitive types") {
@@ -3525,7 +3501,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
@@ -3656,11 +3632,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 }
 
 object DataFrameFunctionsSuite {
-  case class CodegenFallbackExpr(child: Expression) extends Expression with CodegenFallback {
-    override def children: Seq[Expression] = Seq(child)
+  case class CodegenFallbackExpr(child: Expression) extends UnaryExpression with CodegenFallback {
     override def nullable: Boolean = child.nullable
     override def dataType: DataType = child.dataType
     override lazy val resolved = true
     override def eval(input: InternalRow): Any = child.eval(input)
+    override protected def withNewChildInternal(newChild: Expression): CodegenFallbackExpr =
+      copy(child = newChild)
   }
 }

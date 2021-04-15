@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.AlterTableRecoverPartitions
+import org.apache.spark.sql.catalyst.plans.logical.RecoverPartitions
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
@@ -35,30 +35,40 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
   test("recover partitions of a table") {
     comparePlans(
       parsePlan("ALTER TABLE tbl RECOVER PARTITIONS"),
-      AlterTableRecoverPartitions(
-        UnresolvedTable(Seq("tbl"), "ALTER TABLE ... RECOVER PARTITIONS")))
+      RecoverPartitions(
+        UnresolvedTable(
+          Seq("tbl"),
+          "ALTER TABLE ... RECOVER PARTITIONS",
+          Some("Please use ALTER VIEW instead."))))
   }
 
   test("recover partitions of a table in a database") {
     comparePlans(
       parsePlan("alter table db.tbl recover partitions"),
-      AlterTableRecoverPartitions(
-        UnresolvedTable(Seq("db", "tbl"), "ALTER TABLE ... RECOVER PARTITIONS")))
+      RecoverPartitions(
+        UnresolvedTable(
+          Seq("db", "tbl"),
+          "ALTER TABLE ... RECOVER PARTITIONS",
+          Some("Please use ALTER VIEW instead."))))
   }
 
   test("recover partitions of a table spark_catalog") {
     comparePlans(
       parsePlan("alter table spark_catalog.db.TBL recover partitions"),
-      AlterTableRecoverPartitions(
-        UnresolvedTable(Seq("spark_catalog", "db", "TBL"), "ALTER TABLE ... RECOVER PARTITIONS")))
+      RecoverPartitions(
+        UnresolvedTable(
+          Seq("spark_catalog", "db", "TBL"),
+          "ALTER TABLE ... RECOVER PARTITIONS",
+          Some("Please use ALTER VIEW instead."))))
   }
 
   test("recover partitions of a table in nested namespaces") {
     comparePlans(
       parsePlan("Alter Table ns1.ns2.ns3.ns4.ns5.ns6.ns7.ns8.t Recover Partitions"),
-      AlterTableRecoverPartitions(
+      RecoverPartitions(
         UnresolvedTable(
           Seq("ns1", "ns2", "ns3", "ns4", "ns5", "ns6", "ns7", "ns8", "t"),
-          "ALTER TABLE ... RECOVER PARTITIONS")))
+          "ALTER TABLE ... RECOVER PARTITIONS",
+          Some("Please use ALTER VIEW instead."))))
   }
 }

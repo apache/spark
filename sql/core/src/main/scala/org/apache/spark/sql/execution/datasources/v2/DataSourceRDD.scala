@@ -25,6 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
@@ -47,7 +48,7 @@ class DataSourceRDD(
 
   private def castPartition(split: Partition): DataSourceRDDPartition = split match {
     case p: DataSourceRDDPartition => p
-    case _ => throw new SparkException(s"[BUG] Not a DataSourceRDDPartition: $split")
+    case _ => throw QueryExecutionErrors.notADatasourceRDDPartitionError(split)
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
@@ -83,7 +84,7 @@ private class PartitionIterator[T](reader: PartitionReader[T]) extends Iterator[
 
   override def next(): T = {
     if (!hasNext) {
-      throw new java.util.NoSuchElementException("End of stream")
+      throw QueryExecutionErrors.endOfStreamError()
     }
     valuePrepared = false
     reader.get()

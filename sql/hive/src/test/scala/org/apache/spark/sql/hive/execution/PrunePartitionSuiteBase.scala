@@ -49,28 +49,28 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase with
 
           assertPrunedPartitions(
             "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2,
-            "((`p` = '1') || (`p` = '2'))")
+            "((p = '1') || (p = '2'))")
           assertPrunedPartitions(
             "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4,
             "")
           assertPrunedPartitions(
             "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2,
-            "((`p` = '1') || (`p` = '3'))")
+            "((p = '1') || (p = '3'))")
           assertPrunedPartitions(
             "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3,
-            "((`p` = '1') || ((`p` = '2') || (`p` = '3')))")
+            "((p = '1') || ((p = '2') || (p = '3')))")
           assertPrunedPartitions(
             "SELECT * FROM t", 4,
             "")
           assertPrunedPartitions(
             "SELECT * FROM t WHERE p = '1' AND i = 2", 1,
-            "(`p` = '1')")
+            "(p = '1')")
           assertPrunedPartitions(
             """
               |SELECT i, COUNT(1) FROM (
               |SELECT * FROM t WHERE  p = '1' OR (p = '2' AND i = 1)
               |) tmp GROUP BY i
-            """.stripMargin, 2, "((`p` = '1') || (`p` = '2'))")
+            """.stripMargin, 2, "((p = '1') || (p = '2'))")
         }
       }
     }

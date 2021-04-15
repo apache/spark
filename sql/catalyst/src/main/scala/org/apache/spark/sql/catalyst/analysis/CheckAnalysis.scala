@@ -96,7 +96,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
-        throw QueryExecutionErrors.logicalPlanHaveOutputOfCharOrVarcharError(leaf)
+        throw new IllegalStateException(
+          "[BUG] logical plan should not have output of char/varchar type: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
@@ -148,6 +149,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
         failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
+
+      case command: V2PartitionCommand =>
+        command.table match {
+          case r @ ResolvedTable(_, _, table, _) => table match {
+            case t: SupportsPartitionManagement =>
+              if (t.partitionSchema.isEmpty) {
+                failAnalysis(s"Table ${r.name} is not partitioned.")
+              }
+            case _ =>
+              failAnalysis(s"Table ${r.name} does not support partition management.")
+          }
+          case _ =>
+        }
+
+      // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
+      case _: ShowTableExtended =>
+        throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -242,7 +260,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
-          case Aggregate(groupingExprs, aggregateExprs, child) =>
+          case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
@@ -287,6 +305,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     s"nor is it an aggregate function. " +
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
+              case s: ScalarSubquery
+                  if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
+                failAnalysis(s"Correlated scalar subquery '${s.sql}' is neither " +
+                  "present in the group by, nor in an aggregate function. Add it to group by " +
+                  "using ordinal position or wrap it in first() (or first_value) if you don't " +
+                  "care which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
@@ -564,17 +588,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // no validation needed for set and remove property
             }
 
-          case AlterTableAddPartition(r: ResolvedTable, parts, _) =>
-            checkAlterTablePartition(r.table, parts)
-
-          case AlterTableDropPartition(r: ResolvedTable, parts, _, _) =>
-            checkAlterTablePartition(r.table, parts)
-
-          case AlterTableRenamePartition(r: ResolvedTable, from, _) =>
-            checkAlterTablePartition(r.table, Seq(from))
-
-          case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
-
           case _ => // Falls back to the following checks
         }
 
@@ -728,6 +741,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case child => child
     }
 
+    // Check whether the given expressions contains the subquery expression.
+    def containsExpr(expressions: Seq[Expression]): Boolean = {
+      expressions.exists(_.find(_.semanticEquals(expr)).isDefined)
+    }
+
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
 
@@ -743,13 +761,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           cleanQueryInScalarSubquery(query) match {
             case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
             case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
             case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
           }
 
           // Only certain operators are allowed to host subquery expression containing
           // outer references.
           plan match {
-            case _: Filter | _: Aggregate | _: Project | _: SupportsSubquery => // Ok
+            case _: Filter | _: Project | _: SupportsSubquery => // Ok
+            case a: Aggregate =>
+              // If the correlated scalar subquery is in the grouping expressions of an Aggregate,
+              // it must also be in the aggregate expressions to be rewritten in the optimization
+              // phase.
+              if (containsExpr(a.groupingExpressions) && !containsExpr(a.aggregateExpressions)) {
+                failAnalysis("Correlated scalar subqueries in the group by clause " +
+                  s"must also be in the aggregate expressions:\n$a")
+              }
             case other => failAnalysis(
               "Correlated scalar sub-queries can only be used in a " +
                 s"Filter/Aggregate/Project and a few commands: $plan")
@@ -1005,17 +1032,5 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case _ =>
     }
-  }
-
-  // Make sure that the `SHOW PARTITIONS` command is allowed for the table
-  private def checkShowPartitions(showPartitions: ShowPartitions): Unit = showPartitions match {
-    case ShowPartitions(rt: ResolvedTable, _)
-        if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
-      failAnalysis(s"SHOW PARTITIONS cannot run for a table which does not support partitioning")
-    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement, _), _)
-        if partTable.partitionSchema().isEmpty =>
-      failAnalysis(
-        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${partTable.name()}")
-    case _ =>
   }
 }

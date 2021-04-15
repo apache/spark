@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.streaming.StreamingRelation
@@ -76,28 +77,19 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
     // The sum of the number of static partition columns and columns provided in the SELECT
     // clause needs to match the number of columns of the target table.
     if (staticPartitions.size + sourceAttributes.size != targetAttributes.size) {
-      throw new AnalysisException(
-        s"The data to be inserted needs to have the same number of " +
-          s"columns as the target table: target table has ${targetAttributes.size} " +
-          s"column(s) but the inserted data has ${sourceAttributes.size + staticPartitions.size} " +
-          s"column(s), which contain ${staticPartitions.size} partition column(s) having " +
-          s"assigned constant values.")
+      throw QueryCompilationErrors.insertMismatchedColumnNumberError(
+        targetAttributes, sourceAttributes, staticPartitions.size)
     }
 
     if (providedPartitions.size != targetPartitionSchema.fields.size) {
-      throw new AnalysisException(
-        s"The data to be inserted needs to have the same number of " +
-          s"partition columns as the target table: target table " +
-          s"has ${targetPartitionSchema.fields.size} partition column(s) but the inserted " +
-          s"data has ${providedPartitions.size} partition columns specified.")
+      throw QueryCompilationErrors.insertMismatchedPartitionNumberError(
+        targetPartitionSchema, providedPartitions.size)
     }
 
     staticPartitions.foreach {
-      case (partKey, partValue) =>
+      case (partKey, _) =>
         if (!targetPartitionSchema.fields.exists(field => resolver(field.name, partKey))) {
-          throw new AnalysisException(
-            s"$partKey is not a partition column. Partition columns are " +
-              s"${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}")
+          throw QueryCompilationErrors.invalidPartitionColumnError(partKey, targetPartitionSchema)
         }
     }
 
@@ -121,9 +113,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
             Some(Alias(cast(Literal(partValue), field.dataType), field.name)())
         }
       } else {
-        throw new AnalysisException(
-          s"Partition column ${field.name} have multiple values specified, " +
-            s"${potentialSpecs.mkString("[", ", ", "]")}. Please only specify a single value.")
+        throw QueryCompilationErrors.multiplePartitionColumnValuesSpecifiedError(
+          field, potentialSpecs)
       }
     }
 
@@ -131,11 +122,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
     // any static partition appear after dynamic partitions.
     partitionList.dropWhile(_.isDefined).collectFirst {
       case Some(_) =>
-        throw new AnalysisException(
-          s"The ordering of partition columns is " +
-            s"${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}. " +
-            "All partition columns having constant values need to appear before other " +
-            "partition columns that do not have an assigned constant value.")
+        throw QueryCompilationErrors.invalidOrderingForConstantValuePartitionColumnError(
+          targetPartitionSchema)
     }
 
     assert(partitionList.take(staticPartitions.size).forall(_.isDefined))
@@ -199,7 +187,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
 
       // Sanity check
       if (t.location.rootPaths.size != 1) {
-        throw new AnalysisException("Can only write data to relations with a single path.")
+        throw QueryCompilationErrors.cannotWriteDataToRelationsWithMultiplePathsError()
       }
 
       val outputPath = t.location.rootPaths.head
@@ -653,8 +641,7 @@ object DataSourceStrategy
         expressions.Not(rebuildExpressionFromFilter(pred, translatedFilterToExpr))
       case other =>
         translatedFilterToExpr.getOrElse(other,
-          throw new AnalysisException(
-            s"Fail to rebuild expression: missing key $filter in `translatedFilterToExpr`"))
+          throw QueryCompilationErrors.failedToRebuildExpressionError(filter))
     }
   }
 

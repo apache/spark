@@ -247,7 +247,7 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
           .where(col("pValue") < $(fwe) / numFeatures)
           .as[Int].collect()
       case errorType =>
-        throw new IllegalStateException(s"Unknown Selector Type: $errorType")
+        throw new IllegalArgumentException(s"Unknown Selector Type: $errorType")
     }
 
     copyValues(createSelectorModel(uid, indices.sorted)

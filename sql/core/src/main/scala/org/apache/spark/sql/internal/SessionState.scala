@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.DependencyUtils
+import org.apache.spark.util.{DependencyUtils, Utils}
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -66,6 +66,7 @@ private[sql] class SessionState(
     val conf: SQLConf,
     val experimentalMethods: ExperimentalMethods,
     val functionRegistry: FunctionRegistry,
+    val tableFunctionRegistry: TableFunctionRegistry,
     val udfRegistration: UDFRegistration,
     catalogBuilder: () => SessionCatalog,
     val sqlParser: ParserInterface,
@@ -135,10 +136,9 @@ private[sql] object SessionState {
 @Unstable
 class SessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState],
-    options: Map[String, String])
-  extends BaseSessionStateBuilder(session, parentState, options) {
-  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _, Map.empty)
+    parentState: Option[SessionState])
+  extends BaseSessionStateBuilder(session, parentState) {
+  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
 }
 
 /**
@@ -172,7 +172,7 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * [[SessionState]].
    */
   def addJar(path: String): Unit = {
-    val uri = URI.create(path)
+    val uri = Utils.resolveURI(path)
     resolveJars(uri).foreach { p =>
       session.sparkContext.addJar(p)
       val uri = new Path(p).toUri

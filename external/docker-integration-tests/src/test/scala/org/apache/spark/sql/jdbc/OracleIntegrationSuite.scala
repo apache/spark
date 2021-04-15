@@ -24,6 +24,7 @@ import java.util.{Properties, TimeZone}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCRelation}
@@ -288,23 +289,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     }
   }
 
-  /**
-   * Change the Time Zone `timeZoneId` of JVM before executing `f`, then switches back to the
-   * original after `f` returns.
-   * @param timeZoneId the ID for a TimeZone, either an abbreviation such as "PST", a full name such
-   *                   as "America/Los_Angeles", or a custom ID such as "GMT-8:00".
-   */
-  private def withTimeZone(timeZoneId: String)(f: => Unit): Unit = {
-    val originalLocale = TimeZone.getDefault
-    try {
-      // Add Locale setting
-      TimeZone.setDefault(TimeZone.getTimeZone(timeZoneId))
-      f
-    } finally {
-      TimeZone.setDefault(originalLocale)
-    }
-  }
-
   test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
     def checkRow(row: Row, ts: String): Unit = {
       assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
@@ -312,14 +296,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
       val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-      withTimeZone("PST") {
+      withDefaultTimeZone(PST) {
         assert(dfRead.collect().toSet ===
           Set(
             Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
             Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
       }
 
-      withTimeZone("UTC") {
+      withDefaultTimeZone(UTC) {
         assert(dfRead.collect().toSet ===
           Set(
             Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),

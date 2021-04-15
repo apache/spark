@@ -158,7 +158,7 @@ Package       Minimum supported version Note
 `pandas`      0.23.2                    Optional for SQL
 `NumPy`       1.7                       Required for ML 
 `pyarrow`     1.0.0                     Optional for SQL
-`Py4J`        0.10.9                    Required
+`Py4J`        0.10.9.2                  Required
 ============= ========================= ================
 
 Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  

@@ -342,8 +342,7 @@ class InMemoryCatalog(
   }
 
   override def tableExists(db: String, table: String): Boolean = synchronized {
-    requireDbExists(db)
-    catalog(db).tables.contains(table)
+    catalog.contains(db) && catalog(db).tables.contains(table)
   }
 
   override def listTables(db: String): Seq[String] = synchronized {
