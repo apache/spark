@@ -31,7 +31,7 @@ clause to embed the mapper or the reducer scripts.
 ### Syntax
 
 ```sql
-SELECT { TRANSFORM ( named_expression [ , ... ] ) | MAP named_expression [ , ... ] | REDUCE named_expression [ , ... ] }
+{ SELECT TRANSFORM ( named_expression [ , ... ] ) | { MAP | REDUCE } named_expression [ , ... ] }
     [ ROW FORMAT row_format ]
     [ RECORDWRITER record_writer_class ]
     USING script [ AS ( [ col_name [ col_type ] ] [ , ... ] ) ]
