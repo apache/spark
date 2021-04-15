@@ -110,21 +110,21 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     check(innerPlan, outerPlan, correctAnswer, Seq(x === y + b))
   }
 
-  test("aggregate with correlated equality predicates - 1") {
+  test("aggregate with correlated equality predicates that can be pulled up") {
     val outerPlan = testRelation2
     val minB = Alias(min(b), "min_b")()
     val innerPlan =
       Aggregate(Nil, Seq(minB),
-        Filter(And(OuterReference(x) === a + c, b === 3),
+        Filter(And(OuterReference(x) === a, b === 3),
           testRelation))
     val correctAnswer =
-      Aggregate(Seq(a, c), Seq(minB, a, c),
+      Aggregate(Seq(a), Seq(minB, a),
         Filter(b === 3,
           testRelation))
-    check(innerPlan, outerPlan, correctAnswer, Seq(x === a + c))
+    check(innerPlan, outerPlan, correctAnswer, Seq(x === a))
   }
 
-  test("aggregate with correlated equality predicates - 2") {
+  test("aggregate with correlated equality predicates that cannot be pulled up") {
     val outerPlan = testRelation2
     val minB = Alias(min(b), "min_b")()
     val innerPlan =
@@ -132,12 +132,13 @@ class DecorrelateInnerQuerySuite extends PlanTest {
         Filter(OuterReference(x) === OuterReference(y) + a,
           testRelation))
     val correctAnswer =
-      Aggregate(Seq(a), Seq(minB, a),
-        testRelation)
-    check(innerPlan, outerPlan, correctAnswer, Seq(x === y + a))
+      Aggregate(Seq(x, y), Seq(minB, x, y),
+        Filter(x === y + a,
+          DomainJoin(Seq(x, y), testRelation)))
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
   }
 
-  test("aggregate with correlated equality predicates - 3") {
+  test("aggregate with correlated equality predicates that has no attribute") {
     val outerPlan = testRelation2
     val minB = Alias(min(b), "min_b")()
     val innerPlan =

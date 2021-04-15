@@ -295,7 +295,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       if (newCond.isEmpty) oldCond else newCond
     }
 
-    def rewrite(sub: LogicalPlan, outer: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
+    def decorrelate(sub: LogicalPlan, outer: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
       if (SQLConf.get.decorrelateInnerQueryEnabled) {
         DecorrelateInnerQuery(sub, outer)
       } else {
@@ -305,7 +305,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
 
     plan transformExpressions {
       case ScalarSubquery(sub, children, exprId) if children.nonEmpty =>
-        val (newPlan, newCond) = rewrite(sub, outerPlans)
+        val (newPlan, newCond) = decorrelate(sub, outerPlans)
         ScalarSubquery(newPlan, getJoinCondition(newCond, children), exprId)
       case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
@@ -510,56 +510,6 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   val ALWAYS_TRUE_COLNAME = "alwaysTrue"
 
   /**
-   * Build a mapping between domain attributes and corresponding outer query expressions
-   * using the join conditions.
-   */
-  private def buildDomainAttrMap(
-      conditions: Seq[Expression],
-      domainAttrs: Seq[Attribute]): Map[Attribute, Expression] = {
-    val outputSet = AttributeSet(domainAttrs)
-    conditions.collect {
-      // When we build the equality conditions, the left side is always the
-      // domain attributes used in the inner plan, and the right side is the
-      // attribute from outer plan. Note the right hand side is not necessarily
-      // an attribute, for example it can be a literal (if foldable) or a cast expression.
-      case EqualNullSafe(left: Attribute, right: Expression) if outputSet.contains(left) =>
-        left -> right
-    }.toMap
-  }
-
-  /**
-   * Rewrite domain join placeholder to actual inner joins.
-   */
-  private def rewriteDomainJoins(
-      outerPlan: LogicalPlan,
-      innerPlan: LogicalPlan,
-      conditions: Seq[Expression]): LogicalPlan = {
-    innerPlan transform {
-      case d @ DomainJoin(domainAttrs, child) =>
-        val domainAttrMap = buildDomainAttrMap(conditions, domainAttrs)
-        // We should only rewrite a domain join when all corresponding outer plan attributes
-        // can be found from the join condition.
-        if (domainAttrMap.size == domainAttrs.size) {
-          val groupingExprs = domainAttrs.map(domainAttrMap)
-          val aggregateExprs = groupingExprs.zip(domainAttrs).map {
-            // Rebuild the aliases.
-            case (inputAttr, outputAttr) => Alias(inputAttr, outputAttr.name)(outputAttr.exprId)
-          }
-          val domain = Aggregate(groupingExprs, aggregateExprs, outerPlan)
-          child match {
-            // A special optimization for OneRowRelation.
-            // TODO: add a more general rule to optimize join with OneRowRelation.
-            case _: OneRowRelation => domain
-            case _ => Join(child, domain, Inner, None, JoinHint.NONE)
-          }
-        } else {
-          throw new UnsupportedOperationException(
-            s"Unable to rewrite domain join with conditions: $conditions\n$d")
-        }
-    }
-  }
-
-  /**
    * Construct a new child plan by left joining the given subqueries to a base plan.
    * This method returns the child plan and an attribute mapping
    * for the updated `ExprId`s of subqueries. If the non-empty mapping returned,
@@ -571,7 +521,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     val subqueryAttrMapping = ArrayBuffer[(Attribute, Attribute)]()
     val newChild = subqueries.foldLeft(child) {
       case (currentChild, ScalarSubquery(sub, conditions, _)) =>
-        val query = rewriteDomainJoins(currentChild, sub, conditions)
+        val query = DecorrelateInnerQuery.rewriteDomainJoins(currentChild, sub, conditions)
         val origOutput = query.output.head
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)

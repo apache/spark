@@ -101,7 +101,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
   private def canPullUpOverAgg(expression: Expression): Boolean = expression match {
     case Equality(_: Attribute, b) => !containsAttribute(b)
     case Equality(a, _: Attribute) => !containsAttribute(a)
-    case _ => false
+    case o => !containsAttribute(o)
   }
 
   /**
@@ -187,6 +187,64 @@ object DecorrelateInnerQuery extends PredicateHelper {
       (aliasedProjection, aliasedConditions)
     } else {
       (innerPlan, conditions)
+    }
+  }
+
+  /**
+   * Build a mapping between domain attributes and corresponding outer query expressions
+   * using the join conditions.
+   */
+  private def buildDomainAttrMap(
+      conditions: Seq[Expression],
+      domainAttrs: Seq[Attribute]): Map[Attribute, Expression] = {
+    val domainAttrSet = AttributeSet(domainAttrs)
+    conditions.collect {
+      // When we build the join conditions between the domain attributes and outer references,
+      // the left hand side is always the domain attribute used in the inner query and the right
+      // hand side is the attribute from the outer query. Note here the right hand side of a
+      // condition is not necessarily an attribute, for example it can be a literal (if foldable)
+      // or a cast expression after the optimization.
+      case EqualNullSafe(left: Attribute, right: Expression) if domainAttrSet.contains(left) =>
+        left -> right
+    }.toMap
+  }
+
+  /**
+   * Rewrite all [[DomainJoin]]s in the inner query to actual inner joins with the outer query.
+   */
+  def rewriteDomainJoins(
+      outerPlan: LogicalPlan,
+      innerPlan: LogicalPlan,
+      conditions: Seq[Expression]): LogicalPlan = {
+    innerPlan transform {
+      case d @ DomainJoin(domainAttrs, child) =>
+        val domainAttrMap = buildDomainAttrMap(conditions, domainAttrs)
+        // We should only rewrite a domain join when all corresponding outer plan attributes
+        // can be found from the join condition.
+        if (domainAttrMap.size == domainAttrs.size) {
+          val groupingExprs = domainAttrs.map(domainAttrMap)
+          val aggregateExprs = groupingExprs.zip(domainAttrs).map {
+            // Rebuild the aliases.
+            case (inputAttr, outputAttr) => Alias(inputAttr, outputAttr.name)(outputAttr.exprId)
+          }
+          // Construct a domain with the outer query plan.
+          // DomainJoin [a', b']  =>  Aggregate [a, b] [a AS a', b AS b']
+          //                          +- Relation [a, b]
+          val domain = Aggregate(groupingExprs, aggregateExprs, outerPlan)
+          child match {
+            // A special optimization for OneRowRelation.
+            // TODO: add a more general rule to optimize join with OneRowRelation.
+            case _: OneRowRelation => domain
+            // Construct a domain join.
+            // Join Inner
+            // :- Inner Query
+            // +- Domain
+            case _ => Join(child, domain, Inner, None, JoinHint.NONE)
+          }
+        } else {
+          throw new UnsupportedOperationException(
+            s"Unable to rewrite domain join with conditions: $conditions\n$d")
+        }
     }
   }
 
