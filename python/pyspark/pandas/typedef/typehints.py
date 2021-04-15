@@ -266,7 +266,7 @@ def spark_type_to_pandas_dtype(
         return np.dtype(to_arrow_type(spark_type).to_pandas_dtype())
 
 
-def koalas_dtype(tpe) -> Tuple[Dtype, types.DataType]:
+def pandas_on_spark_type(tpe) -> Tuple[Dtype, types.DataType]:
     """
     Convert input into a pandas only dtype object or a numpy dtype object,
     and its corresponding Spark DataType.
@@ -285,15 +285,15 @@ def koalas_dtype(tpe) -> Tuple[Dtype, types.DataType]:
 
     Examples
     --------
-    >>> koalas_dtype(int)
+    >>> pandas_on_spark_type(int)
     (dtype('int64'), LongType)
-    >>> koalas_dtype(str)
+    >>> pandas_on_spark_type(str)
     (dtype('<U'), StringType)
-    >>> koalas_dtype(datetime.date)
+    >>> pandas_on_spark_type(datetime.date)
     (dtype('O'), DateType)
-    >>> koalas_dtype(datetime.datetime)
+    >>> pandas_on_spark_type(datetime.datetime)
     (dtype('<M8[ns]'), TimestampType)
-    >>> koalas_dtype(List[bool])
+    >>> pandas_on_spark_type(List[bool])
     (dtype('O'), ArrayType(BooleanType,true))
     """
     try:
@@ -486,7 +486,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
         tpe = tpe.__args__[0]
         if issubclass(tpe, NameTypeHolder):
             tpe = tpe.tpe
-        dtype, spark_type = koalas_dtype(tpe)
+        dtype, spark_type = pandas_on_spark_type(tpe)
         return SeriesType(dtype, spark_type)
 
     # Note that, DataFrame type hints will create a Tuple.
@@ -503,9 +503,9 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
             parameters = getattr(tuple_type, "__args__")
         dtypes, spark_types = zip(
             *(
-                koalas_dtype(p.tpe)
+                pandas_on_spark_type(p.tpe)
                 if isclass(p) and issubclass(p, NameTypeHolder)
-                else koalas_dtype(p)
+                else pandas_on_spark_type(p)
                 for p in parameters
             )
         )
@@ -514,7 +514,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
         ]
         return DataFrameType(list(dtypes), list(spark_types), names)
 
-    types = koalas_dtype(tpe)
+    types = pandas_on_spark_type(tpe)
     if types is None:
         return UnknownType(tpe)
     else:

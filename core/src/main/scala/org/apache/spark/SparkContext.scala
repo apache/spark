@@ -1583,15 +1583,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def addFile(
       path: String, recursive: Boolean, addedOnSubmit: Boolean, isArchive: Boolean = false
     ): Unit = {
-    val uri = if (!isArchive) {
-      if (Utils.isAbsoluteURI(path) && path.contains("%")) {
-        new URI(path)
-      } else {
-        new Path(path).toUri
-      }
-    } else {
-      Utils.resolveURI(path)
-    }
+    val uri = Utils.resolveURI(path)
     val schemeCorrectedURI = uri.getScheme match {
       case null => new File(path).getCanonicalFile.toURI
       case "local" =>
@@ -1979,11 +1971,7 @@ class SparkContext(config: SparkConf) extends Logging {
         // For local paths with backslashes on Windows, URI throws an exception
         (addLocalJarFile(new File(path)), "local")
       } else {
-        val uri = if (Utils.isAbsoluteURI(path) && path.contains("%")) {
-          new URI(path)
-        } else {
-          new Path(path).toUri
-        }
+        val uri = Utils.resolveURI(path)
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
         val uriScheme = uri.getScheme

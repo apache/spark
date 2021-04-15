@@ -49,7 +49,7 @@ from pyspark.pandas.typedef import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
     infer_return_type,
-    koalas_dtype,
+    pandas_on_spark_type,
 )
 from pyspark import pandas as ps
 
@@ -366,7 +366,7 @@ class TypeHintTests(unittest.TestCase):
 
         for numpy_or_python_type, (dtype, spark_type) in type_mapper.items():
             self.assertEqual(as_spark_type(numpy_or_python_type), spark_type)
-            self.assertEqual(koalas_dtype(numpy_or_python_type), (dtype, spark_type))
+            self.assertEqual(pandas_on_spark_type(numpy_or_python_type), (dtype, spark_type))
 
         with self.assertRaisesRegex(TypeError, "Type uint64 was not understood."):
             as_spark_type(np.dtype("uint64"))
@@ -375,10 +375,10 @@ class TypeHintTests(unittest.TestCase):
             as_spark_type(np.dtype("object"))
 
         with self.assertRaisesRegex(TypeError, "Type uint64 was not understood."):
-            koalas_dtype(np.dtype("uint64"))
+            pandas_on_spark_type(np.dtype("uint64"))
 
         with self.assertRaisesRegex(TypeError, "Type object was not understood."):
-            koalas_dtype(np.dtype("object"))
+            pandas_on_spark_type(np.dtype("object"))
 
     @unittest.skipIf(not extension_dtypes_available, "The pandas extension types are not available")
     def test_as_spark_type_extension_dtypes(self):
@@ -393,7 +393,7 @@ class TypeHintTests(unittest.TestCase):
 
         for extension_dtype, spark_type in type_mapper.items():
             self.assertEqual(as_spark_type(extension_dtype), spark_type)
-            self.assertEqual(koalas_dtype(extension_dtype), (extension_dtype, spark_type))
+            self.assertEqual(pandas_on_spark_type(extension_dtype), (extension_dtype, spark_type))
 
     @unittest.skipIf(
         not extension_object_dtypes_available, "The pandas extension object types are not available"
@@ -408,7 +408,7 @@ class TypeHintTests(unittest.TestCase):
 
         for extension_dtype, spark_type in type_mapper.items():
             self.assertEqual(as_spark_type(extension_dtype), spark_type)
-            self.assertEqual(koalas_dtype(extension_dtype), (extension_dtype, spark_type))
+            self.assertEqual(pandas_on_spark_type(extension_dtype), (extension_dtype, spark_type))
 
     @unittest.skipIf(
         not extension_float_dtypes_available, "The pandas extension float types are not available"
@@ -423,7 +423,7 @@ class TypeHintTests(unittest.TestCase):
 
         for extension_dtype, spark_type in type_mapper.items():
             self.assertEqual(as_spark_type(extension_dtype), spark_type)
-            self.assertEqual(koalas_dtype(extension_dtype), (extension_dtype, spark_type))
+            self.assertEqual(pandas_on_spark_type(extension_dtype), (extension_dtype, spark_type))
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ from typing import Any, Optional
 
 def get_logger() -> Any:
     """ An entry point of the plug-in and return the usage logger. """
-    return KoalasUsageLogger()
+    return PandasOnSparkUsageLogger()
 
 
 def _format_signature(signature):
@@ -37,7 +37,7 @@ def _format_signature(signature):
     )
 
 
-class KoalasUsageLogger(object):
+class PandasOnSparkUsageLogger(object):
     """
     The reference implementation of usage logger.
 

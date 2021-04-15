@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 """
-Koalas specific features.
+pandas-on-Spark specific features.
 """
 import inspect
 from typing import Any, Optional, Tuple, Union, TYPE_CHECKING, cast
@@ -47,8 +47,8 @@ if TYPE_CHECKING:
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
-class KoalasFrameMethods(object):
-    """ Koalas specific features for DataFrame. """
+class PandasOnSparkFrameMethods(object):
+    """ pandas-on-Spark specific features for DataFrame. """
 
     def __init__(self, frame: "DataFrame"):
         self._kdf = frame
@@ -194,10 +194,10 @@ class KoalasFrameMethods(object):
         See also `Transform and apply a function
         <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input frame. Koalas internally
-            splits the input series into multiple batches and calls `func` with each batch multiple
-            times. Therefore, operations such as global aggregations are impossible. See the example
-            below.
+        .. note:: the `func` is unable to access to the whole input frame. pandas-on-Spark
+            internally splits the input series into multiple batches and calls `func` with each
+            batch multiple times. Therefore, operations such as global aggregations are impossible.
+            See the example below.
 
             >>> # This case does not return the length of whole frame but of the batch internally
             ... # used.
@@ -286,7 +286,7 @@ class KoalasFrameMethods(object):
            A  B
         0  1  2
 
-        You can also omit the type hints so Koalas infers the return schema as below:
+        You can also omit the type hints so pandas-on-Spark infers the return schema as below:
 
         >>> df.koalas.apply_batch(lambda pdf: pdf.query('A == 1'))
            A  B
@@ -400,10 +400,10 @@ class KoalasFrameMethods(object):
         See also `Transform and apply a function
         <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input frame. Koalas internally
-            splits the input series into multiple batches and calls `func` with each batch multiple
-            times. Therefore, operations such as global aggregations are impossible. See the example
-            below.
+        .. note:: the `func` is unable to access to the whole input frame. pandas-on-Spark
+            internally splits the input series into multiple batches and calls `func` with each
+            batch multiple times. Therefore, operations such as global aggregations are impossible.
+            See the example below.
 
             >>> # This case does not return the length of whole frame but of the batch internally
             ... # used.
@@ -497,7 +497,7 @@ class KoalasFrameMethods(object):
         2    7
         dtype: int64
 
-        You can also omit the type hints so Koalas infers the return schema as below:
+        You can also omit the type hints so pandas-on-Spark infers the return schema as below:
 
         >>> df.koalas.transform_batch(lambda pdf: pdf + 1)
            A  B
@@ -699,8 +699,8 @@ class KoalasFrameMethods(object):
                 return DataFrame(internal)
 
 
-class KoalasSeriesMethods(object):
-    """ Koalas specific features for Series. """
+class PandasOnSparkSeriesMethods(object):
+    """ pandas-on-Spark specific features for Series. """
 
     def __init__(self, series: "Series"):
         self._kser = series
@@ -713,10 +713,10 @@ class KoalasSeriesMethods(object):
         See also `Transform and apply a function
         <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input series. Koalas internally
-            splits the input series into multiple batches and calls `func` with each batch multiple
-            times. Therefore, operations such as global aggregations are impossible. See the example
-            below.
+        .. note:: the `func` is unable to access to the whole input series. pandas-on-Spark
+            internally splits the input series into multiple batches and calls `func` with each
+            batch multiple times. Therefore, operations such as global aggregations are impossible.
+            See the example below.
 
             >>> # This case does not return the length of whole frame but of the batch internally
             ... # used.
@@ -774,7 +774,7 @@ class KoalasSeriesMethods(object):
         2    6
         Name: A, dtype: int64
 
-        You can also omit the type hints so Koalas infers the return schema as below:
+        You can also omit the type hints so pandas-on-Spark infers the return schema as below:
 
         >>> df.A.koalas.transform_batch(lambda pser: pser + 1)
         0    2

@@ -16,7 +16,7 @@
 #
 
 """
-Date/Time related functions on Koalas Series
+Date/Time related functions on pandas-on-Spark Series
 """
 from typing import TYPE_CHECKING
 
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 
 class DatetimeMethods(object):
-    """Date/Time methods for Koalas Series"""
+    """Date/Time methods for pandas-on-Spark Series"""
 
     def __init__(self, series: "ps.Series"):
         if not isinstance(series.spark.data_type, (DateType, TimestampType)):
