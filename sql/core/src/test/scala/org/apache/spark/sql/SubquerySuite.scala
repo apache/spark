@@ -1827,25 +1827,4 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
     }
   }
-
-  test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
-    withTempView("t1", "t2") {
-      Seq(("a"), "b").toDF("c").createOrReplaceTempView("t1")
-      Seq("ab", "abc", "bc").toDF("c").createOrReplaceTempView("t2")
-      val e1 = intercept[AnalysisException] {
-        sql("select c, (select count(*) from t2 where t1.c = substring(t2.c, 1, 1)) from t1")
-      }
-      assert(e1.getMessage.contains(
-        "Correlated column is not allowed in a non-equality predicate"))
-    }
-    withTempView("t1", "t2") {
-      Seq((6)).toDF("c").createOrReplaceTempView("t1")
-      Seq((0, 6), (1, 5), (2, 4), (3, 3)).toDF("a", "b").createOrReplaceTempView("t2")
-      val e2 = intercept[AnalysisException] {
-        sql("select c, (select count(*) from t2 where a + b = c) from t1")
-      }
-      assert(e2.getMessage.contains(
-        "Correlated column is not allowed in a non-equality predicate"))
-    }
-  }
 }

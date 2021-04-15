@@ -767,4 +767,19 @@ class AnalysisErrorSuite extends AnalysisTest {
       "using ordinal position or wrap it in first() (or first_value) if you don't care " +
       "which value you get." :: Nil)
   }
+
+  test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val t1 = LocalRelation(a, b)
+    val t2 = LocalRelation(c)
+    val plan = Project(
+      ScalarSubquery(
+        Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
+          Filter($"a" + $"b" === $"c", t1))
+      ).as("sub") :: Nil,
+      t2)
+    assertAnalysisError(plan, "Correlated column is not allowed in a non-equality predicate" :: Nil)
+  }
 }
