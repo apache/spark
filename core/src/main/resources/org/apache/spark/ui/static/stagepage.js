@@ -43,6 +43,20 @@ $.extend( $.fn.dataTable.ext.type.order, {
         a = ConvertDurationString( a );
         b = ConvertDurationString( b );
         return ((a < b) ? 1 : ((a > b) ? -1 : 0));
+    },
+
+    "size-pre": parseFloat,
+
+    "size-asc": function ( a, b ) {
+        a = parseFloat( a );
+        b = parseFloat( b );
+        return ((a < b) ? -1 : ((a > b) ? 1 : 0));
+    },
+
+    "size-desc": function ( a, b ) {
+        a = parseFloat( a );
+        b = parseFloat( b );
+        return ((a < b) ? 1 : ((a > b) ? -1 : 0));
     }
 } );
 
@@ -562,10 +576,16 @@ $(document).ready(function () {
                         }
                     ],
                     "columnDefs": [
-                        { "visible": false, "targets": 15 },
-                        { "visible": false, "targets": 16 },
-                        { "visible": false, "targets": 17 },
-                        { "visible": false, "targets": 18 }
+                        // String with structures like : 'bytes / bytes', 'bytes / bytes'
+                        // they should be sorted as numerical-order instead of lexicographical-order.
+                        { "type": "size", "targets": 9 },
+                        { "type": "size", "targets": 10 },
+                        { "type": "size", "targets": 11 },
+                        { "type": "size", "targets": 12 },
+                        { "type": "size", "visible": false, "targets": 15 },
+                        { "type": "size", "visible": false, "targets": 16 },
+                        { "type": "size", "visible": false, "targets": 17 },
+                        { "type": "size", "visible": false, "targets": 18 }
                     ],
                     "deferRender": true,
                     "order": [[0, "asc"]],
