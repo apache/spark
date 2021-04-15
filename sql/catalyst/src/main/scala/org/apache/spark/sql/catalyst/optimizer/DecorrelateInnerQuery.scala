@@ -26,39 +26,81 @@ import org.apache.spark.sql.catalyst.plans.logical._
  * Decorrelate the inner query by eliminating outer references and create domain joins.
  * The implementation is based on the paper: Unnesting Arbitrary Queries by Thomas Neumann
  * and Alfons Kemper. https://dl.gi.de/handle/20.500.12116/2418.
- * (1) Recursively collects outer references from the inner query until it reaches a node
- *     that does not contain correlated value.
- * (2) Inserts an optional [[DomainJoin]] node to indicate whether a domain (inner) join is
- *     needed between the outer query and the specific subtree of the inner query.
- * (3) Returns a list of join conditions with the outer query and a mapping between outer
- *     references with references inside the inner query. The parent nodes need to preserve
- *     the references inside the join conditions and substitute all outer references using
- *     the mapping.
+ *
+ * A correlated subquery can be viewed as a "dependent" nested loop join between the outer and
+ * the inner query. For each row produced by the outer query, we bind the [[OuterReference]]s in
+ * in the inner query with the corresponding values in the row, and then evaluate the inner query.
+ *
+ * Dependent Join
+ * :- Outer Query
+ * +- Inner Query
+ *
+ * If the [[OuterReference]]s are bound to the same value, the inner query will return the same
+ * result. Based on this, we can reduce the times to evaluate the inner query by first getting
+ * all distinct values of the [[OuterReference]]s.
+ *
+ * Normal Join
+ * :- Outer Query
+ * +- Dependent Join
+ *    :- Inner Query
+ *    +- Distinct Aggregate (outer_ref1, outer_ref2, ...)
+ *       +- Outer Query
+ *
+ * The distinct aggregate of the outer references is called a "domain", and the dependent join
+ * between the inner query and the domain is called a "domain join". We need to push down the
+ * domain join through the inner query until there is no outer reference in the sub-tree and
+ * the domain join will turn into a normal join.
+ *
+ * The decorrelation function returns a new query plan with optional placeholder [[DomainJoins]]s
+ * added and a list of join conditions with the outer query. [[DomainJoin]]s need to be rewritten
+ * into actual inner join between the inner query sub-tree and the outer query.
  *
  * E.g. decorrelate an inner query with equality predicates:
  *
- * Aggregate [] [min(c2)]            Aggregate [c1] [min(c2), c1]
- * +- Filter [outer(c3) = c1]   =>   +- Relation [t]
- *    +- Relation [t]
+ * SELECT (SELECT MIN(b) FROM t1 WHERE t2.c = t1.a) FROM t2
  *
- * Join conditions: [c3 = c1]
+ * Aggregate [] [min(b)]            Aggregate [a] [min(b), a]
+ * +- Filter (outer(c) = a)   =>   +- Relation [t1]
+ *    +- Relation [t1]
+ *
+ * Join conditions: [c = a]
  *
  * E.g. decorrelate an inner query with non-equality predicates:
  *
- * Aggregate [] [min(c2)]            Aggregate [c3'] [min(c2), c3']
- * +- Filter [outer(c3) > c1]   =>   +- Filter [c3' > c1]
- *    +- Relation [t]                   +- DomainJoin [c3']
- *                                         +- Relation [t]
+ * SELECT (SELECT MIN(b) FROM t1 WHERE t2.c > t1.a) FROM t2
  *
- * Join conditions: [c3 <=> c3']
+ * Aggregate [] [min(b)]            Aggregate [c'] [min(b), c']
+ * +- Filter (outer(c) > a)   =>   +- Filter (c' > a)
+ *    +- Relation [t1]                  +- DomainJoin [c']
+ *                                         +- Relation [t1]
+ *
+ * Join conditions: [c <=> c']
  */
 object DecorrelateInnerQuery extends PredicateHelper {
 
   /**
-   * Check if the given expression is an equality condition.
+   * Check if an expression contains any attribute. Note OuterReference is a
+   * leaf node and will not be found here.
    */
-  private def isEquality(expression: Expression): Boolean = expression match {
-    case Equality(_, _) => true
+  private def containsAttribute(expression: Expression): Boolean = {
+    expression.find(_.isInstanceOf[Attribute]).isDefined
+  }
+
+  /**
+   * Check if an expression can be pulled up over an [[Aggregate]] without changing the
+   * semantics of the plan. The expression must be an equality predicate that guarantees
+   * one-to-one mapping between inner and outer attributes. More specifically, one side
+   * of the predicate must be an attribute and another side of the predicate must not
+   * contain other attributes from the inner query.
+   * For example:
+   *   (a = outer(c)) -> true
+   *   (a > outer(c)) -> false
+   *   (a + b = outer(c)) -> false
+   *   (a = outer(c) - b) -> false
+   */
+  private def canPullUpOverAgg(expression: Expression): Boolean = expression match {
+    case Equality(_: Attribute, b) => !containsAttribute(b)
+    case Equality(a, _: Attribute) => !containsAttribute(a)
     case _ => false
   }
 
@@ -166,8 +208,16 @@ object DecorrelateInnerQuery extends PredicateHelper {
     // expressions from the inner query that is used to replace outer references.
     type ReturnType = (LogicalPlan, Seq[Expression], Map[Attribute, Attribute])
 
-    // Recursively decorrelate the input plan with a set of parent outer references and
-    // a boolean flag indicating whether the result of the plan will be aggregated.
+    // Decorrelate the input plan with a set of parent outer references and a boolean flag
+    // indicating whether the result of the plan will be aggregated. Steps:
+    // 1. Recursively collects outer references from the inner query until it reaches a node
+    //    that does not contain correlated value.
+    // 2. Inserts an optional [[DomainJoin]] node to indicate whether a domain (inner) join is
+    //    needed between the outer query and the specific sub-tree of the inner query.
+    // 3. Returns a list of join conditions with the outer query and a mapping between outer
+    //    references with references inside the inner query. The parent nodes need to preserve
+    //    the references inside the join conditions and substitute all outer references using
+    //    the mapping.
     def decorrelate(
         plan: LogicalPlan,
         parentOuterReferences: AttributeSet,
@@ -208,51 +258,56 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case Filter(condition, child) =>
             val conditions = splitConjunctivePredicates(condition)
             val (correlated, uncorrelated) = conditions.partition(containsOuter)
-            // Split the correlated predicates
-            val (equality, nonEquality) = correlated.partition(isEquality)
             // Find outer references that can be substituted by attributes from the inner
             // query using the equality predicates.
-            val equivalences = collectEquivalentOuterReferences(equality)
+            val equivalences = collectEquivalentOuterReferences(correlated)
             // Correlated predicates can be removed from the Filter's condition and used as
             // join conditions with the outer query. However, if the results of the sub-tree
-            // is aggregated, only the correlated equality predicates can be used, because
-            // the inner query attributes from a non-equality predicate need to be preserved
-            // in both grouping and aggregate expressions, which can change the semantics
-            // of the plan and lead to incorrect results. Here is an example:
+            // is aggregated, only certain correlated equality predicates can be used, because
+            // the references in the join conditions need to be preserved in both the grouping
+            // and aggregate expressions of an Aggregate, which may change the semantics of the
+            // plan and lead to incorrect results. Here is an example:
             // Relations:
-            //   t1(c1, c2): [(1, 1)]
-            //   t2(c1, c2): [(1, 1), (2, 0)]
+            //   t1(a, b): [(1, 1)]
+            //   t2(c, d): [(1, 1), (2, 0)]
             //
             // Query:
-            //   SELECT * FROM t1 WHERE c1 = (SELECT MAX(c1) FROM t2 WHERE t1.c2 >= c2)
+            //   SELECT * FROM t1 WHERE a = (SELECT MAX(c) FROM t2 WHERE b >= d)
             //
-            // Subquery plan transformation if non-equality predicates are used as join conditions:
-            //   Aggregate [max(c1)]                Aggregate [c2] [max(c1), c2]
-            //   +- Filter [outer(c2) >= c2]   =>   +- Relation [c1, c2]
-            //      +- Relation [c1, c2]
+            // Subquery plan transformation if correlated predicates are used as join conditions:
+            //   Aggregate [max(c)]               Aggregate [d] [max(c), d]
+            //   +- Filter (outer(b) >= d)   =>   +- Relation [c, d]
+            //      +- Relation [c, d]
             //
-            // Which will be rewritten to this query:
-            //   SELECT c1, c2 FROM t1 LEFT OUTER JOIN
-            //   (SELECT MAX(c1) m, c2 FROM t2 GROUP BY c2) s ON t1.c2 >= s.c2 WHERE c1 = m
+            // Plan after rewrite:
+            //   Project [a, b]                                   -- [(1, 1)]
+            //   +- Join LeftOuter (b >= d AND a = max(c))
+            //      :- Relation [a, b]
+            //      +- Aggregate [d] [max(c), d]                  -- [(1, 1), (2, 0)]
+            //         +- Relation [c, d]
             //
             // The result of the original query should be an empty set but the transformed
             // query will output an incorrect result of (1, 1). The correct transformation
-            // is illustrated below:
-            //   Aggregate [max(c1)]                Aggregate [c2'] [max(c1), c2']
-            //   +- Filter [outer(c2) >= c2]   =>   +- Filter [c2' >= c2]
-            //      +- Relation [c1, c2]               +- DomainJoin [c2']
-            //                                            +- Relation [c1, c2]
-            // Which will be rewritten to this query (using CTE here to make the query clearer):
-            //   WITH domain AS (                                                   -- [(1, 1)]
-            //     SELECT DISTINCT c2 FROM t1
-            //   ), domainJoin AS (                                   -- [(1, 1, 1), (2, 0, 1)]
-            //     SELECT t2.c1, t2.c2, domain.c2 AS dc2 FROM t2 JOIN domain
-            //   ), subquery AS (                                                   -- [(2, 1)]
-            //     SELECT MAX(c1) m, dc2 FROM domainJoin WHERE dc2 >= c2 GROUP BY dc2
-            //   )
-            //   SELECT c1, c2 FROM t1 LEFT OUTER JOIN subquery ON c2 <=> dc2 WHERE c1 = m
+            // with domain join is illustrated below:
+            //   Aggregate [max(c)]               Aggregate [b'] [max(c), b']
+            //   +- Filter (outer(b) >= d)   =>   +- Filter (b' >= d)
+            //      +- Relation [c, d]               +- DomainJoin [b']
+            //                                          +- Relation [c, d]
+            // Plan after rewrite:
+            //   Project [a, b]
+            //   +- Join LeftOuter (b <=> b' AND a = max(c))  -- []
+            //      :- Relation [a, b]
+            //      +- Aggregate [b'] [max(c), b']            -- [(2, 1)]
+            //         +- Join Inner (b' >= d)                -- [(1, 1, 1), (2, 0, 1)] (DomainJoin)
+            //            :- Relation [c, d]
+            //            +- Aggregate [b] [b AS b']          -- [(1)] (Domain)
+            //               +- Relation [a, b]
             if (aggregated) {
-              val outerReferences = collectOuterReferences(nonEquality)
+              // Split the correlated predicates into predicates that can and cannot be directly
+              // used as join conditions with the outer query depending on whether they can
+              // be pulled up over an Aggregate without changing the semantics of the plan.
+              val (equalityCond, predicates) = correlated.partition(canPullUpOverAgg)
+              val outerReferences = collectOuterReferences(predicates)
               val newOuterReferences =
                 parentOuterReferences ++ outerReferences -- equivalences.keySet
               val (newChild, joinCond, outerReferenceMap) =
@@ -260,16 +315,16 @@ object DecorrelateInnerQuery extends PredicateHelper {
               // Add the outer references mapping collected from the equality conditions.
               val newOuterReferenceMap = outerReferenceMap ++ equivalences
               // Replace all outer references in the non-equality predicates.
-              val nonEqualityCond = replaceOuterReferences(nonEquality, newOuterReferenceMap)
+              val newCorrelated = replaceOuterReferences(predicates, newOuterReferenceMap)
               // The new filter condition is the original filter condition with correlated
               // equality predicates removed.
-              val newFilterCond = nonEqualityCond ++ uncorrelated
+              val newFilterCond = newCorrelated ++ uncorrelated
               val newFilter = newFilterCond match {
                 case Nil => newChild
                 case conditions => Filter(conditions.reduce(And), newChild)
               }
               // Equality predicates are used as join conditions with the outer query.
-              val newJoinCond = joinCond ++ equality
+              val newJoinCond = joinCond ++ equalityCond
               (newFilter, newJoinCond, newOuterReferenceMap)
             } else {
               // Results of this sub-tree is not aggregated, so all correlated predicates
