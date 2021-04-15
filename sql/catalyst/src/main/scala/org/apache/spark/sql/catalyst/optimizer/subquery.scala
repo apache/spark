@@ -454,11 +454,17 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           case ref: AttributeReference => (ref.exprId, Literal.create(null, ref.dataType))
           case alias @ Alias(_: AttributeReference, _) =>
             (alias.exprId, Literal.create(null, alias.dataType))
+          case alias @ Alias(l: Literal, _) =>
+            (alias.exprId, l.copy(value = null))
           case ne => (ne.exprId, evalAggOnZeroTups(ne))
         }.toMap
 
-      case _ =>
-        sys.error(s"Unexpected operator in scalar subquery: $lp")
+      case l: LeafNode =>
+        l.output.map(a => (a.exprId, Literal.create(null, a.dataType))).toMap
+
+      case p: LogicalPlan =>
+        val bindings = p.children.map(evalPlan).reduce(_ ++ _)
+        p.output.map(e => (e.exprId, bindingExpr(e, bindings))).toMap
     }
 
     val resultMap = evalPlan(plan)

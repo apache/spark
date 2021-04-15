@@ -24,7 +24,6 @@ import inspect
 import sys
 import warnings
 from collections.abc import Mapping
-from distutils.version import LooseVersion
 from functools import partial, wraps, reduce
 from typing import Any, Generic, Iterable, List, Optional, Tuple, TypeVar, Union, cast
 
@@ -35,7 +34,6 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import is_list_like, is_hashable
 from pandas.api.extensions import ExtensionDtype
 from pandas.tseries.frequencies import DateOffset
-import pyspark
 from pyspark import sql as spark
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import (
@@ -52,7 +50,7 @@ from pyspark.sql.types import (
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas.accessors import KoalasSeriesMethods
+from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
 from pyspark.pandas.categorical import CategoricalAccessor
 from pyspark.pandas.config import get_option
 from pyspark.pandas.base import IndexOpsMixin
@@ -67,7 +65,7 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_SERIES_NAME,
 )
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
-from pyspark.pandas.plot import KoalasPlotAccessor
+from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 from pyspark.pandas.ml import corr
 from pyspark.pandas.utils import (
     combine_frames,
@@ -84,7 +82,6 @@ from pyspark.pandas.utils import (
     SPARK_CONF_ARROW_ENABLED,
 )
 from pyspark.pandas.datetimes import DatetimeMethods
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkSeriesMethods
 from pyspark.pandas.strings import StringMethods
 from pyspark.pandas.typedef import (
@@ -352,12 +349,12 @@ if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
 
 class Series(Frame, IndexOpsMixin, Generic[T]):
     """
-    Koalas Series that corresponds to pandas Series logically. This holds Spark Column
+    pandas-on-Spark Series that corresponds to pandas Series logically. This holds Spark Column
     internally.
 
     :ivar _internal: an internal immutable Frame to manage metadata.
     :type _internal: InternalFrame
-    :ivar _kdf: Parent's Koalas DataFrame
+    :ivar _kdf: Parent's pandas-on-Spark DataFrame
     :type _kdf: ps.DataFrame
 
     Parameters
@@ -433,7 +430,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _with_new_scol(self, scol: spark.Column, *, dtype=None) -> "Series":
         """
-        Copy Koalas Series with the new Spark Column.
+        Copy pandas-on-Spark Series with the new Spark Column.
 
         :param scol: the new Spark Column
         :return: the copied Series
@@ -664,8 +661,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         series_examples=_floordiv_example_SERIES,
     )
 
-    # create accessor for Koalas specific methods.
-    koalas = CachedAccessor("koalas", KoalasSeriesMethods)
+    # create accessor for pandas-on-Spark specific methods.
+    koalas = CachedAccessor("koalas", PandasOnSparkSeriesMethods)
 
     # Comparison Operators
     def eq(self, other) -> bool:
@@ -1788,7 +1785,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if isinstance(other, (Series, DataFrame)):
             return self.reindex(index=other.index)
         else:
-            raise TypeError("other must be a Koalas Series or DataFrame")
+            raise TypeError("other must be a pandas-on-Spark Series or DataFrame")
 
     def fillna(
         self, value=None, method=None, axis=None, inplace=False, limit=None
@@ -2496,7 +2493,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         inplace : bool, default False
             if True, perform operation in-place
         kind : str, default None
-            Koalas does not allow specifying the sorting algorithm at the moment, default None
+            pandas-on-Spark does not allow specifying the sorting algorithm at the moment,
+            default None
         na_position : {‘first’, ‘last’}, default ‘last’
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
@@ -2795,11 +2793,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Notes
         -----
-        There are behavior differences between Koalas and pandas.
+        There are behavior differences between pandas-on-Spark and pandas.
 
         * the `method` argument only accepts 'pearson', 'spearman'
-        * the data should not contain NaNs. Koalas will return an error.
-        * Koalas doesn't support the following argument(s).
+        * the data should not contain NaNs. pandas-on-Spark will return an error.
+        * pandas-on-Spark doesn't support the following argument(s).
 
           * `min_periods` argument is not supported
         """
@@ -2835,7 +2833,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         -----
         Faster than ``.sort_values().head(n)`` for small `n` relative to
         the size of the ``Series`` object.
-        In Koalas, thanks to Spark's lazy execution and query optimizer,
+        In pandas-on-Spark, thanks to Spark's lazy execution and query optimizer,
         the two would have same performance.
 
         Examples
@@ -2895,7 +2893,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Faster than ``.sort_values(ascending=False).head(n)`` for small `n`
         relative to the size of the ``Series`` object.
 
-        In Koalas, thanks to Spark's lazy execution and query optimizer,
+        In pandas-on-Spark, thanks to Spark's lazy execution and query optimizer,
         the two would have same performance.
 
         Examples
@@ -3006,7 +3004,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def hist(self, bins=10, **kwds):
         return self.plot.hist(bins, **kwds)
 
-    hist.__doc__ = KoalasPlotAccessor.hist.__doc__
+    hist.__doc__ = PandasOnSparkPlotAccessor.hist.__doc__
 
     def apply(self, func, args=(), **kwds) -> "Series":
         """
@@ -3023,7 +3021,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
              >>> def square(x) -> np.int32:
              ...     return x ** 2
 
-             Koalas uses return type hint and does not try to infer the type.
+             pandas-on-Spark uses return type hint and does not try to infer the type.
 
         Parameters
         ----------
@@ -3109,7 +3107,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: float64
 
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> s.apply(np.log)
         London      2.995732
@@ -3228,7 +3226,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
              >>> def square(x) -> np.int32:
              ...     return x ** 2
 
-             Koalas uses return type hint and does not try to infer the type.
+             pandas-on-Spark uses return type hint and does not try to infer the type.
 
         Parameters
         ----------
@@ -3280,7 +3278,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         1  1.000000  2.718282
         2  1.414214  7.389056
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> s.transform([np.sqrt, np.exp])
                sqrt       exp
@@ -3310,7 +3308,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return self.koalas.transform_batch(func, *args, **kwargs)
 
-    transform_batch.__doc__ = KoalasSeriesMethods.transform_batch.__doc__
+    transform_batch.__doc__ = PandasOnSparkSeriesMethods.transform_batch.__doc__
 
     def round(self, decimals=0) -> "Series":
         """
@@ -3358,9 +3356,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Return value at the given quantile.
 
-        .. note:: Unlike pandas', the quantile in Koalas is an approximated quantile based upon
-            approximate percentile computation because computing quantile across a large dataset
-            is extremely expensive.
+        .. note:: Unlike pandas', the quantile in pandas-on-Spark is an approximated quantile
+            based upon approximate percentile computation because computing quantile across
+            a large dataset is extremely expensive.
 
         Parameters
         ----------
@@ -3417,7 +3415,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             def quantile(spark_column, spark_type):
                 if isinstance(spark_type, (BooleanType, NumericType)):
-                    return SF.percentile_approx(spark_column.cast(DoubleType()), q, accuracy)
+                    return F.percentile_approx(spark_column.cast(DoubleType()), q, accuracy)
                 else:
                     raise TypeError(
                         "Could not convert {} ({}) to numeric".format(
@@ -4847,8 +4845,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         .. note:: This API is slightly different from pandas when indexes from both Series
             are not aligned. To match with pandas', it requires to read the whole data for,
-            for example, counting. pandas raises an exception; however, Koalas just proceeds
-            and performs by ignoring mismatches with NaN permissively.
+            for example, counting. pandas raises an exception; however, pandas-on-Spark
+            just proceeds and performs by ignoring mismatches with NaN permissively.
 
             >>> pdf1 = pd.Series([1, 2, 3], index=[0, 1, 2])
             >>> pdf2 = pd.Series([1, 2, 3], index=[0, 1, 3])
@@ -4984,12 +4982,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
 
         if isinstance(repeats, Series):
-            if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
-                raise ValueError(
-                    "`repeats` argument must be integer with Spark<2.4, but got {}".format(
-                        type(repeats)
-                    )
-                )
             if not same_anchor(self, repeats):
                 kdf = self.to_frame()
                 temp_repeats = verify_temp_column_name(kdf, "__temp_repeats__")
@@ -5001,7 +4993,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 )
             else:
                 scol = F.explode(
-                    SF.array_repeat(self.spark.column, repeats.astype("int32").spark.column)
+                    F.array_repeat(self.spark.column, repeats.astype("int32").spark.column)
                 ).alias(name_like_string(self.name))
                 sdf = self._internal.spark_frame.select(self._internal.index_spark_columns + [scol])
                 internal = self._internal.copy(
@@ -5144,7 +5136,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Notes
         -----
-        Unlike pandas, Koalas doesn't check whether an index is duplicated or not
+        Unlike pandas, pandas-on-Spark doesn't check whether an index is duplicated or not
         because the checking of duplicated index requires scanning whole data which
         can be quite expensive.
 
@@ -5240,7 +5232,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         This method returns an iterable tuple (index, value). This is
         convenient if you want to create a lazy iterator.
 
-        .. note:: Unlike pandas', the iteritems in Koalas returns generator rather zip object
+        .. note:: Unlike pandas', the iteritems in pandas-on-Spark returns generator rather
+            zip object
 
         Returns
         -------
@@ -6078,7 +6071,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     dt = CachedAccessor("dt", DatetimeMethods)
     str = CachedAccessor("str", StringMethods)
     cat = CachedAccessor("cat", CategoricalAccessor)
-    plot = CachedAccessor("plot", KoalasPlotAccessor)
+    plot = CachedAccessor("plot", PandasOnSparkPlotAccessor)
 
     # ----------------------------------------------------------------------
 
@@ -6207,7 +6200,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     elif (3, 5) <= sys.version_info < (3, 7):
         # The implementation is in its metaclass so this flag is needed to distinguish
-        # Koalas Series.
+        # pandas-on-Spark Series.
         is_series = None
 
 

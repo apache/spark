@@ -18,13 +18,11 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
-import java.net.URI
-
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.util.Utils
 
 /**
  * Adds a jar to the current session so it can be used (for UDFs or serdes).
@@ -69,12 +67,11 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Leaf
     val fileList = sparkSession.sparkContext.listFiles()
     if (files.size > 0) {
       files.map { f =>
-        val uri = new URI(f)
-        val schemeCorrectedPath = uri.getScheme match {
-          case null | "local" => new File(f).getCanonicalFile.toURI.toString
+        val uri = Utils.resolveURI(f)
+        uri.getScheme match {
+          case null | "local" | "file" => new File(uri).getCanonicalFile.toURI.toString
           case _ => f
         }
-        new Path(schemeCorrectedPath).toUri.toString
       }.collect {
         case f if fileList.contains(f) => f
       }.map(Row(_))
@@ -96,7 +93,7 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRu
     val jarList = sparkSession.sparkContext.listJars()
     if (jars.nonEmpty) {
       for {
-        jarName <- jars.map(f => new Path(f).getName)
+        jarName <- jars.map(f => Utils.resolveURI(f).toString.split("/").last)
         jarPath <- jarList if jarPath.contains(jarName)
       } yield Row(jarPath)
     } else {
@@ -118,7 +115,7 @@ case class ListArchivesCommand(archives: Seq[String] = Seq.empty[String])
     val archiveList = sparkSession.sparkContext.listArchives()
     if (archives.nonEmpty) {
       for {
-        archiveName <- archives.map(f => new Path(f).getName)
+        archiveName <- archives.map(f => Utils.resolveURI(f).toString.split("/").last)
         archivePath <- archiveList if archivePath.contains(archiveName)
       } yield Row(archivePath)
     } else {

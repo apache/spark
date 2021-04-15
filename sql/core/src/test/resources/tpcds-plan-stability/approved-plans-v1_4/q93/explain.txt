@@ -40,18 +40,18 @@ Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, s
 
 (4) Exchange
 Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
-Arguments: hashpartitioning(cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#3 as bigint), 5), ENSURE_REQUIREMENTS, [id=#7]
+Arguments: hashpartitioning(ss_item_sk#1, ss_ticket_number#3, 5), ENSURE_REQUIREMENTS, [id=#7]
 
 (5) Sort [codegen id : 2]
 Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_sales_price#5]
-Arguments: [cast(ss_item_sk#1 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#3 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [ss_item_sk#1 ASC NULLS FIRST, ss_ticket_number#3 ASC NULLS FIRST], false, 0
 
 (6) Scan parquet default.store_returns
 Output [5]: [sr_item_sk#8, sr_reason_sk#9, sr_ticket_number#10, sr_return_quantity#11, sr_returned_date_sk#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number), IsNotNull(sr_reason_sk)]
-ReadSchema: struct<sr_item_sk:bigint,sr_reason_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int>
+ReadSchema: struct<sr_item_sk:int,sr_reason_sk:int,sr_ticket_number:int,sr_return_quantity:int>
 
 (7) ColumnarToRow [codegen id : 3]
 Input [5]: [sr_item_sk#8, sr_reason_sk#9, sr_ticket_number#10, sr_return_quantity#11, sr_returned_date_sk#12]
@@ -73,7 +73,7 @@ Input [4]: [sr_item_sk#8, sr_reason_sk#9, sr_ticket_number#10, sr_return_quantit
 Arguments: [sr_item_sk#8 ASC NULLS FIRST, sr_ticket_number#10 ASC NULLS FIRST], false, 0
 
 (12) SortMergeJoin [codegen id : 6]
-Left keys [2]: [cast(ss_item_sk#1 as bigint), cast(ss_ticket_number#3 as bigint)]
+Left keys [2]: [ss_item_sk#1, ss_ticket_number#3]
 Right keys [2]: [sr_item_sk#8, sr_ticket_number#10]
 Join condition: None
 
@@ -105,7 +105,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 
 (19) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [sr_reason_sk#9]
-Right keys [1]: [cast(r_reason_sk#14 as bigint)]
+Right keys [1]: [r_reason_sk#14]
 Join condition: None
 
 (20) Project [codegen id : 6]

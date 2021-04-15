@@ -32,6 +32,8 @@ license: |
 
 - In Spark 3.2, `spark.launcher.childConectionTimeout` is deprecated (typo) though still works. Use `spark.launcher.childConnectionTimeout` instead.
 
+- In Spark 3.2, support for Apache Mesos as a resource manager is deprecated and will be removed in a future version. 
+
 ## Upgrading from Core 3.0 to 3.1
 
 - In Spark 3.0 and below, `SparkContext` can be created in executors. Since Spark 3.1, an exception will be thrown when creating `SparkContext` in executors. You can allow it by setting the configuration `spark.executor.allowSparkContext` when creating `SparkContext` in executors.

@@ -94,19 +94,19 @@ case class CacheTableAsSelectExec(
   override lazy val relationName: String = tempViewName
 
   override lazy val planToCache: LogicalPlan = {
-    Dataset.ofRows(sparkSession,
-      CreateViewCommand(
-        name = TableIdentifier(tempViewName),
-        userSpecifiedColumns = Nil,
-        comment = None,
-        properties = Map.empty,
-        originalText = Some(originalText),
-        child = query,
-        allowExisting = false,
-        replace = false,
-        viewType = LocalTempView
-      )
-    )
+    CreateViewCommand(
+      name = TableIdentifier(tempViewName),
+      userSpecifiedColumns = Nil,
+      comment = None,
+      properties = Map.empty,
+      originalText = Some(originalText),
+      plan = query,
+      allowExisting = false,
+      replace = false,
+      viewType = LocalTempView,
+      isAnalyzed = true
+    ).run(sparkSession)
+
     dataFrameForCachedPlan.logicalPlan
   }
 

@@ -876,7 +876,7 @@ from nt3 as nt3
     on udf(ss2.id) = nt3.nt2_id
 where udf(nt3.id) = 1 and udf(ss2.b3);
 
--- [SPARK-28379] Correlated scalar subqueries must be aggregated
+-- Accessing outer query column is not allowed in LocalLimit
 --
 -- test case where a PlaceHolderVar is propagated into a subquery
 --

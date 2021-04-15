@@ -20,10 +20,8 @@ Spark related features. Usually, the features here are missing in pandas
 but Spark has it.
 """
 from abc import ABCMeta, abstractmethod
-from distutils.version import LooseVersion
 from typing import TYPE_CHECKING, Optional, Union, List, cast
 
-import pyspark
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
@@ -326,8 +324,8 @@ class SparkFrameMethods(object):
         Parameters
         ----------
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
 
         Examples
         --------
@@ -352,8 +350,8 @@ class SparkFrameMethods(object):
         Parameters
         ----------
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
 
         Returns
         -------
@@ -396,8 +394,8 @@ class SparkFrameMethods(object):
         Parameters
         ----------
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
 
         See Also
         --------
@@ -441,7 +439,7 @@ class SparkFrameMethods(object):
         +-----+---+---+---+
 
         Keeping index column is useful when you want to call some Spark APIs and
-        convert it back to Koalas DataFrame without creating a default index, which
+        convert it back to pandas-on-Spark DataFrame without creating a default index, which
         can affect performance.
 
         >>> spark_df = df.to_spark(index_col="index")
@@ -464,7 +462,7 @@ class SparkFrameMethods(object):
         |      2|      3|  6|  9|
         +-------+-------+---+---+
 
-        Likewise, can be converted to back to Koalas DataFrame.
+        Likewise, can be converted to back to pandas-on-Spark DataFrame.
 
         >>> new_spark_df.to_koalas(
         ...     index_col=["index_1", "index_2"])  # doctest: +NORMALIZE_WHITESPACE
@@ -519,7 +517,7 @@ class SparkFrameMethods(object):
         """
         Yields and caches the current DataFrame.
 
-        The Koalas DataFrame is yielded as a protected resource and its corresponding
+        The pandas-on-Spark DataFrame is yielded as a protected resource and its corresponding
         data is cached which gets uncached after execution goes of the context.
 
         If you want to specify the StorageLevel manually, use :meth:`DataFrame.spark.persist`
@@ -572,7 +570,7 @@ class SparkFrameMethods(object):
         Yields and caches the current DataFrame with a specific StorageLevel.
         If a StogeLevel is not given, the `MEMORY_AND_DISK` level is used by default like PySpark.
 
-        The Koalas DataFrame is yielded as a protected resource and its corresponding
+        The pandas-on-Spark DataFrame is yielded as a protected resource and its corresponding
         data is cached which gets uncached after execution goes of the context.
 
         See Also
@@ -718,8 +716,8 @@ class SparkFrameMethods(object):
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options
             Additional options passed directly to Spark.
 
@@ -789,8 +787,8 @@ class SparkFrameMethods(object):
         partition_cols : str or list of str, optional
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options : dict
             All other options passed directly into Spark's data source.
 
@@ -881,28 +879,7 @@ class SparkFrameMethods(object):
         == Physical Plan ==
         ...
         """
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-            if mode is not None and extended is not None:
-                raise Exception("extended and mode should not be set together.")
-
-            if extended is not None and isinstance(extended, str):
-                mode = extended
-
-            if mode is not None:
-                if mode == "simple":
-                    extended = False
-                elif mode == "extended":
-                    extended = True
-                else:
-                    raise ValueError(
-                        "Unknown spark.explain mode: {}. Accepted spark.explain modes are "
-                        "'simple', 'extended'.".format(mode)
-                    )
-            if extended is None:
-                extended = False
-            self._kdf._internal.to_internal_spark_frame.explain(extended)
-        else:
-            self._kdf._internal.to_internal_spark_frame.explain(extended, mode)
+        self._kdf._internal.to_internal_spark_frame.explain(extended, mode)
 
     def apply(self, func, index_col: Optional[Union[str, List[str]]] = None) -> "ps.DataFrame":
         """
@@ -1228,7 +1205,7 @@ class CachedSparkFrameMethods(SparkFrameMethods):
 
     def unpersist(self) -> None:
         """
-        The `unpersist` function is used to uncache the Koalas DataFrame when it
+        The `unpersist` function is used to uncache the pandas-on-Spark DataFrame when it
         is not used with `with` statement.
 
         Returns

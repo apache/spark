@@ -23,11 +23,14 @@ object TreePattern extends Enumeration  {
 
   // Enum Ids start from 0.
   // Expression patterns (alphabetically ordered)
-  val IN: Value = Value(0)
+  val EXPRESSION_WITH_RANDOM_SEED = Value(0)
+  val IN: Value = Value
+  val WINDOW_EXPRESSION: Value = Value
 
   // Logical plan patterns (alphabetically ordered)
   val INNER_LIKE_JOIN: Value = Value
   val JOIN: Value = Value
   val LEFT_SEMI_OR_ANTI_JOIN: Value = Value
+  val NATURAL_LIKE_JOIN: Value = Value
   val OUTER_JOIN: Value = Value
 }

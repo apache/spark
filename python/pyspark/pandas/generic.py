@@ -30,7 +30,6 @@ import numpy as np  # noqa: F401
 import pandas as pd
 from pandas.api.types import is_list_like
 
-import pyspark
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -44,7 +43,6 @@ from pyspark.sql.types import (
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Scalar, spark_type_to_pandas_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,
@@ -308,8 +306,8 @@ class Frame(object, metaclass=ABCMeta):
             single partition in single machine and could cause serious
             performance degradation. Avoid this method against very large dataset.
 
-        .. note:: unlike pandas', Koalas' emulates cumulative product by ``exp(sum(log(...)))``
-            trick. Therefore, it only works for positive numbers.
+        .. note:: unlike pandas', pandas-on-Spark's emulates cumulative product by
+            ``exp(sum(log(...)))`` trick. Therefore, it only works for positive numbers.
 
         Parameters
         ----------
@@ -623,10 +621,10 @@ class Frame(object, metaclass=ABCMeta):
         r"""
         Write object to a comma-separated values (csv) file.
 
-        .. note:: Koalas `to_csv` writes files to a path or URI. Unlike pandas', Koalas
-            respects HDFS's property such as 'fs.default.name'.
+        .. note:: pandas-on-Spark `to_csv` writes files to a path or URI. Unlike pandas',
+            pandas-on-Spark respects HDFS's property such as 'fs.default.name'.
 
-        .. note:: Koalas writes CSV files into the directory, `path`, and writes
+        .. note:: pandas-on-Spark writes CSV files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
             This behaviour was inherited from Apache Spark. The number of files can
             be controlled by `num_files`.
@@ -665,8 +663,8 @@ class Frame(object, metaclass=ABCMeta):
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options: keyword arguments for additional options specific to PySpark.
             This kwargs are specific to PySpark's CSV options to pass. Check
             the options in PySpark's API documentation for spark.write.csv(...).
@@ -854,10 +852,10 @@ class Frame(object, metaclass=ABCMeta):
         """
         Convert the object to a JSON string.
 
-        .. note:: Koalas `to_json` writes files to a path or URI. Unlike pandas', Koalas
-            respects HDFS's property such as 'fs.default.name'.
+        .. note:: pandas-on-Spark `to_json` writes files to a path or URI. Unlike pandas',
+            pandas-on-Spark respects HDFS's property such as 'fs.default.name'.
 
-        .. note:: Koalas writes JSON files into the directory, `path`, and writes
+        .. note:: pandas-on-Spark writes JSON files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
             This behaviour was inherited from Apache Spark. The number of files can
             be controlled by `num_files`.
@@ -897,8 +895,8 @@ class Frame(object, metaclass=ABCMeta):
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options: keyword arguments for additional options specific to PySpark.
             It is specific to PySpark's JSON options to pass. Check
             the options in PySpark's API documentation for `spark.write.json(...)`.
@@ -1256,7 +1254,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return the product of the values.
 
-        .. note:: unlike pandas', Koalas' emulates product by ``exp(sum(log(...)))``
+        .. note:: unlike pandas', pandas-on-Spark's emulates product by ``exp(sum(log(...)))``
             trick. Therefore, it only works for positive numbers.
 
         Parameters
@@ -1812,7 +1810,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return the median of the values for the requested axis.
 
-        .. note:: Unlike pandas', the median in Koalas is an approximated median based upon
+        .. note:: Unlike pandas', the median in pandas-on-Spark is an approximated median based upon
             approximate percentile computation because computing median across a large dataset
             is extremely expensive.
 
@@ -1903,7 +1901,7 @@ class Frame(object, metaclass=ABCMeta):
 
         def median(spark_column, spark_type):
             if isinstance(spark_type, (BooleanType, NumericType)):
-                return SF.percentile_approx(spark_column.cast(DoubleType()), 0.5, accuracy)
+                return F.percentile_approx(spark_column.cast(DoubleType()), 0.5, accuracy)
             else:
                 raise TypeError(
                     "Could not convert {} ({}) to numeric".format(
@@ -2453,9 +2451,6 @@ class Frame(object, metaclass=ABCMeta):
         >>> s.last_valid_index()  # doctest: +SKIP
         ('cow', 'weight')
         """
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-            raise RuntimeError("last_valid_index can be used in PySpark >= 3.0")
-
         data_spark_columns = self._internal.data_spark_columns
 
         if len(data_spark_columns) == 0:
@@ -2485,7 +2480,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         Provide rolling transformations.
 
-        .. note:: 'min_periods' in Koalas works as a fixed window size unlike pandas.
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
             Unlike pandas, NA is also counted as the period. This might be changed
             in the near future.
 
@@ -2514,7 +2509,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         Provide expanding transformations.
 
-        .. note:: 'min_periods' in Koalas works as a fixed window size unlike pandas.
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
             Unlike pandas, NA is also counted as the period. This might be changed
             in the near future.
 
@@ -2877,6 +2872,10 @@ class Frame(object, metaclass=ABCMeta):
         str
             Series or DataFrame in Markdown-friendly format.
 
+        Notes
+        -----
+        Requires the `tabulate <https://pypi.org/project/tabulate>`_ package.
+
         Examples
         --------
         >>> kser = ps.Series(["elk", "pig", "dog", "quetzal"], name="animal")
@@ -2900,7 +2899,7 @@ class Frame(object, metaclass=ABCMeta):
         # `to_markdown` is supported in pandas >= 1.0.0 since it's newly added in pandas 1.0.0.
         if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
             raise NotImplementedError(
-                "`to_markdown()` only supported in Koalas with pandas >= 1.0.0"
+                "`to_markdown()` only supported in pandas-on-Spark with pandas >= 1.0.0"
             )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
