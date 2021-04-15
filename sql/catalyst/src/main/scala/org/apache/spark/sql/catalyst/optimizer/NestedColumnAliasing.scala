@@ -281,7 +281,7 @@ object GeneratorNestedColumnAliasing {
           // the generator expression. A workaround is to re-construct array of struct
           // from multiple fields. But it will be more complicated and may not worth.
           // TODO(SPARK-34956): support multiple fields.
-          if (nestedFieldsOnGenerator.size > 1 || nestedFieldsOnGenerator.size == 0) {
+          if (nestedFieldsOnGenerator.size > 1 || nestedFieldsOnGenerator.isEmpty) {
             pushedThrough
           } else {
             // Only one nested column accessor.
@@ -321,7 +321,9 @@ object GeneratorNestedColumnAliasing {
                       .getOrElse(f)
                 }
 
-              case _ => pushedThrough
+              case other =>
+                // We should not reach here.
+                throw new IllegalStateException(s"Unreasonable plan after optimization: $other")
             }
           }
       }

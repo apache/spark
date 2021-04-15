@@ -370,19 +370,21 @@ abstract class SchemaPruningSuite
       .select("friend.first", "friend.middle", "friend")
     checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+  }
 
+  testSchemaPruning("SPARK-34638: nested column prune on generator output - case-sensitivity") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val query4 = spark.table("contacts")
+      val query1 = spark.table("contacts")
         .select(explode(col("friends")).as("friend"))
         .select("friend.First")
-      checkScan(query4, "struct<friends:array<struct<first:string>>>")
-      checkAnswer(query4, Row("Susan") :: Nil)
+      checkScan(query1, "struct<friends:array<struct<first:string>>>")
+      checkAnswer(query1, Row("Susan") :: Nil)
 
-      val query5 = spark.table("contacts")
+      val query2 = spark.table("contacts")
         .select(explode(col("friends")).as("friend"))
         .select("friend.MIDDLE")
-      checkScan(query5, "struct<friends:array<struct<middle:string>>>")
-      checkAnswer(query5, Row("Z.") :: Nil)
+      checkScan(query2, "struct<friends:array<struct<middle:string>>>")
+      checkAnswer(query2, Row("Z.") :: Nil)
     }
   }
 
