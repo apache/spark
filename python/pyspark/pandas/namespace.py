@@ -31,7 +31,6 @@ import pandas as pd
 from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list_like
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pyspark
 from pyspark import sql as spark
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -736,9 +735,6 @@ def read_parquet(path, columns=None, index_col=None, pandas_metadata=False, **op
     index_names = None
 
     if index_col is None and pandas_metadata:
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0.0"):
-            raise ValueError("pandas_metadata is not supported with Spark < 3.0.")
-
         # Try to read pandas metadata
 
         @pandas_udf("index_col array<string>, index_names array<string>", PandasUDFType.SCALAR)
@@ -1073,11 +1069,6 @@ def read_excel(
         )
 
     if isinstance(io, str):
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0.0"):
-            raise ValueError(
-                "The `io` parameter as a string is not supported if the underlying Spark is "
-                "below 3.0. You can use `ps.from_pandas(pd.read_excel(...))` as a workaround"
-            )
         # 'binaryFile' format is available since Spark 3.0.0.
         binaries = default_session().read.format("binaryFile").load(io).select("content").head(2)
         io_or_bin = binaries[0][0]

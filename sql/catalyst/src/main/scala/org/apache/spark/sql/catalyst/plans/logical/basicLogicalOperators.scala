@@ -25,16 +25,18 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{INNER_LIKE_JOIN, JOIN,
-  LEFT_SEMI_OR_ANTI_JOIN, OUTER_JOIN, TreePattern}
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern.{
+  INNER_LIKE_JOIN, JOIN, LEFT_SEMI_OR_ANTI_JOIN, NATURAL_LIKE_JOIN, OUTER_JOIN, TreePattern
+}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
 /**
- * When planning take() or collect() operations, this special node that is inserted at the top of
+ * When planning take() or collect() operations, this special node is inserted at the top of
  * the logical plan before invoking the query planner.
  *
  * Rules can pattern-match on this node in order to apply transformations that only take effect
@@ -68,7 +70,6 @@ object Subquery {
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
-  override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = child.maxRows
 
   override lazy val resolved: Boolean = {
@@ -85,8 +86,15 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
 
+  override def metadataOutput: Seq[Attribute] =
+    getTagValue(Project.hiddenOutputTag).getOrElse(Nil)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): Project =
     copy(child = newChild)
+}
+
+object Project {
+  val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hidden_output")
 }
 
 /**
@@ -451,14 +459,15 @@ case class Join(
   }
 
   override val nodePatterns : Seq[TreePattern] = {
-    var types = Seq(JOIN)
+    var patterns = Seq(JOIN)
     joinType match {
-      case _: InnerLike => types = types :+ INNER_LIKE_JOIN
-      case LeftOuter | FullOuter | RightOuter => types = types :+ OUTER_JOIN
-      case LeftSemiOrAnti(_) => types = types :+ LEFT_SEMI_OR_ANTI_JOIN
+      case _: InnerLike => patterns = patterns :+ INNER_LIKE_JOIN
+      case LeftOuter | FullOuter | RightOuter => patterns = patterns :+ OUTER_JOIN
+      case LeftSemiOrAnti(_) => patterns = patterns :+ LEFT_SEMI_OR_ANTI_JOIN
+      case NaturalJoin(_) | UsingJoin(_, _) => patterns = patterns :+ NATURAL_LIKE_JOIN
       case _ =>
     }
-    types
+    patterns
   }
 
   // Ignore hint for canonicalization
