@@ -41,7 +41,7 @@ select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_stat
 
 While `select_statement` is defined as
 ```sql
-SELECT [ hints , ... ] [ ALL | DISTINCT ] { [[ named_expression | regex_column_names ] [ , ... ] | TRANSFORM Clause ] }
+SELECT [ hints , ... ] [ ALL | DISTINCT ] { [[ named_expression | regex_column_names ] [ , ... ] | TRANSFORM ( named_expression [ , ... ] )) ] }
     FROM { from_item [ , ... ] }
     [ PIVOT clause ]
     [ LATERAL VIEW clause ] [ ... ] 
@@ -166,7 +166,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [[ named_expression | regex_column_n
 
 * **TRANSFORM**
 
-     Specifies a hive-style transform (SELECT TRANSFORM/MAP/REDUCE) query specification to transform
+     Specifies a hive-style transform (`SELECT TRANSFORM`) query specification to transform
      the input by forking and running the specified script.
 
 ### Related Statements

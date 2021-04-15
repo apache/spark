@@ -23,7 +23,7 @@ license: |
 
 The `TRANSFORM` clause is used to specify a Hive-style transform query specification 
 to transform the inputs by running a specified script. Users can plug in their own custom 
-scripts in the data stream by using features natively supported in the Spark SQL.
+scripts in the data stream by using `TRANSFORM` clause.
 
 ### Syntax
 
@@ -94,19 +94,19 @@ row_format:
 
 * **RECORDWRITER**
 
-    Specifies a fully-qualified class name of a custom RecordWriter. A default value is `org.apache.hadoop.hive.ql.exec.TextRecordWriter`.
+    Specifies a fully-qualified class name of a custom RecordWriter. The default value is `org.apache.hadoop.hive.ql.exec.TextRecordWriter`.
 
 * **RECORDREADER**
 
-    Specifies a fully-qualified class name of a custom RecordReader. A default value is `org.apache.hadoop.hive.ql.exec.TextRecordReader`.
+    Specifies a fully-qualified class name of a custom RecordReader. The default value is `org.apache.hadoop.hive.ql.exec.TextRecordReader`.
 
 * **script**
 
-    Specifies a command to process data.
+    Specifies a command or a path to script to process data.
 
 ### SerDe behavior
 
-Spark uses Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, columns will be transformed
+Spark uses Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, columns will be casted
 to `STRING` and combined by tabs before feeding to the user script. All `NULL` values will be converted
 to the literal string `"\N"` in order to differentiate `NULL` values from empty strings. The standard output of the
 user script will be treated as TAB-separated STRING columns, any cell containing only `"\N"` will be re-interpreted
