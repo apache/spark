@@ -1443,7 +1443,7 @@ private[spark] class DAGScheduler(
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
-        stage.resourceProfileId))
+        stage.resourceProfileId, stage.rdd.getTaskSchedulingPlugin()))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run

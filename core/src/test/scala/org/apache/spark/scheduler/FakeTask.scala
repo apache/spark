@@ -44,11 +44,19 @@ object FakeTask {
    */
   def createTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
     createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, prefLocs: _*)
+  }
+
+  def createTaskSet(
+      numTasks: Int,
+      schedulingPlugin: TaskSchedulingPlugin,
+      prefLocs: Seq[TaskLocation]*): TaskSet = {
+    createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Some(schedulingPlugin), prefLocs: _*)
   }
 
   def createTaskSet(numTasks: Int, rpId: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
-    createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0, rpId, prefLocs: _*)
+    createTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0, rpId, None, prefLocs: _*)
   }
 
   def createTaskSet(
@@ -57,7 +65,16 @@ object FakeTask {
       stageAttemptId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
     createTaskSet(numTasks, stageId, stageAttemptId, priority = 0,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, prefLocs: _*)
+  }
+  def createTaskSet(
+      numTasks: Int,
+      stageId: Int,
+      stageAttemptId: Int,
+      priority: Int,
+      rpId: Int,
+      prefLocs: Seq[TaskLocation]*): TaskSet = {
+    createTaskSet(numTasks, stageId, stageAttemptId, priority, rpId, None, prefLocs: _*)
   }
 
   def createTaskSet(
@@ -66,6 +83,7 @@ object FakeTask {
       stageAttemptId: Int,
       priority: Int,
       rpId: Int,
+      schedulingPlugin: Option[TaskSchedulingPlugin],
       prefLocs: Seq[TaskLocation]*): TaskSet = {
     if (prefLocs.size != 0 && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
@@ -73,7 +91,7 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil)
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId, schedulingPlugin)
   }
 
   def createShuffleMapTaskSet(

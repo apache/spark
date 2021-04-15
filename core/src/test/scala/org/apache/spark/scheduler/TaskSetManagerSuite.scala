@@ -41,7 +41,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SystemClock}
+import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SystemClock, Utils}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -2246,10 +2246,12 @@ class TaskSetManagerSuite
 
   test("SPARK-35022: TaskSet with scheduling plugin") {
     sc = new SparkContext("local", "test")
-    sc.conf.set(config.TASK_SCHEDULING_PLUGIN_CLASSNAME, classOf[TestSchedulingPlugin].getName)
+
+    val plugin = Utils.loadExtensions(classOf[TaskSchedulingPlugin],
+      Seq(classOf[TestSchedulingPlugin].getName), conf).head
 
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
-    val taskSet = FakeTask.createTaskSet(5)
+    val taskSet = FakeTask.createTaskSet(5, plugin)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     val accumUpdates = taskSet.tasks.head.metrics.internalAccums
@@ -2284,10 +2286,12 @@ class TaskSetManagerSuite
 
   test("SPARK-35022: skip excluded executor/node") {
     sc = new SparkContext("local", "test")
-    sc.conf.set(config.TASK_SCHEDULING_PLUGIN_CLASSNAME, classOf[TestSchedulingPlugin].getName)
+
+    val plugin = Utils.loadExtensions(classOf[TaskSchedulingPlugin],
+      Seq(classOf[TestSchedulingPlugin].getName), conf).head
 
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
-    val taskSet = FakeTask.createTaskSet(5)
+    val taskSet = FakeTask.createTaskSet(5, plugin)
 
     val clock = new ManualClock
     val mockListenerBus = mock(classOf[LiveListenerBus])

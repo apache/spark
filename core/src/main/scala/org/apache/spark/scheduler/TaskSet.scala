@@ -29,7 +29,8 @@ private[spark] class TaskSet(
     val stageAttemptId: Int,
     val priority: Int,
     val properties: Properties,
-    val resourceProfileId: Int) {
+    val resourceProfileId: Int,
+    val schedulingPlugin: Option[TaskSchedulingPlugin] = None) {
   val id: String = stageId + "." + stageAttemptId
 
   override def toString: String = "TaskSet " + id

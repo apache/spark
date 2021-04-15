@@ -44,6 +44,7 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.scheduler.TaskSchedulingPlugin
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
@@ -140,6 +141,12 @@ abstract class RDD[T: ClassTag](
    * Optionally overridden by subclasses to specify placement preferences.
    */
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
+
+  /**
+   * Optionally overridden by subclasses to specify `TaskSchedulingPlugin` used to customize task
+   * scheduling behavior.
+   */
+  protected[spark] def getTaskSchedulingPlugin(): Option[TaskSchedulingPlugin] = None
 
   /** Optionally overridden by subclasses to specify how they are partitioned. */
   @transient val partitioner: Option[Partitioner] = None
