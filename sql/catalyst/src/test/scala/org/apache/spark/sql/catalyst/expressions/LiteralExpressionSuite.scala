@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
+import java.time.temporal.ChronoUnit
 import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
@@ -384,5 +385,31 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal(Array(period0)), Array(period0))
     val period1 = Period.ofMonths(-1024)
     checkEvaluation(Literal(Array(period0, period1)), Array(period0, period1))
+  }
+
+  test("SPARK-35099: convert a literal of day-time interval to SQL string") {
+    Seq(
+      Duration.ofDays(-1) -> "-1 00:00:00",
+      Duration.of(10, ChronoUnit.MICROS) -> "0 00:00:00.00001",
+      Duration.of(MICROS_PER_DAY - 1, ChronoUnit.MICROS) -> "0 23:59:59.999999"
+    ).foreach { case (duration, intervalPayload) =>
+      val literal = Literal.apply(duration)
+      val expected = s"INTERVAL '$intervalPayload' DAY TO SECOND"
+      assert(literal.sql === expected)
+      assert(literal.toString === expected)
+    }
+  }
+
+  test("SPARK-35099: convert a literal of year-month interval to SQL string") {
+    Seq(
+      Period.ofYears(-1) -> "-1-0",
+      Period.of(9999, 11, 0) -> "9999-11",
+      Period.ofMonths(-11) -> "-0-11"
+    ).foreach { case (period, intervalPayload) =>
+      val literal = Literal.apply(period)
+      val expected = s"INTERVAL '$intervalPayload' YEAR TO MONTH"
+      assert(literal.sql === expected)
+      assert(literal.toString === expected)
+    }
   }
 }

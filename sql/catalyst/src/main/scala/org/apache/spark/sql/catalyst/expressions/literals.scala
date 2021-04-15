@@ -43,7 +43,8 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, Scala
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths}
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -317,6 +318,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           DateFormatter(timeZoneId).format(value.asInstanceOf[Int])
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
+        case DayTimeIntervalType => toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE)
+        case YearMonthIntervalType => toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE)
         case _ =>
           other.toString
       }
@@ -437,6 +440,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
+    case (i: Long, DayTimeIntervalType) => toDayTimeIntervalString(i, ANSI_STYLE)
+    case (i: Int, YearMonthIntervalType) => toYearMonthIntervalString(i, ANSI_STYLE)
     case _ => value.toString
   }
 }
