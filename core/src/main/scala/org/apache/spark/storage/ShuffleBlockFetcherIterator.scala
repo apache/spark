@@ -554,7 +554,7 @@ final class ShuffleBlockFetcherIterator(
     val numDeferredRequest = deferredFetchRequests.values.map(_.size).sum
     val numFetches = remoteRequests.size - fetchRequests.size - numDeferredRequest
     logInfo(s"Started $numFetches remote fetches in ${Utils.getUsedTimeNs(startTimeNs)}" +
-      s"${if (numDeferredRequest > 0 ) s", deferred $numDeferredRequest requests" else "" }")
+      (if (numDeferredRequest > 0 ) s", deferred $numDeferredRequest requests" else ""))
 
     // Get Local Blocks
     fetchLocalBlocks()
