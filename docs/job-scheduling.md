@@ -252,7 +252,7 @@ properties:
 
 The pool properties can be set by creating an XML file, similar to `conf/fairscheduler.xml.template`,
 and either putting a file named `fairscheduler.xml` on the classpath, or setting `spark.scheduler.allocation.file` property in your
-[SparkConf](configuration.html#spark-properties).
+[SparkConf](configuration.html#spark-properties). The file path can either be a local file path or HDFS file path.
 
 {% highlight scala %}
 conf.set("spark.scheduler.allocation.file", "/path/to/file")
