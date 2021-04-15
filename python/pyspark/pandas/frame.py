@@ -78,7 +78,7 @@ from pyspark.sql.types import (
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas.accessors import KoalasFrameMethods
+from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.config import option_context, get_option
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
 from pyspark.pandas.utils import (
@@ -119,7 +119,7 @@ from pyspark.pandas.typedef import (
     Scalar,
     ScalarType,
 )
-from pyspark.pandas.plot import KoalasPlotAccessor
+from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
@@ -404,8 +404,8 @@ if (3, 5) <= sys.version_info < (3, 7) and __name__ != "__main__":
 
 class DataFrame(Frame, Generic[T]):
     """
-    Koalas DataFrame that corresponds to pandas DataFrame logically. This holds Spark DataFrame
-    internally.
+    pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
+    DataFrame internally.
 
     :ivar _internal: an internal immutable Frame to manage metadata.
     :type _internal: InternalFrame
@@ -413,11 +413,11 @@ class DataFrame(Frame, Generic[T]):
     Parameters
     ----------
     data : numpy ndarray (structured or homogeneous), dict, pandas DataFrame, Spark DataFrame \
-        or Koalas Series
+        or pandas-on-Spark Series
         Dict can contain Series, arrays, constants, or list-like objects
         If data is a dict, argument order is maintained for Python 3.6
         and later.
-        Note that if `data` is a pandas DataFrame, a Spark DataFrame, and a Koalas Series,
+        Note that if `data` is a pandas DataFrame, a Spark DataFrame, and a pandas-on-Spark Series,
         other arguments should not be used.
     index : Index or array-like
         Index to use for resulting frame. Will default to RangeIndex if
@@ -876,23 +876,23 @@ class DataFrame(Frame, Generic[T]):
         return self + other
 
     # create accessor for plot
-    plot = CachedAccessor("plot", KoalasPlotAccessor)
+    plot = CachedAccessor("plot", PandasOnSparkPlotAccessor)
 
     # create accessor for Spark related methods.
     spark = CachedAccessor("spark", SparkFrameMethods)
 
-    # create accessor for Koalas specific methods.
-    koalas = CachedAccessor("koalas", KoalasFrameMethods)
+    # create accessor for pandas-on-Spark specific methods.
+    koalas = CachedAccessor("koalas", PandasOnSparkFrameMethods)
 
     def hist(self, bins=10, **kwds):
         return self.plot.hist(bins, **kwds)
 
-    hist.__doc__ = KoalasPlotAccessor.hist.__doc__
+    hist.__doc__ = PandasOnSparkPlotAccessor.hist.__doc__
 
     def kde(self, bw_method=None, ind=None, **kwds):
         return self.plot.kde(bw_method, ind, **kwds)
 
-    kde.__doc__ = KoalasPlotAccessor.kde.__doc__
+    kde.__doc__ = PandasOnSparkPlotAccessor.kde.__doc__
 
     add.__doc__ = _flex_doc_FRAME.format(
         desc="Addition", op_name="+", equiv="dataframe + other", reverse="radd"
@@ -1148,7 +1148,7 @@ class DataFrame(Frame, Generic[T]):
              >>> def square(x) -> np.int32:
              ...     return x ** 2
 
-             Koalas uses return type hint and does not try to infer the type.
+             pandas-on-Spark uses return type hint and does not try to infer the type.
 
         Parameters
         ----------
@@ -1182,7 +1182,7 @@ class DataFrame(Frame, Generic[T]):
         0   1.000000   4.494400
         1  11.262736  20.857489
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> df.applymap(lambda x: x ** 2)
                    0          1
@@ -1349,11 +1349,11 @@ class DataFrame(Frame, Generic[T]):
 
         Notes
         -----
-        There are behavior differences between Koalas and pandas.
+        There are behavior differences between pandas-on-Spark and pandas.
 
         * the `method` argument only accepts 'pearson', 'spearman'
-        * the data should not contain NaNs. Koalas will return an error.
-        * Koalas doesn't support the following argument(s).
+        * the data should not contain NaNs. pandas-on-Spark will return an error.
+        * pandas-on-Spark doesn't support the following argument(s).
 
           * `min_periods` argument is not supported
         """
@@ -1464,7 +1464,7 @@ class DataFrame(Frame, Generic[T]):
             s = pd.Series(v, index=columns, name=k)
             yield k, s
 
-    def itertuples(self, index: bool = True, name: Optional[str] = "Koalas") -> Iterator:
+    def itertuples(self, index: bool = True, name: Optional[str] = "PandasOnSpark") -> Iterator:
         """
         Iterate over DataFrame rows as namedtuples.
 
@@ -1472,7 +1472,7 @@ class DataFrame(Frame, Generic[T]):
         ----------
         index : bool, default True
             If True, return the index as the first element of the tuple.
-        name : str or None, default "Koalas"
+        name : str or None, default "PandasOnSpark"
             The name of the returned namedtuples or None to return regular
             tuples.
 
@@ -1508,8 +1508,8 @@ class DataFrame(Frame, Generic[T]):
         >>> for row in df.itertuples():
         ...     print(row)
         ...
-        Koalas(Index='dog', num_legs=4, num_wings=0)
-        Koalas(Index='hawk', num_legs=2, num_wings=2)
+        PandasOnSpark(Index='dog', num_legs=4, num_wings=0)
+        PandasOnSpark(Index='hawk', num_legs=2, num_wings=2)
 
         By setting the `index` parameter to False we can remove the index
         as the first element of the tuple:
@@ -1517,8 +1517,8 @@ class DataFrame(Frame, Generic[T]):
         >>> for row in df.itertuples(index=False):
         ...     print(row)
         ...
-        Koalas(num_legs=4, num_wings=0)
-        Koalas(num_legs=2, num_wings=2)
+        PandasOnSpark(num_legs=4, num_wings=0)
+        PandasOnSpark(num_legs=2, num_wings=2)
 
         With the `name` parameter set we set a custom name for the yielded
         namedtuples:
@@ -2306,9 +2306,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return self.koalas.apply_batch(func, args=args, **kwds)
 
-    apply_batch.__doc__ = KoalasFrameMethods.apply_batch.__doc__
+    apply_batch.__doc__ = PandasOnSparkFrameMethods.apply_batch.__doc__
 
-    # TODO: Remove this API when Koalas 2.0.0.
+    # TODO: Remove this API.
     def map_in_pandas(self, func) -> "DataFrame":
         warnings.warn(
             "DataFrame.map_in_pandas is deprecated as of DataFrame.koalas.apply_batch. "
@@ -2317,7 +2317,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return self.koalas.apply_batch(func)
 
-    map_in_pandas.__doc__ = KoalasFrameMethods.apply_batch.__doc__
+    map_in_pandas.__doc__ = PandasOnSparkFrameMethods.apply_batch.__doc__
 
     def apply(self, func, axis=0, args=(), **kwds) -> Union["Series", "DataFrame", "Index"]:
         """
@@ -2331,8 +2331,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
 
         .. note:: when `axis` is 0 or 'index', the `func` is unable to access
-            to the whole input series. Koalas internally splits the input series into multiple
-            batches and calls `func` with each batch multiple times. Therefore, operations
+            to the whole input series. pandas-on-Spark internally splits the input series into
+            multiple batches and calls `func` with each batch multiple times. Therefore, operations
             such as global aggregations are impossible. See the example below.
 
             >>> # This case does not return the length of whole series but of the batch internally
@@ -2360,7 +2360,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             >>> def square(s) -> ps.Series[np.int32]:
             ...     return s ** 2
 
-            Koalas uses return type hint and does not try to infer the type.
+            pandas-on-Spark uses return type hint and does not try to infer the type.
 
             In case when axis is 1, it requires to specify `DataFrame` or scalar value
             with type hints as below:
@@ -2440,7 +2440,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0  3.0
         2  2.0  3.0
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> df.apply(np.sqrt, axis=0)
              A    B
@@ -2459,7 +2459,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2    13
         dtype: int64
 
-        Likewise, you can omit the type hint and let Koalas infer its type.
+        Likewise, you can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> df.apply(np.sum, axis=1)
         0    13
@@ -2629,10 +2629,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
              >>> def square(x) -> ps.Series[np.int32]:
              ...     return x ** 2
 
-             Koalas uses return type hint and does not try to infer the type.
+             pandas-on-Spark uses return type hint and does not try to infer the type.
 
         .. note:: the series within ``func`` is actually multiple pandas series as the
-            segments of the whole Koalas series; therefore, the length of each series
+            segments of the whole pandas-on-Spark series; therefore, the length of each series
             is not guaranteed. As an example, an aggregation against each series
             does work as a global aggregation but an aggregation of each segment. See
             below:
@@ -2684,7 +2684,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  1  4
         2  4  9
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> df.transform(lambda x: x ** 2)
            A  B
@@ -2776,7 +2776,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return self.koalas.transform_batch(func, *args, **kwargs)
 
-    transform_batch.__doc__ = KoalasFrameMethods.transform_batch.__doc__
+    transform_batch.__doc__ = PandasOnSparkFrameMethods.transform_batch.__doc__
 
     def pop(self, item) -> "DataFrame":
         """
@@ -3069,8 +3069,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         def pandas_between_time(pdf) -> ps.DataFrame[return_types]:  # type: ignore
             return pdf.between_time(start_time, end_time, include_start, include_end).reset_index()
 
-        # apply_batch will remove the index of the Koalas DataFrame and attach a default index,
-        # which will never be used. So use "distributed" index as a dummy to avoid overhead.
+        # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach a
+        # default index, which will never be used. So use "distributed" index as a dummy to
+        # avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
             kdf = kdf.koalas.apply_batch(pandas_between_time)
 
@@ -3150,8 +3151,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             def pandas_at_time(pdf) -> ps.DataFrame[return_types]:  # type: ignore
                 return pdf.at_time(time, asof, axis).reset_index()
 
-        # apply_batch will remove the index of the Koalas DataFrame and attach a default index,
-        # which will never be used. So use "distributed" index as a dummy to avoid overhead.
+        # apply_batch will remove the index of the pandas-on-Spark DataFrame and attach
+        # a default index, which will never be used. So use "distributed" index as a dummy
+        # to avoid overhead.
         with option_context("compute.default_index_type", "distributed"):
             kdf = kdf.koalas.apply_batch(pandas_at_time)
 
@@ -3648,7 +3650,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         lion    mammal       80.5
         monkey  mammal        NaN
 
-        When we reset the index, the old index is added as a column. Unlike pandas, Koalas
+        When we reset the index, the old index is added as a column. Unlike pandas, pandas-on-Spark
         does not automatically add a sequential index. The following 0, 1, 2, 3 are only
         there when we display the DataFrame.
 
@@ -4161,14 +4163,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
             for large amount of data.
-            Note: This parameter is specific to Koalas and is not found in pandas.
+            Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
         rsd: float, default 0.05
             Maximum estimation error allowed in the HyperLogLog algorithm.
-            Note: Just like ``approx`` this parameter is specific to Koalas.
+            Note: Just like ``approx`` this parameter is specific to pandas-on-Spark.
 
         Returns
         -------
-        The number of unique values per column as a Koalas Series.
+        The number of unique values per column as a pandas-on-Spark Series.
 
         Examples
         --------
@@ -4506,14 +4508,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def to_koalas(self, index_col: Optional[Union[str, List[str]]] = None) -> "DataFrame":
         """
-        Converts the existing DataFrame into a Koalas DataFrame.
+        Converts the existing DataFrame into a pandas-on-Spark DataFrame.
 
         This method is monkey-patched into Spark's DataFrame and can be used
-        to convert a Spark DataFrame into a Koalas DataFrame. If running on
-        an existing Koalas DataFrame, the method returns itself.
+        to convert a Spark DataFrame into a pandas-on-Spark DataFrame. If running on
+        an existing pandas-on-Spark DataFrame, the method returns itself.
 
-        If a Koalas DataFrame is converted to a Spark DataFrame and then back
-        to Koalas, it will lose the index information and the original index
+        If a pandas-on-Spark DataFrame is converted to a Spark DataFrame and then back
+        to pandas-on-Spark, it will lose the index information and the original index
         will be turned into a normal column.
 
         Parameters
@@ -4552,7 +4554,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1        3
         2        4
 
-        Calling to_koalas on a Koalas DataFrame simply returns itself.
+        Calling to_koalas on a pandas-on-Spark DataFrame simply returns itself.
 
         >>> df.to_koalas()
            col1  col2
@@ -4641,8 +4643,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options : dict
             All other options passed directly into Delta Lake.
 
@@ -4723,8 +4725,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Compression codec to use when saving to file. If None is set, it uses the
             value specified in `spark.sql.parquet.compression.codec`.
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options : dict
             All other options passed directly into Spark's data source.
 
@@ -4790,8 +4792,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options : dict
             All other options passed directly into Spark's data source.
 
@@ -4896,7 +4898,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             The column names are keywords. If the values are
             callable, they are computed on the DataFrame and
             assigned to the new columns. The callable must not
-            change input DataFrame (though Koalas doesn't check it).
+            change input DataFrame (though pandas-on-Spark doesn't check it).
             If the values are not callable, (e.g. a Series or a literal),
             they are simply assigned.
 
@@ -4939,7 +4941,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Assigning multiple columns within the same ``assign`` is possible
         but you cannot refer to newly created or modified columns. This
         feature is supported in pandas for Python 3.6 and later but not in
-        Koalas. In Koalas, all items are computed first, and then assigned.
+        pandas-on-Spark. In pandas-on-Spark, all items are computed first,
+        and then assigned.
         """
         return self._assign(kwargs)
 
@@ -6188,9 +6191,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         5  NaN  NaN  6.0
 
         Notice that, unlike pandas raises an ValueError when duplicated values are found,
-        Koalas' pivot still works with its first value it meets during operation because pivot
-        is an expensive operation and it is preferred to permissively execute over failing fast
-        when processing large data.
+        pandas-on-Spark's pivot still works with its first value it meets during operation because
+        pivot is an expensive operation and it is preferred to permissively execute over failing
+        fast when processing large data.
 
         >>> df = ps.DataFrame({"foo": ['one', 'one', 'two', 'two'],
         ...                    "bar": ['A', 'A', 'B', 'C'],
@@ -6893,7 +6896,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace : bool, default False
             if True, perform operation in-place
         kind : str, default None
-            Koalas does not allow specifying the sorting algorithm at the moment, default None
+            pandas-on-Spark does not allow specifying the sorting algorithm at the moment,
+            default None
         na_position : {‘first’, ‘last’}, default ‘last’
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
@@ -7205,7 +7209,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         This method is equivalent to
         ``df.sort_values(columns, ascending=False).head(n)``, but more
         performant in pandas.
-        In Koalas, thanks to Spark's lazy execution and query optimizer,
+        In pandas-on-Spark, thanks to Spark's lazy execution and query optimizer,
         the two would have same performance.
 
         Parameters
@@ -7277,8 +7281,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         well, but not used for ordering.
 
         This method is equivalent to ``df.sort_values(columns, ascending=True).head(n)``,
-        but more performant. In Koalas, thanks to Spark's lazy execution and query optimizer,
-        the two would have same performance.
+        but more performant. In pandas-on-Spark, thanks to Spark's lazy execution and query
+        optimizer, the two would have same performance.
 
         Parameters
         ----------
@@ -8082,10 +8086,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Please call this function using named argument by specifying the ``frac`` argument.
 
         You can use `random_state` for reproducibility. However, note that different from pandas,
-        specifying a seed in Koalas/Spark does not guarantee the sampled rows will be fixed. The
-        result set depends on not only the seed, but also how the data is distributed across
-        machines and to some extent network randomness when shuffle operations are involved. Even
-        in the simplest case, the result set will depend on the system's CPU core count.
+        specifying a seed in pandas-on-Spark/Spark does not guarantee the sampled rows will
+        be fixed. The result set depends on not only the seed, but also how the data is distributed
+        across machines and to some extent network randomness when shuffle operations are involved.
+        Even in the simplest case, the result set will depend on the system's CPU core count.
 
         Parameters
         ----------
@@ -8160,12 +8164,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def astype(self, dtype) -> "DataFrame":
         """
-        Cast a Koalas object to a specified dtype ``dtype``.
+        Cast a pandas-on-Spark object to a specified dtype ``dtype``.
 
         Parameters
         ----------
         dtype : data type, or dict of column name -> data type
-            Use a numpy.dtype or Python type to cast entire Koalas object to
+            Use a numpy.dtype or Python type to cast entire pandas-on-Spark object to
             the same type. Alternatively, use {col: dtype, ...}, where col is a
             column label and dtype is a numpy.dtype or Python type to cast one
             or more of the DataFrame's columns to column-specific types.
@@ -8773,7 +8777,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         nlevels = self._internal.index_level
         assert nlevels <= 1 or (
             isinstance(index, ps.MultiIndex) and nlevels == index.nlevels
-        ), "MultiIndex DataFrame can only be reindexed with a similar Koalas MultiIndex."
+        ), "MultiIndex DataFrame can only be reindexed with a similar pandas-on-Spark MultiIndex."
 
         index_columns = self._internal.index_spark_column_names
         frame = self._internal.resolved_copy.spark_frame.drop(NATURAL_ORDER_COLUMN_NAME)
@@ -8961,7 +8965,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if isinstance(other, DataFrame):
             return self.reindex(index=other.index, columns=other.columns, copy=copy)
         else:
-            raise TypeError("other must be a Koalas DataFrame")
+            raise TypeError("other must be a pandas-on-Spark DataFrame")
 
     def melt(self, id_vars=None, value_vars=None, var_name=None, value_name="value") -> "DataFrame":
         """
@@ -10637,8 +10641,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ' 2   float_col  5 non-null      float64\\n',
         'dtypes: float64(1), int64(1), object(1)']
         """
-        # To avoid pandas' existing config affects Koalas.
-        # TODO: should we have corresponding Koalas configs?
+        # To avoid pandas' existing config affects pandas-on-Spark.
+        # TODO: should we have corresponding pandas-on-Spark configs?
         with pd.option_context(
             "display.max_info_columns", sys.maxsize, "display.max_info_rows", sys.maxsize
         ):
@@ -10670,9 +10674,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         Return value at the given quantile.
 
-        .. note:: Unlike pandas', the quantile in Koalas is an approximated quantile based upon
-            approximate percentile computation because computing quantile across a large dataset
-            is extremely expensive.
+        .. note:: Unlike pandas', the quantile in pandas-on-Spark is an approximated quantile
+            based upon approximate percentile computation because computing quantile across a
+            large dataset is extremely expensive.
 
         Parameters
         ----------
@@ -11814,7 +11818,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if (key,) in self._internal.column_labels:
             self[key] = value
         else:
-            msg = "Koalas doesn't allow columns to be created via a new attribute name"
+            msg = "pandas-on-Spark doesn't allow columns to be created via a new attribute name"
             if is_testing():
                 raise AssertionError(msg)
             else:
@@ -11883,7 +11887,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     elif (3, 5) <= sys.version_info < (3, 7):
         # This is a workaround to support variadic generic in DataFrame in Python 3.5+
         # The implementation is in its metaclass so this flag is needed to distinguish
-        # Koalas DataFrame.
+        # pandas-on-Spark DataFrame.
         is_dataframe = None
 
 
@@ -11903,8 +11907,8 @@ def _reduce_spark_multi(sdf, aggs):
 
 class CachedDataFrame(DataFrame):
     """
-    Cached Koalas DataFrame, which corresponds to pandas DataFrame logically, but internally
-    it caches the corresponding Spark DataFrame.
+    Cached pandas-on-Spark DataFrame, which corresponds to pandas DataFrame logically, but
+    internally it caches the corresponding Spark DataFrame.
     """
 
     def __init__(self, internal, storage_level=None):

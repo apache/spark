@@ -16,7 +16,7 @@
 #
 
 """
-Infrastructure of options for Koalas.
+Infrastructure of options for pandas-on-Spark.
 """
 from contextlib import contextmanager
 import json
@@ -120,7 +120,7 @@ _options = [
     Option(
         key="display.max_rows",
         doc=(
-            "This sets the maximum number of rows Koalas should output when printing out "
+            "This sets the maximum number of rows pandas-on-Spark should output when printing out "
             "various output. For example, this value determines the number of rows to be "
             "shown at the repr() in a dataframe. Set `None` to unlimit the input length. "
             "Default is 1000."
@@ -135,10 +135,10 @@ _options = [
     Option(
         key="compute.max_rows",
         doc=(
-            "'compute.max_rows' sets the limit of the current Koalas DataFrame. Set `None` to "
-            "unlimit the input length. When the limit is set, it is executed by the shortcut by "
-            "collecting the data into the driver, and then using the pandas API. If the limit is "
-            "unset, the operation is executed by PySpark. Default is 1000."
+            "'compute.max_rows' sets the limit of the current pandas-on-Spark DataFrame. "
+            "Set `None` to unlimit the input length. When the limit is set, it is executed "
+            "by the shortcut by collecting the data into the driver, and then using the pandas "
+            "API. If the limit is unset, the operation is executed by PySpark. Default is 1000."
         ),
         default=1000,
         types=(int, type(None)),
@@ -152,7 +152,7 @@ _options = [
         doc=(
             "'compute.shortcut_limit' sets the limit for a shortcut. "
             "It computes specified number of rows and use its schema. When the dataframe "
-            "length is larger than this limit, Koalas uses PySpark to compute."
+            "length is larger than this limit, pandas-on-Spark uses PySpark to compute."
         ),
         default=1000,
         types=int,
@@ -186,9 +186,10 @@ _options = [
         key="compute.ordered_head",
         doc=(
             "'compute.ordered_head' sets whether or not to operate head with natural ordering. "
-            "Koalas does not guarantee the row ordering so `head` could return some rows from "
-            "distributed partitions. If 'compute.ordered_head' is set to True, Koalas performs "
-            "natural ordering beforehand, but it will cause a performance overhead."
+            "pandas-on-Spark does not guarantee the row ordering so `head` could return some "
+            "rows from distributed partitions. If 'compute.ordered_head' is set to True, "
+            "pandas-on-Spark performs natural ordering beforehand, but it will cause a "
+            "performance overhead."
         ),
         default=False,
         types=bool,
@@ -235,7 +236,7 @@ _options = [
 
 _options_dict = dict(zip((option.key for option in _options), _options))  # type: Dict[str, Option]
 
-_key_format = "koalas.{}".format
+_key_format = "pandas_on_Spark.{}".format
 
 
 class OptionError(AttributeError, KeyError):
