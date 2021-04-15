@@ -664,9 +664,12 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
 
   test("Support interval type") {
     withJdbcStatement() { statement =>
+      val legacyIntervalEnabled = SQLConf.get.legacyIntervalEnabled
+      statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key}=true")
       val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
       assert(rs.next())
       assert(rs.getString(1) === "3 months 1 hours")
+      statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key}=$legacyIntervalEnabled")
     }
     // Invalid interval value
     withJdbcStatement() { statement =>
@@ -683,6 +686,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
     val ddl1 = s"CREATE GLOBAL TEMP VIEW $viewName1 AS SELECT INTERVAL 1 DAY AS i"
     val ddl2 = s"CREATE TEMP VIEW $viewName2 as select * from global_temp.$viewName1"
     withJdbcStatement(viewName1, viewName2) { statement =>
+      val legacyIntervalEnabled = SQLConf.get.legacyIntervalEnabled
+      statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key}=true")
       statement.executeQuery(ddl1)
       statement.executeQuery(ddl2)
       val rs = statement.executeQuery(s"SELECT v1.i as a, v2.i as b FROM global_temp.$viewName1" +
@@ -691,6 +696,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
         assert(rs.getString("a") === "1 days")
         assert(rs.getString("b") === "1 days")
       }
+      statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key}=$legacyIntervalEnabled")
     }
   }
 
