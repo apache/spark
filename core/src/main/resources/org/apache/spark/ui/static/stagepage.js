@@ -576,8 +576,8 @@ $(document).ready(function () {
                         }
                     ],
                     "columnDefs": [
-                        // to ensure that strings like '12345678 / 123456', '9999 / 1234' in tables
-                        // can be sorted as numerical-order instead of lexicographical-order.
+                        // String with structures like : 'bytes / bytes', 'bytes / bytes'
+                        // they should be sorted as numerical-order instead of lexicographical-order.
                         { "type": "size", "targets": 9 },
                         { "type": "size", "targets": 10 },
                         { "type": "size", "targets": 11 },
