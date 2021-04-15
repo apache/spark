@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.CreateTableStatement
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableProvider, V1Table, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -374,7 +374,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     tableInstance match {
-      case t: SupportsWrite if t.supports(STREAMING_WRITE) => startQuery(t, extraOptions)
+      case t: SupportsWrite if t.supports(STREAMING_WRITE) =>
+        startQuery(t, extraOptions, catalogAndIdent = Some(catalog.asTableCatalog, identifier))
       case t: V2TableWithV1Fallback =>
         writeToV1Table(t.v1Table)
       case t: V1Table =>
@@ -460,7 +461,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private def startQuery(
       sink: Table,
       newOptions: CaseInsensitiveMap[String],
-      recoverFromCheckpoint: Boolean = true): StreamingQuery = {
+      recoverFromCheckpoint: Boolean = true,
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQuery = {
     val useTempCheckpointLocation = SOURCES_ALLOW_ONE_TIME_QUERY.contains(source)
 
     df.sparkSession.sessionState.streamingQueryManager.startQuery(
@@ -472,7 +474,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       outputMode,
       useTempCheckpointLocation = useTempCheckpointLocation,
       recoverFromCheckpointLocation = recoverFromCheckpoint,
-      trigger = trigger)
+      trigger = trigger,
+      catalogAndIdent = catalogAndIdent)
   }
 
   private def createV1Sink(optionsWithPath: CaseInsensitiveMap[String]): Sink = {

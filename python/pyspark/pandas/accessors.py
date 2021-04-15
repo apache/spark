@@ -18,13 +18,11 @@
 Koalas specific features.
 """
 import inspect
-from distutils.version import LooseVersion
 from typing import Any, Optional, Tuple, Union, TYPE_CHECKING, cast
 import types
 
 import numpy as np  # noqa: F401
 import pandas as pd
-import pyspark
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import StructField, StructType
@@ -89,7 +87,7 @@ class KoalasFrameMethods(object):
 
         Examples
         --------
-        >>> df = pp.DataFrame({"x": ['a', 'b', 'c']})
+        >>> df = ps.DataFrame({"x": ['a', 'b', 'c']})
         >>> df.koalas.attach_id_column(id_type="sequence", column="id")
            x  id
         0  a   0
@@ -111,7 +109,7 @@ class KoalasFrameMethods(object):
 
         For multi-index columns:
 
-        >>> df = pp.DataFrame({("x", "y"): ['a', 'b', 'c']})
+        >>> df = ps.DataFrame({("x", "y"): ['a', 'b', 'c']})
         >>> df.koalas.attach_id_column(id_type="sequence", column=("id-x", "id-y"))
            x id-x
            y id-y
@@ -203,10 +201,10 @@ class KoalasFrameMethods(object):
 
             >>> # This case does not return the length of whole frame but of the batch internally
             ... # used.
-            ... def length(pdf) -> pp.DataFrame[int]:
+            ... def length(pdf) -> ps.DataFrame[int]:
             ...     return pd.DataFrame([len(pdf)])
             ...
-            >>> df = pp.DataFrame({'A': range(1000)})
+            >>> df = ps.DataFrame({'A': range(1000)})
             >>> df.koalas.apply_batch(length)  # doctest: +SKIP
                 c0
             0   83
@@ -222,7 +220,7 @@ class KoalasFrameMethods(object):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def plus_one(x) -> pp.DataFrame[float, float]:
+            >>> def plus_one(x) -> ps.DataFrame[float, float]:
             ...     return x + 1
 
             If the return type is specified, the output column names become
@@ -231,11 +229,11 @@ class KoalasFrameMethods(object):
 
             To specify the column names, you can assign them in a pandas friendly style as below:
 
-            >>> def plus_one(x) -> pp.DataFrame["a": float, "b": float]:
+            >>> def plus_one(x) -> ps.DataFrame["a": float, "b": float]:
             ...     return x + 1
 
             >>> pdf = pd.DataFrame({'a': [1, 2, 3], 'b': [3, 4, 5]})
-            >>> def plus_one(x) -> pp.DataFrame[zip(pdf.dtypes, pdf.columns)]:
+            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.dtypes, pdf.columns)]:
             ...     return x + 1
 
             When the given function has the return type annotated, the original index of the
@@ -265,24 +263,24 @@ class KoalasFrameMethods(object):
         DataFrame.applymap: For elementwise operations.
         DataFrame.aggregate: Only perform aggregating type operations.
         DataFrame.transform: Only perform transforming type operations.
-        Series.koalas.transform_batch: transform the search as each pandas chunpp.
+        Series.koalas.transform_batch: transform the search as each pandas chunks.
 
         Examples
         --------
-        >>> df = pp.DataFrame([(1, 2), (3, 4), (5, 6)], columns=['A', 'B'])
+        >>> df = ps.DataFrame([(1, 2), (3, 4), (5, 6)], columns=['A', 'B'])
         >>> df
            A  B
         0  1  2
         1  3  4
         2  5  6
 
-        >>> def query_func(pdf) -> pp.DataFrame[int, int]:
+        >>> def query_func(pdf) -> ps.DataFrame[int, int]:
         ...     return pdf.query('A == 1')
         >>> df.koalas.apply_batch(query_func)
            c0  c1
         0   1   2
 
-        >>> def query_func(pdf) -> pp.DataFrame["A": int, "B": int]:
+        >>> def query_func(pdf) -> ps.DataFrame["A": int, "B": int]:
         ...     return pdf.query('A == 1')
         >>> df.koalas.apply_batch(query_func)
            A  B
@@ -296,7 +294,7 @@ class KoalasFrameMethods(object):
 
         You can also specify extra arguments.
 
-        >>> def calculation(pdf, y, z) -> pp.DataFrame[int, int]:
+        >>> def calculation(pdf, y, z) -> ps.DataFrame[int, int]:
         ...     return pdf ** y + z
         >>> df.koalas.apply_batch(calculation, args=(10,), z=20)
                 c0        c1
@@ -323,7 +321,7 @@ class KoalasFrameMethods(object):
 
         from pyspark.pandas.groupby import GroupBy
         from pyspark.pandas.frame import DataFrame
-        from pyspark import pandas as pp
+        from pyspark import pandas as ps
 
         if not isinstance(func, types.FunctionType):
             assert callable(func), "the first argument should be a callable function."
@@ -333,7 +331,6 @@ class KoalasFrameMethods(object):
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
-        should_use_map_in_pandas = LooseVersion(pyspark.__version__) >= "3.0"
 
         original_func = func
         func = lambda o: original_func(o, *args, **kwds)
@@ -343,7 +340,7 @@ class KoalasFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
-            limit = pp.get_option("compute.shortcut_limit")
+            limit = ps.get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
             applied = func(pdf)
             if not isinstance(applied, pd.DataFrame):
@@ -351,24 +348,20 @@ class KoalasFrameMethods(object):
                     "The given function should return a frame; however, "
                     "the return type was %s." % type(applied)
                 )
-            kdf = pp.DataFrame(applied)  # type: DataFrame
+            kdf = ps.DataFrame(applied)  # type: DataFrame
             if len(pdf) <= limit:
                 return kdf
 
             return_schema = force_decimal_precision_scale(
                 as_nullable_spark_type(kdf._internal.to_internal_spark_frame.schema)
             )
-            if should_use_map_in_pandas:
-                output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=True
-                )
-                sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
-                    lambda iterator: map(output_func, iterator), schema=return_schema
-                )
-            else:
-                sdf = GroupBy._spark_group_map_apply(
-                    self_applied, func, (F.spark_partition_id(),), return_schema, retain_index=True
-                )
+
+            output_func = GroupBy._make_pandas_df_builder_func(
+                self_applied, func, return_schema, retain_index=True
+            )
+            sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
+                lambda iterator: map(output_func, iterator), schema=return_schema
+            )
 
             # If schema is inferred, we can restore indexes too.
             internal = kdf._internal.with_new_sdf(sdf)
@@ -382,17 +375,12 @@ class KoalasFrameMethods(object):
                 )
             return_schema = cast(DataFrameType, return_type).spark_type
 
-            if should_use_map_in_pandas:
-                output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=False
-                )
-                sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
-                    lambda iterator: map(output_func, iterator), schema=return_schema
-                )
-            else:
-                sdf = GroupBy._spark_group_map_apply(
-                    self_applied, func, (F.spark_partition_id(),), return_schema, retain_index=False
-                )
+            output_func = GroupBy._make_pandas_df_builder_func(
+                self_applied, func, return_schema, retain_index=False
+            )
+            sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
+                lambda iterator: map(output_func, iterator), schema=return_schema
+            )
 
             # Otherwise, it loses index.
             internal = InternalFrame(
@@ -419,10 +407,10 @@ class KoalasFrameMethods(object):
 
             >>> # This case does not return the length of whole frame but of the batch internally
             ... # used.
-            ... def length(pdf) -> pp.DataFrame[int]:
+            ... def length(pdf) -> ps.DataFrame[int]:
             ...     return pd.DataFrame([len(pdf)] * len(pdf))
             ...
-            >>> df = pp.DataFrame({'A': range(1000)})
+            >>> df = ps.DataFrame({'A': range(1000)})
             >>> df.koalas.transform_batch(length)  # doctest: +SKIP
                 c0
             0   83
@@ -436,7 +424,7 @@ class KoalasFrameMethods(object):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def plus_one(x) -> pp.DataFrame[float, float]:
+            >>> def plus_one(x) -> ps.DataFrame[float, float]:
             ...     return x + 1
 
             If the return type is specified, the output column names become
@@ -445,11 +433,11 @@ class KoalasFrameMethods(object):
 
             To specify the column names, you can assign them in a pandas friendly style as below:
 
-            >>> def plus_one(x) -> pp.DataFrame['a': float, 'b': float]:
+            >>> def plus_one(x) -> ps.DataFrame['a': float, 'b': float]:
             ...     return x + 1
 
             >>> pdf = pd.DataFrame({'a': [1, 2, 3], 'b': [3, 4, 5]})
-            >>> def plus_one(x) -> pp.DataFrame[zip(pdf.dtypes, pdf.columns)]:
+            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.dtypes, pdf.columns)]:
             ...     return x + 1
 
             When the given function returns DataFrame and has the return type annotated, the
@@ -474,18 +462,18 @@ class KoalasFrameMethods(object):
         See Also
         --------
         DataFrame.koalas.apply_batch: For row/columnwise operations.
-        Series.koalas.transform_batch: transform the search as each pandas chunpp.
+        Series.koalas.transform_batch: transform the search as each pandas chunks.
 
         Examples
         --------
-        >>> df = pp.DataFrame([(1, 2), (3, 4), (5, 6)], columns=['A', 'B'])
+        >>> df = ps.DataFrame([(1, 2), (3, 4), (5, 6)], columns=['A', 'B'])
         >>> df
            A  B
         0  1  2
         1  3  4
         2  5  6
 
-        >>> def plus_one_func(pdf) -> pp.DataFrame[int, int]:
+        >>> def plus_one_func(pdf) -> ps.DataFrame[int, int]:
         ...     return pdf + 1
         >>> df.koalas.transform_batch(plus_one_func)
            c0  c1
@@ -493,7 +481,7 @@ class KoalasFrameMethods(object):
         1   4   5
         2   6   7
 
-        >>> def plus_one_func(pdf) -> pp.DataFrame['A': int, 'B': int]:
+        >>> def plus_one_func(pdf) -> ps.DataFrame['A': int, 'B': int]:
         ...     return pdf + 1
         >>> df.koalas.transform_batch(plus_one_func)
            A  B
@@ -501,7 +489,7 @@ class KoalasFrameMethods(object):
         1  4  5
         2  6  7
 
-        >>> def plus_one_func(pdf) -> pp.Series[int]:
+        >>> def plus_one_func(pdf) -> ps.Series[int]:
         ...     return pdf.B + 1
         >>> df.koalas.transform_batch(plus_one_func)
         0    3
@@ -542,7 +530,7 @@ class KoalasFrameMethods(object):
         from pyspark.pandas.groupby import GroupBy
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import first_series
-        from pyspark import pandas as pp
+        from pyspark import pandas as ps
 
         assert callable(func), "the first argument should be a callable function."
         spec = inspect.getfullargspec(func)
@@ -552,7 +540,6 @@ class KoalasFrameMethods(object):
         func = lambda o: original_func(o, *args, **kwargs)
 
         names = self._kdf._internal.to_internal_spark_frame.schema.names
-        should_by_pass = LooseVersion(pyspark.__version__) >= "3.0"
 
         def pandas_concat(series):
             # The input can only be a DataFrame for struct from Spark 3.0.
@@ -569,12 +556,9 @@ class KoalasFrameMethods(object):
             # from Spark 3.0.  See SPARK-23836
             return pdf[name]
 
-        def pandas_series_func(f, by_pass):
+        def pandas_series_func(f):
             ff = f
-            if by_pass:
-                return lambda *series: first_series(ff(*series))
-            else:
-                return lambda *series: first_series(ff(pandas_concat(series)))
+            return lambda *series: first_series(ff(*series))
 
         def pandas_frame_func(f, field_name):
             ff = f
@@ -583,7 +567,7 @@ class KoalasFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
-            limit = pp.get_option("compute.shortcut_limit")
+            limit = ps.get_option("compute.shortcut_limit")
             pdf = self._kdf.head(limit + 1)._to_internal_pandas()
             transformed = func(pdf)
             if not isinstance(transformed, (pd.DataFrame, pd.Series)):
@@ -593,10 +577,10 @@ class KoalasFrameMethods(object):
                 )
             if len(transformed) != len(pdf):
                 raise ValueError("transform_batch cannot produce aggregated results")
-            kdf_or_kser = pp.from_pandas(transformed)
+            kdf_or_kser = ps.from_pandas(transformed)
 
-            if isinstance(kdf_or_kser, pp.Series):
-                kser = cast(pp.Series, kdf_or_kser)
+            if isinstance(kdf_or_kser, ps.Series):
+                kser = cast(ps.Series, kdf_or_kser)
 
                 spark_return_type = force_decimal_precision_scale(
                     as_nullable_spark_type(kser.spark.data_type)
@@ -609,7 +593,7 @@ class KoalasFrameMethods(object):
                 )
 
                 pudf = pandas_udf(
-                    pandas_series_func(output_func, should_by_pass),
+                    pandas_series_func(output_func),
                     returnType=spark_return_type,
                     functionType=PandasUDFType.SCALAR,
                 )
@@ -618,9 +602,7 @@ class KoalasFrameMethods(object):
                 internal = self._kdf._internal.copy(
                     column_labels=kser._internal.column_labels,
                     data_spark_columns=[
-                        (pudf(F.struct(*columns)) if should_by_pass else pudf(*columns)).alias(
-                            kser._internal.data_spark_column_names[0]
-                        )
+                        pudf(F.struct(*columns)).alias(kser._internal.data_spark_column_names[0])
                     ],
                     data_dtypes=kser._internal.data_dtypes,
                     column_label_names=kser._internal.column_label_names,
@@ -644,27 +626,17 @@ class KoalasFrameMethods(object):
                     self_applied, func, return_schema, retain_index=True
                 )
                 columns = self_applied._internal.spark_columns
-                if should_by_pass:
-                    pudf = pandas_udf(
-                        output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
-                    )
-                    temp_struct_column = verify_temp_column_name(
-                        self_applied._internal.spark_frame, "__temp_struct__"
-                    )
-                    applied = pudf(F.struct(*columns)).alias(temp_struct_column)
-                    sdf = self_applied._internal.spark_frame.select(applied)
-                    sdf = sdf.selectExpr("%s.*" % temp_struct_column)
-                else:
-                    applied = []
-                    for field in return_schema.fields:
-                        applied.append(
-                            pandas_udf(
-                                pandas_frame_func(output_func, field.name),
-                                returnType=field.dataType,
-                                functionType=PandasUDFType.SCALAR,
-                            )(*columns).alias(field.name)
-                        )
-                    sdf = self_applied._internal.spark_frame.select(*applied)
+
+                pudf = pandas_udf(
+                    output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
+                )
+                temp_struct_column = verify_temp_column_name(
+                    self_applied._internal.spark_frame, "__temp_struct__"
+                )
+                applied = pudf(F.struct(*columns)).alias(temp_struct_column)
+                sdf = self_applied._internal.spark_frame.select(applied)
+                sdf = sdf.selectExpr("%s.*" % temp_struct_column)
+
                 return DataFrame(kdf._internal.with_new_sdf(sdf))
         else:
             return_type = infer_return_type(original_func)
@@ -687,18 +659,14 @@ class KoalasFrameMethods(object):
                 )
 
                 pudf = pandas_udf(
-                    pandas_series_func(output_func, should_by_pass),
+                    pandas_series_func(output_func),
                     returnType=spark_return_type,
                     functionType=PandasUDFType.SCALAR,
                 )
                 columns = self._kdf._internal.spark_columns
                 internal = self._kdf._internal.copy(
                     column_labels=[None],
-                    data_spark_columns=[
-                        (pudf(F.struct(*columns)) if should_by_pass else pudf(*columns)).alias(
-                            SPARK_DEFAULT_SERIES_NAME
-                        )
-                    ],
+                    data_spark_columns=[pudf(F.struct(*columns)).alias(SPARK_DEFAULT_SERIES_NAME)],
                     data_dtypes=[cast(SeriesType, return_type).dtype],
                     column_label_names=None,
                 )
@@ -713,27 +681,16 @@ class KoalasFrameMethods(object):
                 )
                 columns = self_applied._internal.spark_columns
 
-                if should_by_pass:
-                    pudf = pandas_udf(
-                        output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
-                    )
-                    temp_struct_column = verify_temp_column_name(
-                        self_applied._internal.spark_frame, "__temp_struct__"
-                    )
-                    applied = pudf(F.struct(*columns)).alias(temp_struct_column)
-                    sdf = self_applied._internal.spark_frame.select(applied)
-                    sdf = sdf.selectExpr("%s.*" % temp_struct_column)
-                else:
-                    applied = []
-                    for field in return_schema.fields:
-                        applied.append(
-                            pandas_udf(
-                                pandas_frame_func(output_func, field.name),
-                                returnType=field.dataType,
-                                functionType=PandasUDFType.SCALAR,
-                            )(*columns).alias(field.name)
-                        )
-                    sdf = self_applied._internal.spark_frame.select(*applied)
+                pudf = pandas_udf(
+                    output_func, returnType=return_schema, functionType=PandasUDFType.SCALAR
+                )
+                temp_struct_column = verify_temp_column_name(
+                    self_applied._internal.spark_frame, "__temp_struct__"
+                )
+                applied = pudf(F.struct(*columns)).alias(temp_struct_column)
+                sdf = self_applied._internal.spark_frame.select(applied)
+                sdf = sdf.selectExpr("%s.*" % temp_struct_column)
+
                 internal = InternalFrame(
                     spark_frame=sdf,
                     index_spark_columns=None,
@@ -763,10 +720,10 @@ class KoalasSeriesMethods(object):
 
             >>> # This case does not return the length of whole frame but of the batch internally
             ... # used.
-            ... def length(pser) -> pp.Series[int]:
+            ... def length(pser) -> ps.Series[int]:
             ...     return pd.Series([len(pser)] * len(pser))
             ...
-            >>> df = pp.DataFrame({'A': range(1000)})
+            >>> df = ps.DataFrame({'A': range(1000)})
             >>> df.A.koalas.transform_batch(length)  # doctest: +SKIP
                 c0
             0   83
@@ -780,7 +737,7 @@ class KoalasSeriesMethods(object):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def plus_one(x) -> pp.Series[int]:
+            >>> def plus_one(x) -> ps.Series[int]:
             ...     return x + 1
 
         Parameters
@@ -802,14 +759,14 @@ class KoalasSeriesMethods(object):
 
         Examples
         --------
-        >>> df = pp.DataFrame([(1, 2), (3, 4), (5, 6)], columns=['A', 'B'])
+        >>> df = ps.DataFrame([(1, 2), (3, 4), (5, 6)], columns=['A', 'B'])
         >>> df
            A  B
         0  1  2
         1  3  4
         2  5  6
 
-        >>> def plus_one_func(pser) -> pp.Series[np.int64]:
+        >>> def plus_one_func(pser) -> ps.Series[np.int64]:
         ...     return pser + 1
         >>> df.A.koalas.transform_batch(plus_one_func)
         0    2
@@ -827,7 +784,7 @@ class KoalasSeriesMethods(object):
 
         You can also specify extra arguments.
 
-        >>> def plus_one_func(pser, a, b, c=3) -> pp.Series[np.int64]:
+        >>> def plus_one_func(pser, a, b, c=3) -> ps.Series[np.int64]:
         ...     return pser + a + b + c
         >>> df.A.koalas.transform_batch(plus_one_func, 1, b=2)
         0     7
@@ -875,7 +832,7 @@ class KoalasSeriesMethods(object):
     def _transform_batch(self, func, return_type: Optional[Union[SeriesType, ScalarType]]):
         from pyspark.pandas.groupby import GroupBy
         from pyspark.pandas.series import Series, first_series
-        from pyspark import pandas as pp
+        from pyspark import pandas as ps
 
         if not isinstance(func, types.FunctionType):
             f = func
@@ -886,7 +843,7 @@ class KoalasSeriesMethods(object):
             #  because it returns a series from a different DataFrame and it has a different
             #  anchor. We should fix this to allow the shortcut or only allow to infer
             #  schema.
-            limit = pp.get_option("compute.shortcut_limit")
+            limit = ps.get_option("compute.shortcut_limit")
             pser = self._kser.head(limit + 1)._to_internal_pandas()
             transformed = pser.transform(func)
             kser = Series(transformed)  # type: Series
@@ -940,7 +897,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.accessors.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.accessors tests")

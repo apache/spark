@@ -233,7 +233,7 @@ statement
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
-    | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
+    | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
@@ -509,7 +509,11 @@ fromStatementBody
 querySpecification
     : transformClause
       fromClause?
-      whereClause?                                                          #transformQuerySpecification
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?                                                         #transformQuerySpecification
     | selectClause
       fromClause?
       lateralView*
@@ -520,9 +524,9 @@ querySpecification
     ;
 
 transformClause
-    : (SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
-            | kind=MAP namedExpressionSeq
-            | kind=REDUCE namedExpressionSeq)
+    : (SELECT kind=TRANSFORM '(' setQuantifier? namedExpressionSeq ')'
+            | kind=MAP setQuantifier? namedExpressionSeq
+            | kind=REDUCE setQuantifier? namedExpressionSeq)
       inRowFormat=rowFormat?
       (RECORDWRITER recordWriter=STRING)?
       USING script=STRING
@@ -879,8 +883,7 @@ unitToUnitInterval
     ;
 
 intervalValue
-    : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
-    | STRING
+    : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE | STRING)
     ;
 
 colPosition

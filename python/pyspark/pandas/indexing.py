@@ -31,7 +31,7 @@ from pyspark.sql.types import BooleanType, LongType
 from pyspark.sql.utils import AnalysisException
 import numpy as np
 
-from pyspark import pandas as pp  # noqa: F401
+from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas.internal import (
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
@@ -113,7 +113,7 @@ class AtIndexer(IndexerLike):
 
     Examples
     --------
-    >>> kdf = pp.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
+    >>> kdf = ps.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
     ...                    index=[4, 5, 5], columns=['A', 'B', 'C'])
     >>> kdf
         A   B   C
@@ -193,7 +193,7 @@ class iAtIndexer(IndexerLike):
 
     Examples
     --------
-    >>> df = pp.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
+    >>> df = ps.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
     ...                   columns=['A', 'B', 'C'])
     >>> df
         A   B   C
@@ -208,7 +208,7 @@ class iAtIndexer(IndexerLike):
 
     Get value within a series
 
-    >>> kser = pp.Series([1, 2, 3], index=[10, 20, 30])
+    >>> kser = ps.Series([1, 2, 3], index=[10, 20, 30])
     >>> kser
     10    1
     20    2
@@ -789,7 +789,7 @@ class LocIndexer(LocIndexerLike):
     --------
     **Getting values**
 
-    >>> df = pp.DataFrame([[1, 2], [4, 5], [7, 8]],
+    >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
     ...                   index=['cobra', 'viper', 'sidewinder'],
     ...                   columns=['max_speed', 'shield'])
     >>> df
@@ -928,7 +928,7 @@ class LocIndexer(LocIndexerLike):
 
     Another example using integers for the index
 
-    >>> df = pp.DataFrame([[1, 2], [4, 5], [7, 8]],
+    >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
     ...                   index=[7, 8, 9],
     ...                   columns=['max_speed', 'shield'])
     >>> df
@@ -1349,7 +1349,7 @@ class iLocIndexer(LocIndexerLike):
     >>> mydict = [{'a': 1, 'b': 2, 'c': 3, 'd': 4},
     ...           {'a': 100, 'b': 200, 'c': 300, 'd': 400},
     ...           {'a': 1000, 'b': 2000, 'c': 3000, 'd': 4000 }]
-    >>> df = pp.DataFrame(mydict, columns=['a', 'b', 'c', 'd'])
+    >>> df = ps.DataFrame(mydict, columns=['a', 'b', 'c', 'd'])
     >>> df
           a     b     c     d
     0     1     2     3     4
@@ -1718,7 +1718,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.indexing.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.indexing tests")
