@@ -5,6 +5,7 @@ on:
 
 jobs:
   notify:
+    name: Notify test workflow
     runs-on: ubuntu-20.04
     steps:
       - name: "Notify test workflow"
@@ -14,6 +15,10 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const endpoint = "GET /repos/:owner/:repo/actions/workflows/:id/runs?&branch=:branch"
+
+            // TODO: Should use pull_request.user and pull_request.user.repos_url?
+            // If a different person creates a commit to another forked repo,
+            // it would be able to detect.
             const params = {
               owner: context.payload.pull_request.head.repo.owner.login,
               repo: context.payload.pull_request.head.repo.name,
@@ -22,19 +27,28 @@ jobs:
             }
 
             const runs = await github.request(endpoint, params)
-            var runID = runs.data.workflow_runs[0].id
+            const runID = runs.data.workflow_runs[0].id
+            const runUrl = "https://github.com/"
+              + context.payload.pull_request.head.repo.full_name
+              + "/actions/runs/"
+              + runID
 
-            var msg = "**[Test build #" + runID + "]"
-              + "(https://github.com/" +  context.payload.pull_request.head.repo.full_name
-              + "/actions/runs/" + runID + ")** "
-              + "for PR " + context.issue.number
-              + " at commit [`" + context.payload.pull_request.head.sha.substring(0, 7) + "`]"
-              + "(https://github.com/" + context.payload.pull_request.head.repo.full_name
-              + "/commit/" + context.payload.pull_request.head.sha + ")."
+            const name = 'Build and test'
+            const head_sha = context.payload.pull_request.head.sha
+            const status = 'in_progress'
 
-            github.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.payload.repository.owner.login,
-              repo: context.payload.repository.name,
-              body: msg
+            github.checks.create({
+              ...context.repo,
+              name,
+              head_sha,
+              status,
+              output: {
+                title: 'Test results',
+                summary: runUrl,
+                text: JSON.stringify({
+                  owner: context.payload.pull_request.head.repo.owner.login,
+                  repo: context.payload.pull_request.head.repo.name,
+                  run_id: runID
+                })
+              }
             })

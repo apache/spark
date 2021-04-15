@@ -1,0 +1,54 @@
+name: Update build status
+
+on:
+  schedule:
+  - cron: "*/15 * * * *"
+
+jobs:
+  update:
+    name: Update build status
+    runs-on: ubuntu-20.04
+    steps:
+      - name: "Update build status"
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const endpoint = "GET /repos/:owner/:repo/pulls?state=:state"
+            const params = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            }
+
+            const maybeReady = ["clean", "has_hooks", "unknown", "unstable"];
+            const notReady = ["dirty", "draft"];
+
+            for await (const prs of github.paginate.iterator(endpoint,params)) {
+              for await (const pr of prs.data) {
+                if (pr.mergeable_state == null || maybeReady.includes(pr.mergeable_state)) {
+                  const checkRuns = await github.request('GET /repos/{owner}/{repo}/commits/{ref}/check-runs', {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ref: pr.head.sha
+                  })
+
+                  for await (const cr of checkRuns.data.check_runs) {
+                    if (cr.name == "Build and test") {
+                      const params = JSON.parse(cr.output.text)  // text contains parameters to make request in JSON
+                      const run = await github.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}', params)
+                      const response = await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        check_run_id: cr.id,
+                        output: cr.output,
+                        status: run.data.status,
+                        conclusion: run.data.conclusion
+                      })
+
+                      break
+                    }
+                  }
+                }
+              }
+            }
