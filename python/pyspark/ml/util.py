@@ -433,7 +433,13 @@ class DefaultParamsWriter(MLWriter):
 
         # User-supplied param values
         params = instance._paramMap
-        jsonParams = {p.name:params[p] for p in params if paramMap is None else paramMap}
+
+        jsonParams={}
+        if paramMap is not None:
+            jsonParams = paramMap
+        else:
+            for p in params:
+                jsonParams[p.name] = params[p]
 
         # Default param values
         jsonDefaultParams={p.name:instance._defaultParamMap[p] for p in instance._defaultParamMap}
