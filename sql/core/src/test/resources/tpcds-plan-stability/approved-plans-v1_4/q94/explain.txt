@@ -133,7 +133,7 @@ Join condition: None
 Output [2]: [d_date_sk#17, d_date#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (21) ColumnarToRow [codegen id : 8]
@@ -141,7 +141,7 @@ Input [2]: [d_date_sk#17, d_date#18]
 
 (22) Filter [codegen id : 8]
 Input [2]: [d_date_sk#17, d_date#18]
-Condition : (((isnotnull(d_date#18) AND (d_date#18 >= 1999-02-01)) AND (d_date#18 <= 1999-04-02)) AND isnotnull(d_date_sk#17))
+Condition : (((isnotnull(d_date#18) AND (d_date#18 >= 1999-02-01)) AND (cast(d_date#18 as timestamp) <= 1999-04-02 00:00:00)) AND isnotnull(d_date_sk#17))
 
 (23) Project [codegen id : 8]
 Output [1]: [d_date_sk#17]
