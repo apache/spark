@@ -28,7 +28,7 @@ scripts in the data stream by using `TRANSFORM` clause.
 ### Syntax
 
 ```sql
-SELECT TRANSFORM ( named_expression [ , ... ] )
+SELECT TRANSFORM ( expression [ , ... ] )
     [ ROW FORMAT row_format ]
     [ RECORDWRITER record_writer_class ]
     USING script [ AS ( [ col_name [ col_type ] ] [ , ... ] ) ]
@@ -46,11 +46,9 @@ row_format:
 
 ### Parameters
 
-* **named_expression**
-
-    An expression with an assigned name. In general, it denotes a column expression.
-
-    **Syntax:** `expression [AS] [alias]`
+* **expression**
+    
+    Specifies a combination of one or more values, operators and SQL functions that results in a value.
 
 * **row_format**    
 
