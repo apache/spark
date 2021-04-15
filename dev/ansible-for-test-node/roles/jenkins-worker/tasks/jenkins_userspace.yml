@@ -34,14 +34,6 @@
     owner: jenkins
     group: jenkins
 
-- name: copy the sonatype maven settings
-  copy:
-    src: settings.xml
-    dest: "{{ jenkins_home }}/workspace/"
-    mode: 0644
-    owner: jenkins
-    group: jenkins
-
 - name: copy utility scripts to jenkins bin dir
   copy:
     src: "util_scripts/{{ item }}"
