@@ -1027,43 +1027,44 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(Seq((7, 2, -2)).toDF().select(sequence($"_1", $"_2", $"_3")),
       Seq(Row(Array(7, 5, 3))))
 
-    checkAnswer(
-      spark.sql("select sequence(" +
-        "   cast('2018-01-01 00:00:00' as timestamp)" +
-        ",  cast('2018-01-02 00:00:00' as timestamp)" +
-        ",  interval 12 hours)"),
-      Seq(Row(Array(
-        Timestamp.valueOf("2018-01-01 00:00:00"),
-        Timestamp.valueOf("2018-01-01 12:00:00"),
-        Timestamp.valueOf("2018-01-02 00:00:00")))))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      checkAnswer(
+        spark.sql("select sequence(" +
+          "   cast('2018-01-01 00:00:00' as timestamp)" +
+          ",  cast('2018-01-02 00:00:00' as timestamp)" +
+          ",  interval 12 hours)"),
+        Seq(Row(Array(
+          Timestamp.valueOf("2018-01-01 00:00:00"),
+          Timestamp.valueOf("2018-01-01 12:00:00"),
+          Timestamp.valueOf("2018-01-02 00:00:00")))))
 
-    withDefaultTimeZone(UTC) {
+      withDefaultTimeZone(UTC) {
+        checkAnswer(
+          spark.sql("select sequence(" +
+            "   cast('2018-01-01' as date)" +
+            ",  cast('2018-03-01' as date)" +
+            ",  interval 1 month)"),
+          Seq(Row(Array(
+            Date.valueOf("2018-01-01"),
+            Date.valueOf("2018-02-01"),
+            Date.valueOf("2018-03-01")))))
+      }
+
+      // test type coercion
+      checkAnswer(
+        Seq((1.toByte, 3L, 1)).toDF().select(sequence($"_1", $"_2", $"_3")),
+        Seq(Row(Array(1L, 2L, 3L))))
+
       checkAnswer(
         spark.sql("select sequence(" +
           "   cast('2018-01-01' as date)" +
-          ",  cast('2018-03-01' as date)" +
-          ",  interval 1 month)"),
+          ",  cast('2018-01-02 00:00:00' as timestamp)" +
+          ",  interval 12 hours)"),
         Seq(Row(Array(
-          Date.valueOf("2018-01-01"),
-          Date.valueOf("2018-02-01"),
-          Date.valueOf("2018-03-01")))))
+          Timestamp.valueOf("2018-01-01 00:00:00"),
+          Timestamp.valueOf("2018-01-01 12:00:00"),
+          Timestamp.valueOf("2018-01-02 00:00:00")))))
     }
-
-    // test type coercion
-    checkAnswer(
-      Seq((1.toByte, 3L, 1)).toDF().select(sequence($"_1", $"_2", $"_3")),
-      Seq(Row(Array(1L, 2L, 3L))))
-
-    checkAnswer(
-      spark.sql("select sequence(" +
-        "   cast('2018-01-01' as date)" +
-        ",  cast('2018-01-02 00:00:00' as timestamp)" +
-        ",  interval 12 hours)"),
-      Seq(Row(Array(
-        Timestamp.valueOf("2018-01-01 00:00:00"),
-        Timestamp.valueOf("2018-01-01 12:00:00"),
-        Timestamp.valueOf("2018-01-02 00:00:00")))))
-
     // test invalid data types
     intercept[AnalysisException] {
       Seq((true, false)).toDF().selectExpr("sequence(_1, _2)")
