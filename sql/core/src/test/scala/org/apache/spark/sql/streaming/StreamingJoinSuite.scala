@@ -31,6 +31,7 @@ import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 abstract class StreamingJoinSuite
@@ -46,6 +47,10 @@ abstract class StreamingJoinSuite
   after {
     StateStore.stop()
   }
+
+  override protected def sparkConf = super.sparkConf
+    // TODO(SPARK-35095): Use ANSI intervals in streaming join tests
+    .set(SQLConf.LEGACY_INTERVAL_ENABLED, true)
 
   protected def setupStream(prefix: String, multiplier: Int): (MemoryStream[Int], DataFrame) = {
     val input = MemoryStream[Int]
