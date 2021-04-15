@@ -256,6 +256,7 @@ and either putting a file named `fairscheduler.xml` on the classpath, or setting
 
 {% highlight scala %}
 conf.set("spark.scheduler.allocation.file", "/path/to/file")
+conf.set("spark.scheduler.allocation.file", "hdfs:///path/to/file")
 {% endhighlight %}
 
 The format of the XML file is simply a `<pool>` element for each pool, with different elements
