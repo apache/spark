@@ -45,8 +45,6 @@
     - session_lock_resource.py
     - kill_zinc_nailgun.py
     - post_github_pr_comment.py
-    - build-spark.sh
-    - run-k8s-int-tests.sh
 
 - name: update the jenkins proc and open file limits
   copy:
