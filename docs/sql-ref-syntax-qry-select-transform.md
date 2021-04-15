@@ -22,8 +22,7 @@ license: |
 ### Description
 
 The `TRANSFORM` clause is used to specify a Hive-style transform query specification 
-to transform the inputs by running a specified command or script. Users can plug in their own custom 
-command or script in the data stream by using `TRANSFORM` clause.
+to transform the inputs by running a user-specified command or script.
 
 ### Syntax
 
@@ -117,7 +116,7 @@ will be discarded. If there is no `AS` clause after `USING my_script`, Spark ass
    1. key: which is before the first tab.
    2. value: which is the rest after the first tab.
 
-If there is no enough tab, Spark will return `NULL` value in Hive Serde mode or throw `ArrayOutOfBoundsException` in `ROW FORMAT DELIMIT` mode.
+If there is no enough tab, Spark will return `NULL` value in `SERDE` mode or throw `ArrayOutOfBoundsException` in `DELIMITED` mode.
 Note that this is different from specifying an `AS key, value` because in that case, the value will only contain the portion
 between the first tab and the second tab if there are multiple tabs. 
 User scripts can output debug information to standard error which will be shown on the task detail
