@@ -1,5 +1,0 @@
-SHELL=/bin/bash
-PATH=/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/sbin
-
-0 1 * * 7 	/usr/sbin/tmpwatch 7d -a /tmp
-5 0 * * *	/root/kill_hanging_procs.sh &> /dev/null
