@@ -627,8 +627,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       .map(typedVisit[Expression])
   }
 
-  override def visitExpressionSeq(
-    ctx: ExpressionSeqContext): Seq[Expression] = {
+  override def visitExpressionSeq(ctx: ExpressionSeqContext): Seq[Expression] = {
     Option(ctx).toSeq
       .flatMap(_.expression.asScala)
       .map(typedVisit[Expression])
