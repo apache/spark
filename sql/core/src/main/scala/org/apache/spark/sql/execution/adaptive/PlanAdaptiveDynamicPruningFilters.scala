@@ -27,8 +27,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelati
 /**
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
-case class PlanAdaptiveDynamicPruningFilters(
-    originalPlan: SparkPlan) extends Rule[SparkPlan] {
+case class PlanAdaptiveDynamicPruningFilters(rootPlan: SparkPlan) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled) {
       return plan
@@ -40,20 +39,20 @@ case class PlanAdaptiveDynamicPruningFilters(
           adaptivePlan: AdaptiveSparkPlanExec), exprId, _)) =>
         val packedKeys = BindReferences.bindReferences(
           HashJoin.rewriteKeyExpr(buildKeys), adaptivePlan.executedPlan.output)
+        val mode = HashedRelationBroadcastMode(packedKeys)
+        // plan a broadcast exchange of the build side of the join
+        val exchange = BroadcastExchangeExec(mode, adaptivePlan.executedPlan)
 
         val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
-          originalPlan.find {
+          rootPlan.find {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
-              left.sameResult(adaptivePlan.executedPlan)
+              left.sameResult(exchange)
             case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>
-              right.sameResult(adaptivePlan.executedPlan)
+              right.sameResult(exchange)
             case _ => false
           }.isDefined
 
-        if(canReuseExchange) {
-          val mode = HashedRelationBroadcastMode(packedKeys)
-          // plan a broadcast exchange of the build side of the join
-          val exchange = BroadcastExchangeExec(mode, adaptivePlan.executedPlan)
+        if (canReuseExchange) {
           exchange.setLogicalLink(adaptivePlan.executedPlan.logicalLink.get)
           val newAdaptivePlan = AdaptiveSparkPlanExec(
             exchange, adaptivePlan.context, adaptivePlan.preprocessingRules, true)

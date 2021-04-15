@@ -197,6 +197,11 @@ abstract class DynamicPartitionPruningSuiteBase
             case _ => false
           }.isDefined
           assert(hasReuse, s"$s\nshould have been reused in\n$plan")
+        case a: AdaptiveSparkPlanExec =>
+          val hasReuse = collect(a) {
+            case r: ReusedExchangeExec => r
+          }.nonEmpty
+          assert(hasReuse, s"$s\nshould have been reused in\n$plan")
         case _ =>
           fail(s"Invalid child node found in\n$s")
       }

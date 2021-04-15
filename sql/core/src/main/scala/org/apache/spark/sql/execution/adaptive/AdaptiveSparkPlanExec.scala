@@ -91,10 +91,15 @@ case class AdaptiveSparkPlanExec(
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
+  @transient private val initialPlan = context.session.withActive {
+    applyPhysicalRules(
+      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  }
+
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    PlanAdaptiveDynamicPruningFilters(inputPlan),
+    PlanAdaptiveDynamicPruningFilters(initialPlan),
     ReuseAdaptiveSubquery(context.subqueryCache),
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
@@ -128,11 +133,6 @@ case class AdaptiveSparkPlanExec(
   }
 
   @transient private val costEvaluator = SimpleCostEvaluator
-
-  @transient private val initialPlan = context.session.withActive {
-    applyPhysicalRules(
-      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
-  }
 
   @volatile private var currentPhysicalPlan = initialPlan
 
@@ -311,8 +311,7 @@ case class AdaptiveSparkPlanExec(
   }
 
   override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    val broadcastPlan = getFinalPhysicalPlan()
-    broadcastPlan.doExecuteBroadcast()
+    getFinalPhysicalPlan().doExecuteBroadcast()
   }
 
   protected override def stringArgs: Iterator[Any] = Iterator(s"isFinalPlan=$isFinalPlan")
@@ -481,7 +480,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform shuffle node to something else.")
         }
-        ShuffleQueryStageExec(currentStageId, newShuffle, s.child.canonicalized)
+        ShuffleQueryStageExec(currentStageId, newShuffle, s.canonicalized)
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)),
@@ -491,7 +490,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform broadcast node to something else.")
         }
-        BroadcastQueryStageExec(currentStageId, newBroadcast, b.child.canonicalized)
+        BroadcastQueryStageExec(currentStageId, newBroadcast, b.canonicalized)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, e)
