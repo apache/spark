@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.metric
 import org.apache.spark.sql.connector.CustomMetric
 
 object CustomMetrics {
-  private val V2_CUSTOM = "v2Custom"
+  private[spark] val V2_CUSTOM = "v2Custom"
 
   /**
    * Given a class name, builds and returns a metric type for a V2 custom metric class
@@ -45,6 +45,9 @@ object CustomMetrics {
   }
 }
 
+/**
+ * Built-in `CustomMetric` that sums up metric values.
+ */
 class CustomSumMetric extends CustomMetric {
   override def name(): String = "CustomSumMetric"
 
@@ -55,6 +58,9 @@ class CustomSumMetric extends CustomMetric {
   }
 }
 
+/**
+ * Built-in `CustomMetric` that computes average of metric values.
+ */
 class CustomAvgMetric extends CustomMetric {
   override def name(): String = "CustomAvgMetric"
 
