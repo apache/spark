@@ -33,7 +33,7 @@ case class CreateTableExec(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
-    ignoreIfExists: Boolean) extends V2CommandExec {
+    ignoreIfExists: Boolean) extends LeafV2CommandExec {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override protected def run(): Seq[InternalRow] = {

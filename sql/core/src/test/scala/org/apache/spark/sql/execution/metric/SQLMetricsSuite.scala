@@ -168,7 +168,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     //           Exchange(nodeId = 5)
     //             LocalTableScan(nodeId = 6)
     Seq(true, false).foreach { enableWholeStage =>
-      val df = generateRandomBytesDF().repartition(1).groupBy('a).count()
+      val df = generateRandomBytesDF().repartition(2).groupBy('a).count()
       val nodeIds = if (enableWholeStage) {
         Set(4L, 1L)
       } else {

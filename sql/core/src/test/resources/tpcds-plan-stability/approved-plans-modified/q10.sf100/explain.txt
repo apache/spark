@@ -137,22 +137,22 @@ Input [2]: [cs_ship_customer_sk#13, cs_sold_date_sk#14]
 Condition : isnotnull(cs_ship_customer_sk#13)
 
 (19) ReusedExchange [Reuses operator id: 13]
-Output [1]: [d_date_sk#8]
+Output [1]: [d_date_sk#15]
 
 (20) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [cs_sold_date_sk#14]
-Right keys [1]: [d_date_sk#8]
+Right keys [1]: [d_date_sk#15]
 Join condition: None
 
 (21) Project [codegen id : 6]
-Output [1]: [cs_ship_customer_sk#13 AS customer_sk#15]
-Input [3]: [cs_ship_customer_sk#13, cs_sold_date_sk#14, d_date_sk#8]
+Output [1]: [cs_ship_customer_sk#13 AS customer_sk#16]
+Input [3]: [cs_ship_customer_sk#13, cs_sold_date_sk#14, d_date_sk#15]
 
 (22) Union
 
 (23) Exchange
 Input [1]: [customer_sk#12]
-Arguments: hashpartitioning(customer_sk#12, 5), ENSURE_REQUIREMENTS, [id=#16]
+Arguments: hashpartitioning(customer_sk#12, 5), ENSURE_REQUIREMENTS, [id=#17]
 
 (24) Sort [codegen id : 7]
 Input [1]: [customer_sk#12]
@@ -164,43 +164,43 @@ Right keys [1]: [customer_sk#12]
 Join condition: None
 
 (26) Scan parquet default.store_sales
-Output [2]: [ss_customer_sk#17, ss_sold_date_sk#18]
+Output [2]: [ss_customer_sk#18, ss_sold_date_sk#19]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ss_sold_date_sk#18), dynamicpruningexpression(ss_sold_date_sk#18 IN dynamicpruning#7)]
+PartitionFilters: [isnotnull(ss_sold_date_sk#19), dynamicpruningexpression(ss_sold_date_sk#19 IN dynamicpruning#7)]
 PushedFilters: [IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_customer_sk:int>
 
 (27) ColumnarToRow [codegen id : 9]
-Input [2]: [ss_customer_sk#17, ss_sold_date_sk#18]
+Input [2]: [ss_customer_sk#18, ss_sold_date_sk#19]
 
 (28) Filter [codegen id : 9]
-Input [2]: [ss_customer_sk#17, ss_sold_date_sk#18]
-Condition : isnotnull(ss_customer_sk#17)
+Input [2]: [ss_customer_sk#18, ss_sold_date_sk#19]
+Condition : isnotnull(ss_customer_sk#18)
 
 (29) ReusedExchange [Reuses operator id: 13]
-Output [1]: [d_date_sk#8]
+Output [1]: [d_date_sk#20]
 
 (30) BroadcastHashJoin [codegen id : 9]
-Left keys [1]: [ss_sold_date_sk#18]
-Right keys [1]: [d_date_sk#8]
+Left keys [1]: [ss_sold_date_sk#19]
+Right keys [1]: [d_date_sk#20]
 Join condition: None
 
 (31) Project [codegen id : 9]
-Output [1]: [ss_customer_sk#17 AS customer_sk#19]
-Input [3]: [ss_customer_sk#17, ss_sold_date_sk#18, d_date_sk#8]
+Output [1]: [ss_customer_sk#18 AS customer_sk#21]
+Input [3]: [ss_customer_sk#18, ss_sold_date_sk#19, d_date_sk#20]
 
 (32) Exchange
-Input [1]: [customer_sk#19]
-Arguments: hashpartitioning(customer_sk#19, 5), ENSURE_REQUIREMENTS, [id=#20]
+Input [1]: [customer_sk#21]
+Arguments: hashpartitioning(customer_sk#21, 5), ENSURE_REQUIREMENTS, [id=#22]
 
 (33) Sort [codegen id : 10]
-Input [1]: [customer_sk#19]
-Arguments: [customer_sk#19 ASC NULLS FIRST], false, 0
+Input [1]: [customer_sk#21]
+Arguments: [customer_sk#21 ASC NULLS FIRST], false, 0
 
 (34) SortMergeJoin
 Left keys [1]: [c_customer_sk#1]
-Right keys [1]: [customer_sk#19]
+Right keys [1]: [customer_sk#21]
 Join condition: None
 
 (35) Project [codegen id : 12]
@@ -208,84 +208,84 @@ Output [2]: [c_current_cdemo_sk#2, c_current_addr_sk#3]
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 
 (36) Scan parquet default.customer_address
-Output [2]: [ca_address_sk#21, ca_county#22]
+Output [2]: [ca_address_sk#23, ca_county#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [In(ca_county, [Walker County,Richland County,Gaines County,Douglas County,Dona Ana County]), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_county:string>
 
 (37) ColumnarToRow [codegen id : 11]
-Input [2]: [ca_address_sk#21, ca_county#22]
+Input [2]: [ca_address_sk#23, ca_county#24]
 
 (38) Filter [codegen id : 11]
-Input [2]: [ca_address_sk#21, ca_county#22]
-Condition : (ca_county#22 IN (Walker County,Richland County,Gaines County,Douglas County,Dona Ana County) AND isnotnull(ca_address_sk#21))
+Input [2]: [ca_address_sk#23, ca_county#24]
+Condition : (ca_county#24 IN (Walker County,Richland County,Gaines County,Douglas County,Dona Ana County) AND isnotnull(ca_address_sk#23))
 
 (39) Project [codegen id : 11]
-Output [1]: [ca_address_sk#21]
-Input [2]: [ca_address_sk#21, ca_county#22]
+Output [1]: [ca_address_sk#23]
+Input [2]: [ca_address_sk#23, ca_county#24]
 
 (40) BroadcastExchange
-Input [1]: [ca_address_sk#21]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#23]
+Input [1]: [ca_address_sk#23]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#25]
 
 (41) BroadcastHashJoin [codegen id : 12]
 Left keys [1]: [c_current_addr_sk#3]
-Right keys [1]: [ca_address_sk#21]
+Right keys [1]: [ca_address_sk#23]
 Join condition: None
 
 (42) Project [codegen id : 12]
 Output [1]: [c_current_cdemo_sk#2]
-Input [3]: [c_current_cdemo_sk#2, c_current_addr_sk#3, ca_address_sk#21]
+Input [3]: [c_current_cdemo_sk#2, c_current_addr_sk#3, ca_address_sk#23]
 
 (43) BroadcastExchange
 Input [1]: [c_current_cdemo_sk#2]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#24]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#26]
 
 (44) Scan parquet default.customer_demographics
-Output [9]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33]
+Output [9]: [cd_demo_sk#27, cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_education_status:string,cd_purchase_estimate:int,cd_credit_rating:string,cd_dep_count:int,cd_dep_employed_count:int,cd_dep_college_count:int>
 
 (45) ColumnarToRow
-Input [9]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33]
+Input [9]: [cd_demo_sk#27, cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35]
 
 (46) Filter
-Input [9]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33]
-Condition : isnotnull(cd_demo_sk#25)
+Input [9]: [cd_demo_sk#27, cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35]
+Condition : isnotnull(cd_demo_sk#27)
 
 (47) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [c_current_cdemo_sk#2]
-Right keys [1]: [cd_demo_sk#25]
+Right keys [1]: [cd_demo_sk#27]
 Join condition: None
 
 (48) Project [codegen id : 13]
-Output [8]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33]
-Input [10]: [c_current_cdemo_sk#2, cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33]
+Output [8]: [cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35]
+Input [10]: [c_current_cdemo_sk#2, cd_demo_sk#27, cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35]
 
 (49) HashAggregate [codegen id : 13]
-Input [8]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33]
-Keys [8]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33]
+Input [8]: [cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35]
+Keys [8]: [cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#34]
-Results [9]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33, count#35]
+Aggregate Attributes [1]: [count#36]
+Results [9]: [cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35, count#37]
 
 (50) Exchange
-Input [9]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33, count#35]
-Arguments: hashpartitioning(cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33, 5), ENSURE_REQUIREMENTS, [id=#36]
+Input [9]: [cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35, count#37]
+Arguments: hashpartitioning(cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35, 5), ENSURE_REQUIREMENTS, [id=#38]
 
 (51) HashAggregate [codegen id : 14]
-Input [9]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33, count#35]
-Keys [8]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cd_purchase_estimate#29, cd_credit_rating#30, cd_dep_count#31, cd_dep_employed_count#32, cd_dep_college_count#33]
+Input [9]: [cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35, count#37]
+Keys [8]: [cd_gender#28, cd_marital_status#29, cd_education_status#30, cd_purchase_estimate#31, cd_credit_rating#32, cd_dep_count#33, cd_dep_employed_count#34, cd_dep_college_count#35]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#37]
-Results [14]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, count(1)#37 AS cnt1#38, cd_purchase_estimate#29, count(1)#37 AS cnt2#39, cd_credit_rating#30, count(1)#37 AS cnt3#40, cd_dep_count#31, count(1)#37 AS cnt4#41, cd_dep_employed_count#32, count(1)#37 AS cnt5#42, cd_dep_college_count#33, count(1)#37 AS cnt6#43]
+Aggregate Attributes [1]: [count(1)#39]
+Results [14]: [cd_gender#28, cd_marital_status#29, cd_education_status#30, count(1)#39 AS cnt1#40, cd_purchase_estimate#31, count(1)#39 AS cnt2#41, cd_credit_rating#32, count(1)#39 AS cnt3#42, cd_dep_count#33, count(1)#39 AS cnt4#43, cd_dep_employed_count#34, count(1)#39 AS cnt5#44, cd_dep_college_count#35, count(1)#39 AS cnt6#45]
 
 (52) TakeOrderedAndProject
-Input [14]: [cd_gender#26, cd_marital_status#27, cd_education_status#28, cnt1#38, cd_purchase_estimate#29, cnt2#39, cd_credit_rating#30, cnt3#40, cd_dep_count#31, cnt4#41, cd_dep_employed_count#32, cnt5#42, cd_dep_college_count#33, cnt6#43]
-Arguments: 100, [cd_gender#26 ASC NULLS FIRST, cd_marital_status#27 ASC NULLS FIRST, cd_education_status#28 ASC NULLS FIRST, cd_purchase_estimate#29 ASC NULLS FIRST, cd_credit_rating#30 ASC NULLS FIRST, cd_dep_count#31 ASC NULLS FIRST, cd_dep_employed_count#32 ASC NULLS FIRST, cd_dep_college_count#33 ASC NULLS FIRST], [cd_gender#26, cd_marital_status#27, cd_education_status#28, cnt1#38, cd_purchase_estimate#29, cnt2#39, cd_credit_rating#30, cnt3#40, cd_dep_count#31, cnt4#41, cd_dep_employed_count#32, cnt5#42, cd_dep_college_count#33, cnt6#43]
+Input [14]: [cd_gender#28, cd_marital_status#29, cd_education_status#30, cnt1#40, cd_purchase_estimate#31, cnt2#41, cd_credit_rating#32, cnt3#42, cd_dep_count#33, cnt4#43, cd_dep_employed_count#34, cnt5#44, cd_dep_college_count#35, cnt6#45]
+Arguments: 100, [cd_gender#28 ASC NULLS FIRST, cd_marital_status#29 ASC NULLS FIRST, cd_education_status#30 ASC NULLS FIRST, cd_purchase_estimate#31 ASC NULLS FIRST, cd_credit_rating#32 ASC NULLS FIRST, cd_dep_count#33 ASC NULLS FIRST, cd_dep_employed_count#34 ASC NULLS FIRST, cd_dep_college_count#35 ASC NULLS FIRST], [cd_gender#28, cd_marital_status#29, cd_education_status#30, cnt1#40, cd_purchase_estimate#31, cnt2#41, cd_credit_rating#32, cnt3#42, cd_dep_count#33, cnt4#43, cd_dep_employed_count#34, cnt5#44, cd_dep_college_count#35, cnt6#45]
 
 ===== Subqueries =====
 
@@ -298,6 +298,6 @@ Output [1]: [d_date_sk#8]
 
 Subquery:2 Hosting operator id = 16 Hosting Expression = cs_sold_date_sk#14 IN dynamicpruning#7
 
-Subquery:3 Hosting operator id = 26 Hosting Expression = ss_sold_date_sk#18 IN dynamicpruning#7
+Subquery:3 Hosting operator id = 26 Hosting Expression = ss_sold_date_sk#19 IN dynamicpruning#7
 
 

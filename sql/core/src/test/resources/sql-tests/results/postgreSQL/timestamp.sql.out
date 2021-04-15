@@ -217,13 +217,13 @@ struct<49:string,d1:timestamp>
 SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
    FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01'
 -- !query schema
-struct<54:string,diff:interval>
+struct<54:string,diff:day-time interval>
 -- !query output
-	-236720 hours
-	0 seconds
-	3 hours 4 minutes 5 seconds
-	41393 hours 19 minutes 20 seconds
-	953 hours 32 minutes 1 seconds
+	-9863 08:00:00.000000000
+	0 00:00:00.000000000
+	0 03:04:05.000000000
+	1724 18:19:20.000000000
+	39 17:32:01.000000000
 
 
 -- !query
@@ -240,13 +240,13 @@ SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
   WHERE d1 BETWEEN timestamp '1902-01-01'
    AND timestamp '2038-01-01'
 -- !query schema
-struct<54:string,diff:interval>
+struct<54:string,diff:day-time interval>
 -- !query output
-	-236720 hours
-	0 seconds
-	3 hours 4 minutes 5 seconds
-	41393 hours 19 minutes 20 seconds
-	953 hours 32 minutes 1 seconds
+	-9863 08:00:00.000000000
+	0 00:00:00.000000000
+	0 03:04:05.000000000
+	1724 18:19:20.000000000
+	39 17:32:01.000000000
 
 
 -- !query

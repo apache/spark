@@ -573,6 +573,76 @@ pyspark_ml = Module(
     ]
 )
 
+pyspark_pandas = Module(
+    name="pyspark-pandas",
+    dependencies=[pyspark_core, pyspark_sql],
+    source_file_regexes=[
+        "python/pyspark/pandas/"
+    ],
+    python_test_goals=[
+        # doctests
+        "pyspark.pandas.accessors",
+        "pyspark.pandas.base",
+        "pyspark.pandas.categorical",
+        "pyspark.pandas.config",
+        "pyspark.pandas.datetimes",
+        "pyspark.pandas.exceptions",
+        "pyspark.pandas.extensions",
+        "pyspark.pandas.frame",
+        "pyspark.pandas.generic",
+        "pyspark.pandas.groupby",
+        "pyspark.pandas.indexing",
+        "pyspark.pandas.internal",
+        "pyspark.pandas.ml",
+        "pyspark.pandas.mlflow",
+        "pyspark.pandas.namespace",
+        "pyspark.pandas.numpy_compat",
+        "pyspark.pandas.series",
+        "pyspark.pandas.sql_processor",
+        "pyspark.pandas.strings",
+        "pyspark.pandas.utils",
+        "pyspark.pandas.window",
+        "pyspark.pandas.indexes.base",
+        "pyspark.pandas.indexes.category",
+        "pyspark.pandas.indexes.datetimes",
+        "pyspark.pandas.indexes.multi",
+        "pyspark.pandas.indexes.numeric",
+        "pyspark.pandas.spark.accessors",
+        "pyspark.pandas.spark.utils",
+        "pyspark.pandas.typedef.typehints",
+        # unittests
+        "pyspark.pandas.tests.test_dataframe",
+        "pyspark.pandas.tests.test_config",
+        "pyspark.pandas.tests.test_default_index",
+        "pyspark.pandas.tests.test_extension",
+        "pyspark.pandas.tests.test_internal",
+        "pyspark.pandas.tests.test_numpy_compat",
+        "pyspark.pandas.tests.test_typedef",
+        "pyspark.pandas.tests.test_utils",
+        "pyspark.pandas.tests.test_dataframe_conversion",
+        "pyspark.pandas.tests.test_dataframe_spark_io",
+        "pyspark.pandas.tests.test_frame_spark",
+        "pyspark.pandas.tests.test_ops_on_diff_frames",
+        "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",
+        "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_expanding",
+        "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_rolling",
+        "pyspark.pandas.tests.test_series",
+        "pyspark.pandas.tests.test_series_conversion",
+        "pyspark.pandas.tests.test_series_datetime",
+        "pyspark.pandas.tests.test_series_string",
+        "pyspark.pandas.tests.plot.test_frame_plot",
+        "pyspark.pandas.tests.plot.test_frame_plot_matplotlib",
+        "pyspark.pandas.tests.plot.test_frame_plot_plotly",
+        "pyspark.pandas.tests.plot.test_series_plot",
+        "pyspark.pandas.tests.plot.test_series_plot_matplotlib",
+        "pyspark.pandas.tests.plot.test_series_plot_plotly",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+                # they aren't available there
+    ]
+)
+
 sparkr = Module(
     name="sparkr",
     dependencies=[hive, mllib],

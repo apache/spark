@@ -48,8 +48,6 @@ import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
-import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
-import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.createRLEIterator;
 
 /**
  * Decoder to return values from a single column.
@@ -82,14 +80,13 @@ public class VectorizedColumnReader {
   private final int maxDefLevel;
 
   /**
-   * Repetition/Definition/Value readers.
+   * Value readers.
    */
-  private SpecificParquetRecordReaderBase.IntIterator repetitionLevelColumn;
-  private SpecificParquetRecordReaderBase.IntIterator definitionLevelColumn;
   private ValuesReader dataColumn;
 
-  // Only set if vectorized decoding is true. This is used instead of the row by row decoding
-  // with `definitionLevelColumn`.
+  /**
+   * Vectorized RLE decoder for definition levels
+   */
   private VectorizedRleValuesReader defColumn;
 
   /**
@@ -169,23 +166,6 @@ public class VectorizedColumnReader {
     assert "LEGACY".equals(int96RebaseMode) || "EXCEPTION".equals(int96RebaseMode) ||
       "CORRECTED".equals(int96RebaseMode);
     this.int96RebaseMode = int96RebaseMode;
-  }
-
-  /**
-   * Advances to the next value. Returns true if the value is non-null.
-   */
-  private boolean next() throws IOException {
-    if (valuesRead >= endOfPageValueCount) {
-      if (valuesRead >= totalValueCount) {
-        // How do we get here? Throw end of stream exception?
-        return false;
-      }
-      readPage();
-    }
-    ++valuesRead;
-    // TODO: Don't read for flat schemas
-    //repetitionLevel = repetitionLevelColumn.nextInt();
-    return definitionLevelColumn.nextInt() == maxDefLevel;
   }
 
   private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
@@ -854,23 +834,24 @@ public class VectorizedColumnReader {
 
   private void readPageV1(DataPageV1 page) throws IOException {
     this.pageValueCount = page.getValueCount();
-    ValuesReader rlReader = page.getRlEncoding().getValuesReader(descriptor, REPETITION_LEVEL);
-    ValuesReader dlReader;
 
     // Initialize the decoders.
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
       throw new UnsupportedOperationException("Unsupported encoding: " + page.getDlEncoding());
     }
+
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
-    dlReader = this.defColumn;
-    this.repetitionLevelColumn = new ValuesReaderIntIterator(rlReader);
-    this.definitionLevelColumn = new ValuesReaderIntIterator(dlReader);
     try {
       BytesInput bytes = page.getBytes();
       ByteBufferInputStream in = bytes.toInputStream();
-      rlReader.initFromPage(pageValueCount, in);
-      dlReader.initFromPage(pageValueCount, in);
+
+      // only used now to consume the repetition level data
+      page.getRlEncoding()
+          .getValuesReader(descriptor, REPETITION_LEVEL)
+          .initFromPage(pageValueCount, in);
+
+      defColumn.initFromPage(pageValueCount, in);
       initDataReader(page.getValueEncoding(), in);
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
@@ -879,15 +860,11 @@ public class VectorizedColumnReader {
 
   private void readPageV2(DataPageV2 page) throws IOException {
     this.pageValueCount = page.getValueCount();
-    this.repetitionLevelColumn = createRLEIterator(descriptor.getMaxRepetitionLevel(),
-        page.getRepetitionLevels(), descriptor);
 
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
     // do not read the length from the stream. v2 pages handle dividing the page bytes.
-    this.defColumn = new VectorizedRleValuesReader(bitWidth, false);
-    this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumn);
-    this.defColumn.initFromPage(
-        this.pageValueCount, page.getDefinitionLevels().toInputStream());
+    defColumn = new VectorizedRleValuesReader(bitWidth, false);
+    defColumn.initFromPage(this.pageValueCount, page.getDefinitionLevels().toInputStream());
     try {
       initDataReader(page.getDataEncoding(), page.getData().toInputStream());
     } catch (IOException e) {

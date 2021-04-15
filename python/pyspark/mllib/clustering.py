@@ -143,7 +143,7 @@ class BisectingKMeans(object):
     -----
     See the original paper [1]_
 
-    .. [1] Steinbach, M. et al. “A Comparison of Document Clustering Techniques.” (2000).
+    .. [1] Steinbach, M. et al. "A Comparison of Document Clustering Techniques." (2000).
         KDD Workshop on Text Mining, 2000
         http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
     """
