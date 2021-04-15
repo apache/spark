@@ -289,8 +289,7 @@ class SQLAppStatusListener(
     }
 
     val aggregatedMetrics = allMetrics.map { case (id, values) =>
-      val aggMethod = metricAggregationMethods(id)
-      id -> aggMethod(values, maxMetricsFromAllStages.getOrElse(id,
+      id -> metricAggregationMethods(id)(values, maxMetricsFromAllStages.getOrElse(id,
         Array.empty[Long]))
     }.toMap
 
