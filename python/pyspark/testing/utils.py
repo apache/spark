@@ -30,15 +30,16 @@ have_numpy = False
 try:
     import scipy.sparse  # noqa: F401
     have_scipy = True
-except:
+except ImportError:
     # No SciPy, but that's okay, we'll skip those tests
     pass
 try:
     import numpy as np  # noqa: F401
     have_numpy = True
-except:
+except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
+
 
 SPARK_HOME = os.environ["SPARK_HOME"]
 
