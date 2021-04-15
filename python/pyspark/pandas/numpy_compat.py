@@ -35,7 +35,7 @@ unary_np_spark_mappings = OrderedDict(
         "bitwise_not": F.bitwiseNOT,
         "cbrt": F.cbrt,
         "ceil": F.ceil,
-        # It requires complex type which Koalas does not support yet
+        # It requires complex type which pandas-on-Spark does not support yet
         "conj": lambda _: NotImplemented,
         "conjugate": lambda _: NotImplemented,  # It requires complex type
         "cos": F.cos,
@@ -53,7 +53,7 @@ unary_np_spark_mappings = OrderedDict(
         "isfinite": lambda c: c != float("inf"),
         "isinf": lambda c: c == float("inf"),
         "isnan": F.isnan,
-        "isnat": lambda c: NotImplemented,  # Koalas and PySpark does not have Nat concept.
+        "isnat": lambda c: NotImplemented,  # pandas-on-Spark and PySpark does not have Nat concept.
         "log": F.log,
         "log10": F.log10,
         "log1p": F.log1p,

@@ -80,12 +80,12 @@ class NumPyCompatTest(ReusedSQLTestCase, SQLTestUtils):
 
     def test_np_unsupported_series(self):
         kdf = self.kdf
-        with self.assertRaisesRegex(NotImplementedError, "Koalas.*not.*support.*sqrt.*"):
+        with self.assertRaisesRegex(NotImplementedError, "pandas.*not.*support.*sqrt.*"):
             np.sqrt(kdf.a, kdf.b)
 
     def test_np_unsupported_frame(self):
         kdf = self.kdf
-        with self.assertRaisesRegex(NotImplementedError, "Koalas.*not.*support.*sqrt.*"):
+        with self.assertRaisesRegex(NotImplementedError, "on-Spark.*not.*support.*sqrt.*"):
             np.sqrt(kdf, kdf)
 
     def test_np_spark_compat_series(self):

@@ -399,7 +399,7 @@ class KdePlotBase:
         return kd.estimate(list(map(float, ind)))
 
 
-class KoalasPlotAccessor(PandasObject):
+class PandasOnSparkPlotAccessor(PandasObject):
     """
     Series/Frames plotting accessor and method.
 
@@ -427,10 +427,10 @@ class KoalasPlotAccessor(PandasObject):
     @staticmethod
     def _find_backend(backend):
         """
-        Find a Koalas plotting backend
+        Find a pandas-on-Spark plotting backend
         """
         try:
-            return KoalasPlotAccessor._backends[backend]
+            return PandasOnSparkPlotAccessor._backends[backend]
         except KeyError:
             try:
                 module = importlib.import_module(backend)
@@ -438,10 +438,10 @@ class KoalasPlotAccessor(PandasObject):
                 # We re-raise later on.
                 pass
             else:
-                if hasattr(module, "plot") or hasattr(module, "plot_koalas"):
+                if hasattr(module, "plot") or hasattr(module, "plot_pandas_on_spark"):
                     # Validate that the interface is implemented when the option
                     # is set, rather than at plot time.
-                    KoalasPlotAccessor._backends[backend] = module
+                    PandasOnSparkPlotAccessor._backends[backend] = module
                     return module
 
         raise ValueError(
@@ -454,8 +454,8 @@ class KoalasPlotAccessor(PandasObject):
     def _get_plot_backend(backend=None):
         backend = backend or get_option("plotting.backend")
         # Shortcut
-        if backend in KoalasPlotAccessor._backends:
-            return KoalasPlotAccessor._backends[backend]
+        if backend in PandasOnSparkPlotAccessor._backends:
+            return PandasOnSparkPlotAccessor._backends[backend]
 
         if backend == "matplotlib":
             # Because matplotlib is an optional dependency,
@@ -470,7 +470,7 @@ class KoalasPlotAccessor(PandasObject):
                     "default backend 'matplotlib' is selected."
                 ) from None
 
-            KoalasPlotAccessor._backends["matplotlib"] = module
+            PandasOnSparkPlotAccessor._backends["matplotlib"] = module
         elif backend == "plotly":
             try:
                 # test if plotly can be imported
@@ -482,28 +482,28 @@ class KoalasPlotAccessor(PandasObject):
                     "default backend 'plotly' is selected."
                 ) from None
 
-            KoalasPlotAccessor._backends["plotly"] = module
+            PandasOnSparkPlotAccessor._backends["plotly"] = module
         else:
-            module = KoalasPlotAccessor._find_backend(backend)
-            KoalasPlotAccessor._backends[backend] = module
+            module = PandasOnSparkPlotAccessor._find_backend(backend)
+            PandasOnSparkPlotAccessor._backends[backend] = module
         return module
 
     def __call__(self, kind="line", backend=None, **kwargs):
-        plot_backend = KoalasPlotAccessor._get_plot_backend(backend)
+        plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
         plot_data = self.data
 
         kind = {"density": "kde"}.get(kind, kind)
-        if hasattr(plot_backend, "plot_koalas"):
-            # use if there's koalas specific method.
-            return plot_backend.plot_koalas(plot_data, kind=kind, **kwargs)
+        if hasattr(plot_backend, "plot_pandas_on_spark"):
+            # use if there's pandas-on-Spark specific method.
+            return plot_backend.plot_pandas_on_spark(plot_data, kind=kind, **kwargs)
         else:
             # fallback to use pandas'
-            if not KoalasPlotAccessor.pandas_plot_data_map[kind]:
+            if not PandasOnSparkPlotAccessor.pandas_plot_data_map[kind]:
                 raise NotImplementedError(
                     "'%s' plot is not supported with '%s' plot "
                     "backend yet." % (kind, plot_backend.__name__)
                 )
-            plot_data = KoalasPlotAccessor.pandas_plot_data_map[kind](plot_data)
+            plot_data = PandasOnSparkPlotAccessor.pandas_plot_data_map[kind](plot_data)
             return plot_backend.plot(plot_data, kind=kind, **kwargs)
 
     def line(self, x=None, y=None, **kwargs):
@@ -586,7 +586,8 @@ class KoalasPlotAccessor(PandasObject):
             If not specified, all numerical columns are used.
         **kwds : optional
             Additional keyword arguments are documented in
-            :meth:`Koalas.Series.plot` or :meth:`Koalas.DataFrame.plot`.
+            :meth:`pyspark.pandas.Series.plot` or
+            :meth:`pyspark.pandas.DataFrame.plot`.
 
         Returns
         -------
@@ -772,10 +773,10 @@ class KoalasPlotAccessor(PandasObject):
         ----------
         **kwds : optional
             Additional keyword arguments are documented in
-            :meth:`Koalas.Series.plot`.
+            :meth:`pyspark.pandas.Series.plot`.
 
         precision: scalar, default = 0.01
-            This argument is used by Koalas to compute approximate statistics
+            This argument is used by pandas-on-Spark to compute approximate statistics
             for building a boxplot. Use *smaller* values to get more precise
             statistics (matplotlib-only).
 
@@ -787,12 +788,12 @@ class KoalasPlotAccessor(PandasObject):
 
         Notes
         -----
-        There are behavior differences between Koalas and pandas.
+        There are behavior differences between pandas-on-Spark and pandas.
 
-        * Koalas computes approximate statistics - expect differences between
-          pandas and Koalas boxplots, especially regarding 1st and 3rd quartiles.
+        * pandas-on-Spark computes approximate statistics - expect differences between
+          pandas and pandas-on-Spark boxplots, especially regarding 1st and 3rd quartiles.
         * The `whis` argument is only supported as a single number.
-        * Koalas doesn't support the following argument(s) (matplotlib-only).
+        * pandas-on-Spark doesn't support the following argument(s) (matplotlib-only).
 
           * `bootstrap` argument is not supported
           * `autorange` argument is not supported
@@ -884,7 +885,7 @@ class KoalasPlotAccessor(PandasObject):
             KDE is evaluated at the points passed. If `ind` is an integer,
             `ind` number of equally spaced points are used.
         **kwargs : optional
-            Keyword arguments to pass on to :meth:`Koalas.Series.plot`.
+            Keyword arguments to pass on to :meth:`pandas-on-Spark.Series.plot`.
 
         Returns
         -------
@@ -1020,7 +1021,7 @@ class KoalasPlotAccessor(PandasObject):
             Label or position of the column to plot.
             If not provided, ``subplots=True`` argument must be passed (matplotlib-only).
         **kwds
-            Keyword arguments to pass on to :meth:`Koalas.Series.plot`.
+            Keyword arguments to pass on to :meth:`pandas-on-Spark.Series.plot`.
 
         Returns
         -------

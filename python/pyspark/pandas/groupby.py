@@ -191,7 +191,7 @@ class GroupBy(object, metaclass=ABCMeta):
         1    1    2  0.227  0.362
         2    3    4 -0.562  1.267
 
-        To control the output names with different aggregations per column, Koalas
+        To control the output names with different aggregations per column, pandas-on-Spark
         also supports 'named aggregation' or nested renaming in .agg. It can also be
         used when applying multiple aggregation functions to specific columns.
 
@@ -216,8 +216,8 @@ class GroupBy(object, metaclass=ABCMeta):
         1        2   0.227
         2        4  -0.562
         """
-        # I think current implementation of func and arguments in Koalas for aggregate is different
-        # than pandas, later once arguments are added, this could be removed.
+        # I think current implementation of func and arguments in pandas-on-Spark for aggregate
+        # is different than pandas, later once arguments are added, this could be removed.
         if func_or_funcs is None and kwargs is None:
             raise ValueError("No aggregation argument or function specified.")
 
@@ -971,7 +971,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         While `apply` is a very flexible method, its downside is that
         using it can be quite a bit slower than using more specific methods
-        like `agg` or `transform`. Koalas offers a wide range of method that will
+        like `agg` or `transform`. pandas-on-Spark offers a wide range of method that will
         be much faster than using `apply` for their specific purposes, so try to
         use them before reaching for `apply`.
 
@@ -1366,7 +1366,7 @@ class GroupBy(object, metaclass=ABCMeta):
     def _make_pandas_df_builder_func(kdf, func, return_schema, retain_index):
         """
         Creates a function that can be used inside the pandas UDF. This function can construct
-        the same pandas DataFrame as if the Koalas DataFrame is collected to driver side.
+        the same pandas DataFrame as if the pandas-on-Spark DataFrame is collected to driver side.
         The index, column labels, etc. are re-constructed within the function.
         """
         arguments_for_restore_index = kdf._internal.arguments_for_restore_index
@@ -1999,7 +1999,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         While `transform` is a very flexible method, its downside is that
         using it can be quite a bit slower than using more specific methods
-        like `agg` or `transform`. Koalas offers a wide range of method that will
+        like `agg` or `transform`. pandas-on-Spark offers a wide range of method that will
         be much faster than using `transform` for their specific purposes, so try to
         use them before reaching for `transform`.
 
@@ -2071,7 +2071,7 @@ class GroupBy(object, metaclass=ABCMeta):
         1  4  12
         2  6  10
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> def plus_min(x):
         ...     return x + x.min()
@@ -2233,7 +2233,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Return an rolling grouper, providing rolling
         functionality per group.
 
-        .. note:: 'min_periods' in Koalas works as a fixed window size unlike pandas.
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
         Unlike pandas, NA is also counted as the period. This might be changed
         in the near future.
 
@@ -2260,7 +2260,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Return an expanding grouper, providing expanding
         functionality per group.
 
-        .. note:: 'min_periods' in Koalas works as a fixed window size unlike pandas.
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
         Unlike pandas, NA is also counted as the period. This might be changed
         in the near future.
 
@@ -2362,7 +2362,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         For multiple groupings, the result index will be a MultiIndex
 
-        .. note:: Unlike pandas', the median in Koalas is an approximated median based upon
+        .. note:: Unlike pandas', the median in pandas-on-Spark is an approximated median based upon
             approximate percentile computation because computing median across a large dataset
             is extremely expensive.
 
@@ -2695,7 +2695,7 @@ class DataFrameGroupBy(GroupBy):
         will vary depending on what is provided. Refer to the notes
         below for more detail.
 
-        .. note:: Unlike pandas, the percentiles in Koalas are based upon
+        .. note:: Unlike pandas, the percentiles in pandas-on-Spark are based upon
             approximate percentile computation because computing percentiles
             across a large dataset is extremely expensive.
 
@@ -3161,7 +3161,7 @@ def normalize_keyword_aggregation(kwargs):
     >>> normalize_keyword_aggregation({'output': ('input', 'sum')})
     (OrderedDict([('input', ['sum'])]), ('output',), [('input', 'sum')])
     """
-    # this is due to python version issue, not sure the impact on koalas
+    # this is due to python version issue, not sure the impact on pandas-on-Spark
     PY36 = sys.version_info >= (3, 6)
     if not PY36:
         kwargs = OrderedDict(sorted(kwargs.items()))
