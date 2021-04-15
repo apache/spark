@@ -37,3 +37,14 @@ trait Command extends LogicalPlan {
 trait LeafCommand extends Command with LeafLike[LogicalPlan]
 trait UnaryCommand extends Command with UnaryLike[LogicalPlan]
 trait BinaryCommand extends Command with BinaryLike[LogicalPlan]
+
+/**
+ * A logical node that can be used for a command that requires its children to be only analyzed,
+ * but not optimized.
+ */
+trait AnalysisOnlyCommand extends Command {
+  val isAnalyzed: Boolean
+  def childrenToAnalyze: Seq[LogicalPlan]
+  override final def children: Seq[LogicalPlan] = if (isAnalyzed) Nil else childrenToAnalyze
+  def markAsAnalyzed(): LogicalPlan
+}

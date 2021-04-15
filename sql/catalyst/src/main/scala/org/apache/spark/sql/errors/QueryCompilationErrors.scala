@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
@@ -1317,5 +1317,39 @@ private[spark] object QueryCompilationErrors {
       expression: Expression, dataType: DataType): Throwable = {
     new AnalysisException(s"Incompatible input data type. " +
       s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
+  }
+
+  def groupAggPandasUDFUnsupportedByStreamingAggError(): Throwable = {
+    new AnalysisException("Streaming aggregation doesn't support group aggregate pandas UDF")
+  }
+
+  def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
+    new AnalysisException(
+      "Stream-stream join without equality predicate is not supported", plan = Some(plan))
+  }
+
+  def cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError(): Throwable = {
+    new AnalysisException(
+      "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+  }
+
+  def ambiguousAttributesInSelfJoinError(
+      ambiguousAttrs: Seq[AttributeReference]): Throwable = {
+    new AnalysisException(
+      s"""
+         |Column ${ambiguousAttrs.mkString(", ")} are ambiguous. It's probably because
+         |you joined several Datasets together, and some of these Datasets are the same.
+         |This column points to one of the Datasets but Spark is unable to figure out
+         |which one. Please alias the Datasets with different names via `Dataset.as`
+         |before joining them, and specify the column using qualified name, e.g.
+         |`df.as("a").join(df.as("b"), $$"a.id" > $$"b.id")`. You can also set
+         |${SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key} to false to disable this check.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def unexpectedEvalTypesForUDFsError(evalTypes: Set[Int]): Throwable = {
+    new AnalysisException(
+      s"Expected udfs have the same evalType but got different evalTypes: " +
+        s"${evalTypes.mkString(",")}")
   }
 }

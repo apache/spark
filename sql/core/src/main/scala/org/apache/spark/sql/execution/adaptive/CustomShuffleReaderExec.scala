@@ -108,7 +108,7 @@ case class CustomShuffleReaderExec private(
         case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
           startReducerIndex.until(endReducerIndex).map(bytesByPartitionId).sum
         case p: PartialReducerPartitionSpec => p.dataSize
-        case p => throw new IllegalStateException("unexpected " + p)
+        case p => throw new IllegalStateException(s"unexpected $p")
       })
     } else {
       None

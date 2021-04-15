@@ -200,7 +200,7 @@ object SQLMetrics {
       } else if (metricsType == NS_TIMING_METRIC) {
         duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
-        throw new IllegalStateException("unexpected metrics type: " + metricsType)
+        throw new IllegalStateException(s"unexpected metrics type: $metricsType")
       }
 
       val validValues = values.filter(_ >= 0)

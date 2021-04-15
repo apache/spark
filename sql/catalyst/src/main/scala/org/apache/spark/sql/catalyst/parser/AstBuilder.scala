@@ -660,6 +660,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
       relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    if (transformClause.setQuantifier != null) {
+      throw QueryParsingErrors.transformNotSupportQuantifierError(transformClause.setQuantifier)
+    }
     // Create the attributes.
     val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
       // Typed return columns.
