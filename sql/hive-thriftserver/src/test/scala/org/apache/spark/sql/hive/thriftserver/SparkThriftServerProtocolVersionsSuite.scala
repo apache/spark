@@ -362,11 +362,13 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
     }
 
     test(s"$version get interval type") {
-      testExecuteStatementWithProtocolVersion(version, "SELECT interval '1' year '2' day") { rs =>
+      testExecuteStatementWithProtocolVersion(
+        version,
+        "SELECT CAST('1 year 2 day' AS INTERVAL) AS icol") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === "1 years 2 days")
         val metaData = rs.getMetaData
-        assert(metaData.getColumnName(1) === "INTERVAL '1 years 2 days'")
+        assert(metaData.getColumnName(1) === "icol")
         assert(metaData.getColumnTypeName(1) === "string")
         assert(metaData.getColumnType(1) === java.sql.Types.VARCHAR)
         assert(metaData.getPrecision(1) === Int.MaxValue)
