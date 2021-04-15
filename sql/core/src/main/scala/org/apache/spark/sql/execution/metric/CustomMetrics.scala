@@ -34,13 +34,13 @@ object CustomMetrics {
    * Given a V2 custom metric type name, this method parses it and returns the corresponding
    * `CustomMetric` class name.
    */
-  def parseV2CustomMetricType(metricType: String): String = {
+  def parseV2CustomMetricType(metricType: String): Option[String] = {
     val className = metricType.stripPrefix(s"${V2_CUSTOM}_")
 
     if (className == metricType) {
-      throw new IllegalStateException(s"Metric type $metricType is not a V2 custom metric type.")
+      None
     } else {
-      className
+      Some(className)
     }
   }
 }

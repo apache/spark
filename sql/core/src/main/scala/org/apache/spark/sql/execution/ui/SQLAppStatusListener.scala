@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.internal.Logging
@@ -203,19 +204,34 @@ class SQLAppStatusListener(
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
     val accumIds = exec.metrics.map(_.accumulatorId).toSet
 
-    val metricAggregationMap = new mutable.HashMap[String, CustomMetric]()
+    val metricAggregationMap = new mutable.HashMap[String, (Array[Long], Array[Long]) => String]()
     val metricAggregationMethods = exec.metrics.map { m =>
-      val className = CustomMetrics.parseV2CustomMetricType(m.metricType)
-      val customMetric = if (metricAggregationMap.contains(className)) {
-        metricAggregationMap(className)
-      } else {
-        // Try to initiate custom metric object
-        val metric = Utils.loadExtensions(classOf[CustomMetric], Seq(className), conf).head
-        metricAggregationMap.put(className, metric)
-        metric
-      }
-      (m.accumulatorId,
-        (metrics: Array[Long], _: Array[Long]) => customMetric.aggregateTaskMetrics(metrics))
+      val optClassName = CustomMetrics.parseV2CustomMetricType(m.metricType)
+      val metricAggMethod = optClassName.map { className =>
+        if (metricAggregationMap.contains(className)) {
+          metricAggregationMap(className)
+        } else {
+          // Try to initiate custom metric object
+          try {
+            val metric = Utils.loadExtensions(classOf[CustomMetric], Seq(className), conf).head
+            val method =
+              (metrics: Array[Long], _: Array[Long]) => metric.aggregateTaskMetrics(metrics)
+            metricAggregationMap.put(className, method)
+            method
+          } catch {
+            case NonFatal(_) =>
+              // Cannot initiaize custom metric object, we might be in history server that does
+              // not have the custom metric class.
+              val defaultMethod = (_: Array[Long], _: Array[Long]) => "N/A"
+              metricAggregationMap.put(className, defaultMethod)
+              defaultMethod
+          }
+        }
+      }.getOrElse(
+        // Built-in SQLMetric
+        SQLMetrics.stringValue(m.metricType, _, _)
+      )
+      (m.accumulatorId, metricAggMethod)
     }.toMap
 
     val liveStageMetrics = exec.stages.toSeq
