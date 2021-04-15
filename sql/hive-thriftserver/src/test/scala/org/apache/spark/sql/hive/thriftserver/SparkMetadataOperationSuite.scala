@@ -24,6 +24,7 @@ import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils
 
@@ -355,6 +356,8 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     val ddl = s"CREATE GLOBAL TEMP VIEW $viewName as select interval 1 day as i"
 
     withJdbcStatement(viewName) { statement =>
+      val legacyIntervalEnabled = SQLConf.get.legacyIntervalEnabled
+      statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key}=true")
       statement.execute(ddl)
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName, null)
@@ -374,6 +377,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getString("IS_NULLABLE") === "YES")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
+      statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key}=$legacyIntervalEnabled")
     }
   }
 
