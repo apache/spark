@@ -162,8 +162,8 @@ class DatetimeIndexTest(ReusedSQLTestCase, TestUtils):
             )
 
             self.assert_eq(
-                kidx.indexer_between_time("00:00:00", "00:01:00", False, False).sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", False, False)),
+                kidx.indexer_between_time("00:00:00", "00:01:00", True, True).sort_values(),
+                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", True, True)),
             )
 
     def test_indexer_at_time(self):
