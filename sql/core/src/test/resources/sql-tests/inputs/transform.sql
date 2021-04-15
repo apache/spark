@@ -311,7 +311,7 @@ SET spark.sql.legacy.parser.havingWithoutGroupByAsWhere=false;
 SET spark.sql.parser.quotedRegexColumnNames=true;
 
 SELECT TRANSFORM(`(a|b)?+.+`)
- USING 'cat' AS (c)
+  USING 'cat' AS (c)
 FROM script_trans;
 
 SET spark.sql.parser.quotedRegexColumnNames=false;
@@ -320,4 +320,14 @@ SET spark.sql.parser.quotedRegexColumnNames=false;
 WITH temp AS (
   SELECT TRANSFORM(a) USING 'cat' AS (b string) FROM t
 )
-SELECT t1.b FROM temp t1 JOIN temp t2 ON t1.b = t2.b
+SELECT t1.b FROM temp t1 JOIN temp t2 ON t1.b = t2.b;
+
+SELECT TRANSFORM(DISTINCT b, a, c)
+  USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 4;
+
+SELECT TRANSFORM(ALL b, a, c)
+  USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 4;

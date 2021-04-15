@@ -1022,7 +1022,18 @@ case class CacheTableAsSelect(
     plan: LogicalPlan,
     originalText: String,
     isLazy: Boolean,
-    options: Map[String, String]) extends LeafCommand
+    options: Map[String, String],
+    isAnalyzed: Boolean = false) extends AnalysisOnlyCommand {
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
+    assert(!isAnalyzed)
+    copy(plan = newChildren.head)
+  }
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
+
+  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+}
 
 /**
  * The logical plan of the UNCACHE TABLE command.
