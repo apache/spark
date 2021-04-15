@@ -950,9 +950,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case f: Filter =>
         val (correlated, _) = splitConjunctivePredicates(f.condition).partition(containsOuter)
 
-        // Find any non-equality correlated predicates
+        // Find any non-equality correlated predicates and equality predicates that do not
+        // guarantee one-on-one mapping between inner and outer attributes. E.G:
+        // a = outer(c) -> true
+        // a > outer(c) -> false
+        // a + b = outer(c) -> false (because there can be multiple combinations of a, b that
+        // satisfy the condition)
         foundNonEqualCorrelatedPred = foundNonEqualCorrelatedPred || correlated.exists {
-          case _: EqualTo | _: EqualNullSafe => false
+          case Equality(_: Attribute, b) => b.find(_.isInstanceOf[Attribute]).isDefined
+          case Equality(a, _: Attribute) => a.find(_.isInstanceOf[Attribute]).isDefined
           case _ => true
         }
         failOnInvalidOuterReference(f)
