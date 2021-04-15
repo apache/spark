@@ -21,7 +21,7 @@ import pandas as pd
 from pyspark.pandas.plot import (
     HistogramPlotBase,
     name_like_string,
-    KoalasPlotAccessor,
+    PandasOnSparkPlotAccessor,
     BoxPlotBase,
     KdePlotBase,
 )
@@ -30,10 +30,11 @@ if TYPE_CHECKING:
     import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
 
 
-def plot_koalas(data: Union["ps.DataFrame", "ps.Series"], kind: str, **kwargs):
+def plot_pandas_on_spark(
+        data: Union["ps.DataFrame", "ps.Series"], kind: str, **kwargs):
     import plotly
 
-    # Koalas specific plots
+    # pandas-on-Spark specific plots
     if kind == "pie":
         return plot_pie(data, **kwargs)
     if kind == "hist":
@@ -44,13 +45,13 @@ def plot_koalas(data: Union["ps.DataFrame", "ps.Series"], kind: str, **kwargs):
         return plot_kde(data, **kwargs)
 
     # Other plots.
-    return plotly.plot(KoalasPlotAccessor.pandas_plot_data_map[kind](data), kind, **kwargs)
+    return plotly.plot(PandasOnSparkPlotAccessor.pandas_plot_data_map[kind](data), kind, **kwargs)
 
 
 def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     from plotly import express
 
-    data = KoalasPlotAccessor.pandas_plot_data_map["pie"](data)
+    data = PandasOnSparkPlotAccessor.pandas_plot_data_map["pie"](data)
 
     if isinstance(data, pd.Series):
         pdf = data.to_frame()
@@ -115,14 +116,14 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 
     if isinstance(data, ps.DataFrame):
         raise RuntimeError(
-            "plotly does not support a box plot with Koalas DataFrame. Use Series instead."
+            "plotly does not support a box plot with pandas-on-Spark DataFrame. Use Series instead."
         )
 
     # 'whis' isn't actually an argument in plotly (but in matplotlib). But seems like
     # plotly doesn't expose the reach of the whiskers to the beyond the first and
     # third quartiles (?). Looks they use default 1.5.
     whis = kwargs.pop("whis", 1.5)
-    # 'precision' is Koalas specific to control precision for approx_percentile
+    # 'precision' is pandas-on-Spark specific to control precision for approx_percentile
     precision = kwargs.pop("precision", 0.01)
 
     # Plotly options
