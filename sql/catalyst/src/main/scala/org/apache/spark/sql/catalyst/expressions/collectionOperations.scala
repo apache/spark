@@ -2474,6 +2474,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
     copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(start, stop, step) - Generates an array of elements from start to stop (inclusive),
@@ -2502,12 +2503,17 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
        [1,2,3,4,5]
       > SELECT _FUNC_(5, 1);
        [5,4,3,2,1]
+      > SET spark.sql.legacy.interval.enabled=true;
+       spark.sql.legacy.interval.enabled	true
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval 1 month);
        [2018-01-01,2018-02-01,2018-03-01]
+      > SET spark.sql.legacy.interval.enabled=false;
+       spark.sql.legacy.interval.enabled	false
   """,
   group = "array_funcs",
   since = "2.4.0"
 )
+// scalastyle:on line.size.limit line.contains.tab
 case class Sequence(
     start: Expression,
     stop: Expression,

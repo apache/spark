@@ -2392,6 +2392,7 @@ object DatePart {
   }
 }
 
+// scalastyle:off line.size.limit line.contains.tab
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp or interval source.",
@@ -2410,10 +2411,14 @@ object DatePart {
        224
       > SELECT _FUNC_('SECONDS', timestamp'2019-10-01 00:00:01.000001');
        1.000001
+      > SET spark.sql.legacy.interval.enabled=true;
+       spark.sql.legacy.interval.enabled	true
       > SELECT _FUNC_('days', interval 1 year 10 months 5 days);
        5
       > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
+      > SET spark.sql.legacy.interval.enabled=false;
+       spark.sql.legacy.interval.enabled	false
   """,
   note = """
     The _FUNC_ function is equivalent to the SQL-standard function `EXTRACT(field FROM source)`
@@ -2421,6 +2426,7 @@ object DatePart {
   group = "datetime_funcs",
   since = "3.0.0")
 // scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 case class DatePart(field: Expression, source: Expression, child: Expression)
   extends RuntimeReplaceable {
 
@@ -2437,6 +2443,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
     copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit line.contains.tab
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(field FROM source) - Extracts a part of the date/timestamp or interval source.",
@@ -2475,10 +2482,14 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
        224
       > SELECT _FUNC_(SECONDS FROM timestamp'2019-10-01 00:00:01.000001');
        1.000001
+      > SET spark.sql.legacy.interval.enabled=true;
+       spark.sql.legacy.interval.enabled	true
       > SELECT _FUNC_(days FROM interval 1 year 10 months 5 days);
        5
       > SELECT _FUNC_(seconds FROM interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
+      > SET spark.sql.legacy.interval.enabled=false;
+       spark.sql.legacy.interval.enabled	false
   """,
   note = """
     The _FUNC_ function is equivalent to `date_part(field, source)`.
@@ -2486,6 +2497,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   group = "datetime_funcs",
   since = "3.0.0")
 // scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 case class Extract(field: Expression, source: Expression, child: Expression)
   extends RuntimeReplaceable {
 
