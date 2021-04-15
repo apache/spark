@@ -40,30 +40,6 @@ except:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
-tabulate_requirement_message = None
-try:
-    from tabulate import tabulate  # noqa: F401
-except ImportError as e:
-    # If tabulate requirement is not satisfied, skip related tests.
-    tabulate_requirement_message = str(e)
-have_tabulate = tabulate_requirement_message is None
-
-matplotlib_requirement_message = None
-try:
-    import matplotlib  # type: ignore # noqa: F401
-except ImportError as e:
-    # If matplotlib requirement is not satisfied, skip related tests.
-    matplotlib_requirement_message = str(e)
-have_matplotlib = matplotlib_requirement_message is None
-
-plotly_requirement_message = None
-try:
-    import plotly  # type: ignore # noqa: F401
-except ImportError as e:
-    # If plotly requirement is not satisfied, skip related tests.
-    plotly_requirement_message = str(e)
-have_plotly = plotly_requirement_message is None
-
 SPARK_HOME = os.environ["SPARK_HOME"]
 
 
