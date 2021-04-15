@@ -9,7 +9,7 @@
 - name: install docker
   include: install_docker.yml
 
-- name: install kvm/minikube
+- name: install minikube
   include: install_minikube.yml
 
 - name: install anaconda and associated packages
