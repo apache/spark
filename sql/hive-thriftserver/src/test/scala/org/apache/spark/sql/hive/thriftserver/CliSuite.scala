@@ -596,9 +596,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("SPARK-35086: --verbose should be passed to Spark SQL CLI") {
-    runCliWithin(2.minute,
-      Seq("--verbose"))(
-      "SELECT 1;" -> "SELECT 1"
+    runCliWithin(2.minute, Seq("--verbose"))(
+      "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2;" ->
+        "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2"
     )
   }
 }
