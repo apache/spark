@@ -288,7 +288,7 @@ class SQLProcessor(object):
         if isinstance(var, pd.DataFrame):
             return self._convert_var(ps.DataFrame(var))
         if isinstance(var, DataFrame):
-            df_id = "koalas_" + str(id(var))
+            df_id = "pandas_on_spark_" + str(id(var))
             if df_id not in self._temp_views:
                 sdf = var.to_spark()
                 sdf.createOrReplaceTempView(df_id)

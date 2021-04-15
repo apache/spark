@@ -4941,7 +4941,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Assigning multiple columns within the same ``assign`` is possible
         but you cannot refer to newly created or modified columns. This
         feature is supported in pandas for Python 3.6 and later but not in
-        pandas-on-Spark. In Koalas, all items are computed first, and then assigned.
+        pandas-on-Spark. In pandas-on-Spark, all items are computed first,
+        and then assigned.
         """
         return self._assign(kwargs)
 

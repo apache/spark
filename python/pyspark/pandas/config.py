@@ -236,7 +236,7 @@ _options = [
 
 _options_dict = dict(zip((option.key for option in _options), _options))  # type: Dict[str, Option]
 
-_key_format = "koalas.{}".format
+_key_format = "pandas_on_Spark.{}".format
 
 
 class OptionError(AttributeError, KeyError):

@@ -30,7 +30,8 @@ if TYPE_CHECKING:
     import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
 
 
-def plot_koalas(data: Union["ps.DataFrame", "ps.Series"], kind: str, **kwargs):
+def plot_pandas_on_spark(
+        data: Union["ps.DataFrame", "ps.Series"], kind: str, **kwargs):
     import plotly
 
     # pandas-on-Spark specific plots

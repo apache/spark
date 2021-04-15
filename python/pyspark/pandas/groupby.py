@@ -3161,7 +3161,7 @@ def normalize_keyword_aggregation(kwargs):
     >>> normalize_keyword_aggregation({'output': ('input', 'sum')})
     (OrderedDict([('input', ['sum'])]), ('output',), [('input', 'sum')])
     """
-    # this is due to python version issue, not sure the impact on koalas
+    # this is due to python version issue, not sure the impact on pandas-on-Spark
     PY36 = sys.version_info >= (3, 6)
     if not PY36:
         kwargs = OrderedDict(sorted(kwargs.items()))

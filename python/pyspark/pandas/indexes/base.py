@@ -725,11 +725,11 @@ class Index(IndexOpsMixin):
         Support for MultiIndex
 
         >>> kidx = ps.MultiIndex.from_tuples([('a', 'x'), ('b', 'y')])
-        >>> kidx.names = ['hello', 'koalas']
+        >>> kidx.names = ['hello', 'pandas-on-Spark']
         >>> kidx  # doctest: +SKIP
         MultiIndex([('a', 'x'),
                     ('b', 'y')],
-                   names=['hello', 'koalas'])
+                   names=['hello', 'pandas-on-Spark'])
 
         >>> kidx.rename(['aloha', 'databricks'])  # doctest: +SKIP
         MultiIndex([('a', 'x'),
@@ -1387,8 +1387,8 @@ class Index(IndexOpsMixin):
 
         You can set name of result Index.
 
-        >>> s1.index.symmetric_difference(s2.index, result_name='koalas')  # doctest: +SKIP
-        Int64Index([5, 1], dtype='int64', name='koalas')
+        >>> s1.index.symmetric_difference(s2.index, result_name='pandas-on-Spark')  # doctest: +SKIP
+        Int64Index([5, 1], dtype='int64', name='pandas-on-Spark')
 
         You can set sort to `True`, if you want to sort the resulting index.
 

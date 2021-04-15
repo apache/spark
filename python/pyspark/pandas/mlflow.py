@@ -35,7 +35,7 @@ class PythonModelWrapper(object):
     """
     A wrapper around MLflow's Python object model.
 
-    This wrapper acts as a predictor on koalas
+    This wrapper acts as a predictor on pandas-on-Spark
 
     """
 
@@ -82,7 +82,7 @@ class PythonModelWrapper(object):
         """
         Returns a prediction on the data.
 
-        If the data is a koalas DataFrame, the return is a pandas-on-Spark Series.
+        If the data is a pandas-on-Spark DataFrame, the return is a pandas-on-Spark Series.
 
         If the data is a pandas Dataframe, the return is the expected output of the underlying
         pyfunc object (typically a pandas Series or a numpy array).
@@ -135,7 +135,7 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     >>> from mlflow.tracking import MlflowClient, set_tracking_uri
     >>> import mlflow.sklearn
     >>> from tempfile import mkdtemp
-    >>> d = mkdtemp("koalas_mlflow")
+    >>> d = mkdtemp("pandas_on_spark_mlflow")
     >>> set_tracking_uri("file:%s"%d)
     >>> client = MlflowClient()
     >>> exp = mlflow.create_experiment("my_experiment")

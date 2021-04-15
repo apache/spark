@@ -470,7 +470,7 @@ def sql_conf(pairs, *, spark=None):
 
 def validate_arguments_and_invoke_function(
     pobj: Union[pd.DataFrame, pd.Series],
-    koalas_func: Callable,
+    pandas_on_spark_func: Callable,
     pandas_func: Callable,
     input_args: Dict,
 ):
@@ -489,7 +489,7 @@ def validate_arguments_and_invoke_function(
     For example usage, look at DataFrame.to_html().
 
     :param pobj: the pandas DataFrame or Series to operate on
-    :param koalas_func: pandas-on-Spark function, used to get default parameter values
+    :param pandas_on_spark_func: pandas-on-Spark function, used to get default parameter values
     :param pandas_func: pandas function, used to check whether pandas supports all the arguments
     :param input_args: arguments to pass to the pandas function, often created by using locals().
                        Make sure locals() call is at the top of the function so it captures only
@@ -509,10 +509,10 @@ def validate_arguments_and_invoke_function(
         del args["kwargs"]
         args = {**args, **kwargs}
 
-    koalas_params = inspect.signature(koalas_func).parameters
+    pandas_on_spark_params = inspect.signature(pandas_on_spark_func).parameters
     pandas_params = inspect.signature(pandas_func).parameters
 
-    for param in koalas_params.values():
+    for param in pandas_on_spark_params.values():
         if param.name not in pandas_params:
             if args[param.name] == param.default:
                 del args[param.name]

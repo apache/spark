@@ -438,7 +438,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
                 # We re-raise later on.
                 pass
             else:
-                if hasattr(module, "plot") or hasattr(module, "plot_koalas"):
+                if hasattr(module, "plot") or hasattr(module, "plot_pandas_on_spark"):
                     # Validate that the interface is implemented when the option
                     # is set, rather than at plot time.
                     PandasOnSparkPlotAccessor._backends[backend] = module
@@ -493,9 +493,9 @@ class PandasOnSparkPlotAccessor(PandasObject):
         plot_data = self.data
 
         kind = {"density": "kde"}.get(kind, kind)
-        if hasattr(plot_backend, "plot_koalas"):
-            # use if there's koalas specific method.
-            return plot_backend.plot_koalas(plot_data, kind=kind, **kwargs)
+        if hasattr(plot_backend, "plot_pandas_on_spark"):
+            # use if there's pandas-on-Spark specific method.
+            return plot_backend.plot_pandas_on_spark(plot_data, kind=kind, **kwargs)
         else:
             # fallback to use pandas'
             if not PandasOnSparkPlotAccessor.pandas_plot_data_map[kind]:
@@ -586,7 +586,8 @@ class PandasOnSparkPlotAccessor(PandasObject):
             If not specified, all numerical columns are used.
         **kwds : optional
             Additional keyword arguments are documented in
-            :meth:`Koalas.Series.plot` or :meth:`Koalas.DataFrame.plot`.
+            :meth:`pyspark.pandas.Series.plot` or
+            :meth:`pyspark.pandas.DataFrame.plot`.
 
         Returns
         -------
@@ -772,7 +773,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         ----------
         **kwds : optional
             Additional keyword arguments are documented in
-            :meth:`Koalas.Series.plot`.
+            :meth:`pyspark.pandas.Series.plot`.
 
         precision: scalar, default = 0.01
             This argument is used by pandas-on-Spark to compute approximate statistics

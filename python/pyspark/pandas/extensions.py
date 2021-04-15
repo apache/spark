@@ -82,7 +82,7 @@ def _register_accessor(name, cls):
 
     .. code-block:: python
 
-        def __init__(self, koalas_obj):
+        def __init__(self, pandas_on_spark_obj):
             # constructor logic
         ...
 
@@ -166,8 +166,8 @@ def register_dataframe_accessor(name):
         @register_dataframe_accessor("geo")
         class GeoAccessor:
 
-            def __init__(self, koalas_obj):
-                self._obj = koalas_obj
+            def __init__(self, pandas_on_spark_obj):
+                self._obj = pandas_on_spark_obj
                 # other constructor logic
 
             @property
@@ -221,7 +221,7 @@ def register_series_accessor(name):
     When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user is
     interacting with. The code signature must be::
 
-        def __init__(self, koalas_obj):
+        def __init__(self, pandas_on_spark_obj):
             # constructor logic
         ...
 
@@ -247,8 +247,8 @@ def register_series_accessor(name):
         @register_series_accessor("geo")
         class GeoAccessor:
 
-            def __init__(self, koalas_obj):
-                self._obj = koalas_obj
+            def __init__(self, pandas_on_spark_obj):
+                self._obj = pandas_on_spark_obj
 
             @property
             def is_valid(self):
@@ -293,7 +293,7 @@ def register_index_accessor(name):
     When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user is
     interacting with. The code signature must be::
 
-        def __init__(self, koalas_obj):
+        def __init__(self, pandas_on_spark_obj):
             # constructor logic
         ...
 
@@ -319,8 +319,8 @@ def register_index_accessor(name):
         @register_index_accessor("foo")
         class CustomAccessor:
 
-            def __init__(self, koalas_obj):
-                self._obj = koalas_obj
+            def __init__(self, pandas_on_spark_obj):
+                self._obj = pandas_on_spark_obj
                 self.item = "baz"
 
             @property

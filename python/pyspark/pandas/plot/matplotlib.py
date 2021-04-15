@@ -520,11 +520,11 @@ _plot_klass = {getattr(klass, "_kind"): klass for klass in _klasses}
 _common_kinds = {"area", "bar", "barh", "box", "hist", "kde", "line", "pie"}
 _series_kinds = _common_kinds.union(set())
 _dataframe_kinds = _common_kinds.union({"scatter", "hexbin"})
-_koalas_all_kinds = _common_kinds.union(_series_kinds).union(_dataframe_kinds)
+_pandas_on_spark_all_kinds = _common_kinds.union(_series_kinds).union(_dataframe_kinds)
 
 
-def plot_koalas(data, kind, **kwargs):
-    if kind not in _koalas_all_kinds:
+def plot_pandas_on_spark(data, kind, **kwargs):
+    if kind not in _pandas_on_spark_all_kinds:
         raise ValueError("{} is not a valid plot kind".format(kind))
 
     from pyspark.pandas import DataFrame, Series

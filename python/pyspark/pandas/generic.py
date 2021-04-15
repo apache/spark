@@ -621,8 +621,8 @@ class Frame(object, metaclass=ABCMeta):
         r"""
         Write object to a comma-separated values (csv) file.
 
-        .. note:: pandas-on-Spark `to_csv` writes files to a path or URI. Unlike pandas', Koalas
-            respects HDFS's property such as 'fs.default.name'.
+        .. note:: pandas-on-Spark `to_csv` writes files to a path or URI. Unlike pandas',
+            pandas-on-Spark respects HDFS's property such as 'fs.default.name'.
 
         .. note:: pandas-on-Spark writes CSV files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
@@ -852,8 +852,8 @@ class Frame(object, metaclass=ABCMeta):
         """
         Convert the object to a JSON string.
 
-        .. note:: pandas-on-Spark `to_json` writes files to a path or URI. Unlike pandas', Koalas
-            respects HDFS's property such as 'fs.default.name'.
+        .. note:: pandas-on-Spark `to_json` writes files to a path or URI. Unlike pandas',
+            pandas-on-Spark respects HDFS's property such as 'fs.default.name'.
 
         .. note:: pandas-on-Spark writes JSON files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.

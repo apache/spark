@@ -56,7 +56,7 @@ from pyspark.pandas.typedef import (
     Dtype,
     as_spark_type,
     extension_dtypes,
-    koalas_dtype,
+    pandas_on_spark_type,
     spark_type_to_pandas_dtype,
 )
 from pyspark.pandas.utils import (
@@ -213,8 +213,8 @@ def column_op(f):
     """
     A decorator that wraps APIs taking/returning Spark Column so that pandas-on-Spark Series can be
     supported too. If this decorator is used for the `f` function that takes Spark Column and
-    returns Spark Column, decorated `f` takes pandas-on-Spark Series as well and returns Koalas
-    Series.
+    returns Spark Column, decorated `f` takes pandas-on-Spark Series as well and returns
+    pandas-on-Spark Series.
 
     :param f: a function that takes Spark Column and returns Spark Column.
     :param self: pandas-on-Spark Series
@@ -1086,7 +1086,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')
         Int64Index([1, 2], dtype='int64', name='a')
         """
-        dtype, spark_type = koalas_dtype(dtype)
+        dtype, spark_type = pandas_on_spark_type(dtype)
         if not spark_type:
             raise ValueError("Type {} not understood".format(dtype))
 
@@ -1653,13 +1653,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         If Index has name, keep the name up.
 
-        >>> idx = ps.Index([0, 0, 0, 1, 1, 2, 3], name='koalas')
+        >>> idx = ps.Index([0, 0, 0, 1, 1, 2, 3], name='pandas-on-Spark')
         >>> idx.value_counts().sort_index()
         0    3
         1    2
         2    1
         3    1
-        Name: koalas, dtype: int64
+        Name: pandas-on-Spark, dtype: int64
         """
         from pyspark.pandas.series import first_series
 
