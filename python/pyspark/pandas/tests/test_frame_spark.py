@@ -22,7 +22,8 @@ import pandas as pd
 import pyspark
 
 from pyspark import pandas as pp
-from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils, TestUtils
+from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import ReusedSQLTestCase, TestUtils
 
 
 class SparkFrameMethodsTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):

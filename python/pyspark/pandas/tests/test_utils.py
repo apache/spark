@@ -22,7 +22,8 @@ from pyspark.pandas.utils import (
     validate_arguments_and_invoke_function,
     validate_bool_kwarg,
 )
-from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import ReusedSQLTestCase
 
 some_global_variable = 0
 

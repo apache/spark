@@ -25,8 +25,9 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as pp
+from pyspark.testing.sqlutils import SQLTestUtils
 from distutils.version import LooseVersion
-from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils, TestUtils
+from pyspark.testing.utils import ReusedSQLTestCase, TestUtils
 
 
 class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):

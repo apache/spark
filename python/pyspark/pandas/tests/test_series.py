@@ -29,10 +29,10 @@ from pyspark.ml.linalg import SparseVector
 from pyspark.sql import functions as F
 
 from pyspark import pandas as ps
+from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import (
     have_tabulate,
     ReusedSQLTestCase,
-    SQLTestUtils,
     SPARK_CONF_ARROW_ENABLED,
 )
 from pyspark.pandas.exceptions import PandasNotImplementedError

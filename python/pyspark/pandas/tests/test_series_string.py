@@ -20,7 +20,8 @@ import numpy as np
 import re
 
 from pyspark import pandas as ps
-from pyspark.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import ReusedSQLTestCase
 
 
 class SeriesStringTest(ReusedSQLTestCase, SQLTestUtils):
