@@ -18,7 +18,7 @@
 from pyspark import pandas as ps
 from pyspark.pandas import config
 from pyspark.pandas.config import Option, DictWrapper
-from pyspark.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import ReusedSQLTestCase
 
 
 class ConfigTest(ReusedSQLTestCase):

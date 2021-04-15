@@ -18,7 +18,7 @@
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import ReusedSQLTestCase
 
 
 class DefaultIndexTest(ReusedSQLTestCase):

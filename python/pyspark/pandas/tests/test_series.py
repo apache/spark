@@ -30,7 +30,7 @@ from pyspark.sql import functions as F
 
 from pyspark import pandas as ps
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import (
+from pyspark.testing.pandasutils import (
     have_tabulate,
     ReusedSQLTestCase,
     SPARK_CONF_ARROW_ENABLED,

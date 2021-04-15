@@ -23,7 +23,7 @@ from pyspark.pandas.utils import (
     validate_bool_kwarg,
 )
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import ReusedSQLTestCase
 
 some_global_variable = 0
 
