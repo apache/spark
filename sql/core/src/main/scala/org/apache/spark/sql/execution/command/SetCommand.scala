@@ -146,7 +146,22 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // Queries a single property.
     case Some((key, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        val value = sparkSession.conf.getOption(key).getOrElse("<undefined>")
+        val value = sparkSession.conf.getOption(key).getOrElse {
+          // Also lookup the `sharedState.hadoopConf` to display default value for hadoop conf
+          // correctly. It completes all the session-level configs with `sparkSession.conf`
+          // together.
+          //
+          // Note that, as the write-side does not prohibit to set static hadoop/hive to SQLConf
+          // yet, users may get wrong results before reaching here,
+          // e.g. 'SET hive.metastore.uris=abc', where 'hive.metastore.uris' is static and 'abc' is
+          // of no effect, but will show 'abc' via 'SET hive.metastore.uris' wrongly.
+          //
+          // Instead of showing incorrect `<undefined>` to users, it's more reasonable to show the
+          // effective default values. For example, the hadoop output codec/compression configs
+          // take affect from table to table, file to file, so they are not static and users are
+          // very likely to change them based the default value they see.
+          sparkSession.sharedState.hadoopConf.get(key, "<undefined>")
+        }
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)

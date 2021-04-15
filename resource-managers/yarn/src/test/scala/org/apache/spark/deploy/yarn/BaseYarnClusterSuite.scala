@@ -28,7 +28,8 @@ import scala.concurrent.duration._
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
-import org.scalatest.BeforeAndAfterAll
+import org.scalactic.source.Position
+import org.scalatest.{BeforeAndAfterAll, Tag}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 
@@ -41,6 +42,7 @@ import org.apache.spark.util.Utils
 
 abstract class BaseYarnClusterSuite
   extends SparkFunSuite with BeforeAndAfterAll with Matchers with Logging {
+  private var isBindSuccessful = true
 
   // log4j configuration for the YARN containers, so that their output is collected
   // by YARN instead of trying to overwrite unit-tests.log.
@@ -63,6 +65,14 @@ abstract class BaseYarnClusterSuite
   private var logConfDir: File = _
 
   def newYarnConfig(): YarnConfiguration
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+                             (implicit pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      assume(isBindSuccessful, "Mini Yarn cluster should be able to bind.")
+      testFun
+    }
+  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -90,9 +100,16 @@ abstract class BaseYarnClusterSuite
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
     yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
 
-    yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
-    yarnCluster.init(yarnConf)
-    yarnCluster.start()
+    try {
+      yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
+      yarnCluster.init(yarnConf)
+      yarnCluster.start()
+    } catch {
+      case e: Throwable if org.apache.commons.lang3.exception.ExceptionUtils.indexOfThrowable(
+          e, classOf[java.net.BindException]) != -1 =>
+        isBindSuccessful = false
+        return
+    }
 
     // There's a race in MiniYARNCluster in which start() may return before the RM has updated
     // its address in the configuration. You can see this in the logs by noticing that when
@@ -128,7 +145,7 @@ abstract class BaseYarnClusterSuite
 
   override def afterAll(): Unit = {
     try {
-      yarnCluster.stop()
+      if (yarnCluster != null) yarnCluster.stop()
     } finally {
       super.afterAll()
     }

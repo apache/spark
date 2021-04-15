@@ -314,6 +314,16 @@ WITH temp AS (
 )
 SELECT t1.b FROM temp t1 JOIN temp t2 ON t1.b = t2.b;
 
+SELECT TRANSFORM(DISTINCT b, a, c)
+  USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 4;
+
+SELECT TRANSFORM(ALL b, a, c)
+  USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 4;
+
 -- SPARK-35070: TRANSFORM not support alias in inputs
 SELECT TRANSFORM(b AS b_1, MAX(a), CAST(sum(c) AS STRING))
   USING 'cat' AS (a, b, c)
