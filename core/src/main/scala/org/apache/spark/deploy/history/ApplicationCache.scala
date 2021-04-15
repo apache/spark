@@ -156,7 +156,7 @@ private[history] class ApplicationCache(
    */
   @throws[NoSuchElementException]
   private def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
-    logDebug(s"Loading application Entry $appId/${attemptId.mkString}")
+    logDebug(s"Loading application Entry $appId/${attemptId.mkString} ")
     metrics.loadCount.inc()
     val loadedUI = time(metrics.loadTimer) {
       metrics.lookupCount.inc()
