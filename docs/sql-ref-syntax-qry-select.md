@@ -166,8 +166,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [[ named_expression | regex_column_n
 
 * **TRANSFORM**
 
-     Specifies a hive-style transform (`SELECT TRANSFORM`) query specification to transform
-     the input by forking and running the specified script.
+     Specifies a hive-style transform query specification to transform the input by forking and running user-specified command or script.
 
 ### Related Statements
 

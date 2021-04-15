@@ -22,8 +22,8 @@ license: |
 ### Description
 
 The `TRANSFORM` clause is used to specify a Hive-style transform query specification 
-to transform the inputs by running a specified script. Users can plug in their own custom 
-scripts in the data stream by using `TRANSFORM` clause.
+to transform the inputs by running a specified command or script. Users can plug in their own custom 
+command or script in the data stream by using `TRANSFORM` clause.
 
 ### Syntax
 
@@ -31,7 +31,7 @@ scripts in the data stream by using `TRANSFORM` clause.
 SELECT TRANSFORM ( expression [ , ... ] )
     [ ROW FORMAT row_format ]
     [ RECORDWRITER record_writer_class ]
-    USING script [ AS ( [ col_name [ col_type ] ] [ , ... ] ) ]
+    USING command_or_script [ AS ( [ col_name [ col_type ] ] [ , ... ] ) ]
     [ ROW FORMAT row_format ]
     [ RECORDREADER record_reader_class ]
 
@@ -98,7 +98,7 @@ row_format:
 
     Specifies a fully-qualified class name of a custom RecordReader. The default value is `org.apache.hadoop.hive.ql.exec.TextRecordReader`.
 
-* **script**
+* **command_or_script**
 
     Specifies a command or a path to script to process data.
 
