@@ -45,6 +45,7 @@ $.extend( $.fn.dataTable.ext.type.order, {
         return ((a < b) ? 1 : ((a > b) ? -1 : 0));
     },
 
+    
     "size-pre": parseFloat,
 
     "size-asc": function ( a, b ) {
