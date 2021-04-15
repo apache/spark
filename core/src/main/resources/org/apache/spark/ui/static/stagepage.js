@@ -43,6 +43,20 @@ $.extend( $.fn.dataTable.ext.type.order, {
         a = ConvertDurationString( a );
         b = ConvertDurationString( b );
         return ((a < b) ? 1 : ((a > b) ? -1 : 0));
+    },
+
+    "size-pre": parseFloat,
+
+    "size-asc": function ( a, b ) {
+        a = parseFloat( a );
+        b = parseFloat( b );
+        return ((a < b) ? -1 : ((a > b) ? 1 : 0));
+    },
+
+    "size-desc": function ( a, b ) {
+        a = parseFloat( a );
+        b = parseFloat( b );
+        return ((a < b) ? 1 : ((a > b) ? -1 : 0));
     }
 } );
 
@@ -562,17 +576,16 @@ $(document).ready(function () {
                         }
                     ],
                     "columnDefs": [
-                        // Reuse the duration-related sorting methods defined in [stagapage.js#33]
                         // to ensure that strings like '12345678 / 123456', '9999 / 1234' in tables
                         // can be sorted as numerical-order instead of lexicographical-order.
-                        { "type": "duration", "targets": 9 },
-                        { "type": "duration", "targets": 10 },
-                        { "type": "duration", "targets": 11 },
-                        { "type": "duration", "targets": 12 },
-                        { "type": "duration", "visible": false, "targets": 15 },
-                        { "type": "duration", "visible": false, "targets": 16 },
-                        { "type": "duration", "visible": false, "targets": 17 },
-                        { "type": "duration", "visible": false, "targets": 18 }
+                        { "type": "size", "targets": 9 },
+                        { "type": "size", "targets": 10 },
+                        { "type": "size", "targets": 11 },
+                        { "type": "size", "targets": 12 },
+                        { "type": "size", "visible": false, "targets": 15 },
+                        { "type": "size", "visible": false, "targets": 16 },
+                        { "type": "size", "visible": false, "targets": 17 },
+                        { "type": "size", "visible": false, "targets": 18 }
                     ],
                     "deferRender": true,
                     "order": [[0, "asc"]],
