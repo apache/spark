@@ -433,17 +433,10 @@ class DefaultParamsWriter(MLWriter):
 
         # User-supplied param values
         params = instance._paramMap
-        jsonParams = {}
-        if paramMap is not None:
-            jsonParams = paramMap
-        else:
-            for p in params:
-                jsonParams[p.name] = params[p]
+        jsonParams = {p.name:params[p] for p in params if paramMap is None else paramMap}
 
         # Default param values
-        jsonDefaultParams = {}
-        for p in instance._defaultParamMap:
-            jsonDefaultParams[p.name] = instance._defaultParamMap[p]
+        jsonDefaultParams={p.name:instance._defaultParamMap[p] for p in instance._defaultParamMap}
 
         basicMetadata = {"class": cls, "timestamp": int(round(time.time() * 1000)),
                          "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams,
