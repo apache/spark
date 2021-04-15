@@ -145,6 +145,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
           self.markRuleAsIneffective(ruleId)
           self
         } else {
+          afterRule.copyTagsFrom(self)
           afterRule
         }
       }

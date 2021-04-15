@@ -233,7 +233,7 @@ statement
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
-    | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
+    | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
@@ -524,9 +524,9 @@ querySpecification
     ;
 
 transformClause
-    : (SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
-            | kind=MAP namedExpressionSeq
-            | kind=REDUCE namedExpressionSeq)
+    : (SELECT kind=TRANSFORM '(' setQuantifier? namedExpressionSeq ')'
+            | kind=MAP setQuantifier? namedExpressionSeq
+            | kind=REDUCE setQuantifier? namedExpressionSeq)
       inRowFormat=rowFormat?
       (RECORDWRITER recordWriter=STRING)?
       USING script=STRING
