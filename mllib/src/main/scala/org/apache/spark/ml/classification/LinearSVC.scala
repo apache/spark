@@ -312,7 +312,7 @@ class LinearSVC @Since("2.2.0") (
       // we should adjust it to the initial solution for problem:
       // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
       // NOTE: this is NOOP before we finally support model initialization
-      val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, initialSolution, 1, scaledMean, 1)
+      val adapt = BLAS.javaBLAS.ddot(numFeatures, initialSolution, 1, scaledMean, 1)
       initialSolution(numFeatures) += adapt
     }
 
@@ -334,7 +334,7 @@ class LinearSVC @Since("2.2.0") (
       // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
       // we should adjust it back for original problem:
       // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
-      val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, solution, 1, scaledMean, 1)
+      val adapt = BLAS.javaBLAS.ddot(numFeatures, solution, 1, scaledMean, 1)
       solution(numFeatures) -= adapt
     }
     (solution, arrayBuilder.result)

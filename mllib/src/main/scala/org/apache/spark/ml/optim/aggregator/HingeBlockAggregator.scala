@@ -69,7 +69,7 @@ private[ml] class HingeBlockAggregator(
   // deal with non-zero values in prediction.
   private val marginOffset = if (fitIntercept) {
     coefficientsArray.last -
-      BLAS.getBLAS(numFeatures).ddot(numFeatures, coefficientsArray, 1, bcScaledMean.value, 1)
+      BLAS.javaBLAS.ddot(numFeatures, coefficientsArray, 1, bcScaledMean.value, 1)
   } else {
     Double.NaN
   }
@@ -136,7 +136,7 @@ private[ml] class HingeBlockAggregator(
       case sm: SparseMatrix if fitIntercept =>
         val linearGradSumVec = new DenseVector(Array.ofDim[Double](numFeatures))
         BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
-        BLAS.getBLAS(numFeatures).daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
+        BLAS.javaBLAS.daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
           gradientSumArray, 1)
 
       case sm: SparseMatrix if !fitIntercept =>
@@ -150,7 +150,7 @@ private[ml] class HingeBlockAggregator(
     if (fitIntercept) {
       // above update of the linear part of gradientSumArray does NOT take the centering
       // into account, here we need to adjust this part.
-      BLAS.getBLAS(numFeatures).daxpy(numFeatures, -multiplierSum, bcScaledMean.value, 1,
+      BLAS.javaBLAS.daxpy(numFeatures, -multiplierSum, bcScaledMean.value, 1,
         gradientSumArray, 1)
 
       // update the intercept part of gradientSumArray
