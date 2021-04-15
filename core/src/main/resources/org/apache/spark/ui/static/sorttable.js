@@ -185,6 +185,10 @@ sorttable = {
         if (text.match(/^-?[£$¤]?[\d,.]+%?$/)) {
           return sorttable.sort_numeric;
         }
+        // match content like '287.1 MiB (17.2 GiB Remaining)', '0.0 B'
+        else if(text.match(/^(\d+(?:\.\d+)?)\s*(b|kib|mib|gib|tib|pib)[\s\S]*/i)) {
+          return sorttable.sort_storage_size
+        }
         // check for a date: dd/mm/yyyy or dd/mm/yy 
         // can have / or . or - as separator
         // can be mm/dd as well
@@ -277,6 +281,19 @@ sorttable = {
     bb = parseFloat(b[0].replace(/[^0-9.-]/g,'')); 
     if (isNaN(bb)) bb = 0;
     return aa-bb;
+  },
+  sort_storage_size: function(src, dst) {
+    if(src[0].toLowerCase() === dst[0].toLowerCase()) {
+      return 0;
+    }
+    srcSize = storageSizeConverter(src[0])
+    dstSize = storageSizeConverter(dst[0])
+
+    if(srcSize === dstSize) {
+      return 0;
+    }else {
+      return srcSize > dstSize ? 1 : -1;
+    }
   },
   sort_alpha: function(a,b) {
     if (a[0].toLowerCase()==b[0].toLowerCase()) return 0;
@@ -505,3 +522,25 @@ var forEach = function(object, block, context) {
   }
 };
 
+// getStorageSize from str like '9.75 Mib'/'1290 B'
+function storageSizeConverter(data) {
+  var data =data.toString()
+  var multipliers = {
+    b: 1,
+    kib: 1024,
+    mib: 1048576,
+    gib: 1073741824,
+    tib: 1099511627776,
+    pib: 1125899906842624
+  }
+
+  var matches = data.match(/^(\d+(?:\.\d+)?)\s*(b|kib|mib|gib|tib|pib)[\s\S]*/i);
+
+  if(matches) {
+    var unit = matches[2].toLowerCase()
+    return parseFloat(matches[1]) * multipliers[unit];
+  }
+  else {
+    return -1;
+  }
+};
