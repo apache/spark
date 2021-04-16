@@ -154,6 +154,26 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
+  object AsFunctionIdentifier {
+    def unapply(parts: Seq[String]): Option[FunctionIdentifier] = {
+      def namesToFunctionIdentifier(names: Seq[String]): Option[FunctionIdentifier] = names match {
+        case Seq(name) => Some(FunctionIdentifier(name))
+        case Seq(database, name) => Some(FunctionIdentifier(name, Some(database)))
+        case _ => None
+      }
+      parts match {
+        case CatalogAndMultipartIdentifier(None, names)
+          if CatalogV2Util.isSessionCatalog(currentCatalog) =>
+          namesToFunctionIdentifier(names)
+        case CatalogAndMultipartIdentifier(Some(catalog), names)
+          if CatalogV2Util.isSessionCatalog(catalog) &&
+            CatalogV2Util.isSessionCatalog(currentCatalog) =>
+          namesToFunctionIdentifier(names)
+        case _ => None
+      }
+    }
+  }
+
   def parseSessionCatalogFunctionIdentifier(nameParts: Seq[String]): FunctionIdentifier = {
     if (nameParts.length == 1 && catalogManager.v1SessionCatalog.isTempFunction(nameParts.head)) {
       return FunctionIdentifier(nameParts.head)

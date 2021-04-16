@@ -1560,6 +1560,34 @@ class SessionCatalog(
   }
 
   /**
+   * Lookup `registry` and check if a built-in or temporary function is defined for the input
+   * `name`. None if no such function exists.
+   *
+   * This is currently used by both V1 function lookup (in `lookupFunction`), and V2
+   * function lookup (in `Analyzer`).
+   */
+  private def lookupBuiltinOrTempFunctionInfo[T](
+      name: String,
+      children: Seq[Expression],
+      registry: FunctionRegistryBase[T]): Option[T] = synchronized {
+    val ident = FunctionIdentifier(name)
+    if (registry.functionExists(ident)) {
+      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      // Lookup the function as a temporary or a built-in function (i.e. without database) and
+      // 1. if we are not resolving view, we don't care about the function type and just return it.
+      // 2. if we are resolving view, only return a temp function if it's referred by this view.
+      if (!isResolvingView ||
+        !isTemporaryFunction(ident) ||
+        referredTempFunctionNames.contains(ident.funcName)) {
+        // This function has been already loaded into the function registry.
+        return Some(registry.lookupFunction(ident, children))
+      }
+    }
+    None
+  }
+
+  /**
    * Look up a specific function, assuming it exists.
    *
    * For a temporary function or a permanent function that has been loaded,
@@ -1576,20 +1604,15 @@ class SessionCatalog(
       name: FunctionIdentifier,
       children: Seq[Expression],
       registry: FunctionRegistryBase[T]): T = synchronized {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
-    if (name.database.isEmpty && registry.functionExists(name)) {
-      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
-      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-      // Lookup the function as a temporary or a built-in function (i.e. without database) and
-      // 1. if we are not resolving view, we don't care about the function type and just return it.
-      // 2. if we are resolving view, only return a temp function if it's referred by this view.
-      if (!isResolvingView ||
-          !isTemporaryFunction(name) ||
-          referredTempFunctionNames.contains(name.funcName)) {
-        // This function has been already loaded into the function registry.
-        return registry.lookupFunction(name, children)
+    if (name.database.isEmpty) {
+      val funcInfo = lookupBuiltinOrTempFunctionInfo(name.funcName, children, registry)
+      if (funcInfo.isDefined) {
+        return funcInfo.get
       }
     }
 
@@ -1598,7 +1621,8 @@ class SessionCatalog(
       case Seq() => getCurrentDatabase
       case Seq(_, db) => db
       case Seq(catalog, namespace @ _*) =>
-        throw QueryCompilationErrors.v2CatalogNotSupportFunctionError(catalog, namespace)
+        throw new IllegalStateException(s"[BUG] unexpected v2 catalog: $catalog, and " +
+          s"namespace: ${namespace.quoted} in v1 function lookup")
     }
 
     // If the name itself is not qualified, add the current database to it.
@@ -1645,6 +1669,13 @@ class SessionCatalog(
     lookupFunction[LogicalPlan](name, children, tableFunctionRegistry)
   }
 
+  /**
+   * Return a optional [[Expression]] for the input built-in or temporary function with name
+   * `name`. None if the function doesn't exist.
+   */
+  def lookupBuiltinOrTempFunction(name: String, children: Seq[Expression]): Option[Expression] = {
+    lookupBuiltinOrTempFunctionInfo[Expression](name, children, functionRegistry)
+  }
   /**
    * List all functions in the specified database, including temporary functions. This
    * returns the function identifier and the scope in which it was defined (system or user

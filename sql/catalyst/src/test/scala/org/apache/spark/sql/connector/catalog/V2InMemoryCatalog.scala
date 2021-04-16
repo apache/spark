@@ -29,6 +29,137 @@ import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+class BasicInMemoryTableCatalog extends TableCatalog {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  protected val namespaces: util.Map[List[String], Map[String, String]] =
+    new ConcurrentHashMap[List[String], Map[String, String]]()
+
+  protected val tables: util.Map[Identifier, Table] =
+    new ConcurrentHashMap[Identifier, Table]()
+
+  protected val functions: util.Map[Identifier, UnboundFunction] =
+    new ConcurrentHashMap[Identifier, UnboundFunction]()
+
+  private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
+
+  private var _name: Option[String] = None
+
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    _name = Some(name)
+  }
+
+  override def name: String = _name.get
+
+  override def listTables(namespace: Array[String]): Array[Identifier] = {
+    tables.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
+  }
+
+  override def loadTable(ident: Identifier): Table = {
+    Option(tables.get(ident)) match {
+      case Some(table) =>
+        table
+      case _ =>
+        throw new NoSuchTableException(ident)
+    }
+  }
+
+  override def invalidateTable(ident: Identifier): Unit = {
+    invalidatedTables.add(ident)
+  }
+
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    createTable(ident, schema, partitions, properties, Distributions.unspecified(),
+      Array.empty, None)
+  }
+
+  def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String],
+      distribution: Distribution,
+      ordering: Array[SortOrder],
+      requiredNumPartitions: Option[Int]): Table = {
+    if (tables.containsKey(ident)) {
+      throw new TableAlreadyExistsException(ident)
+    }
+
+    V2InMemoryCatalog.maybeSimulateFailedTableCreation(properties)
+
+    val tableName = s"$name.${ident.quoted}"
+    val table = new InMemoryTable(tableName, schema, partitions, properties, distribution,
+      ordering, requiredNumPartitions)
+    tables.put(ident, table)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    table
+  }
+
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    val table = loadTable(ident).asInstanceOf[InMemoryTable]
+    val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
+    val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
+
+    // fail if the last column in the schema was dropped
+    if (schema.fields.isEmpty) {
+      throw new IllegalArgumentException(s"Cannot drop all fields")
+    }
+
+    val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
+      .withData(table.data)
+
+    tables.put(ident, newTable)
+
+    newTable
+  }
+
+  override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
+
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    if (tables.containsKey(newIdent)) {
+      throw new TableAlreadyExistsException(newIdent)
+    }
+
+    Option(tables.remove(oldIdent)) match {
+      case Some(table) =>
+        tables.put(newIdent, table)
+      case _ =>
+        throw new NoSuchTableException(oldIdent)
+    }
+  }
+
+  def isTableInvalidated(ident: Identifier): Boolean = {
+    invalidatedTables.contains(ident)
+  }
+
+  def clearTables(): Unit = {
+    tables.clear()
+  }
+}
+
+class BasicInMemoryCatalog extends BasicInMemoryTableCatalog with FunctionCatalog {
+  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
+    functions.keySet().asScala.filter(_.namespace().sameElements(namespace)).toArray
+  }
+
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    Option(functions.get(ident)) match {
+      case Some(func) =>
+        func
+      case _ =>
+        throw new NoSuchFunctionException(ident)
+    }
+  }
+
+  def createFunction(ident: Identifier, fn: UnboundFunction): UnboundFunction = {
+    functions.put(ident, fn)
+  }
+}
+
 class V2InMemoryCatalog extends BasicInMemoryCatalog with SupportsNamespaces {
   private def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct

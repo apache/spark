@@ -30,7 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
-import org.apache.spark.sql.catalyst.expressions.{FrameLessOffsetWindowFunction, _}
+import org.apache.spark.sql.catalyst.expressions.{Expression, FrameLessOffsetWindowFunction, _}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -46,6 +46,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -1960,8 +1961,13 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
       plan.resolveExpressions {
-        case f @ UnresolvedFunction(NonSessionCatalogAndIdentifier(_, _), _, _, _, _) =>
-          // no-op if this is from a v2 catalog
+        case f @ UnresolvedFunction(NonSessionCatalogAndIdentifier(catalog, name), _, _, _, _) =>
+          if (!catalog.isFunctionCatalog) {
+            withPosition(f) {
+              throw new AnalysisException(s"Trying to lookup function '$name' in catalog" +
+                s" '${catalog.name()}', but '${catalog.name()}' is not a FunctionCatalog.")
+            }
+          }
           f
         case f: UnresolvedFunction
           if externalFunctionNameSet.contains(normalizeFuncName(f.name)) => f
@@ -2021,150 +2027,32 @@ class Analyzer(override val catalogManager: CatalogManager)
                   name, other.getClass.getCanonicalName)
               }
             }
-          case UnresolvedFunction(NonSessionCatalogAndIdentifier(v2Catalog, ident), arguments,
-            isDistinct, filter, _) if v2Catalog.isFunctionCatalog =>
-            val unbound = v2Catalog.asFunctionCatalog.loadFunction(ident)
 
-            val inputType = StructType(arguments.zipWithIndex.map {
-              case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
-            })
-
-            val bound = try {
-              unbound.bind(inputType)
-            } catch {
-              case unsupported: UnsupportedOperationException =>
-                failAnalysis(s"Function '${unbound.name}' cannot process input: " +
-                  s"(${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
-                  unsupported.getMessage)
-            }
-
-            bound match {
-              case scalarFunc: ScalarFunction[_] =>
-                if (isDistinct) {
-                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                    scalarFunc.name(), "DISTINCT")
-                } else if (filter.isDefined) {
-                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                    scalarFunc.name(), "FILTER clause")
-                } else {
-                  // TODO: implement type coercion by looking at input type from the UDF. We may
-                  //  also want to check if the parameter types from the magic method match the
-                  //  input type through `BoundFunction.inputTypes`.
-                  val argClasses = inputType.fields.map(_.dataType)
-                  findMethod(scalarFunc, ScalarFunction.MAGIC_METHOD_NAME, Some(argClasses)) match {
-                    case Some(_) =>
-                      val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
-                      Invoke(caller, ScalarFunction.MAGIC_METHOD_NAME, scalarFunc.resultType(),
-                        arguments, returnNullable = scalarFunc.isResultNullable)
-                    case _ =>
-                      // TODO: handle functions defined in Scala too - in Scala, even if a
-                      //  subclass do not override the default method in parent interface defined
-                      //  in Java, the method can still be found from `getDeclaredMethod`.
-                      findMethod(scalarFunc, "produceResult", Some(Seq(inputType))) match {
-                        case Some(_) =>
-                          ApplyFunctionExpression(scalarFunc, arguments)
-                        case None =>
-                          failAnalysis(s"ScalarFunction '${bound.name()}' neither implement " +
-                            s"magic method nor override 'produceResult'")
-                      }
-                  }
-                }
-              case aggFunc: V2AggregateFunction[_, _] =>
-                // due to type erasure we can't match by parameter types here, so this check will
-                // succeed even if the class doesn't override `update` but implements another
-                // method with the same name.
-                findMethod(aggFunc, "update") match {
-                  case Some(_) =>
-                    val aggregator = V2Aggregator(aggFunc, arguments)
-                    AggregateExpression(aggregator, Complete, isDistinct, filter)
-                  case None =>
-                    failAnalysis(s"AggregateFunction '${bound.name()}' neither implement magic " +
-                      s"method nor override 'update'")
-                }
-              case _ =>
-                failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction or " +
-                  s"AggregateFunction")
+          case u @ UnresolvedFunction(AsFunctionIdentifier(ident), arguments,
+          isDistinct, filter, ignoreNulls) =>
+            withPosition(u) {
+              processFunctionExpr(v1SessionCatalog.lookupFunction(ident, arguments),
+                arguments, isDistinct, filter, ignoreNulls)
             }
 
           case u @ UnresolvedFunction(parts, arguments, isDistinct, filter, ignoreNulls) =>
             withPosition(u) {
-              v1SessionCatalog.lookupFunction(parts.asFunctionIdentifier, arguments) match {
-                // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
-                // the context of a Window clause. They do not need to be wrapped in an
-                // AggregateExpression.
-                case wf: AggregateWindowFunction =>
-                  if (isDistinct) {
-                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                      wf.prettyName, "DISTINCT")
-                  } else if (filter.isDefined) {
-                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                      wf.prettyName, "FILTER clause")
-                  } else if (ignoreNulls) {
-                    wf match {
-                      case nthValue: NthValue =>
-                        nthValue.copy(ignoreNulls = ignoreNulls)
-                      case _ =>
-                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                          wf.prettyName, "IGNORE NULLS")
-                    }
-                  } else {
-                    wf
-                  }
-                case owf: FrameLessOffsetWindowFunction =>
-                  if (isDistinct) {
-                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                      owf.prettyName, "DISTINCT")
-                  } else if (filter.isDefined) {
-                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                      owf.prettyName, "FILTER clause")
-                  } else if (ignoreNulls) {
-                    owf match {
-                      case lead: Lead =>
-                        lead.copy(ignoreNulls = ignoreNulls)
-                      case lag: Lag =>
-                        lag.copy(ignoreNulls = ignoreNulls)
-                    }
-                  } else {
-                    owf
-                  }
-                // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction =>
-                  if (filter.isDefined && !filter.get.deterministic) {
-                    throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
-                  }
-                  if (ignoreNulls) {
-                    val aggFunc = agg match {
-                      case first: First => first.copy(ignoreNulls = ignoreNulls)
-                      case last: Last => last.copy(ignoreNulls = ignoreNulls)
-                      case _ =>
-                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                          agg.prettyName, "IGNORE NULLS")
-                    }
-                    AggregateExpression(aggFunc, Complete, isDistinct, filter)
-                  } else {
-                    AggregateExpression(agg, Complete, isDistinct, filter)
-                  }
-                // This function is not an aggregate function, just return the resolved one.
-                case other if isDistinct =>
-                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                    other.prettyName, "DISTINCT")
-                case other if filter.isDefined =>
-                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                    other.prettyName, "FILTER clause")
-                case other if ignoreNulls =>
-                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                    other.prettyName, "IGNORE NULLS")
-                case e: String2TrimExpression if arguments.size == 2 =>
-                  if (trimWarningEnabled.get) {
-                    log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
-                      " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
-                      " instead.")
-                    trimWarningEnabled.set(false)
-                  }
-                  e
-                case other =>
-                  other
+              // resolve built-in or temporary functions with v2 catalog
+              val resultExpression = if (parts.length == 1) {
+                v1SessionCatalog.lookupBuiltinOrTempFunction(parts.head, arguments).map(
+                  processFunctionExpr(_, arguments, isDistinct, filter, ignoreNulls)
+                )
+              } else {
+                None
               }
+
+              resultExpression.getOrElse(
+                expandRelationName(parts) match {
+                  case NonSessionCatalogAndIdentifier(catalog: FunctionCatalog, ident) =>
+                    lookupV2Function(catalog, ident, arguments, isDistinct, filter, ignoreNulls)
+                  case _ => u
+                }
+              )
             }
         }
     }
@@ -2189,6 +2077,166 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
         case None =>
           cls.getDeclaredMethods.find(_.getName == methodName)
+      }
+    }
+
+    private def processFunctionExpr(
+        expr: Expression,
+        arguments: Seq[Expression],
+        isDistinct: Boolean,
+        filter: Option[Expression],
+        ignoreNulls: Boolean): Expression = expr match {
+      // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
+      // the context of a Window clause. They do not need to be wrapped in an
+      // AggregateExpression.
+      case wf: AggregateWindowFunction =>
+        if (isDistinct) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            wf.prettyName, "DISTINCT")
+        } else if (filter.isDefined) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            wf.prettyName, "FILTER clause")
+        } else if (ignoreNulls) {
+          wf match {
+            case nthValue: NthValue =>
+              nthValue.copy(ignoreNulls = ignoreNulls)
+            case _ =>
+              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                wf.prettyName, "IGNORE NULLS")
+          }
+        } else {
+          wf
+        }
+      case owf: FrameLessOffsetWindowFunction =>
+        if (isDistinct) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            owf.prettyName, "DISTINCT")
+        } else if (filter.isDefined) {
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            owf.prettyName, "FILTER clause")
+        } else if (ignoreNulls) {
+          owf match {
+            case lead: Lead =>
+              lead.copy(ignoreNulls = ignoreNulls)
+            case lag: Lag =>
+              lag.copy(ignoreNulls = ignoreNulls)
+          }
+        } else {
+          owf
+        }
+      // We get an aggregate function, we need to wrap it in an AggregateExpression.
+      case agg: AggregateFunction =>
+        if (filter.isDefined && !filter.get.deterministic) {
+          throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
+        }
+        if (ignoreNulls) {
+          val aggFunc = agg match {
+            case first: First => first.copy(ignoreNulls = ignoreNulls)
+            case last: Last => last.copy(ignoreNulls = ignoreNulls)
+            case _ =>
+              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                agg.prettyName, "IGNORE NULLS")
+          }
+          AggregateExpression(aggFunc, Complete, isDistinct, filter)
+        } else {
+          AggregateExpression(agg, Complete, isDistinct, filter)
+        }
+      // This function is not an aggregate function, just return the resolved one.
+      case other if isDistinct =>
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          other.prettyName, "DISTINCT")
+      case other if filter.isDefined =>
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          other.prettyName, "FILTER clause")
+      case other if ignoreNulls =>
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          other.prettyName, "IGNORE NULLS")
+      case e: String2TrimExpression if arguments.size == 2 =>
+        if (trimWarningEnabled.get) {
+          log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
+            " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
+            " instead.")
+          trimWarningEnabled.set(false)
+        }
+        e
+      case other =>
+        other
+    }
+
+    private def lookupV2Function(
+        catalog: FunctionCatalog,
+        ident: Identifier,
+        arguments: Seq[Expression],
+        isDistinct: Boolean,
+        filter: Option[Expression],
+        ignoreNulls: Boolean): Expression = {
+      val unbound = catalog.loadFunction(ident)
+      val inputType = StructType(arguments.zipWithIndex.map {
+        case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+      })
+      val bound = try {
+        unbound.bind(inputType)
+      } catch {
+        case unsupported: UnsupportedOperationException =>
+          failAnalysis(s"Function '${unbound.name}' cannot process input: " +
+            s"(${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
+            unsupported.getMessage)
+      }
+
+      bound match {
+        case scalarFunc: ScalarFunction[_] =>
+          if (isDistinct) {
+            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+              scalarFunc.name(), "DISTINCT")
+          } else if (filter.isDefined) {
+            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+              scalarFunc.name(), "FILTER clause")
+          } else if (ignoreNulls) {
+            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+              scalarFunc.name(), "IGNORE NULLS")
+          } else {
+            // TODO: implement type coercion by looking at input type from the UDF. We may
+            //  also want to check if the parameter types from the magic method match the
+            //  input type through `BoundFunction.inputTypes`.
+            val argClasses = inputType.fields.map(_.dataType)
+            findMethod(scalarFunc, MAGIC_METHOD_NAME, Some(argClasses)) match {
+              case Some(_) =>
+                val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
+                Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
+                  arguments, returnNullable = scalarFunc.isResultNullable)
+              case _ =>
+                // TODO: handle functions defined in Scala too - in Scala, even if a
+                //  subclass do not override the default method in parent interface
+                //  defined in Java, the method can still be found from
+                //  `getDeclaredMethod`.
+                findMethod(scalarFunc, "produceResult", Some(Seq(inputType))) match {
+                  case Some(_) =>
+                    ApplyFunctionExpression(scalarFunc, arguments)
+                  case None =>
+                    failAnalysis(s"ScalarFunction '${bound.name()}' neither implement " +
+                      s"magic method nor override 'produceResult'")
+                }
+            }
+          }
+        case aggFunc: V2AggregateFunction[_, _] =>
+          if (ignoreNulls) {
+            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+              aggFunc.name(), "IGNORE NULLS")
+          }
+          // due to type erasure we can't match by parameter types here, so this check
+          // will succeed even if the class doesn't override `update` but implements
+          // another method with the same name.
+          findMethod(aggFunc, "update") match {
+            case Some(_) =>
+              val aggregator = V2Aggregator(aggFunc, arguments)
+              AggregateExpression(aggregator, Complete, isDistinct, filter)
+            case None =>
+              failAnalysis(s"AggregateFunction '${bound.name()}' neither implement " +
+                s"magic method nor override 'update'")
+          }
+        case _ =>
+          failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction " +
+            s"or AggregateFunction")
       }
     }
   }

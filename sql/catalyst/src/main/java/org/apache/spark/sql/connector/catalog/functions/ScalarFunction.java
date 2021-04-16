@@ -23,9 +23,8 @@ import org.apache.spark.sql.types.DataType;
 /**
  * Interface for a function that produces a result value for each input row.
  * <p>
- * For each input row, Spark will call a produceResult method that corresponds to the
- * {@link #inputTypes() input data types}. The expected JVM argument types must be the types used by
- * Spark's InternalRow API. If no direct method is found or when not using codegen, Spark will call
+ * To evaluate each input row, Spark will try to first lookup and use a "magic method" (described
+ * below) through Java reflection. If the method is not found, Spark will call
  * {@link #produceResult(InternalRow)}.
  * <p>
  * The JVM type of result values produced by this function must be the type used by Spark's
@@ -46,21 +45,14 @@ import org.apache.spark.sql.types.DataType;
  *     public int invoke(int left, int right) {
  *       return left + right;
  *     }
- *
- *    {@literal @}Override
- *     public produceResult(InternalRow input) {
- *       int left = input.getInt(0);
- *       int right = input.getInt(1);
- *       return left + right;
- *     }
  *   }
  * </pre>
- * In this case, both {@link #MAGIC_METHOD_NAME} and {@link #produceResult} are defined, and Spark
- * will first lookup the {@link #MAGIC_METHOD_NAME} method during query analysis. This is done by
- * first converting the actual input SQL data types to their corresponding Java types following the
- * mapping defined below, and then checking if there is a matching method from all the declared
- * methods in the UDF class, using method name (i.e., {@link #MAGIC_METHOD_NAME}) and the Java
- * types. If no magic method is found, Spark will falls back to use {@link #produceResult}.
+ * In this case, since {@link #MAGIC_METHOD_NAME} is defined, Spark will first lookup it during
+ * query analysis. This is done by first converting the actual input SQL data types to their
+ * corresponding Java types following the mapping defined below, and then checking if there is a
+ * matching method from all the declared methods in the UDF class, using method name (i.e.,
+ * {@link #MAGIC_METHOD_NAME}) and the Java types. If no magic method is found, Spark will falls
+ * back to use {@link #produceResult}.
  * <p>
  * The following are the mapping from {@link DataType SQL data type} to Java type through
  * the magic method approach:
@@ -77,8 +69,6 @@ import org.apache.spark.sql.types.DataType;
  *   <li>{@link org.apache.spark.sql.types.DateType}: {@code int}</li>
  *   <li>{@link org.apache.spark.sql.types.TimestampType}: {@code long}</li>
  *   <li>{@link org.apache.spark.sql.types.BinaryType}: {@code byte[]}</li>
- *   <li>{@link org.apache.spark.sql.types.CalendarIntervalType}:
- *       {@link org.apache.spark.unsafe.types.CalendarInterval}</li>
  *   <li>{@link org.apache.spark.sql.types.DayTimeIntervalType}: {@code long}</li>
  *   <li>{@link org.apache.spark.sql.types.YearMonthIntervalType}: {@code int}</li>
  *   <li>{@link org.apache.spark.sql.types.DecimalType}:

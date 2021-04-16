@@ -28,6 +28,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, V2InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -38,16 +39,81 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     catalog("testcat").asInstanceOf[V2InMemoryCatalog].createFunction(ident, fn)
   }
 
+  test("undefined function") {
+    assert(intercept[AnalysisException](
+      sql("SELECT testcat.non_exist('abc')").collect()
+    ).getMessage.contains("Undefined function"))
+  }
+
+  test("non-function catalog") {
+    spark.conf.set("spark.sql.catalog.testcat", classOf[BasicInMemoryTableCatalog].getName)
+    assert(intercept[AnalysisException](
+      sql("SELECT testcat.strlen('abc')").collect()
+    ).getMessage.contains("is not a FunctionCatalog"))
+  }
+
+  test("built-in with default v2 function catalog") {
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
+    checkAnswer(sql("SELECT length('abc')"), Row(3))
+  }
+
+  test("built-in override with default v2 function catalog") {
+    // a built-in function with the same name should take higher priority
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
+    addFunction(Identifier.of(Array.empty, "length"), new JavaStrLen(new JavaStrLenNoImpl))
+    checkAnswer(sql("SELECT length('abc')"), Row(3))
+  }
+
+  test("temp function override with default v2 function catalog") {
+    val className = "test.org.apache.spark.sql.JavaStringLength"
+    sql(s"CREATE FUNCTION length AS '$className'")
+
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
+    addFunction(Identifier.of(Array.empty, "length"), new JavaStrLen(new JavaStrLenNoImpl))
+    checkAnswer(sql("SELECT length('abc')"), Row(3))
+  }
+
+  test("view should use captured catalog and namespace for function lookup") {
+    val viewName = "my_view"
+    withView(viewName) {
+      spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
+      catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+      addFunction(Identifier.of(Array("ns"), "my_avg"), IntegralAverage)
+      sql("USE ns")
+      sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT my_avg(col1) FROM values (1), (2), (3)")
+
+      // change default catalog and namespace and add a function with the same name but with no
+      // implementation
+      spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat2")
+      catalog("testcat2").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns2"), emptyProps)
+      addFunction(Identifier.of(Array("ns2"), "my_avg"), NoImplAverage)
+      sql("USE ns2")
+      checkAnswer(sql(s"SELECT * FROM $viewName"), Row(2.0) :: Nil)
+    }
+  }
+
   test("scalar function: with default produceResult method") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenDefault))
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
   }
 
+  test("scalar function: with default produceResult method w/ expression") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenDefault))
+    checkAnswer(sql("SELECT testcat.ns.strlen(substr('abcde', 3))"), Row(3) :: Nil)
+  }
+
   test("scalar function: lookup magic method") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenMagic))
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
+  }
+
+  test("scalar function: lookup magic method w/ expression") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenMagic))
+    checkAnswer(sql("SELECT testcat.ns.strlen(substr('abcde', 3))"), Row(3) :: Nil)
   }
 
   test("scalar function: bad magic method") {
@@ -74,9 +140,9 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenDefault))
 
     assert(intercept[AnalysisException](sql("SELECT testcat.ns.strlen(42)"))
-      .getMessage.contains("cannot process input"))
+      .getMessage.contains("Expect StringType"))
     assert(intercept[AnalysisException](sql("SELECT testcat.ns.strlen('a', 'b')"))
-      .getMessage.contains("cannot process input"))
+      .getMessage.contains("Expect exactly one argument"))
   }
 
   test("scalar function: default produceResult in Java") {
@@ -128,6 +194,17 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
 
       (1L to 100L).toDF("i").write.saveAsTable(t)
       checkAnswer(sql(s"SELECT testcat.ns.avg(i) from $t"), Row(50) :: Nil)
+    }
+  }
+
+  test("aggregate function: lookup int average w/ expression") {
+    import testImplicits._
+    val t = "testcat.ns.t"
+    withTable(t) {
+      addFunction(Identifier.of(Array("ns"), "avg"), IntegralAverage)
+
+      (1 to 100).toDF("i").write.saveAsTable(t)
+      checkAnswer(sql(s"SELECT testcat.ns.avg(i * 10) from $t"), Row(505) :: Nil)
     }
   }
 
@@ -335,5 +412,14 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
 
     override def produceResult(state: (Long, Long)): Long = state._1 / state._2
+  }
+
+  object NoImplAverage extends UnboundFunction {
+    override def name(): String = "no_impl_avg"
+    override def description(): String = name()
+
+    override def bind(inputType: StructType): BoundFunction = {
+      throw new UnsupportedOperationException(s"Not implemented")
+    }
   }
 }

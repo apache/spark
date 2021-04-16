@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
 import org.apache.spark.sql.types.DataType
 
@@ -29,9 +29,15 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
     children: Seq[Expression],
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[BUF] {
+  private[this] lazy val inputProjection = UnsafeProjection.create(children)
+
+  override def nullable: Boolean = aggrFunc.isResultNullable
+  override def dataType: DataType = aggrFunc.resultType()
   override def createAggregationBuffer(): BUF = aggrFunc.newAggregationState()
 
-  override def update(buffer: BUF, input: InternalRow): BUF = aggrFunc.update(buffer, input)
+  override def update(buffer: BUF, input: InternalRow): BUF = {
+    aggrFunc.update(buffer, inputProjection(input))
+  }
 
   override def merge(buffer: BUF, input: BUF): BUF = aggrFunc.merge(buffer, input)
 
@@ -57,10 +63,6 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
 
   def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): V2Aggregator[BUF, OUT] =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def nullable: Boolean = aggrFunc.isResultNullable
-
-  override def dataType: DataType = aggrFunc.resultType()
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
