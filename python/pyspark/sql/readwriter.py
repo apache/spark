@@ -418,8 +418,10 @@ class DataFrameReader(OptionUtils):
         ----------------
         options**
             Please refer to
-            `Data Source Option <http://127.0.0.1:4000/sql-data-sources-parquet.html#data-source-option>`_
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
             for the options.
+            Note that you should refer to the documentation of the specific version you're using
+            because the link above always points out the latest documentation.
 
         Examples
         --------
@@ -1226,7 +1228,9 @@ class DataFrameWriter(OptionUtils):
         Other Parameters
         ----------------
         Extra options (keyword argument)
-            `Data Source Option <http://127.0.0.1:4000/sql-data-sources-parquet.html#data-source-option>`_.
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_.
+            Note that you should refer to the documentation of the specific version you're using
+            because the link above always points out the latest documentation.
 
         Examples
         --------

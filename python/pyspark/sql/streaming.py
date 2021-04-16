@@ -714,6 +714,13 @@ class DataStreamReader(OptionUtils):
             If None is set, the value of the SQL config
             ``spark.sql.parquet.int96RebaseModeInRead`` is used by default.
 
+        Other Parameters
+        ----------------
+        Extra options (keyword argument)
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_.
+            Note that you should refer to the documentation of the specific version you're using
+            because the link above always points out the latest documentation.
+
         Examples
         --------
         >>> parquet_sdf = spark.readStream.schema(sdf_schema).parquet(tempfile.mkdtemp())
