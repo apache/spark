@@ -61,7 +61,8 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
         mergeCondition = replaceNullWithFalse(mergeCond),
         matchedActions = replaceNullWithFalse(matchedActions),
         notMatchedActions = replaceNullWithFalse(notMatchedActions))
-    case p: LogicalPlan => p transformExpressions {
+    case p: LogicalPlan => p.transformExpressionsWithPruning(
+      _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL), ruleId) {
       // For `EqualNullSafe` with a `TrueLiteral`, whether the other side is null or false has no
       // difference, as `null <=> true` and `false <=> true` both return false.
       case EqualNullSafe(left, TrueLiteral) =>
