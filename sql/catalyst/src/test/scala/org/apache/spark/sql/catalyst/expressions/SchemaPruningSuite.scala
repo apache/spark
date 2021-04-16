@@ -75,12 +75,18 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     Seq(true, false).foreach(isCaseSensitive => {
       withSQLConf(CASE_SENSITIVE.key -> isCaseSensitive.toString) {
         if (isCaseSensitive) {
+          // Schema is case-sensitive
           val requestedFields = getRootFields(StructField("id", IntegerType))
           val prunedSchema = SchemaPruning.pruneDataSchema(
             StructType.fromDDL("ID int, name String"), requestedFields)
           assert(prunedSchema == StructType(Seq.empty))
+          // Root fields are case-sensitive
+          val rootFieldsSchema = SchemaPruning.pruneDataSchema(
+            StructType.fromDDL("id int, name String"),
+            getRootFields(StructField("ID", IntegerType)))
+          assert(rootFieldsSchema == StructType(StructType(Seq.empty)))
         } else {
-          // Schema is case insensitive
+          // Schema is case-insensitive
           val prunedSchema = SchemaPruning.pruneDataSchema(
             StructType.fromDDL("ID int, name String"),
             getRootFields(StructField("id", IntegerType)))
