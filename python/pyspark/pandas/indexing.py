@@ -1698,6 +1698,25 @@ class iLocIndexer(LocIndexerLike):
             )
 
     def __setitem__(self, key, value):
+        if is_list_like(value) and not isinstance(value, spark.Column):
+            iloc_item = self[key]
+            if not is_list_like(key) or not is_list_like(iloc_item):
+                raise ValueError("setting an array element with a sequence.")
+            else:
+                shape_iloc_item = iloc_item.shape
+                len_iloc_item = shape_iloc_item[0]
+                len_value = len(value)
+                if len_iloc_item != len_value:
+                    if self._is_series:
+                        raise ValueError(
+                            "cannot set using a list-like indexer with a different length than "
+                            "the value"
+                        )
+                    else:
+                        raise ValueError(
+                            "shape mismatch: value array of shape ({},) could not be broadcast "
+                            "to indexing result of shape {}".format(len_value, shape_iloc_item)
+                        )
         super().__setitem__(key, value)
         # Update again with resolved_copy to drop extra columns.
         self._kdf._update_internal_frame(
