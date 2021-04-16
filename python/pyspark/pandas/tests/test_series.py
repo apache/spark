@@ -34,6 +34,7 @@ from pyspark.testing.pandasutils import (
     have_tabulate,
     ReusedSQLTestCase,
     SPARK_CONF_ARROW_ENABLED,
+    tabulate_requirement_message,
 )
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
@@ -2209,7 +2210,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         self.assert_eq(pser.shape, kser.shape)
 
-    @unittest.skipIf(not have_tabulate, "tabulate not installed")
+    @unittest.skipIf(not have_tabulate, tabulate_requirement_message)
     def test_to_markdown(self):
         pser = pd.Series(["elk", "pig", "dog", "quetzal"], name="animal")
         kser = ps.from_pandas(pser)

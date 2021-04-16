@@ -25,7 +25,11 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import have_matplotlib, ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import (
+    have_matplotlib,
+    matplotlib_requirement_message,
+    ReusedSQLTestCase, TestUtils
+)
 
 if have_matplotlib:
     import matplotlib
@@ -34,7 +38,7 @@ if have_matplotlib:
     matplotlib.use("agg")
 
 
-@unittest.skipIf(not have_matplotlib, "matplotlib is not installed.")
+@unittest.skipIf(not have_matplotlib, matplotlib_requirement_message)
 class DataFramePlotMatplotlibTest(ReusedSQLTestCase, TestUtils):
     sample_ratio_default = None
 

@@ -46,6 +46,7 @@ from pyspark.testing.pandasutils import (
     ReusedSQLTestCase,
     SQLTestUtils,
     SPARK_CONF_ARROW_ENABLED,
+    tabulate_requirement_message,
 )
 from pyspark.pandas.utils import name_like_string
 
@@ -4767,7 +4768,7 @@ class DataFrameTest(ReusedSQLTestCase, SQLTestUtils):
         kdf.columns = columns
         self.assertRaises(ValueError, lambda: kdf.eval("x.a + y.b"))
 
-    @unittest.skipIf(not have_tabulate, "tabulate not installed")
+    @unittest.skipIf(not have_tabulate, tabulate_requirement_message)
     def test_to_markdown(self):
         pdf = pd.DataFrame(data={"animal_1": ["elk", "pig"], "animal_2": ["dog", "quetzal"]})
         kdf = ps.from_pandas(pdf)
