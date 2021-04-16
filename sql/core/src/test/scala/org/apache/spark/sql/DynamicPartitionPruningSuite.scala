@@ -198,9 +198,15 @@ abstract class DynamicPartitionPruningSuiteBase
           }.isDefined
           assert(hasReuse, s"$s\nshould have been reused in\n$plan")
         case a: AdaptiveSparkPlanExec =>
-          val hasReuse = collect(a) {
-            case r: ReusedExchangeExec => r
-          }.nonEmpty
+          val broadcastQueryStage = collectFirst(a) {
+            case b: BroadcastQueryStageExec => b
+          }
+          val broadcastPlan = broadcastQueryStage.get.broadcast
+          val hasReuse = find(plan) {
+            case ReusedExchangeExec(_, e) => e eq broadcastPlan
+            case b: BroadcastExchangeLike => b eq broadcastPlan
+            case _ => false
+          }.isDefined
           assert(hasReuse, s"$s\nshould have been reused in\n$plan")
         case _ =>
           fail(s"Invalid child node found in\n$s")
@@ -1466,6 +1472,37 @@ abstract class DynamicPartitionPruningSuiteBase
           checkPartitionPruningPredicate(df, threshold > 10L, false)
         }
       }
+    }
+  }
+
+  test("SPARK-34637: test DPP side broadcast query stage is created firstly") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      val df = sql(
+        """ WITH view1 as (
+          |   SELECT f.store_id FROM fact_stats f WHERE f.units_sold = 70 group by f.store_id
+          | )
+          |
+          | SELECT * FROM view1 v1 join view1 v2 WHERE v1.store_id = v2.store_id
+        """.stripMargin)
+
+      // A possible resulting query plan:
+      // BroadcastHashJoin
+      // +- HashAggregate
+      //    +- ShuffleQueryStage
+      //       +- Exchange
+      //          +- HashAggregate
+      //             +- Filter
+      //                +- FileScan
+      //                   +- SubqueryBroadcast
+      //                      +- AdaptiveSparkPlan
+      //                         +- BroadcastQueryStage
+      //                            +- BroadcastExchange
+      //
+      // +- BroadcastQueryStage
+      //    +- ReusedExchange
+
+      checkPartitionPruningPredicate(df, false, true)
+      checkAnswer(df, Row(15, 15) :: Nil)
     }
   }
 }
