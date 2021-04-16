@@ -34,28 +34,29 @@ from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
 from pyspark.pandas.utils import default_session, SPARK_CONF_ARROW_ENABLED
 
-
-have_tabulate = True
-have_matplotlib = True
-have_plotly = True
-
+tabulate_requirement_message = None
 try:
     from tabulate import tabulate  # noqa: F401
-except ImportError:
+except ImportError as e:
     # If tabulate requirement is not satisfied, skip related tests.
-    have_tabulate = False
+    tabulate_requirement_message = str(e)
+have_tabulate = tabulate_requirement_message is None
 
+matplotlib_requirement_message = None
 try:
     import matplotlib  # type: ignore # noqa: F401
-except ImportError:
+except ImportError as e:
     # If matplotlib requirement is not satisfied, skip related tests.
-    have_matplotlib = False
+    matplotlib_requirement_message = str(e)
+have_matplotlib = matplotlib_requirement_message is None
 
+plotly_requirement_message = None
 try:
     import plotly  # type: ignore # noqa: F401
-except ImportError:
+except ImportError as e:
     # If plotly requirement is not satisfied, skip related tests.
-    have_plotly = False
+    plotly_requirement_message = str(e)
+have_plotly = plotly_requirement_message is None
 
 
 class ReusedSQLTestCase(unittest.TestCase, SQLTestUtils):
