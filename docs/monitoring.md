@@ -472,18 +472,42 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/stages</code></td>
     <td>
       A list of all stages for a given application.
-      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
+        <br><code>?status=[active|complete|pending|failed]</code> list only stages in the given state.
+        <br><code>?details=true</code> lists all stages with the task data.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists stages only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
+        <br><code>?withSummaries=true</code> lists stages with task metrics distribution and executor metrics distribution.
+        <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
     </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
     <td>
       A list of all attempts for the given stage.
+        <br><code>?details=true</code> lists all attempts with the task data for the given stage.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
+        <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution of each attempt.
+        <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
+      <br>Example:
+        <br><code>?details=true</code>
+        <br><code>?details=true&taskStatus=RUNNING</code>
+        <br><code>?withSummaries=true</code>
+        <br><code>?details=true&withSummaries=true&quantiles=0.01,0.5,0.99</code>
     </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
-    <td>Details for the given stage attempt.</td>
+    <td>
+      Details for the given stage attempt.
+        <br><code>?details=true</code> lists all task data for the given stage attempt.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
+        <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution for the given stage attempt.
+        <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
+      <br>Example:
+        <br><code>?details=true</code>
+        <br><code>?details=true&taskStatus=RUNNING</code>
+        <br><code>?withSummaries=true</code>
+        <br><code>?details=true&withSummaries=true&quantiles=0.01,0.5,0.99</code>
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
@@ -755,7 +779,7 @@ A list of the available metrics, with a short description:
 Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
 Executor metric values and their measured memory peak values per executor are exposed via the REST API in JSON format and in Prometheus format.
 The JSON end point is exposed at: `/applications/[app-id]/executors`, and the Prometheus endpoint at: `/metrics/executors/prometheus`.
-The Prometheus endpoint is experimental and conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
+The Prometheus endpoint is conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
 In addition, aggregated per-stage peak values of the executor memory metrics are written to the event log if
 `spark.eventLog.logStageExecutorMetrics` is true.  
 Executor memory metrics are also exposed via the Spark metrics system based on the [Dropwizard metrics library](http://metrics.dropwizard.io/4.1.1).

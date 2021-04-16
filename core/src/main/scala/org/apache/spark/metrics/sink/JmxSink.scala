@@ -22,10 +22,9 @@ import java.util.Properties
 import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.jmx.JmxReporter
 
-import org.apache.spark.SecurityManager
 
-private[spark] class JmxSink(val property: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+private[spark] class JmxSink(
+    val property: Properties, val registry: MetricRegistry) extends Sink {
 
   val reporter: JmxReporter = JmxReporter.forRegistry(registry).build()
 

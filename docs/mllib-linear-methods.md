@@ -251,7 +251,7 @@ a dependency.
 The following example shows how to load a sample dataset, build SVM model,
 and make predictions with the resulting model to compute the training error.
 
-Refer to the [`SVMWithSGD` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.SVMWithSGD) and [`SVMModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.SVMModel) for more details on the API.
+Refer to the [`SVMWithSGD` Python docs](api/python/reference/api/pyspark.mllib.classification.SVMWithSGD.html) and [`SVMModel` Python docs](api/python/reference/api/pyspark.mllib.classification.SVMModel.html) for more details on the API.
 
 {% include_example python/mllib/svm_with_sgd_example.py %}
 </div>
@@ -334,7 +334,7 @@ and make predictions with the resulting model to compute the training error.
 Note that the Python API does not yet support multiclass classification and model save/load but
 will in the future.
 
-Refer to the [`LogisticRegressionWithLBFGS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionWithLBFGS) and [`LogisticRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionModel) for more details on the API.
+Refer to the [`LogisticRegressionWithLBFGS` Python docs](api/python/reference/api/pyspark.mllib.classification.LogisticRegressionWithLBFGS.html) and [`LogisticRegressionModel` Python docs](api/python/reference/api/pyspark.mllib.classification.LogisticRegressionModel.html) for more details on the API.
 
 {% include_example python/mllib/logistic_regression_with_lbfgs_example.py %}
 </div>

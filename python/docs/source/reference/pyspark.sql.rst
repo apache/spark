@@ -73,6 +73,17 @@ See also :class:`SparkSession`.
     SparkSession.version
 
 
+Configuration
+-------------
+
+.. currentmodule:: pyspark.sql.conf
+
+.. autosummary::
+    :toctree: api/
+
+    RuntimeConfig
+
+
 Input and Output
 ----------------
 
@@ -340,6 +351,7 @@ Functions
     avg
     base64
     bin
+    bitwise_not
     bitwiseNOT
     broadcast
     bround
@@ -358,6 +370,7 @@ Functions
     cos
     cosh
     count
+    count_distinct
     countDistinct
     covar_pop
     covar_samp
@@ -461,6 +474,7 @@ Functions
     posexplode
     posexplode_outer
     pow
+    product
     quarter
     radians
     raise_error
@@ -482,9 +496,9 @@ Functions
     sequence
     sha1
     sha2
-    shiftLeft
-    shiftRight
-    shiftRightUnsigned
+    shiftleft
+    shiftright
+    shiftrightunsigned
     shuffle
     signum
     sin
@@ -504,6 +518,7 @@ Functions
     substring
     substring_index
     sum
+    sum_distinct
     sumDistinct
     tan
     tanh

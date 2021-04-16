@@ -56,7 +56,7 @@ CREATE VIEW key_dependent_view AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'spark_catalog.default.view_base_table.`data`' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
+expression 'spark_catalog.default.view_base_table.data' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
 
 
 -- !query

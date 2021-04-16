@@ -24,7 +24,6 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{Expression, UpdateFields, WithField}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -32,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object OptimizeUpdateFields extends Rule[LogicalPlan] {
   private def canOptimize(names: Seq[String]): Boolean = {
-    if (SQLConf.get.caseSensitiveAnalysis) {
+    if (conf.caseSensitiveAnalysis) {
       names.distinct.length != names.length
     } else {
       names.map(_.toLowerCase(Locale.ROOT)).distinct.length != names.length
@@ -43,7 +42,7 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
     case UpdateFields(structExpr, fieldOps)
       if fieldOps.forall(_.isInstanceOf[WithField]) &&
         canOptimize(fieldOps.map(_.asInstanceOf[WithField].name)) =>
-      val caseSensitive = SQLConf.get.caseSensitiveAnalysis
+      val caseSensitive = conf.caseSensitiveAnalysis
 
       val withFields = fieldOps.map(_.asInstanceOf[WithField])
       val names = withFields.map(_.name)

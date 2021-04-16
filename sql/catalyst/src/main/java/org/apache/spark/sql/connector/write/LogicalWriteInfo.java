@@ -35,7 +35,7 @@ public interface LogicalWriteInfo {
   CaseInsensitiveStringMap options();
 
   /**
-   * `queryId` is a unique string of the query. It's possible that there are many queries
+   * {@code queryId} is a unique string of the query. It's possible that there are many queries
    * running at the same time, or a query is restarted and resumed. {@link BatchWrite} can use
    * this id to identify the query.
    */

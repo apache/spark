@@ -54,6 +54,7 @@ class InMemoryPartitionTable(
     if (memoryTablePartitions.containsKey(ident)) {
       throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
     } else {
+      createPartitionKey(ident.toSeq(schema))
       memoryTablePartitions.put(ident, properties)
     }
   }
@@ -61,6 +62,7 @@ class InMemoryPartitionTable(
   def dropPartition(ident: InternalRow): Boolean = {
     if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.remove(ident)
+      removePartitionKey(ident.toSeq(schema))
       true
     } else {
       false
@@ -118,6 +120,15 @@ class InMemoryPartitionTable(
       }
       memoryTablePartitions.put(to, partValue) == null &&
         renamePartitionKey(partitionSchema, from.toSeq(schema), to.toSeq(schema))
+    }
+  }
+
+  override def truncatePartition(ident: InternalRow): Boolean = {
+    if (memoryTablePartitions.containsKey(ident)) {
+      clearPartition(ident.toSeq(schema))
+      true
+    } else {
+      throw new NoSuchPartitionException(name, ident, partitionSchema)
     }
   }
 }

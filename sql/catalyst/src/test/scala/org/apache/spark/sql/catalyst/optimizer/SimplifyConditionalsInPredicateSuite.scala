@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Expression, If, IsNotNull, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Expression, If, IsNotNull, Literal, Or, Rand}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LocalRelation, LogicalPlan, UpdateTable}
@@ -155,6 +155,15 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     testJoin(originalCond, expectedCond = FalseLiteral)
     testDelete(originalCond, expectedCond = FalseLiteral)
     testUpdate(originalCond, expectedCond = FalseLiteral)
+    testProjection(originalCond, expectedExpr = originalCond)
+  }
+
+  test("CASE WHEN non-deterministic-cond THEN false END") {
+    val originalCond =
+      CaseWhen(Seq((UnresolvedAttribute("i") > Rand(0), FalseLiteral)))
+    val expectedCond = And(UnresolvedAttribute("i") > Rand(0), FalseLiteral)
+    // nondeterministic expressions are only allowed in Project, Filter, Aggregate or Window,
+    testFilter(originalCond, expectedCond = FalseLiteral)
     testProjection(originalCond, expectedExpr = originalCond)
   }
 

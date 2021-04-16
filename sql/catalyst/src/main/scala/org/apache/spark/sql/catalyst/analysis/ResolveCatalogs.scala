@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableCatalog, TableChange}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -97,27 +96,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case AlterTableDropColumnsStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
       val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableSetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), props) =>
-      val changes = props.map { case (key, value) =>
-        TableChange.setProperty(key, value)
-      }.toSeq
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
-    case AlterTableUnsetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), keys, _) =>
-      val changes = keys.map(key => TableChange.removeProperty(key))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableSetLocationStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, newLoc) =>
-      if (partitionSpec.nonEmpty) {
-        throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
-      }
-      val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
       createAlterTable(nameParts, catalog, tbl, changes)
 
     case c @ CreateTableStatement(

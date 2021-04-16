@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -117,6 +118,9 @@ case class UserDefinedGenerator(
   }
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): UserDefinedGenerator = copy(children = newChildren)
 }
 
 /**
@@ -226,6 +230,9 @@ case class Stack(children: Seq[Expression]) extends Generator {
          |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
        """.stripMargin, isNull = FalseLiteral)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Stack =
+    copy(children = newChildren)
 }
 
 /**
@@ -252,6 +259,9 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
       InternalRow(fields: _*)
     }
   }
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): ReplicateRows = copy(children = newChildren)
 }
 
 /**
@@ -260,14 +270,17 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
  */
 case class GeneratorOuter(child: Generator) extends UnaryExpression with Generator {
   final override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   override def elementSchema: StructType = child.elementSchema
 
   override lazy val resolved: Boolean = false
+
+  override protected def withNewChildInternal(newChild: Expression): GeneratorOuter =
+    copy(child = newChild.asInstanceOf[Generator])
 }
 
 /**
@@ -368,6 +381,8 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
 // scalastyle:on line.size.limit
 case class Explode(child: Expression) extends ExplodeBase {
   override val position: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): Explode =
+    copy(child = newChild)
 }
 
 /**
@@ -393,6 +408,8 @@ case class Explode(child: Expression) extends ExplodeBase {
 // scalastyle:on line.size.limit line.contains.tab
 case class PosExplode(child: Expression) extends ExplodeBase {
   override val position = true
+  override protected def withNewChildInternal(newChild: Expression): PosExplode =
+    copy(child = newChild)
 }
 
 /**
@@ -444,4 +461,6 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.genCode(ctx)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Inline = copy(child = newChild)
 }

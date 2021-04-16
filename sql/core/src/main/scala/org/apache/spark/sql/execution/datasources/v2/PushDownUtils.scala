@@ -111,7 +111,7 @@ object PushDownUtils extends PredicateHelper {
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-    val cleaned = CharVarcharUtils.replaceCharVarcharWithString(schema).asInstanceOf[StructType]
+    val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     cleaned.toAttributes.map {
       // we have to keep the attribute id during transformation
       a => a.withExprId(nameToAttr(a.name).exprId)

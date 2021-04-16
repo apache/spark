@@ -19,18 +19,21 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
-import java.util.{Calendar, GregorianCalendar, Properties}
-import java.util.concurrent.TimeUnit
+import java.time.{Instant, LocalDate}
+import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
 
 import org.h2.jdbc.JdbcSQLException
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
@@ -73,6 +76,8 @@ class JDBCSuite extends QueryTest
       }
     }
   }
+
+  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -428,6 +433,36 @@ class JDBCSuite extends QueryTest
     assert(ids(2) === 3)
   }
 
+  test("SPARK-34843: columnPartition should generate the correct stride size" +
+    " and also realign the first partition for better distribution") {
+    val schema = StructType(Seq(
+      StructField("PartitionColumn", DateType)
+    ))
+
+    val numPartitions = 1000
+    val partitionConfig = Map(
+      "lowerBound" -> "1930-01-01",
+      "upperBound" -> "2020-12-31",
+      "numPartitions" -> numPartitions.toString,
+      "partitionColumn" -> "PartitionColumn"
+    )
+
+    val partitions = JDBCRelation.columnPartition(
+      schema,
+      analysis.caseInsensitiveResolution,
+      TimeZone.getDefault.toZoneId.toString,
+      new JDBCOptions(url, "table", partitionConfig)
+    )
+
+    val firstPredicate = partitions.head.asInstanceOf[JDBCPartition].whereClause
+    val lastPredicate = partitions(numPartitions - 1).asInstanceOf[JDBCPartition].whereClause
+
+    // 152 days (exclusive) to lower bound
+    assert(firstPredicate == """"PartitionColumn" < '1930-06-02' or "PartitionColumn" is null""")
+    // 152 days (inclusive) to upper bound
+    assert(lastPredicate == """"PartitionColumn" >= '2020-08-02'""")
+  }
+
   test("overflow of partition bound difference does not give negative stride") {
     val df = sql("SELECT * FROM partsoverflow")
     checkNumPartitions(df, expectedNumPartitions = 3)
@@ -611,13 +646,7 @@ class JDBCSuite extends QueryTest
   test("H2 time types") {
     val rows = sql("SELECT * FROM timetypes").collect()
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
-    val epochMillis = java.time.LocalTime.ofNanoOfDay(
-      TimeUnit.MILLISECONDS.toNanos(rows(0).getAs[Int](0)))
-      .atDate(java.time.LocalDate.ofEpochDay(0))
-      .atZone(java.time.ZoneId.systemDefault())
-      .toInstant()
-      .toEpochMilli()
-    cal.setTime(new Date(epochMillis))
+    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
     assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
     assert(cal.get(Calendar.MINUTE) === 34)
     assert(cal.get(Calendar.SECOND) === 56)
@@ -636,20 +665,15 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
-  test("SPARK-33888: test TIME types") {
+  test("SPARK-34357: test TIME types") {
     val rows = spark.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
     val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
       .cache().collect()
-    val expectedTimeRaw = java.sql.Time.valueOf("12:34:56")
-    val expectedTimeMillis = Math.toIntExact(
-      java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
-        expectedTimeRaw.toLocalTime().toNanoOfDay()
-      )
-    )
-    assert(rows(0).getAs[Int](0) === expectedTimeMillis)
-    assert(rows(1).getAs[Int](0) === expectedTimeMillis)
-    assert(cachedRows(0).getAs[Int](0) === expectedTimeMillis)
+    val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
+    assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
   }
 
   test("test DATE types") {
@@ -722,7 +746,7 @@ class JDBCSuite extends QueryTest
   test("Remap types via JdbcDialects") {
     JdbcDialects.registerDialect(testH2Dialect)
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
-    assert(df.schema.filter(_.dataType != org.apache.spark.sql.types.StringType).isEmpty)
+    assert(!df.schema.exists(_.dataType != org.apache.spark.sql.types.StringType))
     val rows = df.collect()
     assert(rows(0).get(0).isInstanceOf[String])
     assert(rows(0).get(1).isInstanceOf[String])
@@ -1029,6 +1053,19 @@ class JDBCSuite extends QueryTest
       === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
 
+  test("SPARK-33867: Test DataFrame.where for LocalDate and Instant") {
+    // Test for SPARK-33867
+    val timestamp = Instant.parse("2001-02-20T11:22:33.543543Z")
+    val date = LocalDate.parse("1995-01-01")
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val jdbcDf = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
+      assert(rows(0).getAs[LocalDate](1) === LocalDate.parse("1996-01-01"))
+      // 8 hour difference since saved time was America/Los_Angeles and Instant is GMT
+      assert(rows(0).getAs[Instant](2) === Instant.parse("2002-02-20T19:22:33.543543Z"))
+    }
+  }
+
   test("test credentials in the properties are not in plan output") {
     val df = sql("SELECT * FROM parts")
     val explain = ExplainCommand(df.queryExecution.logical, ExtendedMode)
@@ -1095,7 +1132,7 @@ class JDBCSuite extends QueryTest
            | password '$password')
          """.stripMargin)
 
-      val show = ShowCreateTableCommand(TableIdentifier(tableName))
+      val show = ShowCreateTableCommand(TableIdentifier(tableName), ShowCreateTable.getoutputAttrs)
       spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
         assert(!r.toString.contains(password))
         assert(r.toString.contains(dbTable))
@@ -1252,8 +1289,8 @@ class JDBCSuite extends QueryTest
   }
 
   test("SPARK-16848: jdbc API throws an exception for user specified schema") {
-    val schema = StructType(Seq(
-      StructField("name", StringType, false), StructField("theid", IntegerType, false)))
+    val schema = StructType(Seq(StructField("name", StringType, false, defaultMetadata),
+      StructField("theid", IntegerType, false, defaultMetadata)))
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val e1 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
@@ -1273,7 +1310,9 @@ class JDBCSuite extends QueryTest
     props.put("customSchema", customSchema)
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
     assert(df.schema.size === 2)
-    assert(df.schema === CatalystSqlParser.parseTableSchema(customSchema))
+    val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema).map(
+      f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
+    assert(df.schema === expectedSchema)
     assert(df.count() === 3)
   }
 
@@ -1289,7 +1328,9 @@ class JDBCSuite extends QueryTest
         """.stripMargin.replaceAll("\n", " "))
       val df = sql("select * from people_view")
       assert(df.schema.length === 2)
-      assert(df.schema === CatalystSqlParser.parseTableSchema(customSchema))
+      val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
+        .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
+      assert(df.schema === expectedSchema)
       assert(df.count() === 3)
     }
   }
@@ -1404,8 +1445,8 @@ class JDBCSuite extends QueryTest
     }
 
   test("jdbc data source shouldn't have unnecessary metadata in its schema") {
-    val schema = StructType(Seq(
-      StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))
+    val schema = StructType(Seq(StructField("NAME", StringType, true, defaultMetadata),
+      StructField("THEID", IntegerType, true, defaultMetadata)))
 
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)
@@ -1599,9 +1640,9 @@ class JDBCSuite extends QueryTest
       case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"D" < '2018-07-10' or "D" is null""",
-          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
-          """"D" >= '2018-07-14'"""))
+          """"D" < '2018-07-11' or "D" is null""",
+          """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
+          """"D" >= '2018-07-15'"""))
     }
     checkAnswer(df1, expectedResult)
 
@@ -1773,4 +1814,28 @@ class JDBCSuite extends QueryTest
     assert(options.asProperties.get("url") == url)
     assert(options.asProperties.get("dbtable") == "table3")
   }
+
+  test("SPARK-34379: Map JDBC RowID to StringType rather than LongType") {
+    val mockRsmd = mock(classOf[java.sql.ResultSetMetaData])
+    when(mockRsmd.getColumnCount).thenReturn(1)
+    when(mockRsmd.getColumnLabel(anyInt())).thenReturn("rowid")
+    when(mockRsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.ROWID)
+    when(mockRsmd.getColumnTypeName(anyInt())).thenReturn("rowid")
+    when(mockRsmd.getPrecision(anyInt())).thenReturn(0)
+    when(mockRsmd.getScale(anyInt())).thenReturn(0)
+    when(mockRsmd.isSigned(anyInt())).thenReturn(false)
+    when(mockRsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNoNulls)
+
+    val mockRs = mock(classOf[java.sql.ResultSet])
+    when(mockRs.getMetaData).thenReturn(mockRsmd)
+
+    val mockDialect = mock(classOf[JdbcDialect])
+    when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
+      .thenReturn(None)
+
+    val schema = JdbcUtils.getSchema(mockRs, mockDialect)
+    val fields = schema.fields
+    assert(fields.length === 1)
+    assert(fields(0).dataType === StringType)
+   }
 }

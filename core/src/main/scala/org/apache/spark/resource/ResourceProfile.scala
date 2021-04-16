@@ -35,7 +35,13 @@ import org.apache.spark.util.Utils
  * Resource profile to associate with an RDD. A ResourceProfile allows the user to
  * specify executor and task requirements for an RDD that will get applied during a
  * stage. This allows the user to change the resource requirements between stages.
- * This is meant to be immutable so user can't change it after building.
+ * This is meant to be immutable so user can't change it after building. Users
+ * should use [[ResourceProfileBuilder]] to build it.
+ *
+ * @param executorResources Resource requests for executors. Mapped from the resource
+ *                          name (e.g., cores, memory, CPU) to its specific request.
+ * @param taskResources Resource requests for tasks. Mapped from the resource
+ *                      name (e.g., cores, memory, CPU) to its specific request.
  */
 @Evolving
 @Since("3.1.0")
@@ -53,6 +59,9 @@ class ResourceProfile(
   private var _maxTasksPerExecutor: Option[Int] = None
   private var _coresLimitKnown: Boolean = false
 
+  /**
+   * A unique id of this ResourceProfile
+   */
   def id: Int = _id
 
   /**
@@ -242,17 +251,39 @@ class ResourceProfile(
 
 object ResourceProfile extends Logging {
   // task resources
+  /**
+   * built-in task resource: cpus
+   */
   val CPUS = "cpus"
   // Executor resources
   // Make sure add new executor resource in below allSupportedExecutorResources
+  /**
+   * built-in executor resource: cores
+   */
   val CORES = "cores"
+  /**
+   * built-in executor resource: cores
+   */
   val MEMORY = "memory"
+  /**
+   * built-in executor resource: offHeap
+   */
   val OFFHEAP_MEM = "offHeap"
+  /**
+   * built-in executor resource: memoryOverhead
+   */
   val OVERHEAD_MEM = "memoryOverhead"
+  /**
+   * built-in executor resource: pyspark.memory
+   */
   val PYSPARK_MEM = "pyspark.memory"
 
-  // all supported spark executor resources (minus the custom resources like GPUs/FPGAs)
-  val allSupportedExecutorResources = Seq(CORES, MEMORY, OVERHEAD_MEM, PYSPARK_MEM, OFFHEAP_MEM)
+  /**
+   * Return all supported Spark built-in executor resources, custom resources like GPUs/FPGAs
+   * are excluded.
+   */
+  def allSupportedExecutorResources: Array[String] =
+    Array(CORES, MEMORY, OVERHEAD_MEM, PYSPARK_MEM, OFFHEAP_MEM)
 
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0

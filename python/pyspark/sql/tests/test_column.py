@@ -139,6 +139,8 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertEqual(170 ^ 75, result['(a ^ b)'])
         result = df.select(functions.bitwiseNOT(df.b)).collect()[0].asDict()
         self.assertEqual(~75, result['~b'])
+        result = df.select(functions.bitwise_not(df.b)).collect()[0].asDict()
+        self.assertEqual(~75, result['~b'])
 
     def test_with_field(self):
         from pyspark.sql.functions import lit, col

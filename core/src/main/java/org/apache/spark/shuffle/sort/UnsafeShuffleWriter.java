@@ -88,6 +88,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
+  @Nullable private long[] partitionLengths;
   private long peakMemoryUsedBytes = 0;
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
@@ -219,7 +220,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     serOutputStream = null;
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
-    final long[] partitionLengths;
     try {
       partitionLengths = mergeSpills(spills);
     } finally {
@@ -542,5 +542,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     public void close() throws IOException {
       channel.close();
     }
+  }
+
+  @Override
+  public long[] getPartitionLengths() {
+    return partitionLengths;
   }
 }

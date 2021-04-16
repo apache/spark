@@ -39,7 +39,7 @@ class MemoryStoreSuite
   with BeforeAndAfterEach
   with ResetSystemProperties {
 
-  var conf: SparkConf = new SparkConf(false)
+  val conf: SparkConf = new SparkConf(false)
     .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test

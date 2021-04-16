@@ -224,7 +224,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       (3, 4)
     )).toDF("src", "dst").repartition(1)
 
-    var assignments2 = new PowerIterationClustering()
+    val assignments2 = new PowerIterationClustering()
       .setInitMode("random")
       .setK(2)
       .assignClusters(data2)
@@ -238,7 +238,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(Set(predictions2(0).size, predictions2(1).size) !== Set(2, 3))
 
 
-    var assignments3 = new PowerIterationClustering()
+    val assignments3 = new PowerIterationClustering()
       .setInitMode("degree")
       .setK(2)
       .assignClusters(data2)

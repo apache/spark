@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -285,7 +286,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def simpleStringWithNodeId(): String = {
-    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+    throw QueryExecutionErrors.simpleStringWithNodeIdUnsupportedError(nodeName)
   }
 }
 
@@ -301,10 +302,10 @@ trait Unevaluable extends Expression {
   final override def foldable: Boolean = false
 
   final override def eval(input: InternalRow = null): Any =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
 
@@ -351,19 +352,24 @@ trait UnevaluableAggregate extends DeclarativeAggregate {
   override def nullable: Boolean = true
 
   override lazy val aggBufferAttributes =
-    throw new UnsupportedOperationException(s"Cannot evaluate aggBufferAttributes: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "aggBufferAttributes", this)
 
   override lazy val initialValues: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate initialValues: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "initialValues", this)
 
   override lazy val updateExpressions: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate updateExpressions: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "updateExpressions", this)
 
   override lazy val mergeExpressions: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate mergeExpressions: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "mergeExpressions", this)
 
   override lazy val evaluateExpression: Expression =
-    throw new UnsupportedOperationException(s"Cannot evaluate evaluateExpression: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "evaluateExpression", this)
 }
 
 /**
@@ -445,21 +451,14 @@ trait Stateful extends Nondeterministic {
 /**
  * A leaf expression, i.e. one without any child expressions.
  */
-abstract class LeafExpression extends Expression {
-
-  override final def children: Seq[Expression] = Nil
-}
+abstract class LeafExpression extends Expression with LeafLike[Expression]
 
 
 /**
  * An expression with one input and one output. The output is by default evaluated to null
  * if the input is evaluated to null.
  */
-abstract class UnaryExpression extends Expression {
-
-  def child: Expression
-
-  override final def children: Seq[Expression] = child :: Nil
+abstract class UnaryExpression extends Expression with UnaryLike[Expression] {
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -546,12 +545,7 @@ object UnaryExpression {
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class BinaryExpression extends Expression {
-
-  def left: Expression
-  def right: Expression
-
-  override final def children: Seq[Expression] = Seq(left, right)
+abstract class BinaryExpression extends Expression with BinaryLike[Expression] {
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -695,7 +689,7 @@ object BinaryOperator {
  * An expression with three inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class TernaryExpression extends Expression {
+abstract class TernaryExpression extends Expression with TernaryLike[Expression] {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -706,12 +700,11 @@ abstract class TernaryExpression extends Expression {
    * If subclass of TernaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
-    val exprs = children
-    val value1 = exprs(0).eval(input)
+    val value1 = first.eval(input)
     if (value1 != null) {
-      val value2 = exprs(1).eval(input)
+      val value2 = second.eval(input)
       if (value2 != null) {
-        val value3 = exprs(2).eval(input)
+        val value3 = third.eval(input)
         if (value3 != null) {
           return nullSafeEval(value1, value2, value3)
         }
@@ -793,7 +786,7 @@ abstract class TernaryExpression extends Expression {
  * An expression with four inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class QuaternaryExpression extends Expression {
+abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expression] {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -804,14 +797,13 @@ abstract class QuaternaryExpression extends Expression {
    * If subclass of QuaternaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
-    val exprs = children
-    val value1 = exprs(0).eval(input)
+    val value1 = first.eval(input)
     if (value1 != null) {
-      val value2 = exprs(1).eval(input)
+      val value2 = second.eval(input)
       if (value2 != null) {
-        val value3 = exprs(2).eval(input)
+        val value3 = third.eval(input)
         if (value3 != null) {
-          val value4 = exprs(3).eval(input)
+          val value4 = fourth.eval(input)
           if (value4 != null) {
             return nullSafeEval(value1, value2, value3, value4)
           }
@@ -1082,4 +1074,6 @@ trait ComplexTypeMergingExpression extends Expression {
  * Common base trait for user-defined functions, including UDF/UDAF/UDTF of different languages
  * and Hive function wrappers.
  */
-trait UserDefinedExpression
+trait UserDefinedExpression {
+  def name: String
+}

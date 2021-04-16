@@ -19,6 +19,8 @@ license: |
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
+  
+*Note*: Apache Mesos support is deprecated as of Apache Spark 3.2.0. It will be removed in a future version.
 
 Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache.org/).
 

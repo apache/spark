@@ -126,11 +126,12 @@ trait WindowExecBase extends UnaryExecNode {
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
       val key = fn match {
-        // This branch is used for Lead/Lag to support ignoring null.
-        // All window frames move in rows. If there are multiple Leads or Lags acting on a row
-        // and operating on different input expressions, they should not be moved uniformly
+        // This branch is used for Lead/Lag to support ignoring null and optimize the performance
+        // for NthValue ignoring null.
+        // All window frames move in rows. If there are multiple Leads, Lags or NthValues acting on
+        // a row and operating on different input expressions, they should not be moved uniformly
         // by row. Therefore, we put these functions in different window frames.
-        case f: FrameLessOffsetWindowFunction if f.ignoreNulls =>
+        case f: OffsetWindowFunction if f.ignoreNulls =>
           (tpe, fr.frameType, fr.lower, fr.upper, f.children.map(_.canonicalized))
         case _ => (tpe, fr.frameType, fr.lower, fr.upper, Nil)
       }
@@ -149,8 +150,8 @@ trait WindowExecBase extends UnaryExecNode {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: FrameLessOffsetWindowFunction =>
               collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
-            case f: OffsetWindowFunction if !f.ignoreNulls &&
-              frame.frameType == RowFrame && frame.lower == UnboundedPreceding =>
+            case f: OffsetWindowFunction if frame.frameType == RowFrame &&
+              frame.lower == UnboundedPreceding =>
               frame.upper match {
                 case UnboundedFollowing => collect("UNBOUNDED_OFFSET", f.fakeFrame, e, f)
                 case CurrentRow => collect("UNBOUNDED_PRECEDING_OFFSET", f.fakeFrame, e, f)
@@ -203,7 +204,7 @@ trait WindowExecBase extends UnaryExecNode {
                   MutableProjection.create(expressions, schema),
                 offset,
                 expr.nonEmpty)
-          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, _) =>
+          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr) =>
             target: InternalRow => {
               new UnboundedOffsetWindowFunctionFrame(
                 target,
@@ -213,9 +214,10 @@ trait WindowExecBase extends UnaryExecNode {
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
-                offset)
+                offset,
+                expr.nonEmpty)
             }
-          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, _) =>
+          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr) =>
             target: InternalRow => {
               new UnboundedPrecedingOffsetWindowFunctionFrame(
                 target,
@@ -225,7 +227,8 @@ trait WindowExecBase extends UnaryExecNode {
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
-                offset)
+                offset,
+                expr.nonEmpty)
             }
 
           // Entire Partition Frame.

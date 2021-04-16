@@ -99,8 +99,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       Thread.sleep(5000)
       iter
     }
-    var taskStarted = new AtomicBoolean(false)
-    var taskEnded = new AtomicBoolean(false)
+    val taskStarted = new AtomicBoolean(false)
+    val taskEnded = new AtomicBoolean(false)
     val listener = new SparkListener() {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         taskStarted.set(true)
@@ -239,11 +239,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     var execResources = backend.getExecutorAvailableResources("1")
     assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
 
-    var exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
+    val exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
     assert(exec3ResourceProfileId === rp.id)
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
-    var taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
+    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, mutable.Map.empty[String, Long],
       mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
       new Properties(), taskResources, bytebuffer)))

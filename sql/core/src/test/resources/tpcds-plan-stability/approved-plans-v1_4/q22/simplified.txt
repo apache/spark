@@ -1,6 +1,6 @@
 TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
   WholeStageCodegen (5)
-    HashAggregate [i_product_name,i_brand,i_class,i_category,spark_grouping_id,sum,count] [avg(cast(inv_quantity_on_hand as bigint)),qoh,sum,count]
+    HashAggregate [i_product_name,i_brand,i_class,i_category,spark_grouping_id,sum,count] [avg(inv_quantity_on_hand),qoh,sum,count]
       InputAdapter
         Exchange [i_product_name,i_brand,i_class,i_category,spark_grouping_id] #1
           WholeStageCodegen (4)
@@ -12,10 +12,12 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                       BroadcastHashJoin [inv_item_sk,i_item_sk]
                         Project [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand]
                           BroadcastHashJoin [inv_date_sk,d_date_sk]
-                            Filter [inv_date_sk,inv_item_sk,inv_warehouse_sk]
+                            Filter [inv_item_sk,inv_warehouse_sk]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand]
+                                  Scan parquet default.inventory [inv_item_sk,inv_warehouse_sk,inv_quantity_on_hand,inv_date_sk]
+                                    SubqueryBroadcast [d_date_sk] #1
+                                      ReusedExchange [d_date_sk] #2
                             InputAdapter
                               BroadcastExchange #2
                                 WholeStageCodegen (1)

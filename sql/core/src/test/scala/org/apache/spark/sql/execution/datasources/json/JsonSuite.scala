@@ -2819,7 +2819,7 @@ abstract class JsonSuite
             val errorMsg = intercept[AnalysisException] {
               readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
             }.getMessage
-            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+            assert(errorMsg.contains("cannot resolve 'AAA'"))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(

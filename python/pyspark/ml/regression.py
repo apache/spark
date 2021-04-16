@@ -180,10 +180,8 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> abs(model.transform(test1).head().newPrediction - 1.0) < 0.001
     True
-    >>> lr.setParams("vector")
-    Traceback (most recent call last):
-        ...
-    TypeError: Method setParams forces keyword arguments.
+    >>> lr.setParams(featuresCol="vector")
+    LinearRegression...
     >>> lr_path = temp_path + "/lr"
     >>> lr.save(lr_path)
     >>> lr2 = LinearRegression.load(lr_path)

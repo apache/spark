@@ -51,6 +51,8 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 
 public class ThriftHttpCLIService extends ThriftCLIService {
 
+  protected org.eclipse.jetty.server.Server httpServer;
+
   public ThriftHttpCLIService(CLIService cliService) {
     super(cliService, ThriftHttpCLIService.class.getSimpleName());
   }
@@ -152,6 +154,19 @@ public class ThriftHttpCLIService extends ThriftCLIService {
     }
   }
 
+  @Override
+  protected void stopServer() {
+    if ((httpServer != null) && httpServer.isStarted()) {
+      try {
+        httpServer.stop();
+        httpServer = null;
+        LOG.info("Thrift HTTP server has been stopped");
+      } catch (Exception e) {
+        LOG.error("Error stopping HTTP server: ", e);
+      }
+    }
+  }
+
   /**
    * Configure Jetty to serve http requests. Example of a client connection URL:
    * http://localhost:10000/servlets/thrifths2/ A gateway may cause actual target URL to differ,
@@ -162,10 +177,14 @@ public class ThriftHttpCLIService extends ThriftCLIService {
     try {
       httpServer.join();
     } catch (Throwable t) {
-      LOG.error(
-          "Error starting HiveServer2: could not start "
-              + ThriftHttpCLIService.class.getSimpleName(), t);
-      System.exit(-1);
+      if (t instanceof InterruptedException) {
+        // This is likely a shutdown
+        LOG.info("Caught " + t.getClass().getSimpleName() + ". Shutting down thrift server.");
+      } else {
+        LOG.error("Error starting HiveServer2: could not start "
+            + ThriftHttpCLIService.class.getSimpleName(), t);
+        System.exit(-1);
+      }
     }
   }
 

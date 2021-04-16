@@ -37,12 +37,6 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     sql(s"INSERT INTO $tableName SELECT 0")
   }
 
-  protected def checkTables(namespace: String, expectedTables: String*): Unit = {
-    val tables = sql(s"SHOW TABLES IN $catalog.$namespace").select("tableName")
-    val rows = expectedTables.map(Row(_))
-    checkAnswer(tables, rows)
-  }
-
   test("basic") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
@@ -122,9 +116,10 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(s"SELECT * FROM $view"),
           spark.table("source").select("id").collect())
 
-        assert(!spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        val oldTable = spark.table(view)
+        assert(spark.sharedState.cacheManager.lookupCachedData(oldTable).isDefined)
         sql(s"DROP TABLE $t")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        assert(spark.sharedState.cacheManager.lookupCachedData(oldTable).isEmpty)
       }
     }
   }

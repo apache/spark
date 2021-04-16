@@ -34,7 +34,7 @@ EXPLAIN FORMATTED
 EXPLAIN FORMATTED
   SELECT key, val FROM explain_temp1 WHERE key > 0
   UNION 
-  SELECT key, val FROM explain_temp1 WHERE key > 0;
+  SELECT key, val FROM explain_temp1 WHERE key > 1;
 
 -- Join
 EXPLAIN FORMATTED

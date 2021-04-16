@@ -15,10 +15,11 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                             WholeStageCodegen (2)
                               Project [sr_item_sk,sr_ticket_number,sr_return_quantity]
                                 BroadcastHashJoin [sr_reason_sk,r_reason_sk]
-                                  Filter [sr_item_sk,sr_ticket_number,sr_reason_sk]
-                                    ColumnarToRow
-                                      InputAdapter
-                                        Scan parquet default.store_returns [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity]
+                                  Project [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity]
+                                    Filter [sr_item_sk,sr_ticket_number,sr_reason_sk]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.store_returns [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]
                                   InputAdapter
                                     BroadcastExchange #3
                                       WholeStageCodegen (1)
@@ -33,6 +34,7 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                         InputAdapter
                           Exchange [ss_item_sk,ss_ticket_number] #4
                             WholeStageCodegen (4)
-                              ColumnarToRow
-                                InputAdapter
-                                  Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price]
+                              Project [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price,ss_sold_date_sk]

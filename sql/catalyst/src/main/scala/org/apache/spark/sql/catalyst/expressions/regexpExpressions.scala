@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure,
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -179,9 +180,12 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
       })
     }
   }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Like =
+    copy(left = newLeft, right = newRight)
 }
 
-abstract class MultiLikeBase
+sealed abstract class MultiLikeBase
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   protected def patterns: Seq[UTF8String]
@@ -220,7 +224,7 @@ abstract class MultiLikeBase
 /**
  * Optimized version of LIKE ALL, when all pattern values are literal.
  */
-abstract class LikeAllBase extends MultiLikeBase {
+sealed abstract class LikeAllBase extends MultiLikeBase {
 
   override def matches(exprValue: String): Any = {
     if (cache.forall(matchFunc(_, exprValue))) {
@@ -267,16 +271,20 @@ abstract class LikeAllBase extends MultiLikeBase {
 
 case class LikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotSpecified: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): LikeAll =
+    copy(child = newChild)
 }
 
 case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotSpecified: Boolean = true
+  override protected def withNewChildInternal(newChild: Expression): NotLikeAll =
+    copy(child = newChild)
 }
 
 /**
  * Optimized version of LIKE ANY, when all pattern values are literal.
  */
-abstract class LikeAnyBase extends MultiLikeBase {
+sealed abstract class LikeAnyBase extends MultiLikeBase {
 
   override def matches(exprValue: String): Any = {
     if (cache.exists(matchFunc(_, exprValue))) {
@@ -323,10 +331,14 @@ abstract class LikeAnyBase extends MultiLikeBase {
 
 case class LikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
   override def isNotSpecified: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): LikeAny =
+    copy(child = newChild)
 }
 
 case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
   override def isNotSpecified: Boolean = true
+  override protected def withNewChildInternal(newChild: Expression): NotLikeAny =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.contains.tab
@@ -408,6 +420,9 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       })
     }
   }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): RLike =
+    copy(left = newLeft, right = newRight)
 }
 
 
@@ -445,7 +460,9 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   override def dataType: DataType = ArrayType(StringType)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = str :: regex :: limit :: Nil
+  override def first: Expression = str
+  override def second: Expression = regex
+  override def third: Expression = limit
 
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1));
 
@@ -464,6 +481,10 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   }
 
   override def prettyName: String = "split"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringSplit =
+    copy(str = newFirst, regex = newSecond, limit = newThird)
 }
 
 
@@ -559,7 +580,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringType, StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = subject :: regexp :: rep :: pos :: Nil
   override def prettyName: String = "regexp_replace"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -615,6 +635,15 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     """
     })
   }
+
+  override def first: Expression = subject
+  override def second: Expression = regexp
+  override def third: Expression = rep
+  override def fourth: Expression = pos
+
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression, fourth: Expression): RegExpReplace =
+    copy(subject = first, regexp = second, rep = third, pos = fourth)
 }
 
 object RegExpReplace {
@@ -625,10 +654,10 @@ object RegExpReplace {
 object RegExpExtractBase {
   def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
     if (groupIndex < 0) {
-      throw new IllegalArgumentException("The specified group index cannot be less than zero")
+      throw QueryExecutionErrors.regexGroupIndexLessThanZeroError
     } else if (groupCount < groupIndex) {
-      throw new IllegalArgumentException(
-        s"Regex group count is $groupCount, but the specified group index is $groupIndex")
+      throw QueryExecutionErrors.regexGroupIndexExceedGroupCountError(
+        groupCount, groupIndex)
     }
   }
 }
@@ -645,7 +674,9 @@ abstract class RegExpExtractBase
   @transient private var pattern: Pattern = _
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
+  override def first: Expression = subject
+  override def second: Expression = regexp
+  override def third: Expression = idx
 
   protected def getLastMatcher(s: Any, p: Any): Matcher = {
     if (p != lastRegex) {
@@ -756,6 +787,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       }"""
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpExtract =
+    copy(subject = newFirst, regexp = newSecond, idx = newThird)
 }
 
 /**
@@ -859,4 +894,8 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
          """
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpExtractAll =
+    copy(subject = newFirst, regexp = newSecond, idx = newThird)
 }

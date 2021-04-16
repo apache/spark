@@ -22,7 +22,8 @@ import java.lang.{Boolean => JBool}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{LeafLike, TreeNode}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
@@ -202,7 +203,7 @@ trait Block extends TreeNode[Block] with JavaCode {
 
   override def verboseString(maxFields: Int): String = toString
   override def simpleStringWithNodeId(): String = {
-    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+    throw QueryExecutionErrors.simpleStringWithNodeIdUnsupportedError(nodeName)
   }
 }
 
@@ -236,8 +237,7 @@ object Block {
         args.foreach {
           case _: ExprValue | _: Inline | _: Block =>
           case _: Boolean | _: Int | _: Long | _: Float | _: Double | _: String =>
-          case other => throw new IllegalArgumentException(
-            s"Can not interpolate ${other.getClass.getName} into code block.")
+          case other => throw QueryExecutionErrors.cannotInterpolateClassIntoCodeBlockError(other)
         }
 
         val (codeParts, blockInputs) = foldLiteralArgs(sc.parts, args)
@@ -298,11 +298,13 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
     }
     buf.toString
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Block]): Block =
+    super.legacyWithNewChildren(newChildren)
 }
 
-case object EmptyBlock extends Block with Serializable {
+case object EmptyBlock extends Block with Serializable with LeafLike[Block] {
   override val code: String = ""
-  override def children: Seq[Block] = Seq.empty
 }
 
 /**
