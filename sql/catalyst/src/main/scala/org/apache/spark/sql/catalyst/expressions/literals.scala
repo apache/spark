@@ -42,7 +42,7 @@ import org.json4s.JsonAST._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreePattern
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL, TRUE_OR_FALSE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths}
@@ -52,6 +52,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableBitSet
 
 object Literal {
   val TrueLiteral: Literal = Literal(true, BooleanType)
@@ -300,27 +301,14 @@ object DecimalLiteral {
 
 object LiteralTreeBits {
   // Singleton tree pattern BitSet for all Literals that are not true, false, or null.
-  val literalBits: BitSet = {
-    val bits: BitSet = new BitSet(TreePattern.maxId)
-    bits.set(LITERAL.id)
-    bits
-  }
+  val literalBits: BitSet = new ImmutableBitSet(TreePattern.maxId, LITERAL.id)
 
   // Singleton tree pattern BitSet for all Literals that are true or false.
-  val booleanLiteralBits: BitSet = {
-    val bits: BitSet = new BitSet(TreePattern.maxId)
-    bits.set(LITERAL.id)
-    bits.set(TRUE_OR_FALSE.id)
-    bits
-  }
+  val booleanLiteralBits: BitSet = new ImmutableBitSet(
+      TreePattern.maxId, LITERAL.id, TRUE_OR_FALSE_LITERAL.id)
 
   // Singleton tree pattern BitSet for all Literals that are nulls.
-  val nullLiteralBits: BitSet = {
-    val bits: BitSet = new BitSet(TreePattern.maxId)
-    bits.set(LITERAL.id)
-    bits.set(NULL.id)
-    bits
-  }
+  val nullLiteralBits: BitSet = new ImmutableBitSet(TreePattern.maxId, LITERAL.id, NULL_LITERAL.id)
 }
 
 /**
@@ -335,7 +323,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
 
-  protected override def getDefaultTreePatternBits: BitSet = {
+  protected override lazy val getDefaultTreePatternBits: BitSet = {
     value match {
       case null => LiteralTreeBits.nullLiteralBits
       case true | false => LiteralTreeBits.booleanLiteralBits

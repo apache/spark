@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableBitSet
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -236,11 +237,7 @@ case class Alias(child: Expression, name: String)(
 
 // Singleton tree pattern BitSet for all AttributeReference instances.
 object AttributeReferenceTreeBits {
-  val bits: BitSet = {
-    val bits: BitSet = new BitSet(TreePattern.maxId)
-    bits.set(ATTRIBUTE_REFERENCE.id)
-    bits
-  }
+  val bits: BitSet = new ImmutableBitSet(TreePattern.maxId, ATTRIBUTE_REFERENCE.id)
 }
 
 /**
@@ -265,7 +262,7 @@ case class AttributeReference(
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
 
-  protected override  def getDefaultTreePatternBits: BitSet = AttributeReferenceTreeBits.bits
+  protected override lazy val getDefaultTreePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
   /**
    * Returns true iff the expression id is the same for both attributes.

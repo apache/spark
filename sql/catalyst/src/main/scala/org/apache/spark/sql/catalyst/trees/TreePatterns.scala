@@ -27,8 +27,8 @@ object TreePattern extends Enumeration  {
   val EXPRESSION_WITH_RANDOM_SEED = Value
   val IN: Value = Value
   val LITERAL: Value = Value
-  val NULL: Value = Value
-  val TRUE_OR_FALSE: Value = Value
+  val NULL_LITERAL: Value = Value
+  val TRUE_OR_FALSE_LITERAL: Value = Value
   val WINDOW_EXPRESSION: Value = Value
 
   // Logical plan patterns (alphabetically ordered)
