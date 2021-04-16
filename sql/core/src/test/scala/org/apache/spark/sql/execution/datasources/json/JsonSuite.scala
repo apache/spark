@@ -2847,19 +2847,49 @@ abstract class JsonSuite
 
   test("Write Non-ASCII character as codepoint") {
     // scalastyle:off nonascii
-    withTempPath { path =>
-      val basePath = path.getCanonicalPath
-      Seq("a", "\n", "\u3042").toDF.write
-        .option("writeNonAsciiCharacterAsCodePoint", "true").json(s"$basePath")
-      val actualText = spark.read.text(s"$basePath")
-        .sort("value").map(_.getString(0)).collect().mkString
-      val expectedText = "{\"value\":\"\\n\"}{\"value\":\"\\u3042\"}{\"value\":\"a\"}"
-      assert(actualText === expectedText)
+    withTempPaths(2) { paths =>
+      paths.foreach(_.delete())
+      val df = Seq("a", "\n", "\u3042").toDF
 
-      val actualJson = spark.read.json(s"$basePath")
+      val basePath1 = paths(0).getCanonicalPath
+      df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
+        .option("pretty", "false").json(basePath1)
+      val actualText1 = spark.read.option("wholetext", "true").text(basePath1)
         .sort("value").map(_.getString(0)).collect().mkString
-      val expectedJson = "\na\u3042"
-      assert(actualJson === expectedJson)
+      val expectedText1 =
+        s"""{"value":"\\n"}
+           |{"value":"\\u3042"}
+           |{"value":"a"}
+           |""".stripMargin
+      assert(actualText1 === expectedText1)
+
+      val actualJson1 = spark.read.json(basePath1)
+        .sort("value").map(_.getString(0)).collect().mkString
+      val expectedJson1 = "\na\u3042"
+      assert(actualJson1 === expectedJson1)
+
+      val basePath2 = paths(1).getCanonicalPath
+      df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
+        .option("pretty", "true").json(basePath2)
+      val actualText2 = spark.read.option("wholetext", "true").text(basePath2)
+        .sort("value").map(_.getString(0)).collect().mkString
+      val expectedText2 =
+        s"""{
+           |  "value" : "\\n"
+           |}
+           |{
+           |  "value" : "\\u3042"
+           |}
+           |{
+           |  "value" : "a"
+           |}
+           |""".stripMargin
+      assert(actualText2 === expectedText2)
+
+      val actualJson2 = spark.read.option("multiline", "true").json(basePath2)
+        .sort("value").map(_.getString(0)).collect().mkString
+      val expectedJson2 = "\na\u3042"
+      assert(actualJson2 === expectedJson2)
     }
     // scalastyle:on nonascii
   }
