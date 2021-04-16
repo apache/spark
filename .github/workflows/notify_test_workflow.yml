@@ -59,7 +59,7 @@ jobs:
 
             const name = 'Build and test'
             const head_sha = context.payload.pull_request.head.sha
-            const status = 'in_progress'
+            const status = 'queued'
 
             github.checks.create({
               ...context.repo,
