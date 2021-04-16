@@ -964,7 +964,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
-  test("ADD FILES command with multiple files") {
+  test("SPARK-35105: ADD FILES command with multiple files") {
     withTempDir { dir =>
       val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
       val file2 = File.createTempFile("someprefix2", "somesuffix 2", dir)
@@ -989,7 +989,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
-  test("ADD JARS command with multiple files") {
+  test("SPARK-35105: ADD JARS command with multiple files") {
     withTempDir { dir =>
       val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
       val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
@@ -1024,7 +1024,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
-  test("ADD ARCHIVES command with multiple files") {
+  test("SPARK-35105: ADD ARCHIVES command with multiple files") {
     withTempDir { dir =>
       val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
       val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
