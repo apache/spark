@@ -188,16 +188,14 @@ class HadoopMapReduceCommitProtocol(
 
       val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
       logDebug(s"Committing files staged for absolute locations $filesToMove")
-      if (dynamicPartitionOverwrite) {
+      if (!dynamicPartitionOverwrite) {
+        for ((src, dst) <- filesToMove) {
+          fs.rename(new Path(src), new Path(dst))
+        }
+      } else {
         val absPartitionPaths = filesToMove.values.map(new Path(_).getParent).toSet
         logDebug(s"Clean up absolute partition directories for overwriting: $absPartitionPaths")
         absPartitionPaths.foreach(fs.delete(_, true))
-      }
-      for ((src, dst) <- filesToMove) {
-        fs.rename(new Path(src), new Path(dst))
-      }
-
-      if (dynamicPartitionOverwrite) {
         val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
         logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
         for (part <- partitionPaths) {
