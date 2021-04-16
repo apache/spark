@@ -157,7 +157,7 @@ ORDER BY udf(cate), val_timestamp
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY testdata.val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2001600000000 FOLLOWING)' due to data type mismatch: The data type 'timestamp' used in the order specification does not match the data type 'day-time interval' which is used in the range frame.; line 1 pos 56
+cannot resolve '(PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY testdata.val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04:00:00' DAY TO SECOND FOLLOWING)' due to data type mismatch: The data type 'timestamp' used in the order specification does not match the data type 'day-time interval' which is used in the range frame.; line 1 pos 56
 
 
 -- !query
