@@ -2314,7 +2314,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
     val parsedInterval = parseIntervalLiteral(ctx)
-    if (SQLConf.get.legacyIntervalEnabled) {
+    if (conf.legacyIntervalEnabled) {
       Literal(parsedInterval, CalendarIntervalType)
     } else if (parsedInterval.months != 0) {
       if (parsedInterval.days != 0 || parsedInterval.microseconds != 0) {
