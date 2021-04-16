@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 case class HadoopFsRelation(
     location: FileIndex,
     partitionSchema: StructType,
-    dataSchema: StructType,
+    dataSchema: StructType, // The top-level columns should not be pruned. Please see SPARK-34897.
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     options: Map[String, String])(val sparkSession: SparkSession)
