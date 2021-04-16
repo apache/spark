@@ -22,6 +22,7 @@ import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Object for grouping all error messages of the query parsing.
@@ -367,4 +368,10 @@ object QueryParsingErrors {
     new ParseException("LOCAL is supported only with file: scheme", ctx)
   }
 
+  def mixedIntervalError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      "Mixing of year-month and day-time fields is not allowed. " +
+      s"Set '${SQLConf.LEGACY_INTERVAL_ENABLED.key}' to true to enable the legacy interval type " +
+      "which supports mixed fields.", ctx)
+  }
 }

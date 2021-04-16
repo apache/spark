@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
@@ -2306,12 +2307,26 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
+   * Create a [[CalendarInterval]] or ANSI interval literal expression.
+   * Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
    * - from-to unit, for instance: interval '1-2' year to month.
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
-    Literal(parseIntervalLiteral(ctx), CalendarIntervalType)
+    val calendarInterval = parseIntervalLiteral(ctx)
+    if (ctx.errorCapturingUnitToUnitInterval != null && !conf.legacyIntervalEnabled) {
+      if (calendarInterval.months != 0) {
+        if (calendarInterval.days != 0 || calendarInterval.microseconds != 0) {
+          throw QueryParsingErrors.mixedIntervalError(ctx)
+        }
+        Literal(calendarInterval.months, YearMonthIntervalType)
+      } else {
+        val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
+        Literal(micros, DayTimeIntervalType)
+      }
+    } else {
+      Literal(calendarInterval, CalendarIntervalType)
+    }
   }
 
   /**
