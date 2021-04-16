@@ -229,7 +229,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         converter)
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
-        ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
+          ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
         wrapperConvertException(data =>
           complexTypeFactory.nullSafeEval(UTF8String.fromString(data)), any => any)
       case udt: UserDefinedType[_] =>
