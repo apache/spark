@@ -42,7 +42,7 @@ jobs:
 
             // TODO: Should use pull_request.user and pull_request.user.repos_url?
             // If a different person creates a commit to another forked repo,
-            // it would be able to detect.
+            // it wouldn't be able to detect.
             const params = {
               owner: context.payload.pull_request.head.repo.owner.login,
               repo: context.payload.pull_request.head.repo.name,
