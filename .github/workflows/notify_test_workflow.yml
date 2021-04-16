@@ -50,7 +50,8 @@ jobs:
               branch: context.payload.pull_request.head.ref,
             }
 
-            console.log('SHA: ' + context.payload.pull_request.head.ref)
+            console.log('Ref: ' + context.payload.pull_request.head.ref)
+            console.log('SHA: ' + context.payload.pull_request.head.sha)
 
             // Wait 3 seconds to make sure the fork repository triggered a workflow.
             await new Promise(r => setTimeout(r, 3000))
