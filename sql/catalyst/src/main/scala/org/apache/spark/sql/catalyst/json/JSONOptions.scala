@@ -136,7 +136,7 @@ private[sql] class JSONOptions(
   val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(false)
 
   /**
-   * Generating \uXXXX style codepoints for non-ASCII characters if the parameter is enabled.
+   * Generating \u0000 style codepoints for non-ASCII characters if the parameter is enabled.
    */
   val writeNonAsciiCharacterAsCodePoint: Boolean =
     parameters.get("writeNonAsciiCharacterAsCodePoint").map(_.toBoolean).getOrElse(false)

@@ -2845,11 +2845,12 @@ abstract class JsonSuite
     }
   }
 
-  test("Write Non-ASCII character as codepoint") {
+  test("SPARK-35047: Write Non-ASCII character as codepoint") {
     // scalastyle:off nonascii
     withTempPaths(2) { paths =>
       paths.foreach(_.delete())
-      val df = Seq("a", "\n", "\u3042").toDF
+      val seq = Seq("a", "\n", "\u3042")
+      val df = seq.toDF
 
       val basePath1 = paths(0).getCanonicalPath
       df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
@@ -2868,30 +2869,60 @@ abstract class JsonSuite
       val expectedJson1 = "\na\u3042"
       assert(actualJson1 === expectedJson1)
 
-      val basePath2 = paths(1).getCanonicalPath
-      df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
-        .option("pretty", "true").json(basePath2)
-      val actualText2 = spark.read.option("wholetext", "true").text(basePath2)
-        .sort("value").map(_.getString(0)).collect().mkString
-      val expectedText2 =
-        s"""{
-           |  "value" : "\\n"
-           |}
-           |{
-           |  "value" : "\\u3042"
-           |}
-           |{
-           |  "value" : "a"
-           |}
-           |""".stripMargin
-      assert(actualText2 === expectedText2)
+      // Test for pretty printed JSON.
+      // If multiLine option is set to true, the format should be should be
+      // one JSON record per file. So LEAF_NODE_DEFAULT_PARALLELISM is set here.
+      withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> s"${seq.length}") {
+        val basePath2 = paths(1).getCanonicalPath
+        df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
+          .option("pretty", "true").json(basePath2)
+        val actualText2 = spark.read.option("wholetext", "true").text(basePath2)
+          .sort("value").map(_.getString(0)).collect().mkString
+        val expectedText2 =
+          s"""{
+             |  "value" : "\\n"
+             |}
+             |{
+             |  "value" : "\\u3042"
+             |}
+             |{
+             |  "value" : "a"
+             |}
+             |""".stripMargin
+        assert(actualText2 === expectedText2)
 
-      val actualJson2 = spark.read.option("multiline", "true").json(basePath2)
-        .sort("value").map(_.getString(0)).collect().mkString
-      val expectedJson2 = "\na\u3042"
-      assert(actualJson2 === expectedJson2)
+        val actualJson2 = spark.read.option("multiLine", "true").json(basePath2)
+          .sort("value").map(_.getString(0)).collect().mkString
+        val expectedJson2 = "\na\u3042"
+        assert(actualJson2 === expectedJson2)
+      }
     }
     // scalastyle:on nonascii
+  }
+
+  test("SPARK-35104: Fix wrong indentation for multiple JSON even if `pretty` option is true") {
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+      withTempPath { path =>
+        val basePath = path.getCanonicalPath
+        val df = Seq("a", "b", "c").toDF
+        df.write.option("pretty", "true").json(basePath)
+
+        val expectedText =
+          s"""{
+             |  "value" : "a"
+             |}
+             |{
+             |  "value" : "b"
+             |}
+             |{
+             |  "value" : "c"
+             |}
+             |""".stripMargin
+        val actualText = spark.read.option("wholetext", "true")
+          .text(basePath).map(_.getString(0)).collect().mkString
+        assert(actualText === expectedText)
+      }
+    }
   }
 }
 
