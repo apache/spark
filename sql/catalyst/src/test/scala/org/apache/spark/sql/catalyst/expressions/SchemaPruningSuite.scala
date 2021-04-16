@@ -43,6 +43,7 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
       val expectedSchema = SchemaPruning.pruneDataSchema(schema, requestedRootFields)
       assert(expectedSchema == StructType(requestedFields))
     }
+
     testPrunedSchema(StructType.fromDDL("a int, b int"), StructField("a", IntegerType))
     testPrunedSchema(StructType.fromDDL("a int, b int"), StructField("b", IntegerType))
 
@@ -70,7 +71,7 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     testPrunedSchema(complexStruct, StructField("c", IntegerType), selectFieldInMap)
   }
 
-  test("SPARK-35096: test case insensitivity of pruned schema  ") {
+  test("SPARK-35096: test case insensitivity of pruned schema") {
     Seq(true, false).foreach(isCaseSensitive => {
       withSQLConf(CASE_SENSITIVE.key -> isCaseSensitive.toString) {
         if (isCaseSensitive) {
@@ -84,11 +85,11 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
             StructType.fromDDL("ID int, name String"),
             getRootFields(StructField("id", IntegerType)))
           assert(prunedSchema == StructType(StructField("ID", IntegerType) :: Nil))
-          // Root fields are insensitive
-          val prunedSchema_1 = SchemaPruning.pruneDataSchema(
+          // Root fields are case-insensitive
+          val rootFieldsSchema = SchemaPruning.pruneDataSchema(
             StructType.fromDDL("id int, name String"),
             getRootFields(StructField("ID", IntegerType)))
-          assert(prunedSchema_1 == StructType(StructField("id", IntegerType) :: Nil))
+          assert(rootFieldsSchema == StructType(StructField("id", IntegerType) :: Nil))
         }
       }
     })

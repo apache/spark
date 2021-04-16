@@ -38,8 +38,7 @@ object SchemaPruning extends SQLConfHelper {
       .reduceLeft(_ merge _)
     val dataSchemaFieldNames = dataSchema.fieldNames.toSet
     val mergedDataSchema =
-      StructType(mergedSchema.filter(f => dataSchemaFieldNames.exists(resolver(_, f.name))
-      ))
+      StructType(mergedSchema.filter(f => dataSchemaFieldNames.exists(resolver(_, f.name))))
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
     sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
@@ -70,8 +69,7 @@ object SchemaPruning extends SQLConfHelper {
         val sortedLeftFields = filteredRightFieldNames.map { fieldName =>
           val resolvedLeftStruct = leftStruct.filter(p => resolver(p.name, fieldName)).head
           val leftFieldType = resolvedLeftStruct.dataType
-          val resolvedRightStruct = rightStruct.filter(p => resolver(p.name, fieldName)).head
-          val rightFieldType = resolvedRightStruct.dataType
+          val rightFieldType = rightStruct(fieldName).dataType
           val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
           StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable)
         }
