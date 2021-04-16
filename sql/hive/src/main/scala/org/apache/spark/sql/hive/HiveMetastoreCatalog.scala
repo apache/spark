@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.util.Locale
 
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.Striped
@@ -241,7 +242,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             LogicalRelation(
               DataSource(
                 sparkSession = sparkSession,
-                paths = rootPath.toString :: Nil,
+                paths = getDirectoryPathSeq(rootPath),
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
                 bucketSpec = None,
                 options = options,
@@ -275,6 +276,31 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case (a1, a2) => a1.withExprId(a2.exprId)
     }
     result.copy(output = newOutput)
+  }
+
+  private def getDirectoryPathSeq(rootPath: Path): Seq[String] = {
+    val enableSupportSubDirectories =
+      sparkSession.conf.getOption("hive.mapred.supports.subdirectories")
+
+    if (enableSupportSubDirectories.isDefined && enableSupportSubDirectories.get.toBoolean) {
+      val fs = rootPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+      val paths = new scala.collection.mutable.ListBuffer[String]
+
+      val checkingQueue = new mutable.Queue[Path]()
+      checkingQueue.enqueue(rootPath)
+      while (!checkingQueue.isEmpty) {
+        val path = checkingQueue.dequeue()
+        paths.append(path.toString)
+        fs.listStatus(path).foreach(fileStatus => {
+          if (fileStatus.isDirectory) {
+            checkingQueue.enqueue(fileStatus.getPath)
+          }
+        })
+      }
+      paths
+    } else {
+      rootPath.toString :: Nil
+    }
   }
 
   private def inferIfNeeded(

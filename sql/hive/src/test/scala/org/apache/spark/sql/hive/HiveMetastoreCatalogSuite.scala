@@ -363,4 +363,28 @@ class DataSourceWithHiveMetastoreCatalogSuite
       }
     })
   }
+
+  test("SPARK-28098: allow reader could read files from subdirectories") {
+    withTempPath(dir => {
+      withTable("dirTest") {
+        val testData = java.util.Arrays.asList(Row(1), Row(2), Row(3), Row(4), Row(5))
+        spark.conf.set("hive.mapred.supports.subdirectories", "true")
+
+        val dataFrame = spark.sqlContext
+          .createDataFrame(testData, StructType(Seq(StructField("val", IntegerType))))
+
+        dataFrame
+          .coalesce(1)
+          .write
+          .mode(SaveMode.Overwrite)
+          .format("orc")
+          .save(s"${dir.getCanonicalPath}/sub1/sub2")
+
+        spark.sql("CREATE EXTERNAL TABLE dirTest (val INT)" +
+          s" STORED AS ORC LOCATION '${dir.toURI}'")
+
+        checkAnswer(spark.sql("select * from dirTest"), dataFrame)
+      }
+    })
+  }
 }
