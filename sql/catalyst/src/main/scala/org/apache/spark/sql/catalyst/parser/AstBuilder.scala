@@ -993,32 +993,47 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         ctx.groupingExpressionsWithGroupingAnalytics.asScala
           .map(groupByExpr => {
             val groupingAnalytics = groupByExpr.groupingAnalytics
+            val nestedGroupingSets = groupByExpr.nestedGroupingSets()
             if (groupingAnalytics != null) {
-              val groupingSets = groupingAnalytics.groupingSet.asScala
-                .map(_.expression.asScala.map(e => expression(e)).toSeq)
-              if (groupingAnalytics.CUBE != null) {
-                // CUBE(A, B, (A, B), ()) is not supported.
-                if (groupingSets.exists(_.isEmpty)) {
-                  throw new ParseException("Empty set in CUBE grouping sets is not supported.",
-                    groupingAnalytics)
+              resolveGroupingAnalytics(groupingAnalytics)
+            } else if (nestedGroupingSets != null) {
+              val groupingSets = nestedGroupingSets.nestedGroupingSet.asScala.map { expr =>
+                val groupingAnalytics = expr.groupingAnalytics()
+                if (groupingAnalytics != null) {
+                  resolveGroupingAnalytics(groupingAnalytics).selectedGroupByExprs
+                } else {
+                  Seq(expr.expression().asScala.map(e => expression(e)))
                 }
-                Cube(groupingSets.toSeq)
-              } else if (groupingAnalytics.ROLLUP != null) {
-                // ROLLUP(A, B, (A, B), ()) is not supported.
-                if (groupingSets.exists(_.isEmpty)) {
-                  throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
-                    groupingAnalytics)
-                }
-                Rollup(groupingSets.toSeq)
-              } else {
-                assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-                GroupingSets(groupingSets.toSeq)
-              }
+              }.flatten.toSeq
+              GroupingSets(groupingSets)
             } else {
               expression(groupByExpr.expression)
             }
           })
       Aggregate(groupByExpressions.toSeq, selectExpressions, query)
+    }
+  }
+
+  def resolveGroupingAnalytics(groupingAnalytics: GroupingAnalyticsContext): BaseGroupingSets = {
+    val groupingSets = groupingAnalytics.groupingSet.asScala
+      .map(_.expression.asScala.map(e => expression(e)).toSeq)
+    if (groupingAnalytics.CUBE != null) {
+      // CUBE(A, B, (A, B), ()) is not supported.
+      if (groupingSets.exists(_.isEmpty)) {
+        throw new ParseException("Empty set in CUBE grouping sets is not supported.",
+          groupingAnalytics)
+      }
+      Cube(groupingSets.toSeq)
+    } else if (groupingAnalytics.ROLLUP != null) {
+      // ROLLUP(A, B, (A, B), ()) is not supported.
+      if (groupingSets.exists(_.isEmpty)) {
+        throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
+          groupingAnalytics)
+      }
+      Rollup(groupingSets.toSeq)
+    } else {
+      assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
+      GroupingSets(groupingSets.toSeq)
     }
   }
 

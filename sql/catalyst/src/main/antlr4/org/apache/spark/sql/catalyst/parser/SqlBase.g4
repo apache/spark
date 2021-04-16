@@ -601,12 +601,22 @@ aggregationClause
     ;
 
 groupByClause
-    : groupingAnalytics
+    : nestedGroupingSets
+    | groupingAnalytics
     | expression
+    ;
+
+nestedGroupingSets
+    :  GROUPING SETS '(' nestedGroupingSet (',' nestedGroupingSet)* ')'
     ;
 
 groupingAnalytics
     : (ROLLUP | CUBE | GROUPING SETS)  '(' groupingSet (',' groupingSet)* ')'
+    ;
+
+nestedGroupingSet
+    : groupingAnalytics
+    | '(' (expression (',' expression)*)? ')'
     ;
 
 groupingSet
