@@ -262,7 +262,7 @@ case class AttributeReference(
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
 
-  protected override lazy val getDefaultTreePatternBits: BitSet = AttributeReferenceTreeBits.bits
+  override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
   /**
    * Returns true iff the expression id is the same for both attributes.

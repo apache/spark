@@ -323,7 +323,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
 
-  protected override lazy val getDefaultTreePatternBits: BitSet = {
+  override lazy val treePatternBits: BitSet = {
     value match {
       case null => LiteralTreeBits.nullLiteralBits
       case true | false => LiteralTreeBits.booleanLiteralBits
