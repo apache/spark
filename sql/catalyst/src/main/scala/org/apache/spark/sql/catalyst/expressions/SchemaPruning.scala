@@ -24,7 +24,9 @@ object SchemaPruning {
    * Prunes the nested schema by the requested fields. For example, if the schema is
    * struct<a:int, b:int>, and given requested field are "a", the field "b" is pruned in the
    * returned schema.
-   * Note that schema field ordering at original schema is still preserved in pruned schema.
+   * Note that:
+   *   1. The schema field ordering at original schema is still preserved in pruned schema.
+   *   2. The top-level fields are not pruned here.
    */
   def pruneDataSchema(
       dataSchema: StructType,
