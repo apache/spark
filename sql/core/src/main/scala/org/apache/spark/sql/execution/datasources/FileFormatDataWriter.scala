@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -47,6 +48,7 @@ abstract class FileFormatDataWriter(
   protected val MAX_FILE_COUNTER: Int = 1000 * 1000
   protected val updatedPartitions: mutable.Set[String] = mutable.Set[String]()
   protected var currentWriter: OutputWriter = _
+  protected var currentPath: String = _
 
   /** Trackers for computing various statistics on the data as it's being written out. */
   protected val statsTrackers: Seq[WriteTaskStatsTracker] =
@@ -56,6 +58,7 @@ abstract class FileFormatDataWriter(
     if (currentWriter != null) {
       try {
         currentWriter.close()
+        statsTrackers.foreach(_.closeFile(currentPath))
       } finally {
         currentWriter = null
       }
@@ -115,7 +118,7 @@ class SingleDirectoryDataWriter(
     releaseResources()
 
     val ext = description.outputWriterFactory.getFileExtension(taskAttemptContext)
-    val currentPath = committer.newTaskTempFile(
+    currentPath = committer.newTaskTempFile(
       taskAttemptContext,
       None,
       f"-c$fileCounter%03d" + ext)
@@ -150,7 +153,8 @@ class SingleDirectoryDataWriter(
 class DynamicPartitionDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol)
+    committer: FileCommitProtocol,
+    concurrentOutputWriterSpec: Option[ConcurrentOutputWriterSpec])
   extends FileFormatDataWriter(description, taskAttemptContext, committer) {
 
   /** Flag saying whether or not the data to be written out is partitioned. */
@@ -167,8 +171,14 @@ class DynamicPartitionDataWriter(
 
   private var fileCounter: Int = _
   private var recordsInFile: Long = _
-  private var currentPartitionValues: Option[UnsafeRow] = None
-  private var currentBucketId: Option[Int] = None
+
+  private var mode: WriterMode = concurrentOutputWriterSpec match {
+    case Some(_) => ConcurrentWriterBeforeSort
+    case None => SingleWriter
+  }
+  private val concurrentWriters =
+    mutable.HashMap[WriterIndex, ConcurrentWriterStatus]()
+  private val currentWriterId = WriterIndex(None, None)
 
   /** Extracts the partition values out of an input row. */
   private lazy val getPartitionValues: InternalRow => UnsafeRow = {
@@ -204,6 +214,32 @@ class DynamicPartitionDataWriter(
   private val getOutputRow =
     UnsafeProjection.create(description.dataColumns, description.allColumns)
 
+  override protected def releaseResources(): Unit = {
+    mode match {
+      case SingleWriter =>
+        if (currentWriter != null) {
+          try {
+            currentWriter.close()
+            statsTrackers.foreach(_.closeFile(currentPath))
+          } finally {
+            currentWriter = null
+          }
+        }
+      case _ =>
+        currentWriter = null
+        concurrentWriters.values.foreach(status => {
+          if (status.outputWriter != null) {
+            try {
+              status.outputWriter.close()
+            } finally {
+              status.outputWriter = null
+            }
+          }
+        })
+        concurrentWriters.clear()
+    }
+  }
+
   /**
    * Opens a new OutputWriter given a partition key and/or a bucket id.
    * If bucket id is specified, we will append it to the end of the file name, but before the
@@ -212,10 +248,17 @@ class DynamicPartitionDataWriter(
    * @param partitionValues the partition which all tuples being written by this `OutputWriter`
    *                        belong to
    * @param bucketId the bucket which all tuples being written by this `OutputWriter` belong to
+   * @param closeCurrentWriter close and release resource for current writer
    */
-  private def newOutputWriter(partitionValues: Option[InternalRow], bucketId: Option[Int]): Unit = {
+  private def newOutputWriter(
+      partitionValues: Option[InternalRow],
+      bucketId: Option[Int],
+      closeCurrentWriter: Boolean): Unit = {
+
     recordsInFile = 0
-    releaseResources()
+    if (closeCurrentWriter) {
+      super.releaseResources()
+    }
 
     val partDir = partitionValues.map(getPartitionPath(_))
     partDir.foreach(updatedPartitions.add)
@@ -229,7 +272,7 @@ class DynamicPartitionDataWriter(
     val customPath = partDir.flatMap { dir =>
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
-    val currentPath = if (customPath.isDefined) {
+    currentPath = if (customPath.isDefined) {
       committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
     } else {
       committer.newTaskTempFile(taskAttemptContext, partDir, ext)
@@ -247,20 +290,25 @@ class DynamicPartitionDataWriter(
     val nextPartitionValues = if (isPartitioned) Some(getPartitionValues(record)) else None
     val nextBucketId = if (isBucketed) Some(getBucketId(record)) else None
 
-    if (currentPartitionValues != nextPartitionValues || currentBucketId != nextBucketId) {
+    if (currentWriterId.partitionValues != nextPartitionValues ||
+      currentWriterId.bucketId != nextBucketId) {
       // See a new partition or bucket - write to a new partition dir (or a new bucket file).
-      if (isPartitioned && currentPartitionValues != nextPartitionValues) {
-        currentPartitionValues = Some(nextPartitionValues.get.copy())
-        statsTrackers.foreach(_.newPartition(currentPartitionValues.get))
-      }
+      updateCurrentWriterStatus()
+
       if (isBucketed) {
-        currentBucketId = nextBucketId
-        statsTrackers.foreach(_.newBucket(currentBucketId.get))
+        currentWriterId.bucketId = nextBucketId
+      }
+      if (isPartitioned && currentWriterId.partitionValues != nextPartitionValues) {
+        currentWriterId.partitionValues = Some(nextPartitionValues.get.copy())
+        if (mode == SingleWriter || !concurrentWriters.contains(currentWriterId)) {
+          statsTrackers.foreach(_.newPartition(currentWriterId.partitionValues.get))
+        }
       }
 
-      fileCounter = 0
-      newOutputWriter(currentPartitionValues, currentBucketId)
-    } else if (description.maxRecordsPerFile > 0 &&
+      getOrNewOutputWriter()
+    }
+
+    if (description.maxRecordsPerFile > 0 &&
       recordsInFile >= description.maxRecordsPerFile) {
       // Exceeded the threshold in terms of the number of records per file.
       // Create a new file by increasing the file counter.
@@ -268,12 +316,141 @@ class DynamicPartitionDataWriter(
       assert(fileCounter < MAX_FILE_COUNTER,
         s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
 
-      newOutputWriter(currentPartitionValues, currentBucketId)
+      newOutputWriter(currentWriterId.partitionValues, currentWriterId.bucketId, true)
     }
     val outputRow = getOutputRow(record)
     currentWriter.write(outputRow)
     statsTrackers.foreach(_.newRow(outputRow))
     recordsInFile += 1
+  }
+
+  /**
+   * Dedicated write code path when enabling concurrent writers.
+   *
+   * The process has the following step:
+   *  - Step 1: Maintain a map of output writers per each partition and/or bucket columns.
+   *            Keep all writers open and write rows one by one.
+   *  - Step 2: If number of concurrent writers exceeds limit, sort rest of rows. Write rows
+   *            one by one, and eagerly close the writer when finishing each partition and/or
+   *            bucket.
+   */
+  def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
+    while (iterator.hasNext && mode == ConcurrentWriterBeforeSort) {
+      write(iterator.next())
+    }
+
+    if (iterator.hasNext) {
+      resetWriterStatus()
+      val sorter = concurrentOutputWriterSpec.get.createSorter()
+      val sortIterator = sorter.sort(iterator.asInstanceOf[Iterator[UnsafeRow]])
+      while (sortIterator.hasNext) {
+        write(sortIterator.next())
+      }
+    }
+  }
+
+  sealed abstract class WriterMode
+
+  /**
+   * Single writer mode always has at most one writer.
+   * The output is expected to be sorted on partition and/or bucket columns before writing.
+   */
+  case object SingleWriter extends WriterMode
+
+  /**
+   * Concurrent writer mode before sort happens, and can have multiple concurrent writers
+   * for each partition and/or bucket columns.
+   */
+  case object ConcurrentWriterBeforeSort extends WriterMode
+
+  /**
+   * Concurrent writer mode after sort happens.
+   */
+  case object ConcurrentWriterAfterSort extends WriterMode
+
+  /** Wrapper class to index a unique output writer. */
+  private case class WriterIndex(
+      var partitionValues: Option[UnsafeRow],
+      var bucketId: Option[Int])
+
+  /** Wrapper class for status of a unique concurrent output writer. */
+  private case class ConcurrentWriterStatus(
+      var outputWriter: OutputWriter,
+      var recordsInFile: Long,
+      var fileCounter: Int,
+      var filePath: String)
+
+  /**
+   * Update current writer status when a new writer is needed for writing row.
+   */
+  private def updateCurrentWriterStatus(): Unit = {
+    mode match {
+      case ConcurrentWriterBeforeSort
+        if currentWriterId.partitionValues.isDefined || currentWriterId.bucketId.isDefined =>
+        // Update writer status in concurrent writers map, because the writer is probably needed
+        // again later for writing other rows.
+        val status = concurrentWriters(currentWriterId)
+        status.outputWriter = currentWriter
+        status.recordsInFile = recordsInFile
+        status.fileCounter = fileCounter
+        status.filePath = currentPath
+      case ConcurrentWriterAfterSort
+        if currentWriterId.partitionValues.isDefined || currentWriterId.bucketId.isDefined =>
+        // Remove writer status in concurrent writers map and release writer resource,
+        // because the writer is not needed any more.
+        concurrentWriters.remove(currentWriterId)
+        super.releaseResources()
+      case _ =>
+    }
+  }
+
+  /**
+   * Get or create a new writer based on writer mode.
+   */
+  private def getOrNewOutputWriter(): Unit = {
+    mode match {
+      case SingleWriter =>
+        fileCounter = 0
+        newOutputWriter(currentWriterId.partitionValues, currentWriterId.bucketId, true)
+      case _ =>
+        if (concurrentWriters.contains(currentWriterId)) {
+          val status = concurrentWriters(currentWriterId)
+          currentWriter = status.outputWriter
+          recordsInFile = status.recordsInFile
+          fileCounter = status.fileCounter
+          currentPath = status.filePath
+        } else {
+          fileCounter = 0
+          newOutputWriter(
+            currentWriterId.partitionValues,
+            currentWriterId.bucketId,
+            false)
+          concurrentWriters.put(
+            WriterIndex(currentWriterId.partitionValues, currentWriterId.bucketId),
+            ConcurrentWriterStatus(currentWriter, recordsInFile, fileCounter, currentPath))
+          if (concurrentWriters.size > concurrentOutputWriterSpec.get.maxWriters &&
+            mode == ConcurrentWriterBeforeSort) {
+            // Fall back to sort-based single writer mode
+            mode = ConcurrentWriterAfterSort
+          }
+        }
+    }
+  }
+
+  private def resetWriterStatus(): Unit = {
+    if (currentWriterId.partitionValues.isDefined || currentWriterId.bucketId.isDefined) {
+      val status = concurrentWriters(currentWriterId)
+      status.outputWriter = currentWriter
+      status.recordsInFile = recordsInFile
+      status.fileCounter = fileCounter
+      status.filePath = currentPath
+    }
+    currentWriterId.partitionValues = None
+    currentWriterId.bucketId = None
+    currentWriter = null
+    recordsInFile = 0
+    fileCounter = 0
+    currentPath = null
   }
 }
 

@@ -35,7 +35,7 @@ case class FileWriterFactory (
     if (description.partitionColumns.isEmpty) {
       new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
     } else {
-      new DynamicPartitionDataWriter(description, taskAttemptContext, committer)
+      new DynamicPartitionDataWriter(description, taskAttemptContext, committer, None)
     }
   }
 
