@@ -67,7 +67,7 @@ object SchemaPruning extends SQLConfHelper {
         val filteredRightFieldNames = rightStruct.fieldNames
           .filter(name => leftStruct.fieldNames.exists(resolver(_, name)))
         val sortedLeftFields = filteredRightFieldNames.map { fieldName =>
-          val resolvedLeftStruct = leftStruct.filter(p => resolver(p.name, fieldName)).head
+          val resolvedLeftStruct = leftStruct.find(p => resolver(p.name, fieldName)).get
           val leftFieldType = resolvedLeftStruct.dataType
           val rightFieldType = rightStruct(fieldName).dataType
           val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
