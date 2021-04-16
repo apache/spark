@@ -94,7 +94,7 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
    * an expression that is not [[CaseWhen]], [[If]], [[And]], [[Or]] or
    * `Literal(null, BooleanType)`.
    */
-  private def  replaceNullWithFalse(e: Expression): Expression = e match {
+  private def replaceNullWithFalse(e: Expression): Expression = e match {
     case Literal(null, BooleanType) =>
       FalseLiteral
     case And(left, right) =>

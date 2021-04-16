@@ -17,8 +17,8 @@
 
 package org.apache.spark.util.collection
 
-private[collection] object ErrorMessage {
-  val msg: String = "mutable operation is not supported"
+private object ErrorMessage {
+  final val msg: String = "mutable operation is not supported"
 }
 
 // An immutable BitSet that initializes set bits in its constructor.
@@ -36,11 +36,15 @@ class ImmutableBitSet(val numBits: Int, val bitsToSet: Int*) extends BitSet(numB
     new UnsupportedOperationException(ErrorMessage.msg)
   }
 
-  override def setUntil(bitIndex: Int): Unit = {
+  override def clearUntil(bitIndex: Int): Unit = {
     new UnsupportedOperationException(ErrorMessage.msg)
   }
 
   override def set(index: Int): Unit = {
+    new UnsupportedOperationException(ErrorMessage.msg)
+  }
+
+  override def setUntil(bitIndex: Int): Unit = {
     new UnsupportedOperationException(ErrorMessage.msg)
   }
 
