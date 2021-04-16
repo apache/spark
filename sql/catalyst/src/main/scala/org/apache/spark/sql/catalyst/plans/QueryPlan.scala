@@ -343,9 +343,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }.asInstanceOf[PlanType]
   }
 
-  private def updateAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
-    val exprId = attrMap.getOrElse(attr, attr).exprId
-    attr.withExprId(exprId)
+  private def updateAttr(a: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
+    attrMap.get(a) match {
+      case Some(b) => AttributeReference(a.name, b.dataType, b.nullable)(b.exprId, a.qualifier)
+      case None => a
+    }
   }
 
   /**
