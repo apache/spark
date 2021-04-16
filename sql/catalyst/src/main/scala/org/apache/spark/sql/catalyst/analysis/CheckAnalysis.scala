@@ -960,7 +960,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // OuterReference is a leaf node and will not be found here.
       case Equality(_: Attribute, b) => containsAttribute(b)
       case Equality(a, _: Attribute) => containsAttribute(a)
-      case o => containsAttribute(o)
+      case e @ Equality(_, _) => containsAttribute(e)
+      case _ => true
     }
 
     val unsupportedPredicates = mutable.ArrayBuffer.empty[Expression]
