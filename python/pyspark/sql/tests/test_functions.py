@@ -21,7 +21,9 @@ import re
 
 from py4j.protocol import Py4JJavaError
 from pyspark.sql import Row, Window
-from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, lit
+from pyspark.sql.functions import udf, input_file_name, col, percentile_approx, \
+    lit, assert_true, sum_distinct, sumDistinct, shiftleft, shiftLeft, shiftRight, \
+    shiftright, shiftrightunsigned, shiftRightUnsigned
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -350,13 +352,22 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual(result[0], '')
 
     def test_slice(self):
-        from pyspark.sql.functions import slice, lit
+        from pyspark.sql.functions import lit, size, slice
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
 
         self.assertEqual(
             df.select(slice(df.x, 2, 2).alias("sliced")).collect(),
             df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect(),
+        )
+
+        self.assertEqual(
+            df.select(slice(df.x, size(df.x) - 1, lit(1)).alias("sliced")).collect(),
+            [Row(sliced=[2]), Row(sliced=[4])]
+        )
+        self.assertEqual(
+            df.select(slice(df.x, lit(1), size(df.x) - 1).alias("sliced")).collect(),
+            [Row(sliced=[1, 2]), Row(sliced=[4])]
         )
 
     def test_array_repeat(self):
@@ -630,6 +641,23 @@ class FunctionsTests(ReusedSQLTestCase):
             "errMsg should be a Column or a str, got <class 'NoneType'>",
             str(cm.exception)
         )
+
+    def test_sum_distinct(self):
+        self.spark.range(10).select(
+            assert_true(sum_distinct(col("id")) == sumDistinct(col("id")))).collect()
+
+    def test_shiftleft(self):
+        self.spark.range(10).select(
+            assert_true(shiftLeft(col("id"), 2) == shiftleft(col("id"), 2))).collect()
+
+    def test_shiftright(self):
+        self.spark.range(10).select(
+            assert_true(shiftRight(col("id"), 2) == shiftright(col("id"), 2))).collect()
+
+    def test_shiftrightunsigned(self):
+        self.spark.range(10).select(
+            assert_true(
+                shiftRightUnsigned(col("id"), 2) == shiftrightunsigned(col("id"), 2))).collect()
 
 
 if __name__ == "__main__":

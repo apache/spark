@@ -21,9 +21,25 @@ import org.apache.spark.sql.{AnalysisException, ShowCreateTableSuite}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
+
+  private var origCreateHiveTableConfig = false
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    origCreateHiveTableConfig =
+      spark.conf.get(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
+    spark.conf.set(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.conf.set(
+      SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key,
+      origCreateHiveTableConfig)
+    super.afterAll()
+  }
 
   test("view") {
     Seq(true, false).foreach { serde =>

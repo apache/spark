@@ -29,6 +29,7 @@ import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaC
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaTokenUtil}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
@@ -70,7 +71,7 @@ private[kafka010] class InternalKafkaConsumer(
    *                          consumer polls nothing before timeout.
    */
   def fetch(offset: Long, pollTimeoutMs: Long):
-      (ju.List[ConsumerRecord[Array[Byte], Array[Byte]]], Long) = {
+      (ju.List[ConsumerRecord[Array[Byte], Array[Byte]]], Long, AvailableOffsetRange) = {
 
     // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
     seek(offset)
@@ -79,7 +80,8 @@ private[kafka010] class InternalKafkaConsumer(
     logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
     val offsetAfterPoll = consumer.position(topicPartition)
     logDebug(s"Offset changed from $offset to $offsetAfterPoll after polling")
-    val fetchedData = (r, offsetAfterPoll)
+    val range = getAvailableOffsetRange()
+    val fetchedData = (r, offsetAfterPoll, range)
     if (r.isEmpty) {
       // We cannot fetch anything after `poll`. Two possible cases:
       // - `offset` is out of range so that Kafka returns nothing. `OffsetOutOfRangeException` will
@@ -87,7 +89,6 @@ private[kafka010] class InternalKafkaConsumer(
       // - Cannot fetch any data before timeout. `TimeoutException` will be thrown.
       // - Fetched something but all of them are not invisible. This is a valid case and let the
       //   caller handles this.
-      val range = getAvailableOffsetRange()
       if (offset < range.earliest || offset >= range.latest) {
         throw new OffsetOutOfRangeException(
           Map(topicPartition -> java.lang.Long.valueOf(offset)).asJava)
@@ -141,18 +142,22 @@ private[kafka010] class InternalKafkaConsumer(
  *                                 should check if the pre-fetched data is still valid.
  * @param _offsetAfterPoll the Kafka offset after calling `poll`. We will use this offset to
  *                           poll when `records` is drained.
+ * @param _availableOffsetRange the available offset range in Kafka when polling the records.
  */
 private[consumer] case class FetchedData(
     private var _records: ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]],
     private var _nextOffsetInFetchedData: Long,
-    private var _offsetAfterPoll: Long) {
+    private var _offsetAfterPoll: Long,
+    private var _availableOffsetRange: AvailableOffsetRange) {
 
   def withNewPoll(
       records: ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]],
-      offsetAfterPoll: Long): FetchedData = {
+      offsetAfterPoll: Long,
+      availableOffsetRange: AvailableOffsetRange): FetchedData = {
     this._records = records
     this._nextOffsetInFetchedData = UNKNOWN_OFFSET
     this._offsetAfterPoll = offsetAfterPoll
+    this._availableOffsetRange = availableOffsetRange
     this
   }
 
@@ -179,6 +184,7 @@ private[consumer] case class FetchedData(
     _records = ju.Collections.emptyListIterator()
     _nextOffsetInFetchedData = UNKNOWN_OFFSET
     _offsetAfterPoll = UNKNOWN_OFFSET
+    _availableOffsetRange = AvailableOffsetRange(UNKNOWN_OFFSET, UNKNOWN_OFFSET)
   }
 
   /**
@@ -191,6 +197,13 @@ private[consumer] case class FetchedData(
    * Returns the next offset to poll after draining the pre-fetched records.
    */
   def offsetAfterPoll: Long = _offsetAfterPoll
+
+  /**
+   * Returns the tuple of earliest and latest offsets that is the available offset range when
+   * polling the records.
+   */
+  def availableOffsetRange: (Long, Long) =
+    (_availableOffsetRange.earliest, _availableOffsetRange.latest)
 }
 
 /**
@@ -225,6 +238,9 @@ private[kafka010] class KafkaDataConsumer(
     consumerPool: InternalKafkaConsumerPool,
     fetchedDataPool: FetchedDataPool) extends Logging {
   import KafkaDataConsumer._
+
+  private val isTokenProviderEnabled =
+    HadoopDelegationTokenManager.isServiceEnabled(SparkEnv.get.conf, "kafka")
 
   // Exposed for testing
   @volatile private[consumer] var _consumer: Option[InternalKafkaConsumer] = None
@@ -276,7 +292,7 @@ private[kafka010] class KafkaDataConsumer(
     val fetchedData = getOrRetrieveFetchedData(offset)
 
     logDebug(s"Get $groupId $topicPartition nextOffset ${fetchedData.nextOffsetInFetchedData} " +
-      "requested $offset")
+      s"requested $offset")
 
     // The following loop is basically for `failOnDataLoss = false`. When `failOnDataLoss` is
     // `false`, first, we will try to fetch the record at `offset`. If no such record exists, then
@@ -470,8 +486,8 @@ private[kafka010] class KafkaDataConsumer(
       // In general, Kafka uses the specified offset as the start point, and tries to fetch the next
       // available offset. Hence we need to handle offset mismatch.
       if (record.offset > offset) {
-        val range = consumer.getAvailableOffsetRange()
-        if (range.earliest <= offset) {
+        val (earliestOffset, _) = fetchedData.availableOffsetRange
+        if (earliestOffset <= offset) {
           // `offset` is still valid but the corresponding message is invisible. We should skip it
           // and jump to `record.offset`. Here we move `fetchedData` back so that the next call of
           // `fetchRecord` can just return `record` directly.
@@ -520,8 +536,8 @@ private[kafka010] class KafkaDataConsumer(
       fetchedData: FetchedData,
       offset: Long,
       pollTimeoutMs: Long): Unit = {
-    val (records, offsetAfterPoll) = consumer.fetch(offset, pollTimeoutMs)
-    fetchedData.withNewPoll(records.listIterator, offsetAfterPoll)
+    val (records, offsetAfterPoll, range) = consumer.fetch(offset, pollTimeoutMs)
+    fetchedData.withNewPoll(records.listIterator, offsetAfterPoll, range)
   }
 
   private[kafka010] def getOrRetrieveConsumer(): InternalKafkaConsumer = {
@@ -529,8 +545,8 @@ private[kafka010] class KafkaDataConsumer(
       retrieveConsumer()
     }
     require(_consumer.isDefined, "Consumer must be defined")
-    if (KafkaTokenUtil.needTokenUpdate(SparkEnv.get.conf, _consumer.get.kafkaParamsWithSecurity,
-        _consumer.get.clusterConfig)) {
+    if (isTokenProviderEnabled && KafkaTokenUtil.needTokenUpdate(
+        _consumer.get.kafkaParamsWithSecurity, _consumer.get.clusterConfig)) {
       logDebug("Cached consumer uses an old delegation token, invalidating.")
       releaseConsumer()
       consumerPool.invalidateKey(cacheKey)

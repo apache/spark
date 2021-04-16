@@ -26,7 +26,9 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class Person(id: Int, name: String, age: Int)
@@ -35,7 +37,8 @@ case class Salary(personId: Int, salary: Double)
 /**
  * Sql Resource Public API Unit Tests running query and extracting the metrics.
  */
-class SqlResourceWithActualMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
+class SqlResourceWithActualMetricsSuite
+  extends SharedSparkSession with SQLMetricsTestUtils with SQLHelper {
 
   import testImplicits._
 
@@ -52,8 +55,10 @@ class SqlResourceWithActualMetricsSuite extends SharedSparkSession with SQLMetri
 
   test("Check Sql Rest Api Endpoints") {
     // Materalize result DataFrame
-    val count = getDF().count()
-    assert(count == 2, s"Expected Query Count is 2 but received: $count")
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val count = getDF().count()
+      assert(count == 2, s"Expected Query Count is 2 but received: $count")
+    }
 
     // Spark apps launched by local-mode seems not having `attemptId` as default
     // so UT is just added for existing endpoints.

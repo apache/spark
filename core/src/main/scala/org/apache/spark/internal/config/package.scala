@@ -384,7 +384,7 @@ package object config {
         "get the replication level of the block to the initial number")
       .version("2.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val STORAGE_MEMORY_MAP_THRESHOLD =
     ConfigBuilder("spark.storage.memoryMapThreshold")
@@ -481,6 +481,24 @@ package object config {
       .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
       .createOptional
 
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.cleanUp")
+      .doc("If true, Spark cleans up its fallback storage data during shutting down.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxDiskSize")
+      .doc("Maximum disk space to use to store shuffle blocks before rejecting remote " +
+        "shuffle blocks. Rejecting remote shuffle blocks means that an executor will not receive " +
+        "any shuffle migrations, and if there are no other executors available for migration " +
+        "then shuffle blocks will be lost unless " +
+        s"${STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH.key} is configured.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createOptional
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")
@@ -499,12 +517,19 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
+  private[spark] val STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT =
+    ConfigBuilder("spark.storage.blockManagerMasterDriverHeartbeatTimeoutMs")
+      .doc("A timeout used for block manager master's driver heartbeat endpoint.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10m")
+
   private[spark] val STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT =
     ConfigBuilder("spark.storage.blockManagerHeartbeatTimeoutMs")
       .version("0.7.0")
       .withAlternative("spark.storage.blockManagerSlaveTimeoutMs")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
+      .createOptional
 
   private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
@@ -655,6 +680,16 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
 
+  private[spark] val SHUFFLE_SERVICE_NAME =
+    ConfigBuilder("spark.shuffle.service.name")
+      .doc("The configured name of the Spark shuffle service the client should communicate with. " +
+        "This must match the name used to configure the Shuffle within the YARN NodeManager " +
+        "configuration (`yarn.nodemanager.aux-services`). Only takes effect when " +
+        s"$SHUFFLE_SERVICE_ENABLED is set to true.")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefault("spark_shuffle")
+
   private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
     .version("3.0.0")
@@ -690,6 +725,18 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val YARN_KERBEROS_FILESYSTEM_RENEWAL_EXCLUDE =
+    ConfigBuilder("spark.yarn.kerberos.renewal.excludeHadoopFileSystems")
+      .doc("The list of Hadoop filesystem URLs whose hosts will be excluded from " +
+        "delegation token renewal at resource scheduler. Currently this is known to " +
+        "work under YARN, so YARN Resource Manager won't renew tokens for the application. " +
+        "Note that as resource scheduler does not renew token, so any application running " +
+        "longer than the original token expiration that tries to use that token will likely fail.")
+      .version("3.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .version("1.0.0")
@@ -799,6 +846,13 @@ package object config {
     ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
       .version("3.1.0")
       .withAlternative("spark.blacklist.killBlacklistedExecutors")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors.decommission")
+      .doc("Attempt decommission of excluded nodes instead of going directly to kill")
+      .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -1005,7 +1059,7 @@ package object config {
       .doc("When true, HadoopRDD/NewHadoopRDD will not create partitions for empty input splits.")
       .version("2.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SECRET_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.regex")
@@ -1015,7 +1069,7 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token".r)
+      .createWithDefault("(?i)secret|password|token|access[.]key".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -1666,6 +1720,13 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
+  private[spark] val IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED =
+    ConfigBuilder("spark.io.compression.zstd.bufferPool.enabled")
+      .doc("If true, enable buffer pool of ZSTD JNI library.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
     ConfigBuilder("spark.io.compression.zstd.level")
       .doc("Compression level for Zstd compression codec. Increasing the compression " +
@@ -1687,9 +1748,10 @@ package object config {
     ConfigBuilder("spark.eventLog.compression.codec")
       .doc("The codec used to compress event log. By default, Spark provides four codecs: " +
         "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
-        "the codec. If this is not given, spark.io.compression.codec will be used.")
+        "the codec.")
       .version("3.0.0")
-      .fallbackConf(IO_COMPRESSION_CODEC)
+      .stringConf
+      .createWithDefault("zstd")
 
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
@@ -1889,6 +1951,14 @@ package object config {
       .doubleConf
       .createWithDefault(0.75)
 
+  private[spark] val SPECULATION_MIN_THRESHOLD =
+    ConfigBuilder("spark.speculation.min.threshold")
+      .doc("Minimum amount of time a task runs before being considered for speculation. " +
+        "This can be used to avoid launching speculative copies of tasks that are very short.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(100)
+
   private[spark] val SPECULATION_TASK_DURATION_THRESHOLD =
     ConfigBuilder("spark.speculation.task.duration.threshold")
       .doc("Task duration after which scheduler would try to speculative run the task. If " +
@@ -1918,7 +1988,8 @@ package object config {
 
   private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
     ConfigBuilder("spark.executor.decommission.killInterval")
-      .doc("Duration after which a decommissioned executor will be killed forcefully." +
+      .doc("Duration after which a decommissioned executor will be killed forcefully " +
+        "*by an outside* (e.g. non-spark) service. " +
         "This config is useful for cloud environments where we know in advance when " +
         "an executor is going to go down after decommissioning signal i.e. around 2 mins " +
         "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
@@ -1926,6 +1997,22 @@ package object config {
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createOptional
+
+  private[spark] val EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT =
+    ConfigBuilder("spark.executor.decommission.forceKillTimeout")
+      .doc("Duration after which a Spark will force a decommissioning executor to exit." +
+        " this should be set to a high value in most situations as low values will prevent " +
+        " block migrations from having enough time to complete.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
+
+  private[spark] val EXECUTOR_DECOMMISSION_SIGNAL =
+    ConfigBuilder("spark.executor.decommission.signal")
+      .doc("The signal that used to trigger the executor to start decommission.")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefaultString("PWR")
 
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
@@ -2023,4 +2110,33 @@ package object config {
       .version("3.1.0")
       .doubleConf
       .createWithDefault(5)
+
+  private[spark] val SHUFFLE_NUM_PUSH_THREADS =
+    ConfigBuilder("spark.shuffle.push.numPushThreads")
+      .doc("Specify the number of threads in the block pusher pool. These threads assist " +
+        "in creating connections and pushing blocks to remote shuffle services. By default, the " +
+        "threadpool size is equal to the number of spark executor cores.")
+      .version("3.2.0")
+      .intConf
+      .createOptional
+
+  private[spark] val SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH =
+    ConfigBuilder("spark.shuffle.push.maxBlockSizeToPush")
+      .doc("The max size of an individual block to push to the remote shuffle services. Blocks " +
+       "larger than this threshold are not pushed to be merged remotely. These shuffle blocks " +
+       "will be fetched by the executors in the original manner.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1m")
+
+  private[spark] val SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH =
+    ConfigBuilder("spark.shuffle.push.maxBlockBatchSize")
+      .doc("The max size of a batch of shuffle blocks to be grouped into a single push request.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      // Default is 3m because it is greater than 2m which is the default value for
+      // TransportConf#memoryMapBytes. If this defaults to 2m as well it is very likely that each
+      // batch of block will be loaded in memory with memory mapping, which has higher overhead
+      // with small MB sized chunk of data.
+      .createWithDefaultString("3m")
 }

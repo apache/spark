@@ -50,7 +50,7 @@ ANALYZE TABLE table_identifier [ partition_spec ]
      * If no analyze option is specified, `ANALYZE TABLE` collects the table's number of rows and size in bytes.
      * **NOSCAN**
 
-       Collects only the table's size in bytes ( which does not require scanning the entire table ).
+       Collects only the table's size in bytes (which does not require scanning the entire table).
      * **FOR COLUMNS col [ , ... ] `|` FOR ALL COLUMNS**
 
        Collects column statistics for each column specified, or alternatively for every column, as well as table statistics.
@@ -122,3 +122,7 @@ DESC EXTENDED students name;
 |     histogram|      NULL|
 +--------------+----------+
 ```
+
+### Related Statements
+
+* [ANALYZE TABLES](sql-ref-syntax-aux-analyze-tables.html)

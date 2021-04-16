@@ -320,7 +320,7 @@ select extract(not_supported from c) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the string type.;; line 1 pos 7
+Literals of type 'not_supported' are currently not supported for the string type.; line 1 pos 7
 
 
 -- !query
@@ -329,7 +329,7 @@ select extract(not_supported from i) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the interval type.;; line 1 pos 7
+Literals of type 'not_supported' are currently not supported for the interval type.; line 1 pos 7
 
 
 -- !query
@@ -642,7 +642,7 @@ select date_part('not_supported', c) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the string type.;; line 1 pos 7
+Literals of type 'not_supported' are currently not supported for the string type.; line 1 pos 7
 
 
 -- !query
@@ -651,7 +651,7 @@ select date_part(c, c) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The field parameter needs to be a foldable string value.;; line 1 pos 7
+The field parameter needs to be a foldable string value.; line 1 pos 7
 
 
 -- !query
@@ -668,7 +668,7 @@ select date_part(i, i) from t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The field parameter needs to be a foldable string value.;; line 1 pos 7
+The field parameter needs to be a foldable string value.; line 1 pos 7
 
 
 -- !query
@@ -778,7 +778,7 @@ struct<extract(second FROM c):decimal(8,6)>
 -- !query
 select c - i from t
 -- !query schema
-struct<CAST(c - i AS STRING):string>
+struct<c - i:string>
 -- !query output
 1999-08-05 14:18:02.334456
 
@@ -786,7 +786,7 @@ struct<CAST(c - i AS STRING):string>
 -- !query
 select year(c - i) from t
 -- !query schema
-struct<year(CAST(CAST(c - i AS STRING) AS DATE)):int>
+struct<year(c - i):int>
 -- !query output
 1999
 
@@ -794,7 +794,7 @@ struct<year(CAST(CAST(c - i AS STRING) AS DATE)):int>
 -- !query
 select extract(year from c - i) from t
 -- !query schema
-struct<extract(year FROM CAST(c - i AS STRING)):int>
+struct<extract(year FROM c - i):int>
 -- !query output
 1999
 
@@ -802,6 +802,6 @@ struct<extract(year FROM CAST(c - i AS STRING)):int>
 -- !query
 select extract(month from to_timestamp(c) - i) from t
 -- !query schema
-struct<extract(month FROM CAST(to_timestamp(c) - i AS TIMESTAMP)):int>
+struct<extract(month FROM to_timestamp(c) - i):int>
 -- !query output
 8

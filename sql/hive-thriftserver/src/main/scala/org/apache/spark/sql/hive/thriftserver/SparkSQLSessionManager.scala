@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session.SessionManager
@@ -73,12 +75,12 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
       sessionHandle
     } catch {
-      case e: Exception =>
+      case NonFatal(e) =>
         try {
           closeSession(sessionHandle)
         } catch {
-          case t: Throwable =>
-            logWarning("Error closing session", t)
+          case NonFatal(inner) =>
+            logWarning("Error closing session", inner)
         }
         throw new HiveSQLException("Failed to open new session: " + e, e)
     }

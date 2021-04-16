@@ -16,8 +16,10 @@
 #
 
 import tempfile
+import math
 import unittest
 
+import numpy as np
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml import Estimator, Pipeline, Model
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel, OneVsRest
@@ -26,9 +28,10 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import CrossValidator, CrossValidatorModel, ParamGridBuilder, \
-    TrainValidationSplit, TrainValidationSplitModel
+    TrainValidationSplit, TrainValidationSplitModel, ParamRandomBuilder
 from pyspark.sql.functions import rand
-from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.mlutils import DummyEvaluator, DummyLogisticRegression, \
+    DummyLogisticRegressionModel, SparkSessionTestCase
 
 
 class HasInducedError(Params):
@@ -62,6 +65,108 @@ class InducedErrorEstimator(Estimator, HasInducedError):
         model = InducedErrorModel()
         self._copyValues(model)
         return model
+
+
+class DummyParams(Params):
+
+    def __init__(self):
+        super(DummyParams, self).__init__()
+        self.test_param = Param(self, "test_param", "dummy parameter for testing")
+        self.another_test_param = Param(self, "another_test_param", "second parameter for testing")
+
+
+class ParamRandomBuilderTests(unittest.TestCase):
+
+    def __init__(self, methodName):
+        super(ParamRandomBuilderTests, self).__init__(methodName=methodName)
+        self.dummy_params = DummyParams()
+        self.to_test = ParamRandomBuilder()
+        self.n = 100
+
+    def check_ranges(self, params, lowest, highest, expected_type):
+        self.assertEqual(self.n, len(params))
+        for param in params:
+            for v in param.values():
+                self.assertGreaterEqual(v, lowest)
+                self.assertLessEqual(v, highest)
+                self.assertEqual(type(v), expected_type)
+
+    def check_addRandom_ranges(self, x, y, expected_type):
+        params = self.to_test.addRandom(self.dummy_params.test_param, x, y, self.n).build()
+        self.check_ranges(params, x, y, expected_type)
+
+    def check_addLog10Random_ranges(self, x, y, expected_type):
+        params = self.to_test.addLog10Random(self.dummy_params.test_param, x, y, self.n).build()
+        self.check_ranges(params, x, y, expected_type)
+
+    @staticmethod
+    def counts(xs):
+        key_to_count = {}
+        for v in xs:
+            k = int(v)
+            if key_to_count.get(k) is None:
+                key_to_count[k] = 1
+            else:
+                key_to_count[k] = key_to_count[k] + 1
+        return key_to_count
+
+    @staticmethod
+    def raw_values_of(params):
+        values = []
+        for param in params:
+            for v in param.values():
+                values.append(v)
+        return values
+
+    def check_even_distribution(self, vs, bin_function):
+        binned = map(lambda x: bin_function(x), vs)
+        histogram = self.counts(binned)
+        values = list(histogram.values())
+        sd = np.std(values)
+        mu = np.mean(values)
+        for k, v in histogram.items():
+            self.assertLess(abs(v - mu), 5 * sd, "{} values for bucket {} is unlikely "
+                                                 "when the mean is {} and standard deviation {}"
+                            .format(v, k, mu, sd))
+
+    def test_distribution(self):
+        params = self.to_test.addRandom(self.dummy_params.test_param, 0, 20000, 10000).build()
+        values = self.raw_values_of(params)
+        self.check_even_distribution(values, lambda x: x // 1000)
+
+    def test_logarithmic_distribution(self):
+        params = self.to_test.addLog10Random(self.dummy_params.test_param, 1, 1e10, 10000).build()
+        values = self.raw_values_of(params)
+        self.check_even_distribution(values, lambda x: math.log10(x))
+
+    def test_param_cardinality(self):
+        num_random_params = 7
+        values = [1, 2, 3]
+        self.to_test.addRandom(self.dummy_params.test_param, 1, 10, num_random_params)
+        self.to_test.addGrid(self.dummy_params.another_test_param, values)
+        self.assertEqual(len(self.to_test.build()), num_random_params * len(values))
+
+    def test_add_random_integer_logarithmic_range(self):
+        self.check_addLog10Random_ranges(100, 200, int)
+
+    def test_add_logarithmic_random_float_and_integer_yields_floats(self):
+        self.check_addLog10Random_ranges(100, 200., float)
+
+    def test_add_random_float_logarithmic_range(self):
+        self.check_addLog10Random_ranges(100., 200., float)
+
+    def test_add_random_integer_range(self):
+        self.check_addRandom_ranges(100, 200, int)
+
+    def test_add_random_float_and_integer_yields_floats(self):
+        self.check_addRandom_ranges(100, 200., float)
+
+    def test_add_random_float_range(self):
+        self.check_addRandom_ranges(100., 200., float)
+
+    def test_unexpected_type(self):
+        with self.assertRaises(TypeError):
+            self.to_test.addRandom(self.dummy_params.test_param, 1, "wrong type", 1).build()
 
 
 class ParamGridBuilderTests(SparkSessionTestCase):
@@ -201,7 +306,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             for v in param.values():
                 assert(type(v) == float)
 
-    def test_save_load_trained_model(self):
+    def _run_test_save_load_trained_model(self, LogisticRegressionCls, LogisticRegressionModelCls):
         # This tests saving and loading the trained model only.
         # Save/load for CrossValidator will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
@@ -212,7 +317,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
              (Vectors.dense([0.6]), 1.0),
              (Vectors.dense([1.0]), 1.0)] * 10,
             ["features", "label"])
-        lr = LogisticRegression()
+        lr = LogisticRegressionCls()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
         cv = CrossValidator(
@@ -228,7 +333,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
 
         lrModelPath = temp_path + "/lrModel"
         lrModel.save(lrModelPath)
-        loadedLrModel = LogisticRegressionModel.load(lrModelPath)
+        loadedLrModel = LogisticRegressionModelCls.load(lrModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
@@ -248,7 +353,12 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             loadedCvModel.isSet(param) for param in loadedCvModel.params
         ))
 
-    def test_save_load_simple_estimator(self):
+    def test_save_load_trained_model(self):
+        self._run_test_save_load_trained_model(LogisticRegression, LogisticRegressionModel)
+        self._run_test_save_load_trained_model(DummyLogisticRegression,
+                                               DummyLogisticRegressionModel)
+
+    def _run_test_save_load_simple_estimator(self, LogisticRegressionCls, evaluatorCls):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
             [(Vectors.dense([0.0]), 0.0),
@@ -258,9 +368,9 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
              (Vectors.dense([1.0]), 1.0)] * 10,
             ["features", "label"])
 
-        lr = LogisticRegression()
+        lr = LogisticRegressionCls()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
-        evaluator = BinaryClassificationEvaluator()
+        evaluator = evaluatorCls()
 
         # test save/load of CrossValidator
         cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
@@ -277,6 +387,12 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         cvModel.save(cvModelPath)
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+
+    def test_save_load_simple_estimator(self):
+        self._run_test_save_load_simple_estimator(
+            LogisticRegression, BinaryClassificationEvaluator)
+        self._run_test_save_load_simple_estimator(
+            DummyLogisticRegression, DummyEvaluator)
 
     def test_parallel_evaluation(self):
         dataset = self.spark.createDataFrame(
@@ -343,7 +459,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             for j in range(len(grid)):
                 self.assertEqual(cvModel.subModels[i][j].uid, cvModel3.subModels[i][j].uid)
 
-    def test_save_load_nested_estimator(self):
+    def _run_test_save_load_nested_estimator(self, LogisticRegressionCls):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
             [(Vectors.dense([0.0]), 0.0),
@@ -353,9 +469,9 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
              (Vectors.dense([1.0]), 1.0)] * 10,
             ["features", "label"])
 
-        ova = OneVsRest(classifier=LogisticRegression())
-        lr1 = LogisticRegression().setMaxIter(100)
-        lr2 = LogisticRegression().setMaxIter(150)
+        ova = OneVsRest(classifier=LogisticRegressionCls())
+        lr1 = LogisticRegressionCls().setMaxIter(100)
+        lr2 = LogisticRegressionCls().setMaxIter(150)
         grid = ParamGridBuilder().addGrid(ova.classifier, [lr1, lr2]).build()
         evaluator = MulticlassClassificationEvaluator()
 
@@ -385,7 +501,11 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         self.assert_param_maps_equal(loadedModel.getEstimatorParamMaps(), grid)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
-    def test_save_load_pipeline_estimator(self):
+    def test_save_load_nested_estimator(self):
+        self._run_test_save_load_nested_estimator(LogisticRegression)
+        self._run_test_save_load_nested_estimator(DummyLogisticRegression)
+
+    def _run_test_save_load_pipeline_estimator(self, LogisticRegressionCls):
         temp_path = tempfile.mkdtemp()
         training = self.spark.createDataFrame([
             (0, "a b c d e spark", 1.0),
@@ -402,9 +522,9 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         tokenizer = Tokenizer(inputCol="text", outputCol="words")
         hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
 
-        ova = OneVsRest(classifier=LogisticRegression())
-        lr1 = LogisticRegression().setMaxIter(5)
-        lr2 = LogisticRegression().setMaxIter(10)
+        ova = OneVsRest(classifier=LogisticRegressionCls())
+        lr1 = LogisticRegressionCls().setMaxIter(5)
+        lr2 = LogisticRegressionCls().setMaxIter(10)
 
         pipeline = Pipeline(stages=[tokenizer, hashingTF, ova])
 
@@ -463,6 +583,10 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         for loadedStage, originalStage in zip(loaded_nested_pipeline_model.stages,
                                               original_nested_pipeline_model.stages):
             self.assertEqual(loadedStage.uid, originalStage.uid)
+
+    def test_save_load_pipeline_estimator(self):
+        self._run_test_save_load_pipeline_estimator(LogisticRegression)
+        self._run_test_save_load_pipeline_estimator(DummyLogisticRegression)
 
     def test_user_specified_folds(self):
         from pyspark.sql import functions as F
@@ -593,7 +717,7 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
                          "validationMetrics has the same size of grid parameter")
         self.assertEqual(1.0, max(validationMetrics))
 
-    def test_save_load_trained_model(self):
+    def _run_test_save_load_trained_model(self, LogisticRegressionCls, LogisticRegressionModelCls):
         # This tests saving and loading the trained model only.
         # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
@@ -604,7 +728,7 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
              (Vectors.dense([0.6]), 1.0),
              (Vectors.dense([1.0]), 1.0)] * 10,
             ["features", "label"])
-        lr = LogisticRegression()
+        lr = LogisticRegressionCls()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
         tvs = TrainValidationSplit(
@@ -619,7 +743,7 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
 
         lrModelPath = temp_path + "/lrModel"
         lrModel.save(lrModelPath)
-        loadedLrModel = LogisticRegressionModel.load(lrModelPath)
+        loadedLrModel = LogisticRegressionModelCls.load(lrModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
@@ -636,7 +760,12 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             loadedTvsModel.isSet(param) for param in loadedTvsModel.params
         ))
 
-    def test_save_load_simple_estimator(self):
+    def test_save_load_trained_model(self):
+        self._run_test_save_load_trained_model(LogisticRegression, LogisticRegressionModel)
+        self._run_test_save_load_trained_model(DummyLogisticRegression,
+                                               DummyLogisticRegressionModel)
+
+    def _run_test_save_load_simple_estimator(self, LogisticRegressionCls, evaluatorCls):
         # This tests saving and loading the trained model only.
         # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
@@ -647,9 +776,9 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
              (Vectors.dense([0.6]), 1.0),
              (Vectors.dense([1.0]), 1.0)] * 10,
             ["features", "label"])
-        lr = LogisticRegression()
+        lr = LogisticRegressionCls()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
-        evaluator = BinaryClassificationEvaluator()
+        evaluator = evaluatorCls()
         tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         tvsModel = tvs.fit(dataset)
 
@@ -665,6 +794,12 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+
+    def test_save_load_simple_estimator(self):
+        self._run_test_save_load_simple_estimator(
+            LogisticRegression, BinaryClassificationEvaluator)
+        self._run_test_save_load_simple_estimator(
+            DummyLogisticRegression, DummyEvaluator)
 
     def test_parallel_evaluation(self):
         dataset = self.spark.createDataFrame(
@@ -718,7 +853,7 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         for i in range(len(grid)):
             self.assertEqual(tvsModel.subModels[i].uid, tvsModel3.subModels[i].uid)
 
-    def test_save_load_nested_estimator(self):
+    def _run_test_save_load_nested_estimator(self, LogisticRegressionCls):
         # This tests saving and loading the trained model only.
         # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
@@ -729,9 +864,9 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
              (Vectors.dense([0.6]), 1.0),
              (Vectors.dense([1.0]), 1.0)] * 10,
             ["features", "label"])
-        ova = OneVsRest(classifier=LogisticRegression())
-        lr1 = LogisticRegression().setMaxIter(100)
-        lr2 = LogisticRegression().setMaxIter(150)
+        ova = OneVsRest(classifier=LogisticRegressionCls())
+        lr1 = LogisticRegressionCls().setMaxIter(100)
+        lr2 = LogisticRegressionCls().setMaxIter(150)
         grid = ParamGridBuilder().addGrid(ova.classifier, [lr1, lr2]).build()
         evaluator = MulticlassClassificationEvaluator()
 
@@ -759,7 +894,11 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         self.assert_param_maps_equal(loadedModel.getEstimatorParamMaps(), grid)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
 
-    def test_save_load_pipeline_estimator(self):
+    def test_save_load_nested_estimator(self):
+        self._run_test_save_load_nested_estimator(LogisticRegression)
+        self._run_test_save_load_nested_estimator(DummyLogisticRegression)
+
+    def _run_test_save_load_pipeline_estimator(self, LogisticRegressionCls):
         temp_path = tempfile.mkdtemp()
         training = self.spark.createDataFrame([
             (0, "a b c d e spark", 1.0),
@@ -776,9 +915,9 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         tokenizer = Tokenizer(inputCol="text", outputCol="words")
         hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
 
-        ova = OneVsRest(classifier=LogisticRegression())
-        lr1 = LogisticRegression().setMaxIter(5)
-        lr2 = LogisticRegression().setMaxIter(10)
+        ova = OneVsRest(classifier=LogisticRegressionCls())
+        lr1 = LogisticRegressionCls().setMaxIter(5)
+        lr2 = LogisticRegressionCls().setMaxIter(10)
 
         pipeline = Pipeline(stages=[tokenizer, hashingTF, ova])
 
@@ -835,6 +974,10 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         for loadedStage, originalStage in zip(loaded_nested_pipeline_model.stages,
                                               original_nested_pipeline_model.stages):
             self.assertEqual(loadedStage.uid, originalStage.uid)
+
+    def test_save_load_pipeline_estimator(self):
+        self._run_test_save_load_pipeline_estimator(LogisticRegression)
+        self._run_test_save_load_pipeline_estimator(DummyLogisticRegression)
 
     def test_copy(self):
         dataset = self.spark.createDataFrame([

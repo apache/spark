@@ -23,4 +23,13 @@
       <value>true</value>
       <description>Internal marker for test.</description>
   </property>
+  <property>
+    <name>hadoop.tmp.dir</name>
+    <value>/tmp/hive_one</value>
+    <description>default is /tmp/hadoop-${user.name} and will be overridden </description>
+  </property>
+  <property>
+    <name>hadoop.this.is.a.test.key</name>
+    <value>2018-11-17 13:33:33.333</value>
+  </property>
 </configuration>

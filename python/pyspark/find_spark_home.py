@@ -36,7 +36,7 @@ def _find_spark_home():
                 (os.path.isdir(os.path.join(path, "jars")) or
                  os.path.isdir(os.path.join(path, "assembly"))))
 
-    # Spark distribution can be downloaded when HADOOP_VERSION environment variable is set.
+    # Spark distribution can be downloaded when PYSPARK_HADOOP_VERSION environment variable is set.
     # We should look up this directory first, see also SPARK-32017.
     spark_dist_dir = "spark-distribution"
     paths = [

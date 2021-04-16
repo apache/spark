@@ -223,7 +223,7 @@ Table or view not found: outermost; line 4 pos 23
 
 
 -- !query
-CREATE TABLE withz USING parquet AS SELECT i AS k, CAST(i || ' v' AS string) v FROM (SELECT EXPLODE(SEQUENCE(1, 16, 3)) i)
+CREATE TABLE withz USING parquet AS SELECT i AS k, CAST(i AS string) || ' v' AS v FROM (SELECT EXPLODE(SEQUENCE(1, 16, 3)) i)
 -- !query schema
 struct<>
 -- !query output
@@ -385,7 +385,7 @@ WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: test;
+Table not found: test; line 1 pos 37
 
 
 -- !query

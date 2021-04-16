@@ -40,9 +40,9 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
@@ -130,11 +130,11 @@ class TestHiveContext(
    * when running in the JVM, i.e. it needs to be false when calling from Python.
    */
   def this(sc: SparkContext, loadTestTables: Boolean = true) = {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
+    this(new TestHiveSparkSession(TestHiveContext.withHiveExternalCatalog(sc), loadTestTables))
   }
 
   def this(sc: SparkContext, hiveClient: HiveClient) = {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc),
+    this(new TestHiveSparkSession(TestHiveContext.withHiveExternalCatalog(sc),
       hiveClient,
       loadTestTables = false))
   }
@@ -223,7 +223,7 @@ private[hive] class TestHiveSparkSession(
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestHiveSessionStateBuilder(this, parentSessionState, Map.empty).build()
+    new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
   lazy val metadataHive: HiveClient = {
@@ -327,20 +327,22 @@ private[hive] class TestHiveSparkSession(
   }
 
   if (loadTestTables) {
+    def createTableSQL(tblName: String): String = {
+      s"CREATE TABLE $tblName (key INT, value STRING) STORED AS textfile"
+    }
     // The test tables that are defined in the Hive QTestUtil.
     // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
     // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
     @transient
     val hiveQTestUtilTables: Seq[TestTable] = Seq(
       TestTable("src",
-        "CREATE TABLE src (key INT, value STRING) STORED AS TEXTFILE".cmd,
+        createTableSQL("src").cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
       TestTable("src1",
-        "CREATE TABLE src1 (key INT, value STRING) STORED AS TEXTFILE".cmd,
+        createTableSQL("src1").cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
       TestTable("srcpart", () => {
-        "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)"
-          .cmd.apply()
+        s"${createTableSQL("srcpart")} PARTITIONED BY (ds STRING, hr STRING)".cmd.apply()
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
           s"""
              |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'
@@ -349,8 +351,7 @@ private[hive] class TestHiveSparkSession(
         }
       }),
       TestTable("srcpart1", () => {
-        "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)"
-          .cmd.apply()
+        s"${createTableSQL("srcpart1")} PARTITIONED BY (ds STRING, hr INT)".cmd.apply()
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
           s"""
              |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'
@@ -595,15 +596,13 @@ private[hive] class TestHiveQueryExecution(
   }
 
   override lazy val analyzed: LogicalPlan = sparkSession.withActive {
-    val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _, _) => tbl.asTableIdentifier :: Nil
-      case _ => Nil
-    }
-
     // Make sure any test tables referenced are loaded.
-    val referencedTables =
-      describedTables ++
-        logical.collect { case UnresolvedRelation(ident, _, _) => ident.asTableIdentifier }
+    val referencedTables = logical.collect {
+      case UnresolvedRelation(ident, _, _) =>
+        if (ident.length > 1 && ident.head.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
+          ident.tail.asTableIdentifier
+        } else ident.asTableIdentifier
+    }
     val resolver = sparkSession.sessionState.conf.resolver
     val referencedTestTables = referencedTables.flatMap { tbl =>
       val testTableOpt = sparkSession.testTables.keys.find(resolver(_, tbl.table))
@@ -648,13 +647,16 @@ private[hive] object TestHiveContext {
     scratchDir
   }
 
+  private def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
+    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+    sc
+  }
 }
 
 private[sql] class TestHiveSessionStateBuilder(
     session: SparkSession,
-    state: Option[SessionState],
-    options: Map[String, String])
-  extends HiveSessionStateBuilder(session, state, options)
+    state: Option[SessionState])
+  extends HiveSessionStateBuilder(session, state)
   with WithTestConf {
 
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
@@ -663,7 +665,7 @@ private[sql] class TestHiveSessionStateBuilder(
     new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
   }
 
-  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _, Map.empty)
+  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }
 
 private[hive] object HiveTestJars {
@@ -682,7 +684,7 @@ private[hive] object HiveTestJars {
     val fileName = urlString.split("/").last
     val targetFile = new File(hiveTestJarsDir, fileName)
     if (!targetFile.exists()) {
-      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null, null)
+      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null)
     }
     targetFile
   }

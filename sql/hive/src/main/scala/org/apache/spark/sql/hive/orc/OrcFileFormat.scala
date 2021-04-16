@@ -32,12 +32,14 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
+import org.apache.hadoop.hive.serde2.objectinspector
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.orc.OrcConf
 import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.{SPARK_VERSION_SHORT, TaskContext}
@@ -323,13 +325,19 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     val deserializer = new OrcSerde
     val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
     val unsafeProjection = UnsafeProjection.create(requiredSchema)
+    val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
 
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
       val (fieldRefs, fieldOrdinals) = requiredSchema.zipWithIndex.map {
         case (field, ordinal) =>
-          var ref = oi.getStructFieldRef(field.name)
-          if (ref == null) {
-            ref = oi.getStructFieldRef("_col" + dataSchema.fieldIndex(field.name))
+          var ref: objectinspector.StructField = null
+          if (forcePositionalEvolution) {
+            ref = oi.getAllStructFieldRefs.get(dataSchema.fieldIndex(field.name))
+          } else {
+            ref = oi.getStructFieldRef(field.name)
+            if (ref == null) {
+              ref = oi.getStructFieldRef("_col" + dataSchema.fieldIndex(field.name))
+            }
           }
           ref -> ordinal
       }.unzip

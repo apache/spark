@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
@@ -67,6 +68,9 @@ object FileFormatWriter extends Logging {
            |}""".stripMargin
       })
     }
+
+    override protected def withNewChildInternal(newChild: Expression): Empty2Null =
+      copy(child = newChild)
   }
 
   /**
@@ -164,7 +168,7 @@ object FileFormatWriter extends Logging {
 
     SQLExecution.checkSQLExecutionId(sparkSession)
 
-    // propagate the decription UUID into the jobs, so that committers
+    // propagate the description UUID into the jobs, so that committers
     // get an ID guaranteed to be unique.
     job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
 
@@ -217,8 +221,9 @@ object FileFormatWriter extends Logging {
 
       val commitMsgs = ret.map(_.commitMsg)
 
-      committer.commitJob(job, commitMsgs)
-      logInfo(s"Write Job ${description.uuid} committed.")
+      logInfo(s"Start to commit write Job ${description.uuid}.")
+      val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
+      logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
       processStats(description.statsTrackers, ret.map(_.summary.stats))
       logInfo(s"Finished processing stats for write job ${description.uuid}.")
@@ -228,7 +233,7 @@ object FileFormatWriter extends Logging {
     } catch { case cause: Throwable =>
       logError(s"Aborting job ${description.uuid}.", cause)
       committer.abortJob(job)
-      throw new SparkException("Job aborted.", cause)
+      throw QueryExecutionErrors.jobAbortedError(cause)
     }
   }
 
@@ -293,7 +298,7 @@ object FileFormatWriter extends Logging {
         // We throw the exception and let Executor throw ExceptionFailure to abort the job.
         throw new TaskOutputFileAlreadyExistException(f)
       case t: Throwable =>
-        throw new SparkException("Task failed while writing rows.", t)
+        throw QueryExecutionErrors.taskFailedWhileWritingRowsError(t)
     }
   }
 

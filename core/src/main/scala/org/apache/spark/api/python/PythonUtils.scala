@@ -27,7 +27,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 
 private[spark] object PythonUtils {
-  val PY4J_ZIP_NAME = "py4j-0.10.9-src.zip"
+  val PY4J_ZIP_NAME = "py4j-0.10.9.2-src.zip"
 
   /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
   def sparkPythonPath: String = {
@@ -88,5 +88,9 @@ private[spark] object PythonUtils {
 
   def getPythonAuthSocketTimeout(sc: JavaSparkContext): Long = {
     sc.conf.get(org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT)
+  }
+
+  def getSparkBufferSize(sc: JavaSparkContext): Int = {
+    sc.conf.get(org.apache.spark.internal.config.BUFFER_SIZE)
   }
 }

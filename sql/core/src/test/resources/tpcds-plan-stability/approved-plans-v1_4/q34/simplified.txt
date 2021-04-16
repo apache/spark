@@ -17,10 +17,12 @@ WholeStageCodegen (7)
                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
                                   Project [ss_customer_sk,ss_hdemo_sk,ss_store_sk,ss_ticket_number]
                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                      Filter [ss_sold_date_sk,ss_store_sk,ss_hdemo_sk,ss_customer_sk]
+                                      Filter [ss_store_sk,ss_hdemo_sk,ss_customer_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.store_sales [ss_sold_date_sk,ss_customer_sk,ss_hdemo_sk,ss_store_sk,ss_ticket_number]
+                                            Scan parquet default.store_sales [ss_customer_sk,ss_hdemo_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]
+                                              SubqueryBroadcast [d_date_sk] #1
+                                                ReusedExchange [d_date_sk] #3
                                       InputAdapter
                                         BroadcastExchange #3
                                           WholeStageCodegen (1)
@@ -41,7 +43,7 @@ WholeStageCodegen (7)
                                 BroadcastExchange #5
                                   WholeStageCodegen (3)
                                     Project [hd_demo_sk]
-                                      Filter [hd_vehicle_count,hd_buy_potential,hd_dep_count,hd_demo_sk]
+                                      Filter [hd_vehicle_count,hd_dep_count,hd_buy_potential,hd_demo_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.household_demographics [hd_demo_sk,hd_buy_potential,hd_dep_count,hd_vehicle_count]

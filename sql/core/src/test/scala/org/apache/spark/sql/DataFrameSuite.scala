@@ -18,9 +18,10 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, File}
+import java.lang.{Long => JLong}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.util.UUID
+import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.runtime.universe.TypeTag
@@ -36,10 +37,12 @@ import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -132,7 +135,7 @@ class DataFrameSuite extends QueryTest
       df2
         .select('_1 as 'letter, 'number)
         .groupBy('letter)
-        .agg(countDistinct('number)),
+        .agg(count_distinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
   }
@@ -512,7 +515,7 @@ class DataFrameSuite extends QueryTest
         Row(5, false)))
 
     checkAnswer(
-      testData2.select(sumDistinct($"a")),
+      testData2.select(sum_distinct($"a")),
       Row(6))
   }
 
@@ -606,7 +609,7 @@ class DataFrameSuite extends QueryTest
     val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
     df.sparkSession.udf.register("simpleUDF", (v: Int) => v * v)
     checkAnswer(
-      df.select($"id", callUDF("simpleUDF", $"value")),
+      df.select($"id", callUDF("simpleUDF", $"value")), // test deprecated one
       Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
@@ -804,7 +807,7 @@ class DataFrameSuite extends QueryTest
     assert(df2.drop("`a.b`").columns.size == 2)
   }
 
-  test("drop(name: String) search and drop all top level columns that matchs the name") {
+  test("drop(name: String) search and drop all top level columns that matches the name") {
     val df1 = Seq((1, 2)).toDF("a", "b")
     val df2 = Seq((3, 4)).toDF("a", "b")
     checkAnswer(df1.crossJoin(df2), Row(1, 2, 3, 4))
@@ -828,6 +831,15 @@ class DataFrameSuite extends QueryTest
     ("Alice", 32, 164),
     ("David", 60, 192),
     ("Amy", 24, 180)).toDF("name", "age", "height")
+
+  private lazy val person3: DataFrame = Seq(
+    ("Luis", 1, 99),
+    ("Luis", 16, 99),
+    ("Luis", 16, 176),
+    ("Fernando", 32, 99),
+    ("Fernando", 32, 164),
+    ("David", 60, 99),
+    ("Amy", 24, 99)).toDF("name", "age", "height")
 
   test("describe") {
     val describeResult = Seq(
@@ -918,6 +930,25 @@ class DataFrameSuite extends QueryTest
     val emptyDescription = person2.limit(0).summary()
     assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptySummaryResult)
+  }
+
+  test("SPARK-34165: Add count_distinct to summary") {
+    val summaryDF = person3.summary("count", "count_distinct")
+
+    val summaryResult = Seq(
+      Row("count", "7", "7", "7"),
+      Row("count_distinct", "4", "5", "3"))
+
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
+    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
+    checkAnswer(summaryDF, summaryResult)
+
+    val approxSummaryDF = person3.summary("count", "approx_count_distinct")
+    val approxSummaryResult = Seq(
+      Row("count", "7", "7", "7"),
+      Row("approx_count_distinct", "4", "5", "3"))
+    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
+    checkAnswer(approxSummaryDF, approxSummaryResult)
   }
 
   test("summary advanced") {
@@ -1232,6 +1263,99 @@ class DataFrameSuite extends QueryTest
                          " _1  | 2   \n" +
                          " _2  | 2   \n"
     assert(df.showString(10, vertical = true) === expectedAnswer)
+  }
+
+  test("SPARK-33690: showString: escape meta-characters") {
+    val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
+    assert(df1.showString(1, truncate = 0) ===
+      """+--------------------------------------+
+        ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
+        |+--------------------------------------+
+        ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
+        |+--------------------------------------+
+        |""".stripMargin)
+
+    val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    assert(df2.showString(1, truncate = 0) ===
+      """+---------------------------------------------+
+        ||array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+        |+---------------------------------------------+
+        ||[aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh]     |
+        |+---------------------------------------------+
+        |""".stripMargin)
+
+    val df3 =
+      spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    assert(df3.showString(1, truncate = 0) ===
+      """+----------------------------------------------------------+
+        ||map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+        |+----------------------------------------------------------+
+        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh} |
+        |+----------------------------------------------------------+
+        |""".stripMargin)
+
+    val df4 =
+      spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    assert(df4.showString(1, truncate = 0) ===
+      """+-------------------------------------------------------+
+        ||named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+        |+-------------------------------------------------------+
+        ||{aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}               |
+        |+-------------------------------------------------------+
+        |""".stripMargin)
+  }
+
+  test("SPARK-34308: printSchema: escape meta-characters") {
+    val captured = new ByteArrayOutputStream()
+
+    val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
+    Console.withOut(captured) {
+      df1.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh: string (nullable = false)
+        |
+        |""".stripMargin)
+    captured.reset()
+
+    val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    Console.withOut(captured) {
+      df2.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): array (nullable = false)
+        | |    |-- element: string (containsNull = false)
+        |
+        |""".stripMargin)
+    captured.reset()
+
+    val df3 =
+      spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    Console.withOut(captured) {
+      df3.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): map (nullable = false)
+        | |    |-- key: string
+        | |    |-- value: string (valueContainsNull = false)
+        |
+        |""".stripMargin)
+    captured.reset()
+
+    val df4 =
+      spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    Console.withOut(captured) {
+      df4.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): struct (nullable = false)
+        | |    |-- v: string (nullable = false)
+        |
+        |""".stripMargin)
   }
 
   test("SPARK-7319 showString") {
@@ -2429,7 +2553,7 @@ class DataFrameSuite extends QueryTest
     val err = intercept[AnalysisException] {
       df.groupBy($"d", $"b").as[GroupByKey, Row]
     }
-    assert(err.getMessage.contains("cannot resolve '`d`'"))
+    assert(err.getMessage.contains("cannot resolve 'd'"))
   }
 
   test("emptyDataFrame should be foldable") {
@@ -2447,6 +2571,14 @@ class DataFrameSuite extends QueryTest
     "it refers to non-existent table with same name") {
     val e = intercept[AnalysisException] {
       sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
+    }
+    assert(e.getMessage.contains("Table or view not found:"))
+  }
+
+  test("SPARK-32680: Don't analyze CTAS with unresolved query") {
+    val v2Source = classOf[FakeV2Provider].getName
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist")
     }
     assert(e.getMessage.contains("Table or view not found:"))
   }
@@ -2566,6 +2698,171 @@ class DataFrameSuite extends QueryTest
     val df = l.join(r, $"col2" === $"col4", "LeftOuter")
     checkAnswer(df, Row("2", "2"))
   }
+
+  test("SPARK-33939: Make Column.named use UnresolvedAlias to assign name") {
+    val df = spark.range(1).selectExpr("id as id1", "id as id2")
+    val df1 = df.selectExpr("cast(struct(id1, id2).id1 as int)")
+    assert(df1.schema.head.name == "CAST(struct(id1, id2).id1 AS INT)")
+
+    val df2 = df.selectExpr("cast(array(struct(id1, id2))[0].id1 as int)")
+    assert(df2.schema.head.name == "CAST(array(struct(id1, id2))[0].id1 AS INT)")
+
+    val df3 = df.select(hex(expr("struct(id1, id2).id1")))
+    assert(df3.schema.head.name == "hex(struct(id1, id2).id1)")
+
+    // this test is to make sure we don't have a regression.
+    val df4 = df.selectExpr("id1 == null")
+    assert(df4.schema.head.name == "(id1 = NULL)")
+  }
+
+  test("SPARK-33989: Strip auto-generated cast when using Cast.sql") {
+    Seq("SELECT id == null FROM VALUES(1) AS t(id)",
+      "SELECT floor(1)",
+      "SELECT split(struct(c1, c2).c1, ',') FROM VALUES(1, 2) AS t(c1, c2)").foreach { sqlStr =>
+      assert(!sql(sqlStr).schema.fieldNames.head.toLowerCase(Locale.getDefault).contains("cast"))
+    }
+
+    Seq("SELECT id == CAST(null AS int) FROM VALUES(1) AS t(id)",
+      "SELECT floor(CAST(1 AS double))",
+      "SELECT split(CAST(struct(c1, c2).c1 AS string), ',') FROM VALUES(1, 2) AS t(c1, c2)"
+    ).foreach { sqlStr =>
+      assert(sql(sqlStr).schema.fieldNames.head.toLowerCase(Locale.getDefault).contains("cast"))
+    }
+  }
+
+  test("SPARK-34318: colRegex should work with column names & qualifiers which contain newlines") {
+    val df = Seq(1, 2, 3).toDF("test\n_column").as("test\n_table")
+    val col1 = df.colRegex("`tes.*\n.*mn`")
+    checkAnswer(df.select(col1), Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    val col2 = df.colRegex("test\n_table.`tes.*\n.*mn`")
+    checkAnswer(df.select(col2), Row(1) :: Row(2) :: Row(3) :: Nil)
+  }
+
+  test("SPARK-34763: col(), $\"<name>\", df(\"name\") should handle quoted column name properly") {
+    val df1 = spark.sql("SELECT 'col1' AS `a``b.c`")
+    checkAnswer(df1.selectExpr("`a``b.c`"), Row("col1"))
+    checkAnswer(df1.select(df1("`a``b.c`")), Row("col1"))
+    checkAnswer(df1.select(col("`a``b.c`")), Row("col1"))
+    checkAnswer(df1.select($"`a``b.c`"), Row("col1"))
+
+    val df2 = df1.as("d.e`f")
+    checkAnswer(df2.selectExpr("`a``b.c`"), Row("col1"))
+    checkAnswer(df2.select(df2("`a``b.c`")), Row("col1"))
+    checkAnswer(df2.select(col("`a``b.c`")), Row("col1"))
+    checkAnswer(df2.select($"`a``b.c`"), Row("col1"))
+
+    checkAnswer(df2.selectExpr("`d.e``f`.`a``b.c`"), Row("col1"))
+    checkAnswer(df2.select(df2("`d.e``f`.`a``b.c`")), Row("col1"))
+    checkAnswer(df2.select(col("`d.e``f`.`a``b.c`")), Row("col1"))
+    checkAnswer(df2.select($"`d.e``f`.`a``b.c`"), Row("col1"))
+
+    val df3 = df1.as("*-#&% ?")
+    checkAnswer(df3.selectExpr("`*-#&% ?`.`a``b.c`"), Row("col1"))
+    checkAnswer(df3.select(df3("*-#&% ?.`a``b.c`")), Row("col1"))
+    checkAnswer(df3.select(col("*-#&% ?.`a``b.c`")), Row("col1"))
+    checkAnswer(df3.select($"*-#&% ?.`a``b.c`"), Row("col1"))
+  }
+
+  test("SPARK-34776: Nested column pruning should not prune Window produced attributes") {
+    val df = Seq(
+      ("t1", "123", "bob"),
+      ("t1", "456", "bob"),
+      ("t2", "123", "sam")
+    ).toDF("type", "value", "name")
+
+    val test = df.select(
+      $"*",
+      struct(count($"*").over(Window.partitionBy($"type", $"value", $"name"))
+        .as("count"), $"name").as("name_count")
+    ).select(
+      $"*",
+      max($"name_count").over(Window.partitionBy($"type", $"value")).as("best_name")
+    )
+    checkAnswer(test.select($"best_name.name"), Row("bob") :: Row("bob") :: Row("sam") :: Nil)
+  }
+
+  test("SPARK-34829: Multiple applications of typed ScalaUDFs in higher order functions work") {
+    val reverse = udf((s: String) => s.reverse)
+    val reverse2 = udf((b: Bar2) => Bar2(b.s.reverse))
+
+    val df = Seq(Array("abc", "def")).toDF("array")
+    val test = df.select(transform(col("array"), s => reverse(s)))
+    checkAnswer(test, Row(Array("cba", "fed")) :: Nil)
+
+    val df2 = Seq(Array(Bar2("abc"), Bar2("def"))).toDF("array")
+    val test2 = df2.select(transform(col("array"), b => reverse2(b)))
+    checkAnswer(test2, Row(Array(Row("cba"), Row("fed"))) :: Nil)
+
+    val df3 = Seq(Map("abc" -> 1, "def" -> 2)).toDF("map")
+    val test3 = df3.select(transform_keys(col("map"), (s, _) => reverse(s)))
+    checkAnswer(test3, Row(Map("cba" -> 1, "fed" -> 2)) :: Nil)
+
+    val df4 = Seq(Map(Bar2("abc") -> 1, Bar2("def") -> 2)).toDF("map")
+    val test4 = df4.select(transform_keys(col("map"), (b, _) => reverse2(b)))
+    checkAnswer(test4, Row(Map(Row("cba") -> 1, Row("fed") -> 2)) :: Nil)
+
+    val df5 = Seq(Map(1 -> "abc", 2 -> "def")).toDF("map")
+    val test5 = df5.select(transform_values(col("map"), (_, s) => reverse(s)))
+    checkAnswer(test5, Row(Map(1 -> "cba", 2 -> "fed")) :: Nil)
+
+    val df6 = Seq(Map(1 -> Bar2("abc"), 2 -> Bar2("def"))).toDF("map")
+    val test6 = df6.select(transform_values(col("map"), (_, b) => reverse2(b)))
+    checkAnswer(test6, Row(Map(1 -> Row("cba"), 2 -> Row("fed"))) :: Nil)
+
+    val reverseThenConcat = udf((s1: String, s2: String) => s1.reverse ++ s2.reverse)
+    val reverseThenConcat2 = udf((b1: Bar2, b2: Bar2) => Bar2(b1.s.reverse ++ b2.s.reverse))
+
+    val df7 = Seq((Map(1 -> "abc", 2 -> "def"), Map(1 -> "ghi", 2 -> "jkl"))).toDF("map1", "map2")
+    val test7 =
+      df7.select(map_zip_with(col("map1"), col("map2"), (_, s1, s2) => reverseThenConcat(s1, s2)))
+    checkAnswer(test7, Row(Map(1 -> "cbaihg", 2 -> "fedlkj")) :: Nil)
+
+    val df8 = Seq((Map(1 -> Bar2("abc"), 2 -> Bar2("def")),
+      Map(1 -> Bar2("ghi"), 2 -> Bar2("jkl")))).toDF("map1", "map2")
+    val test8 =
+      df8.select(map_zip_with(col("map1"), col("map2"), (_, b1, b2) => reverseThenConcat2(b1, b2)))
+    checkAnswer(test8, Row(Map(1 -> Row("cbaihg"), 2 -> Row("fedlkj"))) :: Nil)
+
+    val df9 = Seq((Array("abc", "def"), Array("ghi", "jkl"))).toDF("array1", "array2")
+    val test9 =
+      df9.select(zip_with(col("array1"), col("array2"), (s1, s2) => reverseThenConcat(s1, s2)))
+    checkAnswer(test9, Row(Array("cbaihg", "fedlkj")) :: Nil)
+
+    val df10 = Seq((Array(Bar2("abc"), Bar2("def")), Array(Bar2("ghi"), Bar2("jkl"))))
+      .toDF("array1", "array2")
+    val test10 =
+      df10.select(zip_with(col("array1"), col("array2"), (b1, b2) => reverseThenConcat2(b1, b2)))
+    checkAnswer(test10, Row(Array(Row("cbaihg"), Row("fedlkj"))) :: Nil)
+  }
+
+  test("SPARK-34882: Aggregate with multiple distinct null sensitive aggregators") {
+    withUserDefinedFunction(("countNulls", true)) {
+      spark.udf.register("countNulls", udaf(new Aggregator[JLong, JLong, JLong] {
+        def zero: JLong = 0L
+        def reduce(b: JLong, a: JLong): JLong = if (a == null) {
+          b + 1
+        } else {
+          b
+        }
+        def merge(b1: JLong, b2: JLong): JLong = b1 + b2
+        def finish(r: JLong): JLong = r
+        def bufferEncoder: Encoder[JLong] = Encoders.LONG
+        def outputEncoder: Encoder[JLong] = Encoders.LONG
+      }))
+
+      val result = testData.selectExpr(
+        "countNulls(key)",
+        "countNulls(DISTINCT key)",
+        "countNulls(key) FILTER (WHERE key > 50)",
+        "countNulls(DISTINCT key) FILTER (WHERE key > 50)",
+        "count(DISTINCT key)")
+
+      checkAnswer(result, Row(0, 0, 0, 0, 100))
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
+
+case class Bar2(s: String)

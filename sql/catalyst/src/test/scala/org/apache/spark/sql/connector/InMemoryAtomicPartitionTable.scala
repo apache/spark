@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.catalog.SupportsAtomicPartitionManagement
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
@@ -42,6 +42,7 @@ class InMemoryAtomicPartitionTable (
     if (memoryTablePartitions.containsKey(ident)) {
       throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
     } else {
+      createPartitionKey(ident.toSeq(schema))
       memoryTablePartitions.put(ident, properties)
     }
   }
@@ -49,6 +50,7 @@ class InMemoryAtomicPartitionTable (
   override def dropPartition(ident: InternalRow): Boolean = {
     if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.remove(ident)
+      removePartitionKey(ident.toSeq(schema))
       true
     } else {
       false
@@ -72,5 +74,15 @@ class InMemoryAtomicPartitionTable (
       return false;
     }
     idents.forall(dropPartition)
+  }
+
+  override def truncatePartitions(idents: Array[InternalRow]): Boolean = {
+    val nonExistent = idents.filterNot(partitionExists)
+    if (nonExistent.isEmpty) {
+      idents.foreach(truncatePartition)
+      true
+    } else {
+      throw new NoSuchPartitionException(name, nonExistent.head, partitionSchema)
+    }
   }
 }

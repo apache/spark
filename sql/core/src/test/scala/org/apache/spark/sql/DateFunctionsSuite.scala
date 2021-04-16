@@ -47,7 +47,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("function current_timestamp and now") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
-    checkAnswer(df1.select(countDistinct(current_timestamp())), Row(1))
+    checkAnswer(df1.select(count_distinct(current_timestamp())), Row(1))
 
     // Execution in one query should return the same value
     checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = CURRENT_TIMESTAMP()"""), Row(true))
@@ -323,6 +323,46 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
   }
 
+  test("function make_interval") {
+    val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
+    val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
+    val df = Seq((t1), (t2)).toDF("t")
+    // adds two hours to times
+    checkAnswer(
+      df.select(col("t") + make_interval(hours = lit(2))),
+      Seq(Row(Timestamp.valueOf("2015-10-01 02:00:01")),
+        Row(Timestamp.valueOf("2016-02-29 02:00:02"))))
+    // adds four days and two hours to times
+    checkAnswer(
+      df.select(col("t") + make_interval(hours = lit(2), days = lit(4))),
+      Seq(Row(Timestamp.valueOf("2015-10-05 02:00:01")),
+        Row(Timestamp.valueOf("2016-03-04 02:00:02"))))
+    // subtracts two hours from times
+    checkAnswer(
+      df.select(col("t") + make_interval(hours = lit(-2))),
+      Seq(Row(Timestamp.valueOf("2015-09-30 22:00:01")),
+        Row(Timestamp.valueOf("2016-02-28 22:00:02"))))
+
+    val d1 = Date.valueOf("2015-08-31")
+    val d2 = Date.valueOf("2015-02-28")
+    val df2 = Seq((d1), (d2)).toDF("d")
+    // adding an hour to a date does nothing
+    checkAnswer(
+      df2.select(col("d") + make_interval(hours = lit(1))),
+      Seq(Row(Date.valueOf("2015-08-31")),
+        Row(Date.valueOf("2015-02-28"))))
+    // adds three years to date
+    checkAnswer(
+      df2.select(col("d") + make_interval(years = lit(3))),
+      Seq(Row(Date.valueOf("2018-08-31")),
+        Row(Date.valueOf("2018-02-28"))))
+    // subtracts 1 week, one day from date
+    checkAnswer(
+      df2.select(col("d") - make_interval(weeks = lit(1), days = lit(1))),
+      Seq(Row(Date.valueOf("2015-08-23")),
+        Row(Date.valueOf("2015-02-20"))))
+  }
+
   test("function add_months") {
     val d1 = Date.valueOf("2015-08-31")
     val d2 = Date.valueOf("2015-02-28")
@@ -372,11 +412,21 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val df1 = Seq(("mon", "2015-07-23"), ("tuesday", "2015-07-20")).toDF("dow", "d")
     val df2 = Seq(("th", "2015-07-23 00:11:22"), ("xx", "2015-07-24 11:22:33")).toDF("dow", "t")
     checkAnswer(
-      df1.select(next_day(col("d"), "MONDAY")),
-      Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-07-27"))))
+      df1.select(
+        next_day(col("d"), "MONDAY"),
+        next_day(col("d"), col("dow")),
+        next_day(col("d"), "NonValidDay")),
+      Seq(
+        Row(Date.valueOf("2015-07-27"), Date.valueOf("2015-07-27"), null),
+        Row(Date.valueOf("2015-07-27"), Date.valueOf("2015-07-21"), null)))
     checkAnswer(
-      df2.select(next_day(col("t"), "th")),
-      Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
+      df2.select(
+        next_day(col("t"), "th"),
+        next_day(col("t"), col("dow")),
+        next_day(col("t"), "NonValidDay")),
+      Seq(
+        Row(Date.valueOf("2015-07-30"), Date.valueOf("2015-07-30"), null),
+        Row(Date.valueOf("2015-07-30"), null, null)))
   }
 
   def checkExceptionMessage(df: DataFrame): Unit = {
@@ -454,7 +504,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e.getCause.isInstanceOf[IllegalArgumentException])
     assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
-    // february
+    // February
     val x1 = "2016-02-29"
     val x2 = "2017-02-29"
     val df1 = Seq(x1, x2).toDF("x")
@@ -629,7 +679,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
             e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
         }
 
-        // february
+        // February
         val y1 = "2016-02-29"
         val y2 = "2017-02-29"
         val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
@@ -680,7 +730,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd mm:HH:ss')"), Seq(
           Row(secs(ts4.getTime)), Row(null), Row(secs(ts3.getTime)), Row(null)))
 
-        // february
+        // February
         val y1 = "2016-02-29"
         val y2 = "2017-02-29"
         val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")

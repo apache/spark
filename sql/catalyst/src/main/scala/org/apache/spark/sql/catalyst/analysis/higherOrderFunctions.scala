@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -32,13 +33,17 @@ import org.apache.spark.sql.types.DataType
 case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-    case u @ UnresolvedFunction(fn, children, false, filter)
+    case u @ UnresolvedFunction(fn, children, false, filter, ignoreNulls)
         if hasLambdaAndResolvedArguments(children) =>
       withPosition(u) {
         catalog.lookupFunction(fn, children) match {
           case func: HigherOrderFunction =>
             filter.foreach(_.failAnalysis("FILTER predicate specified, " +
               s"but ${func.prettyName} is not an aggregate function"))
+            if (ignoreNulls) {
+              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                func.prettyName, "IGNORE NULLS")
+            }
             func
           case other => other.failAnalysis(
             "A lambda function should only be used in a higher order function. However, " +

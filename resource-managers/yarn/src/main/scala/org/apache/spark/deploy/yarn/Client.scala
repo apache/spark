@@ -1069,7 +1069,7 @@ private[spark] class Client(
             logError(s"Application $appId not found.")
             cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
-          case NonFatal(e) =>
+          case NonFatal(e) if !e.isInstanceOf[InterruptedIOException] =>
             val msg = s"Failed to contact YARN for application $appId."
             logError(msg, e)
             // Don't necessarily clean up staging dir because status is unknown
@@ -1629,6 +1629,7 @@ private[spark] class YarnClusterApplication extends SparkApplication {
     // so remove them from sparkConf here for yarn mode.
     conf.remove(JARS)
     conf.remove(FILES)
+    conf.remove(ARCHIVES)
 
     new Client(new ClientArguments(args), conf, null).run()
   }

@@ -840,6 +840,9 @@ The following options provides finer-grained control for this feature:
 </tr>
 </table>
 
+Users can exclude Kerberos delegation token renewal at resource scheduler. Currently it is only supported
+on YARN. The configuration is covered in the [Running Spark on YARN](running-on-yarn.html#yarn-specific-kerberos-configuration) page.
+
 ## Long-Running Applications
 
 Long-running applications may run into issues if their run time exceeds the maximum delegation

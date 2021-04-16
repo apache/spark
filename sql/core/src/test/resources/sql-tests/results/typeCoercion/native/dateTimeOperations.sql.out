@@ -76,7 +76,7 @@ cannot resolve 'CAST(1 AS DECIMAL(10,0)) + INTERVAL '2 days'' due to data type m
 -- !query
 select cast('2017-12-11' as string) + interval 2 day
 -- !query schema
-struct<CAST(CAST(CAST(2017-12-11 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS STRING):string>
+struct<CAST(2017-12-11 AS STRING) + INTERVAL '2 days':string>
 -- !query output
 2017-12-13 00:00:00
 
@@ -84,7 +84,7 @@ struct<CAST(CAST(CAST(2017-12-11 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS
 -- !query
 select cast('2017-12-11 09:30:00' as string) + interval 2 day
 -- !query schema
-struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS STRING):string>
+struct<CAST(2017-12-11 09:30:00 AS STRING) + INTERVAL '2 days':string>
 -- !query output
 2017-12-13 09:30:00
 
@@ -110,7 +110,7 @@ cannot resolve 'CAST(1 AS BOOLEAN) + INTERVAL '2 days'' due to data type mismatc
 -- !query
 select cast('2017-12-11 09:30:00.0' as timestamp) + interval 2 day
 -- !query schema
-struct<CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2 days' AS TIMESTAMP):timestamp>
+struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2 days':timestamp>
 -- !query output
 2017-12-13 09:30:00
 
@@ -189,7 +189,7 @@ cannot resolve 'CAST(1 AS DECIMAL(10,0)) + INTERVAL '2 days'' due to data type m
 -- !query
 select interval 2 day + cast('2017-12-11' as string)
 -- !query schema
-struct<CAST(CAST(CAST(2017-12-11 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS STRING):string>
+struct<CAST(2017-12-11 AS STRING) + INTERVAL '2 days':string>
 -- !query output
 2017-12-13 00:00:00
 
@@ -197,7 +197,7 @@ struct<CAST(CAST(CAST(2017-12-11 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS
 -- !query
 select interval 2 day + cast('2017-12-11 09:30:00' as string)
 -- !query schema
-struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS STRING) AS TIMESTAMP) + INTERVAL '2 days' AS STRING):string>
+struct<CAST(2017-12-11 09:30:00 AS STRING) + INTERVAL '2 days':string>
 -- !query output
 2017-12-13 09:30:00
 
@@ -223,7 +223,7 @@ cannot resolve 'CAST(1 AS BOOLEAN) + INTERVAL '2 days'' due to data type mismatc
 -- !query
 select interval 2 day + cast('2017-12-11 09:30:00.0' as timestamp)
 -- !query schema
-struct<CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2 days' AS TIMESTAMP):timestamp>
+struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) + INTERVAL '2 days':timestamp>
 -- !query output
 2017-12-13 09:30:00
 
@@ -302,7 +302,7 @@ cannot resolve 'CAST(1 AS DECIMAL(10,0)) + (- INTERVAL '2 days')' due to data ty
 -- !query
 select cast('2017-12-11' as string) - interval 2 day
 -- !query schema
-struct<CAST(CAST(2017-12-11 AS STRING) - INTERVAL '2 days' AS STRING):string>
+struct<CAST(2017-12-11 AS STRING) - INTERVAL '2 days':string>
 -- !query output
 2017-12-09 00:00:00
 
@@ -310,7 +310,7 @@ struct<CAST(CAST(2017-12-11 AS STRING) - INTERVAL '2 days' AS STRING):string>
 -- !query
 select cast('2017-12-11 09:30:00' as string) - interval 2 day
 -- !query schema
-struct<CAST(CAST(2017-12-11 09:30:00 AS STRING) - INTERVAL '2 days' AS STRING):string>
+struct<CAST(2017-12-11 09:30:00 AS STRING) - INTERVAL '2 days':string>
 -- !query output
 2017-12-09 09:30:00
 
@@ -336,7 +336,7 @@ cannot resolve 'CAST(1 AS BOOLEAN) + (- INTERVAL '2 days')' due to data type mis
 -- !query
 select cast('2017-12-11 09:30:00.0' as timestamp) - interval 2 day
 -- !query schema
-struct<CAST(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - INTERVAL '2 days' AS TIMESTAMP):timestamp>
+struct<CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) - INTERVAL '2 days':timestamp>
 -- !query output
 2017-12-09 09:30:00
 

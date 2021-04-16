@@ -481,8 +481,7 @@ private[spark] class ApplicationMaster(
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
 
     allocator.allocateResources()
-    val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATION_MASTER,
-      sparkConf, securityMgr)
+    val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATION_MASTER, sparkConf)
     val prefix = _sparkConf.get(YARN_METRICS_NAMESPACE).getOrElse(appId)
     ms.registerSource(new ApplicationMasterSource(prefix, allocator))
     // do not register static sources in this case as per SPARK-25277
@@ -690,7 +689,7 @@ private[spark] class ApplicationMaster(
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
     driver match {
       case Some(d) =>
-        d.send(AddWebUIFilter(amFilter, params.toMap, proxyBase))
+        d.send(AddWebUIFilter(amFilter, params, proxyBase))
 
       case None =>
         System.setProperty(UI_FILTERS.key, amFilter)

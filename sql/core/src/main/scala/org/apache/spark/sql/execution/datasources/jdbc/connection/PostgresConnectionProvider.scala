@@ -32,11 +32,4 @@ private[jdbc] class PostgresConnectionProvider extends SecureConnectionProvider 
     val properties = parseURL.invoke(driver, options.url, null).asInstanceOf[Properties]
     properties.getProperty("jaasApplicationName", "pgjdbc")
   }
-
-  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
-    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
-    if (configEntry == null || configEntry.isEmpty) {
-      setAuthenticationConfig(parent, driver, options)
-    }
-  }
 }

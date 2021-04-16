@@ -26,19 +26,21 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveInlineTables, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{UpdateColumnComment, UpdateColumnType}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -49,6 +51,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val table: Table = {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
 
@@ -75,6 +78,14 @@ class PlanResolutionSuite extends AnalysisTest {
     V1Table(t)
   }
 
+  private val view: V1Table = {
+    val t = mock(classOf[CatalogTable])
+    when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.tableType).thenReturn(CatalogTableType.VIEW)
+    when(t.provider).thenReturn(Some(v1Format))
+    V1Table(t)
+  }
+
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
@@ -98,6 +109,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v2Table" => table
         case "v2Table1" => table
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
+        case "view" => view
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -109,7 +121,7 @@ class PlanResolutionSuite extends AnalysisTest {
     new InMemoryCatalog,
     EmptyFunctionRegistry,
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
-  v1SessionCatalog.createTempView("v", LocalRelation(Nil), false)
+  createTempView(v1SessionCatalog, "v", LocalRelation(Nil), false)
 
   private val catalogManagerWithDefault = {
     val manager = mock(classOf[CatalogManager])
@@ -145,28 +157,26 @@ class PlanResolutionSuite extends AnalysisTest {
     manager
   }
 
-  def parseAndResolve(query: String, withDefault: Boolean = false): LogicalPlan = {
+  def parseAndResolve(
+      query: String,
+      withDefault: Boolean = false,
+      checkAnalysis: Boolean = false): LogicalPlan = {
     val catalogManager = if (withDefault) {
       catalogManagerWithDefault
     } else {
       catalogManagerWithoutDefault
     }
-    val analyzer = new Analyzer(catalogManager)
-    // TODO: run the analyzer directly.
-    val rules = Seq(
-      CTESubstitution,
-      ResolveInlineTables,
-      analyzer.ResolveRelations,
-      new ResolveCatalogs(catalogManager),
-      new ResolveSessionCatalog(catalogManager, _ == Seq("v"), _ => false),
-      analyzer.ResolveTables,
-      analyzer.ResolveReferences,
-      analyzer.ResolveSubqueryColumnAliases,
-      analyzer.ResolveReferences,
-      analyzer.ResolveAlterTableChanges)
-    rules.foldLeft(parsePlan(query)) {
-      case (plan, rule) => rule.apply(plan)
+    val analyzer = new Analyzer(catalogManager) {
+      override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
+        new ResolveSessionCatalog(catalogManager))
     }
+    // We don't check analysis here by default, as we expect the plan to be unresolved
+    // such as `CreateTable`.
+    val analyzed = analyzer.execute(CatalystSqlParser.parsePlan(query))
+    if (checkAnalysis) {
+      analyzer.checkAnalysis(analyzed)
+    }
+    analyzed
   }
 
   private def parseResolveCompare(query: String, expected: LogicalPlan): Unit =
@@ -670,13 +680,13 @@ class PlanResolutionSuite extends AnalysisTest {
     val tableIdent2 = Identifier.of(Array.empty, "tab")
 
     parseResolveCompare(s"DROP TABLE $tableName1",
-      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = false, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
-      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = true, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = true, purge = false))
     parseResolveCompare(s"DROP TABLE $tableName2",
-      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = false, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2",
-      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = true, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = true, purge = false))
   }
 
   test("drop view") {
@@ -684,6 +694,8 @@ class PlanResolutionSuite extends AnalysisTest {
     val viewIdent1 = TableIdentifier("view", Option("db"))
     val viewName2 = "view"
     val viewIdent2 = TableIdentifier("view", Option("default"))
+    val tempViewName = "v"
+    val tempViewIdent = TableIdentifier("v")
 
     parseResolveCompare(s"DROP VIEW $viewName1",
       DropTableCommand(viewIdent1, ifExists = false, isView = true, purge = false))
@@ -693,11 +705,15 @@ class PlanResolutionSuite extends AnalysisTest {
       DropTableCommand(viewIdent2, ifExists = false, isView = true, purge = false))
     parseResolveCompare(s"DROP VIEW IF EXISTS $viewName2",
       DropTableCommand(viewIdent2, ifExists = true, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW $tempViewName",
+      DropTableCommand(tempViewIdent, ifExists = false, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
+      DropTableCommand(tempViewIdent, ifExists = true, isView = true, purge = false))
   }
 
   test("drop view in v2 catalog") {
     intercept[AnalysisException] {
-      parseAndResolve("DROP VIEW testcat.db.view")
+      parseAndResolve("DROP VIEW testcat.db.view", checkAnalysis = true)
     }.getMessage.toLowerCase(Locale.ROOT).contains(
       "view support in catalog has not been implemented")
   }
@@ -705,16 +721,16 @@ class PlanResolutionSuite extends AnalysisTest {
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
   // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter view: alter view properties") {
-    val sql1_view = "ALTER VIEW table_name SET TBLPROPERTIES ('test' = 'test', " +
+    val sql1_view = "ALTER VIEW view SET TBLPROPERTIES ('test' = 'test', " +
         "'comment' = 'new_comment')"
-    val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
-    val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+    val sql2_view = "ALTER VIEW view UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_view = "ALTER VIEW view UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
     val parsed1_view = parseAndResolve(sql1_view)
     val parsed2_view = parseAndResolve(sql2_view)
     val parsed3_view = parseAndResolve(sql3_view)
 
-    val tableIdent = TableIdentifier("table_name", Some("default"))
+    val tableIdent = TableIdentifier("view", Some("default"))
     val expected1_view = AlterTableSetPropertiesCommand(
       tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = true)
     val expected2_view = AlterTableUnsetPropertiesCommand(
@@ -755,27 +771,23 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           parsed1 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.setProperty("test", "test"),
-                TableChange.setProperty("comment", "new_comment")))
-            case _ => fail("expect AlterTable")
+            case SetTableProperties(_: ResolvedTable, properties) =>
+              assert(properties == Map(("test", "test"), ("comment", "new_comment")))
+            case _ => fail(s"expect ${SetTableProperties.getClass.getName}")
           }
 
           parsed2 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.removeProperty("comment"),
-                TableChange.removeProperty("test")))
-            case _ => fail("expect AlterTable")
+            case UnsetTableProperties(_: ResolvedTable, propertyKeys, ifExists) =>
+              assert(propertyKeys == Seq("comment", "test"))
+              assert(!ifExists)
+            case _ => fail(s"expect ${UnsetTableProperties.getClass.getName}")
           }
 
           parsed3 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.removeProperty("comment"),
-                TableChange.removeProperty("test")))
-            case _ => fail("expect AlterTable")
+            case UnsetTableProperties(_: ResolvedTable, propertyKeys, ifExists) =>
+              assert(propertyKeys == Seq("comment", "test"))
+              assert(ifExists)
+            case _ => fail(s"expect ${UnsetTableProperties.getClass.getName}")
           }
         }
     }
@@ -787,12 +799,14 @@ class PlanResolutionSuite extends AnalysisTest {
 
     // For non-existing tables, we convert it to v2 command with `UnresolvedV2Table`
     parsed4 match {
-      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
-      case _ => fail("Expect AlterTable, but got:\n" + parsed4.treeString)
+      case SetTableProperties(_: UnresolvedTable, _) => // OK
+      case _ =>
+        fail(s"Expect ${SetTableProperties.getClass.getName}, but got:\n" + parsed4.treeString)
     }
     parsed5 match {
-      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
-      case _ => fail("Expect AlterTable, but got:\n" + parsed5.treeString)
+      case UnsetTableProperties(_: UnresolvedTable, _, _) => // OK
+      case _ =>
+        fail(s"Expect ${UnsetTableProperties.getClass.getName}, but got:\n" + parsed5.treeString)
     }
   }
 
@@ -814,11 +828,8 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected)
         } else {
           parsed match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.setProperty("a", "1"),
-                TableChange.setProperty("b", "0.1"),
-                TableChange.setProperty("c", "true")))
+            case SetTableProperties(_: ResolvedTable, changes) =>
+              assert(changes == Map(("a", "1"), ("b", "0.1"), ("c", "true")))
             case _ => fail("Expect AlterTable, but got:\n" + parsed.treeString)
           }
         }
@@ -838,9 +849,10 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected)
         } else {
           parsed match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(TableChange.setProperty("location", "new location")))
-            case _ => fail("Expect AlterTable, but got:\n" + parsed.treeString)
+            case SetTableLocation(_: ResolvedTable, _, location) =>
+              assert(location === "new location")
+            case _ =>
+              fail(s"Expect ${SetTableLocation.getClass.getName}, but got:\n" + parsed.treeString)
           }
         }
     }
@@ -855,21 +867,21 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
           val expected1 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map.empty, false)
+            TableIdentifier(tblName, Some("default")), Map.empty, false, parsed1.output)
           val expected2 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map.empty, true)
+            TableIdentifier(tblName, Some("default")), Map.empty, true, parsed2.output)
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended) =>
+            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -879,11 +891,11 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
           val expected3 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map("a" -> "1"), false)
+            TableIdentifier(tblName, Some("default")), Map("a" -> "1"), false, parsed3.output)
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
-            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended) =>
+            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _) =>
               assert(!isExtended)
               assert(partitionSpec == Map("a" -> "1"))
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
@@ -1156,9 +1168,9 @@ class PlanResolutionSuite extends AnalysisTest {
       ("ALTER TABLE testcat.tab ALTER COLUMN i TYPE bigint", false),
       ("ALTER TABLE tab ALTER COLUMN i TYPE bigint", false),
       (s"ALTER TABLE $v2SessionCatalogTable ALTER COLUMN i TYPE bigint", true),
-      ("INSERT INTO TABLE tab VALUES (1)", false),
-      ("INSERT INTO TABLE testcat.tab VALUES (1)", false),
-      (s"INSERT INTO TABLE $v2SessionCatalogTable VALUES (1)", true),
+      ("INSERT INTO TABLE tab VALUES (1, 'a')", false),
+      ("INSERT INTO TABLE testcat.tab VALUES (1, 'a')", false),
+      (s"INSERT INTO TABLE $v2SessionCatalogTable VALUES (1, 'a')", true),
       ("DESC TABLE tab", false),
       ("DESC TABLE testcat.tab", false),
       (s"DESC TABLE $v2SessionCatalogTable", true),
@@ -1171,28 +1183,28 @@ class PlanResolutionSuite extends AnalysisTest {
     )
   }
 
-  DSV2ResolutionTests.foreach { case (sql, isSessionCatlog) =>
+  DSV2ResolutionTests.foreach { case (sql, isSessionCatalog) =>
     test(s"Data source V2 relation resolution '$sql'") {
       val parsed = parseAndResolve(sql, withDefault = true)
-      val catlogIdent = if (isSessionCatlog) v2SessionCatalog else testCat
-      val tableIdent = if (isSessionCatlog) "v2Table" else "tab"
+      val catalogIdent = if (isSessionCatalog) v2SessionCatalog else testCat
+      val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
         case AlterTable(_, _, r: DataSourceV2Relation, _) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case Project(_, AsDataSourceV2Relation(r)) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+        case AppendData(r: DataSourceV2Relation, _, _, _, _) =>
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case DescribeRelation(r: ResolvedTable, _, _) =>
-          assert(r.catalog == catlogIdent)
+        case DescribeRelation(r: ResolvedTable, _, _, _) =>
+          assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
-        case ShowTableProperties(r: ResolvedTable, _) =>
-          assert(r.catalog == catlogIdent)
+        case ShowTableProperties(r: ResolvedTable, _, _) =>
+          assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
-        case ShowTablePropertiesCommand(t: TableIdentifier, _) =>
+        case ShowTablePropertiesCommand(t: TableIdentifier, _, _) =>
           assert(t.identifier == tableIdent)
       }
     }
@@ -1217,6 +1229,7 @@ class PlanResolutionSuite extends AnalysisTest {
       mergeCondition match {
         case EqualTo(l: AttributeReference, r: AttributeReference) =>
           assert(l.sameRef(ti) && r.sameRef(si))
+        case Literal(_, BooleanType) => // this is acceptable as a merge condition
         case other => fail("unexpected merge condition " + other)
       }
 
@@ -1292,6 +1305,28 @@ class PlanResolutionSuite extends AnalysisTest {
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                 insertAssigns))) =>
             checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
+              updateAssigns, insertAssigns, starInUpdate = true)
+
+          case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+
+        // merge with star should get resolved into specific actions even if there
+        // is no other unresolved expression in the merge
+        parseAndResolve(s"""
+             |MERGE INTO $target AS target
+             |USING $source AS source
+             |ON true
+             |WHEN MATCHED THEN UPDATE SET *
+             |WHEN NOT MATCHED THEN INSERT *
+           """.stripMargin) match {
+          case MergeIntoTable(
+              SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+              SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
+              mergeCondition,
+              Seq(UpdateAction(None, updateAssigns)),
+              Seq(InsertAction(None, insertAssigns))) =>
+
+            checkResolution(target, source, mergeCondition, None, None, None,
               updateAssigns, insertAssigns, starInUpdate = true)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
@@ -1588,7 +1623,7 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("b", StringType)
       )
     )
-    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile " +
         "PARTITIONED BY (c INT, d STRING COMMENT 'test2')",
       createTable(
         table = "my_tab",
@@ -1616,7 +1651,7 @@ class PlanResolutionSuite extends AnalysisTest {
     )
     // Partitioned by a StructType should be accepted by `SparkSqlParser` but will fail an analyze
     // rule in `AnalyzeCreateTable`.
-    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile " +
         "PARTITIONED BY (nested STRUCT<col1: STRING,col2: INT>)",
       createTable(
         table = "my_tab",
@@ -1721,14 +1756,16 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("create hive external table - location must be specified") {
-    val exc = intercept[AnalysisException] {
-      parseAndResolve("CREATE EXTERNAL TABLE my_tab STORED AS parquet")
+  test("create hive external table") {
+    val withoutLoc = "CREATE EXTERNAL TABLE my_tab STORED AS parquet"
+    parseAndResolve(withoutLoc) match {
+      case ct: CreateTable =>
+        assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
+        assert(ct.tableDesc.storage.locationUri.isEmpty)
     }
-    assert(exc.getMessage.contains("CREATE EXTERNAL TABLE must be accompanied by LOCATION"))
 
-    val query = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
-    parseAndResolve(query) match {
+    val withLoc = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
+    parseAndResolve(withLoc) match {
       case ct: CreateTable =>
         assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
         assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
@@ -1890,7 +1927,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("Test CTAS #3") {
-    val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
+    val s3 = """CREATE TABLE page_view STORED AS textfile AS SELECT * FROM src"""
     val (desc, exists) = extractTableDesc(s3)
     assert(exists == false)
     assert(desc.identifier.database == Some("default"))

@@ -22,6 +22,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
+import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 class DriverCommandFeatureStepSuite extends SparkFunSuite {
 
@@ -50,12 +51,51 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       "--properties-file", SPARK_CONF_PATH,
       "--class", KubernetesTestConf.MAIN_CLASS,
       mainResource, "5", "7", "9"))
+  }
 
-    val envs = spec.pod.container.getEnv.asScala
-      .map { env => (env.getName, env.getValue) }
-      .toMap
-    val expected = Map(ENV_PYSPARK_MAJOR_PYTHON_VERSION -> "3")
-    assert(envs === expected)
+  test("python executable precedence") {
+    val mainResource = "local:/main.py"
+
+    val pythonExecutables = Seq(
+      (Some("conf_py"), Some("conf_driver_py"), Some("env_py"), Some("env_driver_py")),
+      (Some("conf_py"), None, Some("env_py"), Some("env_driver_py")),
+      (None, None, Some("env_py"), Some("env_driver_py")),
+      (None, None, Some("env_py"), None)
+    )
+
+    val expectedResults = Seq(
+      ("conf_py", "conf_driver_py"),
+      ("conf_py", "conf_py"),
+      ("env_py", "env_driver_py"),
+      ("env_py", "env_py")
+    )
+
+    pythonExecutables.zip(expectedResults).foreach { case (pythonExecutable, expected) =>
+      val sparkConf = new SparkConf(false)
+      val (confPy, confDriverPy, envPy, envDriverPy) = pythonExecutable
+      confPy.foreach(sparkConf.set(PYSPARK_PYTHON, _))
+      confDriverPy.foreach(sparkConf.set(PYSPARK_DRIVER_PYTHON, _))
+      val pythonEnvs = Map(
+        (
+          envPy.map(v => ENV_PYSPARK_PYTHON -> v :: Nil) ++
+          envDriverPy.map(v => ENV_PYSPARK_DRIVER_PYTHON -> v :: Nil)
+        ).flatten.toArray: _*)
+
+      val spec = applyFeatureStep(
+        PythonMainAppResource(mainResource),
+        conf = sparkConf,
+        appArgs = Array("foo"),
+        env = pythonEnvs)
+
+      val envs = spec.pod.container.getEnv.asScala
+        .map { env => (env.getName, env.getValue) }
+        .toMap
+
+      val (expectedEnvPy, expectedDriverPy) = expected
+      assert(envs === Map(
+        ENV_PYSPARK_PYTHON -> expectedEnvPy,
+        ENV_PYSPARK_DRIVER_PYTHON -> expectedDriverPy))
+    }
   }
 
   test("R resource") {
@@ -123,13 +163,16 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       resource: MainAppResource,
       conf: SparkConf = new SparkConf(false),
       appArgs: Array[String] = Array(),
-      proxyUser: Option[String] = None): KubernetesDriverSpec = {
+      proxyUser: Option[String] = None,
+      env: Map[String, String] = Map.empty[String, String]): KubernetesDriverSpec = {
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = conf,
       mainAppResource = resource,
       appArgs = appArgs,
       proxyUser = proxyUser)
-    val step = new DriverCommandFeatureStep(kubernetesConf)
+    val step = new DriverCommandFeatureStep(kubernetesConf) {
+      private[spark] override val environmentVariables: Map[String, String] = env
+    }
     val pod = step.configurePod(SparkPod.initialPod())
     val props = step.getAdditionalPodSystemProperties()
     KubernetesDriverSpec(pod, Nil, props)

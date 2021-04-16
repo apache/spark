@@ -24,6 +24,8 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 import org.apache.spark.launcher.SparkLauncher
 
 /**
@@ -31,7 +33,7 @@ import org.apache.spark.launcher.SparkLauncher
  * executors can also find the app code.
  */
 private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
-  extends KubernetesFeatureConfigStep {
+  extends KubernetesFeatureConfigStep with Logging {
 
   override def configurePod(pod: SparkPod): SparkPod = {
     conf.mainAppResource match {
@@ -70,12 +72,37 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
     SparkPod(pod.pod, driverContainer)
   }
 
+  // Exposed for testing purpose.
+  private[spark] def environmentVariables: Map[String, String] = sys.env
+
   private def configureForPython(pod: SparkPod, res: String): SparkPod = {
+    if (conf.get(PYSPARK_MAJOR_PYTHON_VERSION).isDefined) {
+      logWarning(
+          s"${PYSPARK_MAJOR_PYTHON_VERSION.key} was deprecated in Spark 3.1. " +
+          s"Please set '${PYSPARK_PYTHON.key}' and '${PYSPARK_DRIVER_PYTHON.key}' " +
+          s"configurations or $ENV_PYSPARK_PYTHON and $ENV_PYSPARK_DRIVER_PYTHON environment " +
+          "variables instead.")
+    }
+
     val pythonEnvs =
-      Seq(new EnvVarBuilder()
-          .withName(ENV_PYSPARK_MAJOR_PYTHON_VERSION)
-          .withValue(conf.get(PYSPARK_MAJOR_PYTHON_VERSION))
-        .build())
+      Seq(
+        conf.get(PYSPARK_PYTHON)
+          .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON)).map { value =>
+          new EnvVarBuilder()
+            .withName(ENV_PYSPARK_PYTHON)
+            .withValue(value)
+            .build()
+        },
+        conf.get(PYSPARK_DRIVER_PYTHON)
+          .orElse(conf.get(PYSPARK_PYTHON))
+          .orElse(environmentVariables.get(ENV_PYSPARK_DRIVER_PYTHON))
+          .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON)).map { value =>
+          new EnvVarBuilder()
+            .withName(ENV_PYSPARK_DRIVER_PYTHON)
+            .withValue(value)
+            .build()
+        }
+      ).flatten
 
     // re-write primary resource to be the remote one and upload the related file
     val newResName = KubernetesUtils

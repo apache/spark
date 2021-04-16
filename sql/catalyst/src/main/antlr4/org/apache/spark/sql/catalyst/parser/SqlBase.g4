@@ -21,7 +21,7 @@ grammar SqlBase;
    * When false, INTERSECT is given the greater precedence over the other set
    * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
    */
-  public boolean legacy_setops_precedence_enbled = false;
+  public boolean legacy_setops_precedence_enabled = false;
 
   /**
    * When false, a literal with an exponent would be converted into
@@ -134,6 +134,8 @@ statement
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+    | ANALYZE TABLES ((FROM | IN) multipartIdentifier)? COMPUTE STATISTICS
+        (identifier)?                                                  #analyzeTables
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
@@ -198,7 +200,7 @@ statement
     | SHOW TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
-        LIKE pattern=STRING partitionSpec?                             #showTable
+        LIKE pattern=STRING partitionSpec?                             #showTableExtended
     | SHOW TBLPROPERTIES table=multipartIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
@@ -229,8 +231,9 @@ statement
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
-    | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
-    | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
+    | MSCK REPAIR TABLE multipartIdentifier
+        (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
+    | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
@@ -466,11 +469,11 @@ multiInsertQueryBody
 
 queryTerm
     : queryPrimary                                                                       #queryTermDefault
-    | left=queryTerm {legacy_setops_precedence_enbled}?
+    | left=queryTerm {legacy_setops_precedence_enabled}?
         operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enbled}?
+    | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enbled}?
+    | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
@@ -506,7 +509,11 @@ fromStatementBody
 querySpecification
     : transformClause
       fromClause?
-      whereClause?                                                          #transformQuerySpecification
+      lateralView*
+      whereClause?
+      aggregationClause?
+      havingClause?
+      windowClause?                                                         #transformQuerySpecification
     | selectClause
       fromClause?
       lateralView*
@@ -517,9 +524,9 @@ querySpecification
     ;
 
 transformClause
-    : (SELECT kind=TRANSFORM '(' namedExpressionSeq ')'
-            | kind=MAP namedExpressionSeq
-            | kind=REDUCE namedExpressionSeq)
+    : (SELECT kind=TRANSFORM '(' setQuantifier? expressionSeq ')'
+            | kind=MAP setQuantifier? expressionSeq
+            | kind=REDUCE setQuantifier? expressionSeq)
       inRowFormat=rowFormat?
       (RECORDWRITER recordWriter=STRING)?
       USING script=STRING
@@ -585,11 +592,21 @@ fromClause
     ;
 
 aggregationClause
-    : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
+    : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
+        (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
+    | GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
-    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
+    ;
+
+groupByClause
+    : groupingAnalytics
+    | expression
+    ;
+
+groupingAnalytics
+    : (ROLLUP | CUBE | GROUPING SETS)  '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupingSet
@@ -692,7 +709,7 @@ inlineTable
     ;
 
 functionTable
-    : funcName=errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
+    : funcName=functionName '(' (expression (',' expression)*)? ')' tableAlias
     ;
 
 tableAlias
@@ -757,6 +774,10 @@ expression
     : booleanExpression
     ;
 
+expressionSeq
+    : expression (',' expression)*
+    ;
+
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
     | EXISTS '(' query ')'                                         #exists
@@ -792,7 +813,7 @@ primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #currentDatetime
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
-    | CAST '(' expression AS dataType ')'                                                      #cast
+    | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
     | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
     | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
@@ -803,7 +824,8 @@ primaryExpression
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
     | functionName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
-       (FILTER '(' WHERE where=booleanExpression ')')? (OVER windowSpec)?                      #functionCall
+       (FILTER '(' WHERE where=booleanExpression ')')?
+       (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
     | identifier '->' expression                                                               #lambda
     | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -865,8 +887,7 @@ unitToUnitInterval
     ;
 
 intervalValue
-    : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
-    | STRING
+    : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE | STRING)
     ;
 
 colPosition
@@ -1143,6 +1164,7 @@ ansiNonReserved
     | REPAIR
     | REPLACE
     | RESET
+    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -1171,6 +1193,7 @@ ansiNonReserved
     | STRUCT
     | SUBSTR
     | SUBSTRING
+    | SYNC
     | TABLES
     | TABLESAMPLE
     | TBLPROPERTIES
@@ -1183,6 +1206,7 @@ ansiNonReserved
     | TRIM
     | TRUE
     | TRUNCATE
+    | TRY_CAST
     | TYPE
     | UNARCHIVE
     | UNBOUNDED
@@ -1397,6 +1421,7 @@ nonReserved
     | REPAIR
     | REPLACE
     | RESET
+    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -1426,6 +1451,7 @@ nonReserved
     | STRUCT
     | SUBSTR
     | SUBSTRING
+    | SYNC
     | TABLE
     | TABLES
     | TABLESAMPLE
@@ -1443,6 +1469,7 @@ nonReserved
     | TRIM
     | TRUE
     | TRUNCATE
+    | TRY_CAST
     | TYPE
     | UNARCHIVE
     | UNBOUNDED
@@ -1651,6 +1678,7 @@ RENAME: 'RENAME';
 REPAIR: 'REPAIR';
 REPLACE: 'REPLACE';
 RESET: 'RESET';
+RESPECT: 'RESPECT';
 RESTRICT: 'RESTRICT';
 REVOKE: 'REVOKE';
 RIGHT: 'RIGHT';
@@ -1683,6 +1711,7 @@ STRATIFY: 'STRATIFY';
 STRUCT: 'STRUCT';
 SUBSTR: 'SUBSTR';
 SUBSTRING: 'SUBSTRING';
+SYNC: 'SYNC';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLESAMPLE: 'TABLESAMPLE';
@@ -1700,6 +1729,7 @@ TRANSFORM: 'TRANSFORM';
 TRIM: 'TRIM';
 TRUE: 'TRUE';
 TRUNCATE: 'TRUNCATE';
+TRY_CAST: 'TRY_CAST';
 TYPE: 'TYPE';
 UNARCHIVE: 'UNARCHIVE';
 UNBOUNDED: 'UNBOUNDED';

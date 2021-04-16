@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import operator
 import sys
 import uuid
@@ -33,7 +34,9 @@ from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _HasVarianceImpurity, _TreeClassifierParams
 from pyspark.ml.regression import _FactorizationMachinesParams, DecisionTreeRegressionModel
 from pyspark.ml.base import _PredictorParams
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable, HasTrainingSummary
+from pyspark.ml.util import DefaultParamsReader, DefaultParamsWriter, \
+    JavaMLReadable, JavaMLReader, JavaMLWritable, JavaMLWriter, \
+    MLReader, MLReadable, MLWriter, MLWritable, HasTrainingSummary
 from pyspark.ml.wrapper import JavaParams, \
     JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
@@ -2760,7 +2763,7 @@ class _OneVsRestParams(_ClassifierParams, HasWeightCol):
 
 
 @inherit_doc
-class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
+class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, MLReadable, MLWritable):
     """
     Reduction of Multiclass Classification to Binary Classification.
     Performs reduction using one against all strategy.
@@ -2991,8 +2994,73 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, JavaMLReadable, Jav
         _java_obj.setRawPredictionCol(self.getRawPredictionCol())
         return _java_obj
 
+    @classmethod
+    def read(cls):
+        return OneVsRestReader(cls)
 
-class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
+    def write(self):
+        if isinstance(self.getClassifier(), JavaMLWritable):
+            return JavaMLWriter(self)
+        else:
+            return OneVsRestWriter(self)
+
+
+class _OneVsRestSharedReadWrite:
+    @staticmethod
+    def saveImpl(instance, sc, path, extraMetadata=None):
+        skipParams = ['classifier']
+        jsonParams = DefaultParamsWriter.extractJsonParams(instance, skipParams)
+        DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap=jsonParams,
+                                         extraMetadata=extraMetadata)
+        classifierPath = os.path.join(path, 'classifier')
+        instance.getClassifier().save(classifierPath)
+
+    @staticmethod
+    def loadClassifier(path, sc):
+        classifierPath = os.path.join(path, 'classifier')
+        return DefaultParamsReader.loadParamsInstance(classifierPath, sc)
+
+    @staticmethod
+    def validateParams(instance):
+        elems_to_check = [instance.getClassifier()]
+        if isinstance(instance, OneVsRestModel):
+            elems_to_check.extend(instance.models)
+
+        for elem in elems_to_check:
+            if not isinstance(elem, MLWritable):
+                raise ValueError(f'OneVsRest write will fail because it contains {elem.uid} '
+                                 f'which is not writable.')
+
+
+@inherit_doc
+class OneVsRestReader(MLReader):
+    def __init__(self, cls):
+        super(OneVsRestReader, self).__init__()
+        self.cls = cls
+
+    def load(self, path):
+        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        if not DefaultParamsReader.isPythonParamsInstance(metadata):
+            return JavaMLReader(self.cls).load(path)
+        else:
+            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
+            ova = OneVsRest(classifier=classifier)._resetUid(metadata['uid'])
+            DefaultParamsReader.getAndSetParams(ova, metadata, skipParams=['classifier'])
+            return ova
+
+
+@inherit_doc
+class OneVsRestWriter(MLWriter):
+    def __init__(self, instance):
+        super(OneVsRestWriter, self).__init__()
+        self.instance = instance
+
+    def saveImpl(self, path):
+        _OneVsRestSharedReadWrite.validateParams(self.instance)
+        _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sc, path)
+
+
+class OneVsRestModel(Model, _OneVsRestParams, MLReadable, MLWritable):
     """
     Model fitted by OneVsRest.
     This stores the models resulting from training k binary classifiers: one for each class.
@@ -3023,6 +3091,9 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
     def __init__(self, models):
         super(OneVsRestModel, self).__init__()
         self.models = models
+        if not isinstance(models[0], JavaMLWritable):
+            return
+        # set java instance
         java_models = [model._to_java() for model in self.models]
         sc = SparkContext._active_spark_context
         java_models_array = JavaWrapper._new_java_array(java_models,
@@ -3159,6 +3230,57 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
         if (self.isDefined(self.weightCol) and self.getWeightCol()):
             _java_obj.set("weightCol", self.getWeightCol())
         return _java_obj
+
+    @classmethod
+    def read(cls):
+        return OneVsRestModelReader(cls)
+
+    def write(self):
+        if all(map(lambda elem: isinstance(elem, JavaMLWritable),
+                   [self.getClassifier()] + self.models)):
+            return JavaMLWriter(self)
+        else:
+            return OneVsRestModelWriter(self)
+
+
+@inherit_doc
+class OneVsRestModelReader(MLReader):
+    def __init__(self, cls):
+        super(OneVsRestModelReader, self).__init__()
+        self.cls = cls
+
+    def load(self, path):
+        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        if not DefaultParamsReader.isPythonParamsInstance(metadata):
+            return JavaMLReader(self.cls).load(path)
+        else:
+            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
+            numClasses = metadata['numClasses']
+            subModels = [None] * numClasses
+            for idx in range(numClasses):
+                subModelPath = os.path.join(path, f'model_{idx}')
+                subModels[idx] = DefaultParamsReader.loadParamsInstance(subModelPath, self.sc)
+            ovaModel = OneVsRestModel(subModels)._resetUid(metadata['uid'])
+            ovaModel.set(ovaModel.classifier, classifier)
+            DefaultParamsReader.getAndSetParams(ovaModel, metadata, skipParams=['classifier'])
+            return ovaModel
+
+
+@inherit_doc
+class OneVsRestModelWriter(MLWriter):
+    def __init__(self, instance):
+        super(OneVsRestModelWriter, self).__init__()
+        self.instance = instance
+
+    def saveImpl(self, path):
+        _OneVsRestSharedReadWrite.validateParams(self.instance)
+        instance = self.instance
+        numClasses = len(instance.models)
+        extraMetadata = {'numClasses': numClasses}
+        _OneVsRestSharedReadWrite.saveImpl(instance, self.sc, path, extraMetadata=extraMetadata)
+        for idx in range(numClasses):
+            subModelPath = os.path.join(path, f'model_{idx}')
+            instance.models[idx].save(subModelPath)
 
 
 @inherit_doc

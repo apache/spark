@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils
 
-class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
+class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   override def mode: ServerMode.Value = ServerMode.binary
 
@@ -283,6 +283,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       .add("c14", "timestamp", nullable = false, "14")
       .add("c15", "struct<X: bigint,Y: double>", nullable = true, "15")
       .add("c16", "binary", nullable = false, "16")
+      .add("c17", "char(255)", nullable = true, "17")
+      .add("c18", "varchar(1024)", nullable = false, "18")
 
     val ddl =
       s"""
@@ -299,7 +301,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
       import java.sql.Types._
       val expectedJavaTypes = Seq(BOOLEAN, TINYINT, SMALLINT, INTEGER, BIGINT, FLOAT, DOUBLE,
-        DECIMAL, DECIMAL, VARCHAR, ARRAY, ARRAY, JAVA_OBJECT, DATE, TIMESTAMP, STRUCT, BINARY)
+        DECIMAL, DECIMAL, VARCHAR, ARRAY, ARRAY, JAVA_OBJECT, DATE, TIMESTAMP, STRUCT, BINARY,
+        CHAR, VARCHAR)
 
       var pos = 0
 
@@ -313,7 +316,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
         val colSize = rowSet.getInt("COLUMN_SIZE")
         schema(pos).dataType match {
-          case StringType | BinaryType | _: ArrayType | _: MapType => assert(colSize === 0)
+          case StringType | BinaryType | _: ArrayType | _: MapType | _: VarcharType =>
+            assert(colSize === 0)
           case o => assert(colSize === o.defaultSize)
         }
 
@@ -342,7 +346,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         pos += 1
       }
 
-      assert(pos === 17, "all columns should have been verified")
+      assert(pos === 19, "all columns should have been verified")
     }
   }
 

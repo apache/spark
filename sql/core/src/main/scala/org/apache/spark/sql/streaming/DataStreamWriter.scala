@@ -22,12 +22,16 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.plans.logical.CreateTableStatement
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -301,13 +305,84 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * table as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
    * the stream.
    *
+   * For v1 table, partitioning columns provided by `partitionBy` will be respected no matter the
+   * table exists or not. A new table will be created if the table not exists.
+   *
+   * For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will be
+   * respected only if the v2 table does not exist. Besides, the v2 table created by this API lacks
+   * some functionalities (e.g., customized properties, options, and serde info). If you need them,
+   * please create the v2 table manually before the execution to avoid creating a table with
+   * incomplete information.
+   *
    * @since 3.1.0
    */
+  @Evolving
   @throws[TimeoutException]
-  def saveAsTable(tableName: String): StreamingQuery = {
-    this.source = SOURCE_NAME_TABLE
+  def toTable(tableName: String): StreamingQuery = {
     this.tableName = tableName
-    startInternal(None)
+
+    import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
+
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    val originalMultipartIdentifier = df.sparkSession.sessionState.sqlParser
+      .parseMultipartIdentifier(tableName)
+    val CatalogAndIdentifier(catalog, identifier) = originalMultipartIdentifier
+
+    // Currently we don't create a logical streaming writer node in logical plan, so cannot rely
+    // on analyzer to resolve it. Directly lookup only for temp view to provide clearer message.
+    // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
+    if (df.sparkSession.sessionState.catalog.isTempView(originalMultipartIdentifier)) {
+      throw new AnalysisException(s"Temporary view $tableName doesn't support streaming write")
+    }
+
+    if (!catalog.asTableCatalog.tableExists(identifier)) {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      /**
+       * Note, currently the new table creation by this API doesn't fully cover the V2 table.
+       * TODO (SPARK-33638): Full support of v2 table creation
+       */
+      val cmd = CreateTableStatement(
+        originalMultipartIdentifier,
+        df.schema.asNullable,
+        partitioningColumns.getOrElse(Nil).asTransforms.toSeq,
+        None,
+        Map.empty[String, String],
+        Some(source),
+        Map.empty[String, String],
+        extraOptions.get("path"),
+        None,
+        None,
+        external = false,
+        ifNotExists = false)
+      Dataset.ofRows(df.sparkSession, cmd)
+    }
+
+    val tableInstance = catalog.asTableCatalog.loadTable(identifier)
+
+    def writeToV1Table(table: CatalogTable): StreamingQuery = {
+      if (table.tableType == CatalogTableType.VIEW) {
+        throw new AnalysisException(s"Streaming into views $tableName is not supported.")
+      }
+      require(table.provider.isDefined)
+      if (source != table.provider.get) {
+        throw new AnalysisException(s"The input source($source) is different from the table " +
+          s"$tableName's data source provider(${table.provider.get}).")
+      }
+      format(table.provider.get)
+        .option("path", new Path(table.location).toString).start()
+    }
+
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    tableInstance match {
+      case t: SupportsWrite if t.supports(STREAMING_WRITE) =>
+        startQuery(t, extraOptions, catalogAndIdent = Some(catalog.asTableCatalog, identifier))
+      case t: V2TableWithV1Fallback =>
+        writeToV1Table(t.v1Table)
+      case t: V1Table =>
+        writeToV1Table(t.v1Table)
+      case t => throw new AnalysisException(s"Table $tableName doesn't support streaming " +
+        s"write - $t")
+    }
   }
 
   private def startInternal(path: Option[String]): StreamingQuery = {
@@ -316,42 +391,15 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         "write files of Hive data source directly.")
     }
 
-    if (source == SOURCE_NAME_TABLE) {
-      assertNotPartitioned(SOURCE_NAME_TABLE)
-
-      import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
-
-      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-      val originalMultipartIdentifier = df.sparkSession.sessionState.sqlParser
-        .parseMultipartIdentifier(tableName)
-      val CatalogAndIdentifier(catalog, identifier) = originalMultipartIdentifier
-
-      // Currently we don't create a logical streaming writer node in logical plan, so cannot rely
-      // on analyzer to resolve it. Directly lookup only for temp view to provide clearer message.
-      // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
-      if (df.sparkSession.sessionState.catalog.isTempView(originalMultipartIdentifier)) {
-        throw new AnalysisException(s"Temporary view $tableName doesn't support streaming write")
-      }
-
-      val tableInstance = catalog.asTableCatalog.loadTable(identifier)
-
-      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      val sink = tableInstance match {
-        case t: SupportsWrite if t.supports(STREAMING_WRITE) => t
-        case t => throw new AnalysisException(s"Table $tableName doesn't support streaming " +
-          s"write - $t")
-      }
-
-      startQuery(sink, extraOptions)
-    } else if (source == SOURCE_NAME_MEMORY) {
+    if (source == SOURCE_NAME_MEMORY) {
       assertNotPartitioned(SOURCE_NAME_MEMORY)
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
       val sink = new MemorySink()
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink, df.schema.toAttributes))
-      val recoverFromChkpoint = outputMode == OutputMode.Complete()
-      val query = startQuery(sink, extraOptions, recoverFromCheckpoint = recoverFromChkpoint)
+      val recoverFromCheckpoint = outputMode == OutputMode.Complete()
+      val query = startQuery(sink, extraOptions, recoverFromCheckpoint = recoverFromCheckpoint)
       resultDf.createOrReplaceTempView(query.name)
       query
     } else if (source == SOURCE_NAME_FOREACH) {
@@ -413,7 +461,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private def startQuery(
       sink: Table,
       newOptions: CaseInsensitiveMap[String],
-      recoverFromCheckpoint: Boolean = true): StreamingQuery = {
+      recoverFromCheckpoint: Boolean = true,
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQuery = {
     val useTempCheckpointLocation = SOURCES_ALLOW_ONE_TIME_QUERY.contains(source)
 
     df.sparkSession.sessionState.streamingQueryManager.startQuery(
@@ -425,7 +474,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       outputMode,
       useTempCheckpointLocation = useTempCheckpointLocation,
       recoverFromCheckpointLocation = recoverFromCheckpoint,
-      trigger = trigger)
+      trigger = trigger,
+      catalogAndIdent = catalogAndIdent)
   }
 
   private def createV1Sink(optionsWithPath: CaseInsensitiveMap[String]): Sink = {
@@ -457,12 +507,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * :: Experimental ::
    *
    * (Scala-specific) Sets the output of the streaming query to be processed using the provided
-   * function. This is supported only the in the micro-batch execution modes (that is, when the
+   * function. This is supported only in the micro-batch execution modes (that is, when the
    * trigger is not continuous). In every micro-batch, the provided function will be called in
    * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
-   * The batchId can be used deduplicate and transactionally write the output
+   * The batchId can be used to deduplicate and transactionally write the output
    * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to exactly same for the same batchId (assuming all operations are deterministic in the query).
+   * to be exactly the same for the same batchId (assuming all operations are deterministic
+   * in the query).
    *
    * @since 2.4.0
    */
@@ -478,12 +529,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * :: Experimental ::
    *
    * (Java-specific) Sets the output of the streaming query to be processed using the provided
-   * function. This is supported only the in the micro-batch execution modes (that is, when the
+   * function. This is supported only in the micro-batch execution modes (that is, when the
    * trigger is not continuous). In every micro-batch, the provided function will be called in
    * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
-   * The batchId can be used deduplicate and transactionally write the output
+   * The batchId can be used to deduplicate and transactionally write the output
    * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to exactly same for the same batchId (assuming all operations are deterministic in the query).
+   * to be exactly the same for the same batchId (assuming all operations are deterministic
+   * in the query).
    *
    * @since 2.4.0
    */

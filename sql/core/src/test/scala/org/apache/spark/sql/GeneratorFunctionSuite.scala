@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Generator}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -358,8 +359,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 }
 
-case class EmptyGenerator() extends Generator {
-  override def children: Seq[Expression] = Nil
+case class EmptyGenerator() extends Generator with LeafLike[Expression] {
   override def elementSchema: StructType = new StructType().add("id", IntegerType)
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

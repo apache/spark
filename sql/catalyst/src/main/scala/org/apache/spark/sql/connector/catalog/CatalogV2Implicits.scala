@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, Transform}
 
 /**
@@ -132,14 +133,6 @@ private[sql] object CatalogV2Implicits {
     }
 
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")
-  }
-
-  def quoteIfNeeded(part: String): String = {
-    if (part.contains(".") || part.contains("`")) {
-      s"`${part.replace("`", "``")}`"
-    } else {
-      part
-    }
   }
 
   def parseColumnPath(name: String): Seq[String] = {

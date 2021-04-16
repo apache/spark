@@ -30,12 +30,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, SortOrder, Transform, YearsTransform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
-import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
-import org.apache.spark.sql.types.{DataType, DateType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.sources.{AlwaysTrue, And, EqualNullSafe, EqualTo, Filter, IsNotNull, IsNull}
+import org.apache.spark.sql.types.{DataType, DateType, IntegerType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -46,7 +47,10 @@ class InMemoryTable(
     val name: String,
     val schema: StructType,
     override val partitioning: Array[Transform],
-    override val properties: util.Map[String, String])
+    override val properties: util.Map[String, String],
+    val distribution: Distribution = Distributions.unspecified(),
+    val ordering: Array[SortOrder] = Array.empty,
+    val numPartitions: Option[Int] = None)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
@@ -58,7 +62,7 @@ class InMemoryTable(
 
   private object IndexColumn extends MetadataColumn {
     override def name: String = "index"
-    override def dataType: DataType = StringType
+    override def dataType: DataType = IntegerType
     override def comment: String = "Metadata column used to conflict with a data column"
   }
 
@@ -165,6 +169,47 @@ class InMemoryTable(
 
   protected def addPartitionKey(key: Seq[Any]): Unit = {}
 
+  protected def renamePartitionKey(
+      partitionSchema: StructType,
+      from: Seq[Any],
+      to: Seq[Any]): Boolean = {
+    val rows = dataMap.remove(from).getOrElse(new BufferedRows(from.mkString("/")))
+    val newRows = new BufferedRows(to.mkString("/"))
+    rows.rows.foreach { r =>
+      val newRow = new GenericInternalRow(r.numFields)
+      for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema(i).dataType))
+      for (i <- 0 until partitionSchema.length) {
+        val j = schema.fieldIndex(partitionSchema(i).name)
+        newRow.update(j, to(i))
+      }
+      newRows.withRow(newRow)
+    }
+    dataMap.put(to, newRows).foreach { _ =>
+      throw new IllegalStateException(
+        s"The ${to.mkString("[", ", ", "]")} partition exists already")
+    }
+    true
+  }
+
+  protected def removePartitionKey(key: Seq[Any]): Unit = dataMap.synchronized {
+    dataMap.remove(key)
+  }
+
+  protected def createPartitionKey(key: Seq[Any]): Unit = dataMap.synchronized {
+    if (!dataMap.contains(key)) {
+      val emptyRows = new BufferedRows(key.toArray.mkString("/"))
+      val rows = if (key.length == schema.length) {
+        emptyRows.withRow(InternalRow.fromSeq(key))
+      } else emptyRows
+      dataMap.put(key, rows)
+    }
+  }
+
+  protected def clearPartition(key: Seq[Any]): Unit = dataMap.synchronized {
+    assert(dataMap.contains(key))
+    dataMap(key).clear()
+  }
+
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row)
@@ -248,11 +293,21 @@ class InMemoryTable(
         this
       }
 
-      override def buildForBatch(): BatchWrite = writer
+      override def build(): Write = new Write with RequiresDistributionAndOrdering {
+        override def requiredDistribution: Distribution = distribution
 
-      override def buildForStreaming(): StreamingWrite = streamingWriter match {
-        case exc: StreamingNotSupportedOperation => exc.throwsException()
-        case s => s
+        override def requiredOrdering: Array[SortOrder] = ordering
+
+        override def requiredNumPartitions(): Int = {
+          numPartitions.getOrElse(0)
+        }
+
+        override def toBatch: BatchWrite = writer
+
+        override def toStreaming: StreamingWrite = streamingWriter match {
+          case exc: StreamingNotSupportedOperation => exc.throwsException()
+          case s => s
+        }
       }
     }
   }
@@ -335,6 +390,10 @@ class InMemoryTable(
     }
   }
 
+  override def canDeleteWhere(filters: Array[Filter]): Boolean = {
+    InMemoryTable.supportsFilters(filters)
+  }
+
   override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
@@ -352,11 +411,34 @@ object InMemoryTable {
       filters.flatMap(splitAnd).forall {
         case EqualTo(attr, value) =>
           value == extractValue(attr, partitionNames, partValues)
+        case EqualNullSafe(attr, value) =>
+          val attrVal = extractValue(attr, partitionNames, partValues)
+          if (attrVal == null && value === null) {
+            true
+          } else if (attrVal == null || value === null) {
+            false
+          } else {
+            value == attrVal
+          }
+        case IsNull(attr) =>
+          null == extractValue(attr, partitionNames, partValues)
         case IsNotNull(attr) =>
           null != extractValue(attr, partitionNames, partValues)
+        case AlwaysTrue() => true
         case f =>
           throw new IllegalArgumentException(s"Unsupported filter type: $f")
       }
+    }
+  }
+
+  def supportsFilters(filters: Array[Filter]): Boolean = {
+    filters.flatMap(splitAnd).forall {
+      case _: EqualTo => true
+      case _: EqualNullSafe => true
+      case _: IsNull => true
+      case _: IsNotNull => true
+      case _: AlwaysTrue => true
+      case _ => false
     }
   }
 
@@ -394,6 +476,8 @@ class BufferedRows(
     rows.append(row)
     this
   }
+
+  def clear(): Unit = rows.clear()
 }
 
 private class BufferedRowsReaderFactory(

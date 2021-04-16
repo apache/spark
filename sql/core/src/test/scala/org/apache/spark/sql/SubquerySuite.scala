@@ -512,6 +512,18 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
   }
 
+  test("SPARK-34269: correlated subquery with view in aggregate's grouping expression") {
+    withTable("tr") {
+      withView("vr") {
+        r.write.saveAsTable("tr")
+        sql("create view vr as select * from tr")
+        checkAnswer(
+          sql("select a, (select sum(d) from vr where a = c) sum_d from l l1 group by 1, 2"),
+          Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
+      }
+    }
+  }
+
   test("SPARK-18504 extra GROUP BY column in correlated scalar subquery is not permitted") {
     withTempView("t") {
       Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
@@ -883,7 +895,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTempView("t") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
       val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.message.contains("cannot resolve '`a`' given input columns: [t.i, t.j]"))
+      assert(e.message.contains("cannot resolve 'a' given input columns: [t.i, t.j]"))
     }
   }
 
@@ -1103,12 +1115,12 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
            |SELECT c1 FROM t1
            |WHERE
            |c1 IN ((
-           |        SELECT c1 FROM t2
+           |        SELECT c1 + 1 AS c1 FROM t2
            |        ORDER BY c1
            |       )
            |       UNION
            |       (
-           |         SELECT c1 FROM t2
+           |         SELECT c1 + 2 AS c1 FROM t2
            |         ORDER BY c1
            |       ))
         """.stripMargin
@@ -1751,6 +1763,68 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           }
         }
       }
+    }
+  }
+
+  test("SPARK-28379: non-aggregated zero row scalar subquery") {
+    checkAnswer(
+      sql("select a, (select id from range(0) where id = a) from l where a = 3"),
+      Row(3, null))
+    checkAnswer(
+      sql("select a, (select c from (select * from r limit 0) where c = a) from l where a = 3"),
+      Row(3, null))
+  }
+
+  test("SPARK-28379: non-aggregated single row correlated scalar subquery") {
+    withTempView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      // inline table
+      checkAnswer(
+        sql("select c1, c2, (select col1 from values (0, 1) where col2 = c2) from t"),
+        Row(0, 1, 0) :: Row(1, 2, null) :: Nil)
+      // one row relation
+      checkAnswer(
+        sql("select c1, c2, (select a from (select 1 as a) where a = c2) from t"),
+        Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
+      // limit 1 with order by
+      checkAnswer(
+        sql(
+          """
+            |select c1, c2, (
+            |  select b from (select * from l order by a asc nulls last limit 1) where a = c2
+            |) from t
+            |""".stripMargin),
+        Row(0, 1, 2.0) :: Row(1, 2, null) :: Nil)
+      // limit 1 with window
+      checkAnswer(
+        sql(
+          """
+            |select c1, c2, (
+            |  select w from (
+            |    select a, sum(b) over (partition by a) w from l order by a asc nulls last limit 1
+            |  ) where a = c1 + c2
+            |) from t
+            |""".stripMargin),
+        Row(0, 1, 4.0) :: Row(1, 2, null) :: Nil)
+      // set operations
+      checkAnswer(
+        sql(
+          """
+            |select c1, c2, (
+            |  select a from ((select 1 as a) intersect (select 1 as a)) where a = c2
+            |) from t
+            |""".stripMargin),
+        Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
+      // join
+      checkAnswer(
+        sql(
+          """
+            |select c1, c2, (
+            |  select a from (select * from (select 1 as a) join (select 1 as b) on a = b)
+            |  where a = c2
+            |) from t
+            |""".stripMargin),
+        Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
     }
   }
 }

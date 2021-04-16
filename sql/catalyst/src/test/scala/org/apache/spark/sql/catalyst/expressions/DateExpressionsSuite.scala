@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.{ParseException, SimpleDateFormat}
-import java.time.{DateTimeException, Instant, LocalDate, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, Period, ZoneId}
 import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -521,30 +522,51 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("add_months") {
-    checkEvaluation(AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(1)),
+  private def testAddMonths(dataType: DataType): Unit = {
+    def addMonths(date: Literal, months: Any): AddMonthsBase = dataType match {
+      case IntegerType => AddMonths(date, Literal.create(months, dataType))
+      case YearMonthIntervalType =>
+        val period = if (months == null) null else Period.ofMonths(months.asInstanceOf[Int])
+        DateAddYMInterval(date, Literal.create(period, dataType))
+    }
+    checkEvaluation(addMonths(Literal(Date.valueOf("2015-01-30")), 1),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
-    checkEvaluation(AddMonths(Literal(Date.valueOf("2016-03-30")), Literal(-1)),
+    checkEvaluation(addMonths(Literal(Date.valueOf("2016-03-30")), -1),
       DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2015-01-30")), Literal.create(null, IntegerType)),
+      addMonths(Literal(Date.valueOf("2015-01-30")), null),
       null)
-    checkEvaluation(AddMonths(Literal.create(null, DateType), Literal(1)), null)
-    checkEvaluation(AddMonths(Literal.create(null, DateType), Literal.create(null, IntegerType)),
+    checkEvaluation(addMonths(Literal.create(null, DateType), 1), null)
+    checkEvaluation(addMonths(Literal.create(null, DateType), null),
       null)
     // Valid range of DateType is [0001-01-01, 9999-12-31]
     val maxMonthInterval = 10000 * 12
     checkEvaluation(
-      AddMonths(Literal(LocalDate.parse("0001-01-01")), Literal(maxMonthInterval)),
+      addMonths(Literal(LocalDate.parse("0001-01-01")), maxMonthInterval),
       LocalDate.of(10001, 1, 1).toEpochDay.toInt)
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("9999-12-31")), Literal(-1 * maxMonthInterval)), -719529)
+      addMonths(Literal(Date.valueOf("9999-12-31")), -1 * maxMonthInterval), -719529)
+  }
+
+  test("add_months") {
+    testAddMonths(IntegerType)
     // Test evaluation results between Interpreted mode and Codegen mode
     forAll (
       LiteralGenerator.randomGen(DateType),
       LiteralGenerator.monthIntervalLiterGen
     ) { (l1: Literal, l2: Literal) =>
       cmpInterpretWithCodegen(EmptyRow, AddMonths(l1, l2))
+    }
+  }
+
+  test("SPARK-34721: add a year-month interval to a date") {
+    testAddMonths(YearMonthIntervalType)
+    // Test evaluation results between Interpreted mode and Codegen mode
+    forAll (
+      LiteralGenerator.randomGen(DateType),
+      LiteralGenerator.yearMonthIntervalLiteralGen
+    ) { (l1: Literal, l2: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, DateAddYMInterval(l1, l2))
     }
   }
 
@@ -640,13 +662,33 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testNextDay("2015-07-23", "Fri", "2015-07-24")
     testNextDay("2015-07-23", "fr", "2015-07-24")
 
-    checkEvaluation(NextDay(Literal(Date.valueOf("2015-07-23")), Literal("xx")), null)
-    checkEvaluation(NextDay(Literal.create(null, DateType), Literal("xx")), null)
-    checkEvaluation(
-      NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
-    // Test escaping of dayOfWeek
-    GenerateUnsafeProjection.generate(
-      NextDay(Literal(Date.valueOf("2015-07-23")), Literal("\"quote")) :: Nil)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        var expr: Expression = NextDay(Literal(Date.valueOf("2015-07-23")), Literal("xx"))
+        if (ansiEnabled) {
+          val errMsg = "Illegal input for day of week: xx"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        expr = NextDay(Literal.create(null, DateType), Literal("xx"))
+        checkEvaluation(expr, null)
+
+        expr = NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType))
+        checkEvaluation(expr, null)
+
+        // Test escaping of dayOfWeek
+        expr = NextDay(Literal(Date.valueOf("2015-07-23")), Literal("\"quote"))
+        GenerateUnsafeProjection.generate(expr :: Nil)
+        if (ansiEnabled) {
+          val errMsg = """Illegal input for day of week: "quote"""
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+      }
+    }
   }
 
   private def testTruncDate(input: Date, fmt: String, expected: Date): Unit = {
@@ -1132,42 +1174,112 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("timestamps difference") {
+  test("SPARK-34903: timestamps difference") {
     val end = Instant.parse("2019-10-04T11:04:01.123456Z")
-    checkEvaluation(SubtractTimestamps(Literal(end), Literal(end)),
-      new CalendarInterval(0, 0, 0))
-    checkEvaluation(SubtractTimestamps(Literal(end), Literal(Instant.EPOCH)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
-        "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds")))
-    checkEvaluation(SubtractTimestamps(Literal(Instant.EPOCH), Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
-        "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds")))
-    checkEvaluation(
-      SubtractTimestamps(
-        Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
-        Literal(Instant.parse("0001-01-01T00:00:00Z"))),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
-        "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
+    outstandingTimezonesIds.foreach { tz =>
+      def sub(left: Instant, right: Instant): Expression = {
+        SubtractTimestamps(
+          Literal(left),
+          Literal(right),
+          legacyInterval = true,
+          timeZoneId = Some(tz))
+      }
+      checkEvaluation(sub(end, end), new CalendarInterval(0, 0, 0))
+      checkEvaluation(sub(end, Instant.EPOCH),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds")))
+      checkEvaluation(sub(Instant.EPOCH, end),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds")))
+      checkEvaluation(
+        sub(
+          Instant.parse("9999-12-31T23:59:59.999999Z"),
+          Instant.parse("0001-01-01T00:00:00Z")),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
+    }
+
+    outstandingTimezonesIds.foreach { tz =>
+      def check(left: Instant, right: Instant): Unit = {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(left),
+            Literal(right),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.between(
+            right.atZone(getZoneId(tz)).toLocalDateTime,
+            left.atZone(getZoneId(tz)).toLocalDateTime))
+      }
+
+      check(end, end)
+      check(end, Instant.EPOCH)
+      check(Instant.EPOCH, end)
+      check(Instant.parse("9999-12-31T23:59:59.999999Z"), Instant.parse("0001-01-01T00:00:00Z"))
+
+      val errMsg = intercept[ArithmeticException] {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(Instant.MIN),
+            Literal(Instant.MAX),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.ZERO)
+      }.getMessage
+      assert(errMsg.contains("overflow"))
+
+      Seq(false, true).foreach { legacy =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (end: Expression, start: Expression) => SubtractTimestamps(end, start, legacy, Some(tz)),
+          TimestampType, TimestampType)
+      }
+    }
   }
 
-  test("subtract dates") {
+  test("SPARK-34896: subtract dates") {
     val end = LocalDate.of(2019, 10, 5)
-    checkEvaluation(SubtractDates(Literal(end), Literal(end)),
-      new CalendarInterval(0, 0, 0))
-    checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 days")))
-    checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval -1 days")))
     val epochDate = Literal(LocalDate.ofEpochDay(0))
-    checkEvaluation(SubtractDates(Literal(end), epochDate),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval 49 years 9 months 4 days")))
-    checkEvaluation(SubtractDates(epochDate, Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval -49 years -9 months -4 days")))
-    checkEvaluation(
-      SubtractDates(
-        Literal(LocalDate.of(10000, 1, 1)),
-        Literal(LocalDate.of(1, 1, 1))),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      checkEvaluation(SubtractDates(Literal(end), Literal(end)),
+        new CalendarInterval(0, 0, 0))
+      checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 days")))
+      checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval -1 days")))
+      checkEvaluation(SubtractDates(Literal(end), epochDate),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 49 years 9 months 4 days")))
+      checkEvaluation(SubtractDates(epochDate, Literal(end)),
+        IntervalUtils.stringToInterval(
+          UTF8String.fromString("interval -49 years -9 months -4 days")))
+      checkEvaluation(
+        SubtractDates(
+          Literal(LocalDate.of(10000, 1, 1)),
+          Literal(LocalDate.of(1, 1, 1))),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
+    }
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
+      checkEvaluation(SubtractDates(Literal(end), Literal(end)), Duration.ZERO)
+      checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)), Duration.ofDays(1))
+      checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)), Duration.ofDays(-1))
+      checkEvaluation(SubtractDates(Literal(end), epochDate), Duration.ofDays(end.toEpochDay))
+      checkEvaluation(SubtractDates(epochDate, Literal(end)),
+        Duration.ofDays(end.toEpochDay).negated())
+      checkEvaluation(
+        SubtractDates(
+          Literal(LocalDate.of(10000, 1, 1)),
+          Literal(LocalDate.of(1, 1, 1))),
+        Duration.ofDays(ChronoUnit.DAYS.between( LocalDate.of(1, 1, 1), LocalDate.of(10000, 1, 1))))
+      checkExceptionInExpression[ArithmeticException](
+        SubtractDates(Literal(LocalDate.MAX), Literal(LocalDate.MIN)),
+        "overflow")
+    }
+    Seq(false, true).foreach { ansiIntervals =>
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (end: Expression, start: Expression) => SubtractDates(end, start, ansiIntervals),
+        DateType, DateType)
+    }
   }
 
   test("to_timestamp exception mode") {
@@ -1245,6 +1357,75 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkResult(Int.MinValue.toLong - 100)
   }
 
+  test("DATE_FROM_UNIX_DATE") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        DateFromUnixDate(Literal(value.intValue())),
+        LocalDate.ofEpochDay(value.intValue()))
+    }
+    // test null input
+    checkEvaluation(DateFromUnixDate(Literal(null, IntegerType)), null)
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+  }
+
+  test("UNIX_DATE") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        UnixDate(Literal(LocalDate.ofEpochDay(value.intValue()))),
+        value.intValue())
+    }
+    // test null input
+    checkEvaluation(UnixDate(Literal(null, DateType)), null)
+    // test various inputs
+    testIntegralInput(testIntegralFunc)
+  }
+
+  test("UNIX_SECONDS") {
+    checkEvaluation(UnixSeconds(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixSeconds(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    // -1ms is considered to be in -1st second, as 0-999ms is in 0th second.
+    timestamp = Literal(new Timestamp(-1L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    // Truncates higher levels of precision
+    timestamp = Literal(new Timestamp(1999L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+  }
+
+  test("UNIX_MILLIS") {
+    checkEvaluation(UnixMillis(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMillis(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMillis(timestamp), 1000L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMillis(timestamp), -1000L)
+    // Truncates higher levels of precision
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(999999)
+    checkEvaluation(UnixMillis(Literal(timestampWithNanos)), 1000L)
+  }
+
+  test("UNIX_MICROS") {
+    checkEvaluation(UnixMicros(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMicros(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMicros(timestamp), 1000000L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMicros(timestamp), -1000000L)
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(1000) // 1 microsecond
+    checkEvaluation(UnixMicros(Literal(timestampWithNanos)), 1000001L)
+  }
+
   test("TIMESTAMP_SECONDS") {
     def testIntegralFunc(value: Number): Unit = {
       checkEvaluation(
@@ -1296,6 +1477,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       SecondsToTimestamp(Literal(123.456789123)),
       Instant.ofEpochSecond(123, 456789000))
+    checkEvaluation(SecondsToTimestamp(Literal(16777215.0f)), Instant.ofEpochSecond(16777215))
   }
 
   test("TIMESTAMP_MILLIS") {
@@ -1389,4 +1571,97 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
- }
+
+  test("SPARK-34739: add a year-month interval to a timestamp") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    for (zid <- outstandingZoneIds) {
+      val timeZoneId = Option(zid.getId)
+      sdf.setTimeZone(TimeZone.getTimeZone(zid))
+
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:11:12.123").getTime)),
+          Literal(Period.ofMonths(2)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2016-03-29 10:11:12.123").getTime)))
+
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal.create(null, TimestampType),
+          Literal(Period.ofMonths(1)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
+          Literal.create(null, YearMonthIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal.create(null, TimestampType),
+          Literal.create(null, YearMonthIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, interval: Expression) => TimestampAddYMInterval(ts, interval, timeZoneId),
+        TimestampType, YearMonthIntervalType)
+    }
+  }
+
+  test("SPARK-34761: add a day-time interval to a timestamp") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    for (zid <- outstandingZoneIds) {
+      val timeZoneId = Option(zid.getId)
+      sdf.setTimeZone(TimeZone.getTimeZone(zid))
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+          Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2021-01-11 00:10:00.444").getTime)))
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:10:00.123").getTime)),
+          Literal(Duration.ofDays(-10).minusMinutes(9).minusMillis(120)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2020-12-22 00:01:00.003").getTime)))
+
+      val e = intercept[Exception] {
+        checkEvaluation(
+          TimeAdd(
+            Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+            Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+            timeZoneId),
+          null)
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal(Duration.ofDays(1)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+          Literal.create(null, DayTimeIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal.create(null, DayTimeIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, interval: Expression) => TimeAdd(ts, interval, timeZoneId),
+        TimestampType, DayTimeIntervalType)
+    }
+  }
+}

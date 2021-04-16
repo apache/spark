@@ -212,9 +212,9 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val initializeWithNonexistingMethod = InitializeJavaBean(
       Literal.fromObject(new java.util.LinkedList[Int]),
-      Map("nonexisting" -> Literal(1)))
+      Map("nonexistent" -> Literal(1)))
     checkExceptionInExpression[Exception](initializeWithNonexistingMethod,
-      """A method named "nonexisting" is not declared in any enclosing class """ +
+      """A method named "nonexistent" is not declared in any enclosing class """ +
         "nor any supertype")
 
     val initializeWithWrongParamType = InitializeJavaBean(

@@ -73,7 +73,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def schema(schema: StructType): DataFrameReader = {
-    this.userSpecifiedSchema = Option(CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema))
+    if (schema != null) {
+      val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+      this.userSpecifiedSchema = Option(replaced)
+    }
     this
   }
 
@@ -89,8 +92,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.3.0
    */
   def schema(schemaString: String): DataFrameReader = {
-    this.userSpecifiedSchema = Option(StructType.fromDDL(schemaString))
-    this
+    schema(StructType.fromDDL(schemaString))
   }
 
   /**
@@ -265,14 +267,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
 
-      val optionsWithPath = if (paths.isEmpty) {
-        extraOptions
-      } else if (paths.length == 1) {
-        extraOptions + ("path" -> paths.head)
-      } else {
-        val objectMapper = new ObjectMapper()
-        extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
-      }
+      val optionsWithPath = getOptionsWithPaths(paths: _*)
 
       val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
         optionsWithPath.originalMap
@@ -303,6 +298,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case _ => loadV1Source(paths: _*)
       }
     }.getOrElse(loadV1Source(paths: _*))
+  }
+
+  private def getOptionsWithPaths(paths: String*): CaseInsensitiveMap[String] = {
+    if (paths.isEmpty) {
+      extraOptions
+    } else if (paths.length == 1) {
+      extraOptions + ("path" -> paths.head)
+    } else {
+      val objectMapper = new ObjectMapper()
+      extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
+    }
   }
 
   private def loadV1Source(paths: String*) = {
@@ -822,6 +828,29 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
+   * <li>`datetimeRebaseMode` (default is the value specified in the SQL config
+   * `spark.sql.parquet.datetimeRebaseModeInRead`): the rebasing mode for the values
+   * of the `DATE`, `TIMESTAMP_MICROS`, `TIMESTAMP_MILLIS` logical types from the Julian to
+   * Proleptic Gregorian calendar:
+   *   <ul>
+   *     <li>`EXCEPTION` : Spark fails in reads of ancient dates/timestamps that are ambiguous
+   *     between the two calendars</li>
+   *     <li>`CORRECTED` : loading of dates/timestamps without rebasing</li>
+   *     <li>`LEGACY` : perform rebasing of ancient dates/timestamps from the Julian to Proleptic
+   *     Gregorian calendar</li>
+   *   </ul>
+   * </li>
+   * <li>`int96RebaseMode` (default is the value specified in the SQL config
+   * `spark.sql.parquet.int96RebaseModeInRead`): the rebasing mode for `INT96` timestamps
+   * from the Julian to Proleptic Gregorian calendar:
+   *   <ul>
+   *     <li>`EXCEPTION` : Spark fails in reads of ancient `INT96` timestamps that are ambiguous
+   *     between the two calendars</li>
+   *     <li>`CORRECTED` : loading of timestamps without rebasing</li>
+   *     <li>`LEGACY` : perform rebasing of ancient `INT96` timestamps from the Julian to Proleptic
+   *     Gregorian calendar</li>
+   *   </ul>
+   * </li>
    * </ul>
    *
    * @since 1.4.0

@@ -148,9 +148,9 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       <td>{formatResourcesAddresses(executor.resources)}</td>
       <td>{executor.state}</td>
       <td>
-        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+        <a href={s"$workerUrlRef/logPage/?appId=${executor.application.id}&executorId=${executor.
           id}&logType=stdout"}>stdout</a>
-        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+        <a href={s"$workerUrlRef/logPage/?appId=${executor.application.id}&executorId=${executor.
           id}&logType=stderr"}>stderr</a>
       </td>
     </tr>

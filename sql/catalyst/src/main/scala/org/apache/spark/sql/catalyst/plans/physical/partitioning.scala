@@ -164,7 +164,7 @@ trait Partitioning {
    * i.e. the current dataset does not need to be re-partitioned for the `required`
    * Distribution (it is possible that tuples within a partition need to be reorganized).
    *
-   * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` does't match
+   * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` doesn't match
    * [[Distribution.requiredNumPartitions]].
    */
   final def satisfies(required: Distribution): Boolean = {
@@ -235,6 +235,9 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
    * than numPartitions) based on hashing expressions.
    */
   def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
 }
 
 /**
@@ -284,6 +287,10 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
       }
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): RangePartitioning =
+    copy(ordering = newChildren.asInstanceOf[Seq[SortOrder]])
 }
 
 /**
@@ -326,6 +333,10 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")
   }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): PartitioningCollection =
+    super.legacyWithNewChildren(newChildren).asInstanceOf[PartitioningCollection]
 }
 
 /**

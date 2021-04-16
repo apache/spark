@@ -623,9 +623,9 @@ abstract class SchemaPruningSuite
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
 
-      val departmentScahem = "`depId` INT,`depName` STRING,`contactId` INT, " +
+      val departmentSchema = "`depId` INT,`depName` STRING,`contactId` INT, " +
         "`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, `address`: STRING>>"
-      spark.read.format(dataSourceName).schema(departmentScahem).load(path + "/departments")
+      spark.read.format(dataSourceName).schema(departmentSchema).load(path + "/departments")
         .createOrReplaceTempView("departments")
 
       testThunk
@@ -651,9 +651,9 @@ abstract class SchemaPruningSuite
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
 
-      val departmentScahem = "`depId` INT,`depName` STRING,`contactId` INT, " +
+      val departmentSchema = "`depId` INT,`depName` STRING,`contactId` INT, " +
         "`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, `address`: STRING>>"
-      spark.read.format(dataSourceName).schema(departmentScahem).load(path + "/departments")
+      spark.read.format(dataSourceName).schema(departmentSchema).load(path + "/departments")
         .createOrReplaceTempView("departments")
 
       testThunk
@@ -772,6 +772,48 @@ abstract class SchemaPruningSuite
         val expectedScanSchema = CatalystSqlParser.parseDataType(expectedScanSchemaCatalogString)
         implicit val equality = schemaEquality
         assert(scanSchema === expectedScanSchema)
+    }
+  }
+
+  testSchemaPruning("SPARK-34963: extract case-insensitive struct field from array") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query1 = spark.table("contacts")
+        .select("friends.First", "friends.MiDDle")
+      checkScan(query1, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query1,
+        Row(Array.empty[String], Array.empty[String]) ::
+          Row(Array("Susan"), Array("Z.")) ::
+          Row(null, null) ::
+          Row(null, null) :: Nil)
+
+      val query2 = spark.table("contacts")
+        .where("friends.First is not null")
+        .select("friends.First", "friends.MiDDle")
+      checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+      checkAnswer(query2,
+        Row(Array.empty[String], Array.empty[String]) ::
+          Row(Array("Susan"), Array("Z.")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-34963: extract case-insensitive struct field from struct") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query1 = spark.table("contacts")
+        .select("Name.First", "NAME.MiDDle")
+      checkScan(query1, "struct<name:struct<first:string,middle:string>>")
+      checkAnswer(query1,
+        Row("Jane", "X.") ::
+          Row("Janet", null) ::
+          Row("Jim", null) ::
+          Row("John", "Y.") :: Nil)
+
+      val query2 = spark.table("contacts")
+        .where("Name.MIDDLE is not null")
+        .select("Name.First", "NAME.MiDDle")
+      checkScan(query2, "struct<name:struct<first:string,middle:string>>")
+      checkAnswer(query2,
+        Row("Jane", "X.") ::
+          Row("John", "Y.") :: Nil)
     }
   }
 }

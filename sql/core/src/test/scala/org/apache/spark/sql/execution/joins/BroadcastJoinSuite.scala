@@ -242,33 +242,40 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     assert(HashJoin.rewriteKeyExpr(l :: l :: Nil) === l :: l :: Nil)
     assert(HashJoin.rewriteKeyExpr(l :: i :: Nil) === l :: i :: Nil)
 
-    assert(HashJoin.rewriteKeyExpr(i :: Nil) === Cast(i, LongType) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(i :: Nil) ===
+      Cast(i, LongType, Some(conf.sessionLocalTimeZone)) :: Nil)
     assert(HashJoin.rewriteKeyExpr(i :: l :: Nil) === i :: l :: Nil)
     assert(HashJoin.rewriteKeyExpr(i :: i :: Nil) ===
-      BitwiseOr(ShiftLeft(Cast(i, LongType), Literal(32)),
-        BitwiseAnd(Cast(i, LongType), Literal((1L << 32) - 1))) :: Nil)
+      BitwiseOr(ShiftLeft(Cast(i, LongType, Some(conf.sessionLocalTimeZone)), Literal(32)),
+        BitwiseAnd(Cast(i, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 32) - 1))) ::
+        Nil)
     assert(HashJoin.rewriteKeyExpr(i :: i :: i :: Nil) === i :: i :: i :: Nil)
 
-    assert(HashJoin.rewriteKeyExpr(s :: Nil) === Cast(s, LongType) :: Nil)
+    assert(HashJoin.rewriteKeyExpr(s :: Nil) ===
+      Cast(s, LongType, Some(conf.sessionLocalTimeZone)) :: Nil)
     assert(HashJoin.rewriteKeyExpr(s :: l :: Nil) === s :: l :: Nil)
     assert(HashJoin.rewriteKeyExpr(s :: s :: Nil) ===
-      BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
-        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+      BitwiseOr(ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
+        BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
+        Nil)
     assert(HashJoin.rewriteKeyExpr(s :: s :: s :: Nil) ===
       BitwiseOr(ShiftLeft(
-        BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
-          BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+        BitwiseOr(ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
+          BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))),
         Literal(16)),
-        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+        BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
+        Nil)
     assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: Nil) ===
       BitwiseOr(ShiftLeft(
         BitwiseOr(ShiftLeft(
-          BitwiseOr(ShiftLeft(Cast(s, LongType), Literal(16)),
-            BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+          BitwiseOr(ShiftLeft(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal(16)),
+            BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)),
+              Literal((1L << 16) - 1))),
           Literal(16)),
-          BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))),
+          BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))),
         Literal(16)),
-        BitwiseAnd(Cast(s, LongType), Literal((1L << 16) - 1))) :: Nil)
+        BitwiseAnd(Cast(s, LongType, Some(conf.sessionLocalTimeZone)), Literal((1L << 16) - 1))) ::
+        Nil)
     assert(HashJoin.rewriteKeyExpr(s :: s :: s :: s :: s :: Nil) ===
       s :: s :: s :: s :: s :: Nil)
 

@@ -21,7 +21,8 @@ license: |
 
 Since Spark 3.0, Spark SQL introduces two experimental options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
 
-When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, SQL functions and SQL parsing).
+When `spark.sql.ansi.enabled` is set to `true`, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. For example, Spark will throw an exception at runtime instead of returning null results if the inputs to a SQL operator/function are invalid. Some ANSI dialect features may be not from the ANSI SQL standard directly, but their behaviors align with ANSI SQL's style.
+
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
 
@@ -46,10 +47,20 @@ When `spark.sql.ansi.enabled` is set to `true` and an overflow occurs in numeric
 SELECT 2147483647 + 1;
 java.lang.ArithmeticException: integer overflow
 
+SELECT abs(-2147483648);
+java.lang.ArithmeticException: integer overflow
+
 -- `spark.sql.ansi.enabled=false`
 SELECT 2147483647 + 1;
 +----------------+
 |(2147483647 + 1)|
++----------------+
+|     -2147483648|
++----------------+
+
+SELECT abs(-2147483648);
++----------------+
+|abs(-2147483648)|
 +----------------+
 |     -2147483648|
 +----------------+
@@ -61,26 +72,36 @@ Spark SQL has three kinds of type conversions: explicit casting, type coercion, 
 When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
 On the other hand, `INSERT INTO` syntax throws an analysis exception when the ANSI mode enabled via `spark.sql.storeAssignmentPolicy=ANSI`.
 
-The type conversion of Spark ANSI mode follows the syntax rules of section 6.13 "cast specification" in [ISO/IEC 9075-2:2011 Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)"](https://www.iso.org/standard/53682.html), except it specially allows the following
+The type conversion of Spark ANSI mode follows the syntax rules of section 6.13 "cast specification" in [ISO/IEC 9075-2:2011 Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)](https://www.iso.org/standard/53682.html), except it specially allows the following
  straightforward type conversions which are disallowed as per the ANSI standard:
 * NumericType <=> BooleanType
 * StringType <=> BinaryType
+* ArrayType => String
+* MapType => String
+* StructType => String
 
  The valid combinations of target data type and source data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
-    
-| From\To   | NumericType | StringType | DateType | TimestampType | IntervalType | BooleanType | BinaryType | ArrayType | MapType | StructType |
+
+| Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
 |-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
-| NumericType   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
-| StringType    | Y       | Y      | Y    | Y         | Y        | Y       | Y      | N     | N   | N      |
-| DateType      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| TimestampType | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| IntervalType  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
-| BooleanType   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
-| BinaryType    | Y       | N      | N    | N         | N        | N       | Y      | N     | N   | N      |
-| ArrayType     | N       | N      | N    | N         | N        | N       | N      | Y     | N   | N      |
-| MapType       | N       | N      | N    | N         | N        | N       | N      | N     | Y   | N      |
-| StructType    | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y      |
+| Numeric   | <span style="color:red">**Y**</span> | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| String    | <span style="color:red">**Y**</span> | Y | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | Y | N     | N   | N      |
+| Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
+| Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary    | N       | Y      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array     | N       | Y      | N    | N         | N        | N       | N      | <span style="color:red">**Y**</span> | N   | N      |
+| Map       | N       | Y      | N    | N         | N        | N       | N      | N     | <span style="color:red">**Y**</span> | N      |
+| Struct    | N       | Y      | N    | N         | N        | N       | N      | N     | N   | <span style="color:red">**Y**</span> |
+
+In the table above, all the `CAST`s that can cause runtime exceptions are marked as red <span style="color:red">**Y**</span>:
+* CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
+* CAST(String AS (Numeric/Date/Timestamp/Interval/Boolean)): raise a runtime exception if the value can't be parsed as the target data type.
+* CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
+* CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
+* CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
 
 Currently, the ANSI mode affects explicit casting and assignment casting only.
 In future releases, the behaviour of type coercion might change along with the other two type conversion rules.
@@ -94,6 +115,10 @@ java.lang.NumberFormatException: invalid input syntax for type numeric: a
 
 SELECT CAST(2147483648L AS INT);
 java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
+
+SELECT CAST(DATE'2020-01-01' AS INT)
+org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
+To convert values from date to int, you can use function UNIX_DATE instead.
 
 -- `spark.sql.ansi.enabled=false` (This is a default behaviour)
 SELECT CAST('a' AS INT);
@@ -109,6 +134,13 @@ SELECT CAST(2147483648L AS INT);
 +-----------------------+
 |            -2147483648|
 +-----------------------+
+
+SELECT CAST(DATE'2020-01-01' AS INT)
++------------------------------+
+|CAST(DATE '2020-01-01' AS INT)|
++------------------------------+
+|                          null|
++------------------------------+
 
 -- Examples of store assignment rules
 CREATE TABLE t (v INT);
@@ -132,21 +164,26 @@ SELECT * FROM t;
 
 The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `size`: This function returns null for null input.
-  - `element_at`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices. 
-  - `element_at`: This function throws `NoSuchElementException` if key does not exist in map. 
+  - `element_at`:
+    - This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
+    - This function throws `NoSuchElementException` if key does not exist in map.
   - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `parse_url`: This function throws `IllegalArgumentException` if an input string is not a valid url.
-  - `to_date` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
-  - `to_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
-  - `unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
-  - `to_unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_date`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_timestamp`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `unix_timestamp`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_unix_timestamp`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `make_date`: This function should fail with an exception if the result date is invalid.
+  - `make_timestamp`: This function should fail with an exception if the result timestamp is invalid.
+  - `make_interval`:  This function should fail with an exception if the result interval is invalid.
+  - `next_day`: This function throws `IllegalArgumentException` if input is not a valid day of week.
 
 ### SQL Operators
 
 The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
-  - `CAST(string_col AS TIMESTAMP)`: This operator should fail with an exception if the input string can't be parsed.
+  - `GROUP BY`: aliases in a select list can not be used in GROUP BY clauses. Each column referenced in a GROUP BY clause shall unambiguously reference a column of the table resulting from the FROM clause.
 
 ### SQL Keywords
 
@@ -346,6 +383,7 @@ Below is a list of all the keywords in Spark SQL.
 |REPAIR|non-reserved|non-reserved|non-reserved|
 |REPLACE|non-reserved|non-reserved|non-reserved|
 |RESET|non-reserved|non-reserved|non-reserved|
+|RESPECT|non-reserved|non-reserved|non-reserved|
 |RESTRICT|non-reserved|non-reserved|non-reserved|
 |REVOKE|non-reserved|non-reserved|reserved|
 |RIGHT|reserved|strict-non-reserved|reserved|
@@ -378,6 +416,7 @@ Below is a list of all the keywords in Spark SQL.
 |STRUCT|non-reserved|non-reserved|non-reserved|
 |SUBSTR|non-reserved|non-reserved|non-reserved|
 |SUBSTRING|non-reserved|non-reserved|non-reserved|
+|SYNC|non-reserved|non-reserved|non-reserved|
 |TABLE|reserved|non-reserved|reserved|
 |TABLES|non-reserved|non-reserved|non-reserved|
 |TABLESAMPLE|non-reserved|non-reserved|reserved|
@@ -396,6 +435,7 @@ Below is a list of all the keywords in Spark SQL.
 |TRIM|non-reserved|non-reserved|non-reserved|
 |TRUE|non-reserved|non-reserved|reserved|
 |TRUNCATE|non-reserved|non-reserved|reserved|
+|TRY_CAST|non-reserved|non-reserved|non-reserved|
 |TYPE|non-reserved|non-reserved|non-reserved|
 |UNARCHIVE|non-reserved|non-reserved|non-reserved|
 |UNBOUNDED|non-reserved|non-reserved|non-reserved|

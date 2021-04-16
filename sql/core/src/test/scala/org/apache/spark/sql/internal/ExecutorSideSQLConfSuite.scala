@@ -108,7 +108,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
           .queryExecution.executedPlan)
         assert(res.length == 2)
         assert(res.forall { case (_, code, _) =>
-          (code.contains("* Codegend pipeline") == flag) &&
+          (code.contains("* Codegened pipeline") == flag) &&
             (code.contains("// input[") == flag)
         })
       }
@@ -175,7 +175,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         df.hint("broadcast")
       }
 
-      // set local propert and assert
+      // set local property and assert
       val df2 = generateBroadcastDataFrame(confKey, confValue1)
       spark.sparkContext.setLocalProperty(confKey, confValue1)
       val checks = df1.join(df2).collect()

@@ -30,7 +30,7 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' to make predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' For more details, see
-#' \href{http://spark.apache.org/docs/latest/ml-collaborative-filtering.html}{MLlib:
+#' \href{https://spark.apache.org/docs/latest/ml-collaborative-filtering.html}{MLlib:
 #' Collaborative Filtering}.
 #'
 #' @param data a SparkDataFrame for training.

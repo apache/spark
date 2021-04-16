@@ -425,14 +425,14 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     def checkErrorMessage(
       childDataType: DataType,
       fieldDataType: DataType,
-      errorMesage: String): Unit = {
+      errorMessage: String): Unit = {
       val e = intercept[org.apache.spark.sql.AnalysisException] {
         ExtractValue(
           Literal.create(null, childDataType),
           Literal.create(null, fieldDataType),
           _ == _)
       }
-      assert(e.getMessage().contains(errorMesage))
+      assert(e.getMessage().contains(errorMessage))
     }
 
     checkErrorMessage(structType, IntegerType, "Field name should be String Literal")

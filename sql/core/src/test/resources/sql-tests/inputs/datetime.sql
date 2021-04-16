@@ -14,7 +14,14 @@ select TIMESTAMP_MILLIS(-92233720368547758);
 select TIMESTAMP_SECONDS(0.1234567);
 -- truncation is OK for float/double
 select TIMESTAMP_SECONDS(0.1234567d), TIMESTAMP_SECONDS(FLOAT(0.1234567));
-
+-- UNIX_SECONDS, UNIX_MILLISECONDS and UNIX_MICROSECONDS
+select UNIX_SECONDS(TIMESTAMP('2020-12-01 14:30:08Z')), UNIX_SECONDS(TIMESTAMP('2020-12-01 14:30:08.999999Z')), UNIX_SECONDS(null);
+select UNIX_MILLIS(TIMESTAMP('2020-12-01 14:30:08Z')), UNIX_MILLIS(TIMESTAMP('2020-12-01 14:30:08.999999Z')), UNIX_MILLIS(null);
+select UNIX_MICROS(TIMESTAMP('2020-12-01 14:30:08Z')), UNIX_MICROS(TIMESTAMP('2020-12-01 14:30:08.999999Z')), UNIX_MICROS(null);
+-- DATE_FROM_UNIX_DATE
+select DATE_FROM_UNIX_DATE(0), DATE_FROM_UNIX_DATE(1000), DATE_FROM_UNIX_DATE(null);
+-- UNIX_DATE
+select UNIX_DATE(DATE('1970-01-01')), UNIX_DATE(DATE('2020-12-04')), UNIX_DATE(null);
 -- [SPARK-16836] current_date and current_timestamp literals
 select current_date = current_date(), current_timestamp = current_timestamp();
 
@@ -154,7 +161,7 @@ select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMM
 select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 
--- Timestamp type parse error
+-- Datetime types parse error
 select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
 select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
 select to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
@@ -163,4 +170,12 @@ select unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
 select unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
 select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
 select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
-select cast("Unparseable" as timestamp)
+select cast("Unparseable" as timestamp);
+select cast("Unparseable" as date);
+
+-- next_day
+select next_day("2015-07-23", "Mon");
+select next_day("2015-07-23", "xx");
+select next_day("xx", "Mon");
+select next_day(null, "Mon");
+select next_day(null, "xx");

@@ -60,7 +60,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       case other => fail(other.toString)
     }
 
-    // Both sides are PartitioningCollection, but left side cannot be reorderd to match
+    // Both sides are PartitioningCollection, but left side cannot be reordered to match
     // and it should fall back to the right side.
     val smjExec3 = SortMergeJoinExec(
       exprA :: exprC :: Nil, exprB :: exprA :: Nil, Inner, None, plan1, plan1)

@@ -232,6 +232,7 @@ class FeatureTests(SparkSessionTestCase):
         model = StringIndexerModel.from_labels(["a", "b", "c"], inputCol="label",
                                                outputCol="indexed", handleInvalid="keep")
         self.assertEqual(model.labels, ["a", "b", "c"])
+        self.assertEqual(model.labelsArray, [("a", "b", "c")])
 
         df1 = self.spark.createDataFrame([
             (0, "a"),

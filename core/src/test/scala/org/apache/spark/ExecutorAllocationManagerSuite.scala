@@ -936,6 +936,53 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
+  test("SPARK-33763: metrics to track dynamic allocation (decommissionEnabled=false)") {
+    val manager = createManager(createConf(3, 5, 3))
+    (1 to 5).map(_.toString).foreach { id => onExecutorAddedDefaultProfile(manager, id) }
+
+    assert(executorsPendingToRemove(manager).isEmpty)
+    assert(removeExecutorsDefaultProfile(manager, Seq("1", "2")) === Seq("1", "2"))
+    assert(executorsPendingToRemove(manager).contains("1"))
+    assert(executorsPendingToRemove(manager).contains("2"))
+
+    onExecutorRemoved(manager, "1", "driver requested exit")
+    assert(manager.executorAllocationManagerSource.driverKilled.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 0)
+
+    onExecutorRemoved(manager, "2", "another driver requested exit")
+    assert(manager.executorAllocationManagerSource.driverKilled.getCount() === 2)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 0)
+
+    onExecutorRemoved(manager, "3", "this will be an unexpected exit")
+    assert(manager.executorAllocationManagerSource.driverKilled.getCount() === 2)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 1)
+  }
+
+  test("SPARK-33763: metrics to track dynamic allocation (decommissionEnabled = true)") {
+    val manager = createManager(createConf(3, 5, 3, decommissioningEnabled = true))
+    (1 to 5).map(_.toString).foreach { id => onExecutorAddedDefaultProfile(manager, id) }
+
+    assert(executorsPendingToRemove(manager).isEmpty)
+    assert(removeExecutorsDefaultProfile(manager, Seq("1", "2")) === Seq("1", "2"))
+    assert(executorsDecommissioning(manager).contains("1"))
+    assert(executorsDecommissioning(manager).contains("2"))
+
+    onExecutorRemoved(manager, "1", ExecutorLossMessage.decommissionFinished)
+    assert(manager.executorAllocationManagerSource.gracefullyDecommissioned.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.decommissionUnfinished.getCount() === 0)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 0)
+
+    onExecutorRemoved(manager, "2", "stopped before gracefully finished")
+    assert(manager.executorAllocationManagerSource.gracefullyDecommissioned.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.decommissionUnfinished.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 0)
+
+    onExecutorRemoved(manager, "3", "this will be an unexpected exit")
+    assert(manager.executorAllocationManagerSource.gracefullyDecommissioned.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.decommissionUnfinished.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 1)
+  }
+
   test("remove multiple executors") {
     val manager = createManager(createConf(5, 10, 5))
     (1 to 10).map(_.toString).foreach { id => onExecutorAddedDefaultProfile(manager, id) }
@@ -1588,7 +1635,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   test("SPARK-23365 Don't update target num executors when killing idle executors") {
     val clock = new ManualClock()
     val manager = createManager(
-      createConf(1, 2, 1).set(config.DYN_ALLOCATION_TESTING, false),
+      createConf(1, 2, 1),
       clock = clock)
 
     when(client.requestTotalExecutors(any(), any(), any())).thenReturn(true)
@@ -1616,19 +1663,17 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
-    verify(client, never).killExecutors(any(), any(), any(), any())
+    assert(manager.executorMonitor.executorsPendingToRemove().isEmpty)
 
     // now we cross the idle timeout for executor-1, so we kill it.  the really important
     // thing here is that we do *not* ask the executor allocation client to adjust the target
     // number of executors down
-    when(client.killExecutors(Seq("executor-1"), false, false, false))
-      .thenReturn(Seq("executor-1"))
     clock.advance(3000)
     schedule(manager)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
     // here's the important verify -- we did kill the executors, but did not adjust the target count
-    verify(client).killExecutors(Seq("executor-1"), false, false, false)
+    assert(manager.executorMonitor.executorsPendingToRemove() === Set("executor-1"))
   }
 
   test("SPARK-26758 check executor target number after idle time out ") {
@@ -1703,8 +1748,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerExecutorAdded(0L, id, execInfo))
   }
 
-  private def onExecutorRemoved(manager: ExecutorAllocationManager, id: String): Unit = {
-    post(SparkListenerExecutorRemoved(0L, id, null))
+  private def onExecutorRemoved(
+      manager: ExecutorAllocationManager,
+      id: String,
+      reason: String = null): Unit = {
+    post(SparkListenerExecutorRemoved(0L, id, reason))
   }
 
   private def onExecutorBusy(manager: ExecutorAllocationManager, id: String): Unit = {

@@ -408,5 +408,14 @@ This will instruct PyArrow >= 0.15.0 to use the legacy IPC format with the older
 is in Spark 2.3.x and 2.4.x. Not setting this environment variable will lead to a similar error as
 described in `SPARK-29367 <https://issues.apache.org/jira/browse/SPARK-29367>`_ when running
 ``pandas_udf``\s or :meth:`DataFrame.toPandas` with Arrow enabled. More information about the Arrow IPC change can
-be read on the Arrow 0.15.0 release `blog <http://arrow.apache.org/blog/2019/10/06/0.15.0-release/#columnar-streaming-protocol-change-since-0140>`_.
+be read on the Arrow 0.15.0 release `blog <https://arrow.apache.org/blog/2019/10/06/0.15.0-release/#columnar-streaming-protocol-change-since-0140>`_.
 
+Setting Arrow ``self_destruct`` for memory savings
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Since Spark 3.2, the Spark configuration ``spark.sql.execution.arrow.pyspark.selfDestruct.enabled`` can be used to enable PyArrow's ``self_destruct`` feature, which can save memory when creating a Pandas DataFrame via ``toPandas`` by freeing Arrow-allocated memory while building the Pandas DataFrame.
+This option is experimental, and some operations may fail on the resulting Pandas DataFrame due to immutable backing arrays.
+Typically, you would see the error ``ValueError: buffer source array is read-only``.
+Newer versions of Pandas may fix these errors by improving support for such cases.
+You can work around this error by copying the column(s) beforehand.
+Additionally, this conversion may be slower because it is single-threaded.

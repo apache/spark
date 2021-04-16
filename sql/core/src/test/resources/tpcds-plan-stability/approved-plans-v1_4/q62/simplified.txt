@@ -1,22 +1,22 @@
 TakeOrderedAndProject [substr(w_warehouse_name, 1, 20),sm_type,web_name,30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 days ]
   WholeStageCodegen (6)
-    HashAggregate [substr(w_warehouse_name, 1, 20),sm_type,web_name,sum,sum,sum,sum,sum] [sum(cast(CASE WHEN ((ws_ship_date_sk - ws_sold_date_sk) <= 30) THEN 1 ELSE 0 END as bigint)),sum(cast(CASE WHEN (((ws_ship_date_sk - ws_sold_date_sk) > 30) AND ((ws_ship_date_sk - ws_sold_date_sk) <= 60)) THEN 1 ELSE 0 END as bigint)),sum(cast(CASE WHEN (((ws_ship_date_sk - ws_sold_date_sk) > 60) AND ((ws_ship_date_sk - ws_sold_date_sk) <= 90)) THEN 1 ELSE 0 END as bigint)),sum(cast(CASE WHEN (((ws_ship_date_sk - ws_sold_date_sk) > 90) AND ((ws_ship_date_sk - ws_sold_date_sk) <= 120)) THEN 1 ELSE 0 END as bigint)),sum(cast(CASE WHEN ((ws_ship_date_sk - ws_sold_date_sk) > 120) THEN 1 ELSE 0 END as bigint)),substr(w_warehouse_name, 1, 20),30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 days ,sum,sum,sum,sum,sum]
+    HashAggregate [substr(w_warehouse_name, 1, 20),sm_type,web_name,sum,sum,sum,sum,sum] [sum(CASE WHEN ((ws_ship_date_sk - ws_sold_date_sk) <= 30) THEN 1 ELSE 0 END),sum(CASE WHEN (((ws_ship_date_sk - ws_sold_date_sk) > 30) AND ((ws_ship_date_sk - ws_sold_date_sk) <= 60)) THEN 1 ELSE 0 END),sum(CASE WHEN (((ws_ship_date_sk - ws_sold_date_sk) > 60) AND ((ws_ship_date_sk - ws_sold_date_sk) <= 90)) THEN 1 ELSE 0 END),sum(CASE WHEN (((ws_ship_date_sk - ws_sold_date_sk) > 90) AND ((ws_ship_date_sk - ws_sold_date_sk) <= 120)) THEN 1 ELSE 0 END),sum(CASE WHEN ((ws_ship_date_sk - ws_sold_date_sk) > 120) THEN 1 ELSE 0 END),substr(w_warehouse_name, 1, 20),30 days ,31 - 60 days ,61 - 90 days ,91 - 120 days ,>120 days ,sum,sum,sum,sum,sum]
       InputAdapter
         Exchange [substr(w_warehouse_name, 1, 20),sm_type,web_name] #1
           WholeStageCodegen (5)
             HashAggregate [w_warehouse_name,sm_type,web_name,ws_ship_date_sk,ws_sold_date_sk] [sum,sum,sum,sum,sum,substr(w_warehouse_name, 1, 20),sum,sum,sum,sum,sum]
-              Project [ws_sold_date_sk,ws_ship_date_sk,w_warehouse_name,sm_type,web_name]
+              Project [ws_ship_date_sk,ws_sold_date_sk,w_warehouse_name,sm_type,web_name]
                 BroadcastHashJoin [ws_ship_date_sk,d_date_sk]
-                  Project [ws_sold_date_sk,ws_ship_date_sk,w_warehouse_name,sm_type,web_name]
+                  Project [ws_ship_date_sk,ws_sold_date_sk,w_warehouse_name,sm_type,web_name]
                     BroadcastHashJoin [ws_web_site_sk,web_site_sk]
-                      Project [ws_sold_date_sk,ws_ship_date_sk,ws_web_site_sk,w_warehouse_name,sm_type]
+                      Project [ws_ship_date_sk,ws_web_site_sk,ws_sold_date_sk,w_warehouse_name,sm_type]
                         BroadcastHashJoin [ws_ship_mode_sk,sm_ship_mode_sk]
-                          Project [ws_sold_date_sk,ws_ship_date_sk,ws_web_site_sk,ws_ship_mode_sk,w_warehouse_name]
+                          Project [ws_ship_date_sk,ws_web_site_sk,ws_ship_mode_sk,ws_sold_date_sk,w_warehouse_name]
                             BroadcastHashJoin [ws_warehouse_sk,w_warehouse_sk]
                               Filter [ws_warehouse_sk,ws_ship_mode_sk,ws_web_site_sk,ws_ship_date_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.web_sales [ws_sold_date_sk,ws_ship_date_sk,ws_web_site_sk,ws_ship_mode_sk,ws_warehouse_sk]
+                                    Scan parquet default.web_sales [ws_ship_date_sk,ws_web_site_sk,ws_ship_mode_sk,ws_warehouse_sk,ws_sold_date_sk]
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)

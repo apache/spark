@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, Expression, If}
-import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, Literal, MapFilter, Or}
-import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, LambdaFunction, Literal, MapFilter, Or}
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertStarAction, Join, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction, UpdateStarAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.Utils
@@ -53,7 +52,20 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(replaceNullWithFalse(cond)))
+    case d @ DeleteFromTable(_, Some(cond)) => d.copy(condition = Some(replaceNullWithFalse(cond)))
+    case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
+    case m @ MergeIntoTable(_, _, mergeCond, matchedActions, notMatchedActions) =>
+      m.copy(
+        mergeCondition = replaceNullWithFalse(mergeCond),
+        matchedActions = replaceNullWithFalse(matchedActions),
+        notMatchedActions = replaceNullWithFalse(notMatchedActions))
     case p: LogicalPlan => p transformExpressions {
+      // For `EqualNullSafe` with a `TrueLiteral`, whether the other side is null or false has no
+      // difference, as `null <=> true` and `false <=> true` both return false.
+      case EqualNullSafe(left, TrueLiteral) =>
+        EqualNullSafe(replaceNullWithFalse(left), TrueLiteral)
+      case EqualNullSafe(TrueLiteral, right) =>
+        EqualNullSafe(TrueLiteral, replaceNullWithFalse(right))
       case i @ If(pred, _, _) => i.copy(predicate = replaceNullWithFalse(pred))
       case cw @ CaseWhen(branches, _) =>
         val newBranches = branches.map { case (cond, value) =>
@@ -91,7 +103,7 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       val newBranches = cw.branches.map { case (cond, value) =>
         replaceNullWithFalse(cond) -> replaceNullWithFalse(value)
       }
-      val newElseValue = cw.elseValue.map(replaceNullWithFalse)
+      val newElseValue = cw.elseValue.map(replaceNullWithFalse).getOrElse(FalseLiteral)
       CaseWhen(newBranches, newElseValue)
     case i @ If(pred, trueVal, falseVal) if i.dataType == BooleanType =>
       If(replaceNullWithFalse(pred), replaceNullWithFalse(trueVal), replaceNullWithFalse(falseVal))
@@ -106,5 +118,16 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
         logWarning(message)
         e
       }
+  }
+
+  private def replaceNullWithFalse(mergeActions: Seq[MergeAction]): Seq[MergeAction] = {
+    mergeActions.map {
+      case u @ UpdateAction(Some(cond), _) => u.copy(condition = Some(replaceNullWithFalse(cond)))
+      case u @ UpdateStarAction(Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
+      case d @ DeleteAction(Some(cond)) => d.copy(condition = Some(replaceNullWithFalse(cond)))
+      case i @ InsertAction(Some(cond), _) => i.copy(condition = Some(replaceNullWithFalse(cond)))
+      case i @ InsertStarAction(Some(cond)) => i.copy(condition = Some(replaceNullWithFalse(cond)))
+      case other => other
+    }
   }
 }

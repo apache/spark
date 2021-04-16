@@ -77,7 +77,7 @@ object FlatMapGroupsWithStateExecHelper {
   // =========================== Private implementations of StateManager ===========================
   // ===============================================================================================
 
-  /** Commmon methods for StateManager implementations */
+  /** Common methods for StateManager implementations */
   private abstract class StateManagerImplBase(shouldStoreTimestamp: Boolean)
     extends StateManager {
 

@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
@@ -63,7 +64,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // the produced join then becomes unresolved and break structural integrity. We should
     // de-duplicate conflicting attributes.
     // SPARK-26078: it may also happen that the subquery has conflicting attributes with the outer
-    // values. In this case, the resulting join would contain trivially true conditions (eg.
+    // values. In this case, the resulting join would contain trivially true conditions (e.g.
     // id#3 = id#3) which cannot be de-duplicated after. In this method, if there are conflicting
     // attributes in the join condition, the subquery's conflicting attributes are changed using
     // a projection which aliases them and resolves the problem.
@@ -93,7 +94,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Filter(condition, child) =>
+    case Filter(condition, child)
+      if SubqueryExpression.hasInOrCorrelatedExistsSubquery(condition) =>
       val (withSubquery, withoutSubquery) =
         splitConjunctivePredicates(condition)
           .partition(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
@@ -174,7 +176,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val inConditions = values.zip(sub.output).map(EqualTo.tupled)
           // To handle a null-aware predicate not-in-subquery in nested conditions
           // (e.g., `v > 0 OR t1.id NOT IN (SELECT id FROM t2)`), we transform
-          // `inConditon` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
+          // `inCondition` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
           //
           // For example, `SELECT * FROM t1 WHERE v > 0 OR t1.id NOT IN (SELECT id FROM t2)`
           // is transformed into a plan below;
@@ -452,11 +454,17 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           case ref: AttributeReference => (ref.exprId, Literal.create(null, ref.dataType))
           case alias @ Alias(_: AttributeReference, _) =>
             (alias.exprId, Literal.create(null, alias.dataType))
+          case alias @ Alias(l: Literal, _) =>
+            (alias.exprId, l.copy(value = null))
           case ne => (ne.exprId, evalAggOnZeroTups(ne))
         }.toMap
 
-      case _ =>
-        sys.error(s"Unexpected operator in scalar subquery: $lp")
+      case l: LeafNode =>
+        l.output.map(a => (a.exprId, Literal.create(null, a.dataType))).toMap
+
+      case p: LogicalPlan =>
+        val bindings = p.children.map(evalPlan).reduce(_ ++ _)
+        p.output.map(e => (e.exprId, bindingExpr(e, bindings))).toMap
     }
 
     val resultMap = evalPlan(plan)
@@ -567,7 +575,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
               case s @ SubqueryAlias(alias, _) =>
                 subqueryRoot = SubqueryAlias(alias, subqueryRoot)
-              case op => sys.error(s"Unexpected operator $op in corelated subquery")
+              case op => sys.error(s"Unexpected operator $op in correlated subquery")
             }
 
             // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
@@ -607,6 +615,19 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   }
 
   /**
+   * Check if an [[Aggregate]] has no correlated subquery in aggregate expressions but
+   * still has correlated scalar subqueries in its grouping expressions, which will not
+   * be rewritten.
+   */
+  private def checkScalarSubqueryInAgg(a: Aggregate): Unit = {
+    if (a.groupingExpressions.exists(hasCorrelatedScalarSubquery) &&
+        !a.aggregateExpressions.exists(hasCorrelatedScalarSubquery)) {
+      throw new IllegalStateException(
+        s"Fail to rewrite correlated scalar subqueries in Aggregate:\n$a")
+    }
+  }
+
+  /**
    * Rewrite [[Filter]], [[Project]] and [[Aggregate]] plans containing correlated scalar
    * subqueries.
    */
@@ -625,6 +646,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         val newExprs = updateAttrs(rewriteExprs, subqueryAttrMapping)
         val newAgg = Aggregate(newGrouping, newExprs, newChild)
         val attrMapping = a.output.zip(newAgg.output)
+        checkScalarSubqueryInAgg(newAgg)
         newAgg -> attrMapping
       } else {
         a -> Nil

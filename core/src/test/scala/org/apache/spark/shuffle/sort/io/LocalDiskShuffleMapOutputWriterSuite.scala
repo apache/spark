@@ -65,7 +65,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   override def beforeEach(): Unit = {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     tempDir = Utils.createTempDir()
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir)
     tempFile = File.createTempFile("tempfile", "", tempDir)

@@ -20,6 +20,7 @@ package org.apache.spark.internal.plugin
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.{Map => JMap}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -138,15 +139,15 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     sc = new SparkContext(conf)
     sc.parallelize(1 to 10, 2).count()
 
-    assert(TestSparkPlugin.executorPlugin.numOnTaskStart == 2)
-    assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded == 2)
-    assert(TestSparkPlugin.executorPlugin.numOnTaskFailed == 0)
+    assert(TestSparkPlugin.executorPlugin.numOnTaskStart.get() == 2)
+    assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded.get() == 2)
+    assert(TestSparkPlugin.executorPlugin.numOnTaskFailed.get() == 0)
   }
 
   test("SPARK-33088: executor failed tasks trigger plugin calls") {
     val conf = new SparkConf()
       .setAppName(getClass().getName())
-      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+      .set(SparkLauncher.SPARK_MASTER, "local[2]")
       .set(PLUGINS, Seq(classOf[TestSparkPlugin].getName()))
 
     sc = new SparkContext(conf)
@@ -157,9 +158,9 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     }
 
     eventually(timeout(10.seconds), interval(100.millis)) {
-      assert(TestSparkPlugin.executorPlugin.numOnTaskStart == 2)
-      assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded == 0)
-      assert(TestSparkPlugin.executorPlugin.numOnTaskFailed == 2)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskStart.get() == 2)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded.get() == 0)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskFailed.get() == 2)
     }
   }
 
@@ -343,9 +344,9 @@ private class TestDriverPlugin extends DriverPlugin {
 
 private class TestExecutorPlugin extends ExecutorPlugin {
 
-  var numOnTaskStart: Int = 0
-  var numOnTaskSucceeded: Int = 0
-  var numOnTaskFailed: Int = 0
+  val numOnTaskStart = new AtomicInteger(0)
+  val numOnTaskSucceeded = new AtomicInteger(0)
+  val numOnTaskFailed = new AtomicInteger(0)
 
   override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
     ctx.metricRegistry().register("executorMetric", new Gauge[Int] {
@@ -355,15 +356,15 @@ private class TestExecutorPlugin extends ExecutorPlugin {
   }
 
   override def onTaskStart(): Unit = {
-    numOnTaskStart += 1
+    numOnTaskStart.incrementAndGet()
   }
 
   override def onTaskSucceeded(): Unit = {
-    numOnTaskSucceeded += 1
+    numOnTaskSucceeded.incrementAndGet()
   }
 
   override def onTaskFailed(failureReason: TaskFailedReason): Unit = {
-    numOnTaskFailed += 1
+    numOnTaskFailed.incrementAndGet()
   }
 }
 

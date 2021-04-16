@@ -65,13 +65,13 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
   override def notSupportsTableComment: Boolean = true
 
   override def testUpdateColumnType(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
+    sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType)
+    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType)
+    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val msg1 = intercept[AnalysisException] {
@@ -81,7 +81,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
   }
 
   override def testUpdateColumnNullability(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL) USING _")
+    sql(s"CREATE TABLE $tbl (ID STRING NOT NULL)")
     // Update nullability is unsupported for mssql db.
     val msg = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
