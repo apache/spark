@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.spark.sql.hive
 
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -24,8 +24,8 @@ import java.util.{Base64, HashMap, Map}
 import scala.sys.process._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.parquet.crypto.{KeyAccessDeniedException, ParquetCryptoRuntimeException}
 import org.apache.parquet.crypto.keytools.{KeyToolkit, KmsClient}
+import org.apache.parquet.crypto.{KeyAccessDeniedException, ParquetCryptoRuntimeException}
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
@@ -48,9 +48,8 @@ class ParquetEncryptionSuite extends QueryTest with SharedSparkSession {
       spark.conf.set(
         "parquet.crypto.factory.class",
         "org.apache.parquet.crypto.keytools.PropertiesDrivenCryptoFactory")
-      spark.conf.set(
-        "parquet.encryption.kms.client.class",
-        "org.apache.spark.sql.execution.datasources.parquet.InMemoryKMS")
+      spark.conf
+        .set("parquet.encryption.kms.client.class", "org.apache.spark.sql.hive.InMemoryKMS")
       spark.conf.set(
         "parquet.encryption.key.list",
         s"footerKey: ${footerKey}, key1: ${key1}, key2: ${key2}")
