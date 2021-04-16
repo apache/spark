@@ -368,7 +368,7 @@ object QueryParsingErrors {
     new ParseException("LOCAL is supported only with file: scheme", ctx)
   }
 
-  def mixedIntervalError(ctx: IntervalContext): Throwable = {
+  def mixedIntervalError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       "Mixing of year-month and day-time fields is not allowed. " +
       s"Set '${SQLConf.LEGACY_INTERVAL_ENABLED.key}' to true to enable the legacy interval type " +

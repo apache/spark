@@ -2099,7 +2099,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(interval, CalendarIntervalType)
+          calendarIntervalToLiteral(interval, ctx)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -2306,6 +2306,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     UnresolvedTableOrView(visitMultipartIdentifier(ctx), commandName, allowTempView)
   }
 
+  private def calendarIntervalToLiteral(
+      calendarInterval: CalendarInterval,
+      ctx: ParserRuleContext): Literal = {
+    if (conf.legacyIntervalEnabled) {
+      Literal(calendarInterval, CalendarIntervalType)
+    } else if (calendarInterval.months != 0) {
+      if (calendarInterval.days != 0 || calendarInterval.microseconds != 0) {
+        throw QueryParsingErrors.mixedIntervalError(ctx)
+      }
+      Literal(calendarInterval.months, YearMonthIntervalType)
+    } else {
+      val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
+      Literal(micros, DayTimeIntervalType)
+    }
+  }
+
   /**
    * Create a [[CalendarInterval]] or ANSI interval literal expression.
    * Two syntaxes are supported:
@@ -2313,18 +2329,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * - from-to unit, for instance: interval '1-2' year to month.
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
-    val parsedInterval = parseIntervalLiteral(ctx)
-    if (conf.legacyIntervalEnabled) {
-      Literal(parsedInterval, CalendarIntervalType)
-    } else if (parsedInterval.months != 0) {
-      if (parsedInterval.days != 0 || parsedInterval.microseconds != 0) {
-        throw QueryParsingErrors.mixedIntervalError(ctx)
-      }
-      Literal(parsedInterval.months, YearMonthIntervalType)
-    } else {
-      val micros = IntervalUtils.getDuration(parsedInterval, TimeUnit.MICROSECONDS)
-      Literal(micros, DayTimeIntervalType)
-    }
+    calendarIntervalToLiteral(parseIntervalLiteral(ctx), ctx)
   }
 
   /**
