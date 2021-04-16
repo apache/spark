@@ -813,24 +813,24 @@ object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     WidenSetOperationTypes ::
-      CombinedTypeCoercionRule(
-        InConversion ::
-          PromoteStrings ::
-          DecimalPrecision ::
-          BooleanEquality ::
-          FunctionArgumentConversion ::
-          ConcatCoercion ::
-          MapZipWithCoercion ::
-          EltCoercion ::
-          CaseWhenCoercion ::
-          IfCoercion ::
-          StackCoercion ::
-          Division ::
-          IntegralDivision ::
-          ImplicitTypeCasts ::
-          DateTimeOperations ::
-          WindowFrameCoercion ::
-          StringLiteralCoercion :: Nil) :: Nil
+    CombinedTypeCoercionRule(
+      InConversion ::
+      PromoteStrings ::
+      DecimalPrecision ::
+      BooleanEquality ::
+      FunctionArgumentConversion ::
+      ConcatCoercion ::
+      MapZipWithCoercion ::
+      EltCoercion ::
+      CaseWhenCoercion ::
+      IfCoercion ::
+      StackCoercion ::
+      Division ::
+      IntegralDivision ::
+      ImplicitTypeCasts ::
+      DateTimeOperations ::
+      WindowFrameCoercion ::
+      StringLiteralCoercion :: Nil) :: Nil
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
 
