@@ -866,18 +866,7 @@ private[spark] class ExternalSorter[K, V, C](
       if (hasSpilled) {
         false
       } else {
-        val inMemoryIterator = new WritablePartitionedIterator {
-          private[this] var cur = if (upstream.hasNext) upstream.next() else null
-
-          def writeNext(writer: PairsWriter): Unit = {
-            writer.write(cur._1._2, cur._2)
-            cur = if (upstream.hasNext) upstream.next() else null
-          }
-
-          def hasNext(): Boolean = cur != null
-
-          def nextPartition(): Int = cur._1._1
-        }
+        val inMemoryIterator = new DefaultWritablePartitionedIterator[K, C](upstream)
         logInfo(s"Task ${TaskContext.get().taskAttemptId} force spilling in-memory map to disk " +
           s"and it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)

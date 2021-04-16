@@ -48,18 +48,7 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
   def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
     : WritablePartitionedIterator = {
     val it = partitionedDestructiveSortedIterator(keyComparator)
-    new WritablePartitionedIterator {
-      private[this] var cur = if (it.hasNext) it.next() else null
-
-      def writeNext(writer: PairsWriter): Unit = {
-        writer.write(cur._1._2, cur._2)
-        cur = if (it.hasNext) it.next() else null
-      }
-
-      def hasNext(): Boolean = cur != null
-
-      def nextPartition(): Int = cur._1._1
-    }
+    new DefaultWritablePartitionedIterator[K, V](it)
   }
 }
 
@@ -93,4 +82,18 @@ private[spark] trait WritablePartitionedIterator {
   def hasNext(): Boolean
 
   def nextPartition(): Int
+}
+
+private[spark] class DefaultWritablePartitionedIterator[K, V](it: Iterator[((Int, K), V)])
+  extends WritablePartitionedIterator {
+  private[this] var cur = if (it.hasNext) it.next() else null
+
+  def writeNext(writer: PairsWriter): Unit = {
+    writer.write(cur._1._2, cur._2)
+    cur = if (it.hasNext) it.next() else null
+  }
+
+  def hasNext(): Boolean = cur != null
+
+  def nextPartition(): Int = cur._1._1
 }
