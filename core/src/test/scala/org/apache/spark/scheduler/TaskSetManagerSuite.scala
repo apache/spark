@@ -2310,6 +2310,33 @@ class TaskSetManagerSuite
     }
     assert(err.getMessage.contains("scheduled task index is 0"))
   }
+
+  test("SPARK-35022: distribute tasks using scheduling plugin") {
+    sc = new SparkContext("local", "test")
+
+    val plugin = Utils.loadExtensions(classOf[TaskSchedulingPlugin],
+      Seq(classOf[TestSchedulingPlugin2].getName), conf).head
+
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    val taskSet = FakeTask.createTaskSet(5, plugin)
+
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    assert(manager.resourceOffer("exec1", "host1", ANY)._1.get.index === 1)
+    clock.advance(1)
+
+    assert(manager.resourceOffer("exec3", "host3", ANY)._1.get.index === 3)
+    clock.advance(1)
+
+    assert(manager.resourceOffer("exec1", "host1", ANY)._1.get.index == 0)
+    clock.advance(1)
+
+    assert(manager.resourceOffer("exec2", "host2", ANY)._1.get.index == 4)
+    clock.advance(1)
+
+    assert(manager.resourceOffer("exec2", "host2", ANY)._1.get.index == 2)
+  }
 }
 
 class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {
@@ -2342,4 +2369,26 @@ class TestSchedulingPlugin extends TaskSchedulingPlugin {
       throw new IllegalStateException(s"scheduled task index is ${message.scheduledTaskIndex}")
     }
   }
+}
+
+class TestSchedulingPlugin2 extends TaskSchedulingPlugin {
+  private val hostToTasksMap = Map("host1" -> Seq(0, 1), "host2" -> Seq(2, 4), "host3" -> Seq(3))
+
+  override def rankTasks(
+      execId: String, host: String, tasks: Seq[Task[_]], taskIndexes: Seq[Int]): Seq[Int] = {
+    if (taskIndexes.isEmpty) {
+      taskIndexes
+    } else {
+      if (hostToTasksMap.contains(host)) {
+        val candidates = hostToTasksMap(host)
+        taskIndexes.zipWithIndex.find(pair => candidates.contains(pair._1)).map { pref =>
+          Seq(pref._2)
+        }.getOrElse(Seq.empty)
+      } else {
+        taskIndexes
+      }
+    }
+  }
+
+  override def informScheduledTask(message: TaskScheduledResult): Unit = {}
 }
