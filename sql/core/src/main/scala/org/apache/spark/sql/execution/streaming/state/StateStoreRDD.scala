@@ -18,11 +18,10 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
-
 import scala.reflect.ClassTag
-
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.TaskSchedulingPlugin
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -42,6 +41,11 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
   protected val hadoopConfBroadcast = dataRDD.context.broadcast(
     new SerializableConfiguration(sessionState.newHadoopConf()))
 
+  override def getTaskSchedulingPlugin(): Option[TaskSchedulingPlugin] = {
+    Some(new StateSchedulingPlugin(dataRDD: RDD[_], storeCoordinator,
+      (taskIndex: Int) => getStateProviderId(taskIndex)))
+  }
+
   /**
    * Set the preferred location of each partition using the executor that has the related
    * [[StateStoreProvider]] already loaded.
@@ -53,10 +57,14 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
     storeCoordinator.flatMap(_.getLocation(stateStoreProviderId)).toSeq
   }
 
-  protected def getStateProviderId(partition: Partition): StateStoreProviderId = {
+  private def getStateProviderId(taskIndex: Int): StateStoreProviderId = {
     StateStoreProviderId(
-      StateStoreId(checkpointLocation, operatorId, partition.index),
+      StateStoreId(checkpointLocation, operatorId, taskIndex),
       queryRunId)
+  }
+
+  protected def getStateProviderId(partition: Partition): StateStoreProviderId = {
+    getStateProviderId(partition.index)
   }
 }
 

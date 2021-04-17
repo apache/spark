@@ -2389,6 +2389,4 @@ class TestSchedulingPlugin2 extends TaskSchedulingPlugin {
       }
     }
   }
-
-  override def informScheduledTask(message: TaskScheduledResult): Unit = {}
 }

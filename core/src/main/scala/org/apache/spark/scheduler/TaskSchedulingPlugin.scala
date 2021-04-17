@@ -44,7 +44,7 @@ private[spark] trait TaskSchedulingPlugin {
    * scheduler does not choose top-1 ranked task. The plugin may decide what
    * action is needed if it is happening.
    */
-  def informScheduledTask(message: TaskScheduledResult): Unit
+  def informScheduledTask(message: TaskScheduledResult): Unit = {}
 }
 
 private[spark] trait TaskScheduledResult {
