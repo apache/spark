@@ -125,7 +125,6 @@ private[spark] class IndexShuffleBlockResolver(
       ShuffleMergedMetaBlockId(appId, shuffleId, reduceId))
   }
 
-
   /**
    * Remove data file and index file that contain the output data from one map.
    */
@@ -369,13 +368,12 @@ private[spark] class IndexShuffleBlockResolver(
     val dataFile = getMergedBlockDataFile(conf.getAppId, blockId.shuffleId, blockId.reduceId)
     // Load all the indexes in order to identify all chunks in the specified merged shuffle file.
     val size = indexFile.length.toInt
-    val buffer = ByteBuffer.allocate(size)
-    val offsets = buffer.asLongBuffer
-    val dis = new DataInputStream(Files.newInputStream(indexFile.toPath))
-    try {
+    val offsets = Utils.tryWithResource {
+      new DataInputStream(Files.newInputStream(indexFile.toPath))
+    } { dis =>
+      val buffer = ByteBuffer.allocate(size)
       dis.readFully(buffer.array)
-    } finally {
-      dis.close()
+      buffer.asLongBuffer
     }
     // Number of chunks is number of indexes - 1
     val numChunks = size / 8 - 1
@@ -401,7 +399,6 @@ private[spark] class IndexShuffleBlockResolver(
     val chunkBitMaps = new FileSegmentManagedBuffer(transportConf, metaFile, 0L, metaFile.length)
     new MergedBlockMeta(numChunks, chunkBitMaps)
   }
-
 
   override def getBlockData(
       blockId: BlockId,

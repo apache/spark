@@ -346,7 +346,6 @@ private[spark] object Utils extends Logging {
     }
   }
 
-
   /**
    * Create a temporary directory inside the given parent directory. The directory will be
    * automatically deleted when the VM shuts down.

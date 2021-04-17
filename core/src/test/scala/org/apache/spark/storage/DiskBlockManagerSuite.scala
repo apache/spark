@@ -88,7 +88,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
   test("find active merged shuffle directories") {
     testConf.set("spark.local.dir", rootDirs)
-    testConf.set("spark.shuffle.push.based.enabled", "true")
+    testConf.set("spark.shuffle.push.enabled", "true")
     testConf.set("spark.shuffle.service.enabled", "true")
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
     assert(diskBlockManager.activeMergedShuffleDirs.isDefined)
@@ -96,6 +96,11 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     val expected = Array(rootDir0.getAbsolutePath, rootDir1.getAbsolutePath).sorted
     val actual = diskBlockManager.activeMergedShuffleDirs.get.map(file => file.getParent)
     assert(expected sameElements actual)
+    // Verify subdirectories creation
+    val mergeDirs = Array(new File(rootDir0, DiskBlockManager.MERGE_MANAGER_DIR).toPath)
+    mergeDirs.foreach { mergeDir =>
+      assert(Files.list(mergeDir).count() === 64)
+    }
   }
 
   test("should not create merge directories if one already exists under a local dir") {
@@ -108,13 +113,12 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
       Utils.deleteRecursively(mergeDir1)
     }
     testConf.set("spark.local.dir", rootDirs)
-    testConf.set("spark.shuffle.push.based.enabled", "true")
+    testConf.set("spark.shuffle.push.enabled", "true")
     testConf.set("spark.shuffle.service.enabled", "true")
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
     assert(diskBlockManager.activeMergedShuffleDirs.isDefined)
     assert(diskBlockManager.activeMergedShuffleDirs.get.length == 1)
   }
-
 
   def writeToFile(file: File, numBytes: Int): Unit = {
     val writer = new FileWriter(file, true)

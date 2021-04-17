@@ -87,25 +87,28 @@ case class ShufflePushBlockId(shuffleId: Int, mapIndex: Int, reduceId: Int) exte
   override def name: String = "shufflePush_" + shuffleId + "_" + mapIndex + "_" + reduceId
 }
 
+@Since("3.2.0")
 @DeveloperApi
 case class ShuffleMergedBlockId(appId: String, shuffleId: Int, reduceId: Int) extends BlockId {
   override def name: String = "mergedShuffle_" + appId + "_" + shuffleId + "_" + reduceId + ".data"
 }
 
+@Since("3.2.0")
 @DeveloperApi
 case class ShuffleMergedIndexBlockId(
-  appId: String,
-  shuffleId: Int,
-  reduceId: Int) extends BlockId {
+    appId: String,
+    shuffleId: Int,
+    reduceId: Int) extends BlockId {
   override def name: String =
     "mergedShuffle_" + appId + "_" + shuffleId + "_" + reduceId + ".index"
 }
 
+@Since("3.2.0")
 @DeveloperApi
 case class ShuffleMergedMetaBlockId(
-  appId: String,
-  shuffleId: Int,
-  reduceId: Int) extends BlockId {
+    appId: String,
+    shuffleId: Int,
+    reduceId: Int) extends BlockId {
   override def name: String =
     "mergedShuffle_" + appId + "_" + shuffleId + "_" + reduceId + ".meta"
 }
