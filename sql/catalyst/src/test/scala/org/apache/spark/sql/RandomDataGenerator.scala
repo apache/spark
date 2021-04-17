@@ -25,8 +25,8 @@ import scala.collection.mutable
 import scala.util.{Random, Try}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, MILLIS_PER_DAY}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -275,8 +275,13 @@ object RandomDataGenerator {
       case DayTimeIntervalType => Some(() => {
         val maxSeconds = Duration.ofDays(106751991).getSeconds
         val seconds = rand.nextLong() % maxSeconds
+        // The precision of java.time.Duration is nanosecond, but when it is used as
+        // DayTimeIntervalType in Spark, it is microsecond. Here by following the behavior
+        // of DurationConverter to achieve consistency
         val nanoAdjustment = rand.nextLong() % 999999000
-        Duration.ofSeconds(seconds, nanoAdjustment)
+        val duration = Duration.ofSeconds(seconds, nanoAdjustment)
+        val micros = IntervalUtils.durationToMicros(duration)
+        IntervalUtils.microsToDuration(micros)
       })
       case YearMonthIntervalType => Some(() => {
         val years = rand.nextInt() % 178956970
