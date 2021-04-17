@@ -22,12 +22,13 @@ import scala.reflect.ClassTag
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
+import org.apache.spark.scheduler.TaskSchedulingPlugin
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BoundReference, Expression, NamedExpression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
-import org.apache.spark.sql.execution.streaming.state.{StateStoreCoordinatorRef, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{StateSchedulingPlugin, StateStoreCoordinatorRef, StateStoreProviderId}
 
 
 /**
@@ -212,6 +213,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       stateStoreNames: Seq[String],
       @transient private val storeCoordinator: Option[StateStoreCoordinatorRef])
       extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2)) {
+
+    override def getTaskSchedulingPlugin(): Option[TaskSchedulingPlugin] = {
+      Some(new StateSchedulingPlugin(this: RDD[_], storeCoordinator,
+        (taskIndex: Int) => StateStoreProviderId(stateInfo, taskIndex, stateStoreNames.head)))
+    }
 
     /**
      * Set the preferred location of each partition using the executor that has the related

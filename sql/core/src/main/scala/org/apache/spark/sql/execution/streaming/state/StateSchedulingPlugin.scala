@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.streaming.state
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{Task, TaskLocation, TaskSchedulingPlugin}
 
 class StateSchedulingPlugin(
     val rdd: RDD[_],
     val storeCoordinator: Option[StateStoreCoordinatorRef],
-    val getStateProviderId: (Int => StateStoreProviderId)) extends TaskSchedulingPlugin {
+    val getStateProviderId: (Int => StateStoreProviderId))
+  extends TaskSchedulingPlugin with Logging {
 
   /**
    * Return the mapping between state store location to task indexes/partitions,
@@ -49,9 +51,10 @@ class StateSchedulingPlugin(
     if (executors.isEmpty) {
       // The current scheduler does not support getting executors.
       // TODO: Maybe make it configurable?
-      10
+      1
     } else {
-      rdd.getNumPartitions / rdd.sparkContext.getExecutorIds()
+      rdd.getNumPartitions / rdd.sparkContext.getExecutorIds().length
+    }
   }
 
   override def rankTasks(
@@ -59,10 +62,10 @@ class StateSchedulingPlugin(
       host: String,
       tasks: Seq[Task[_]],
       taskIndexes: Seq[Int]): Seq[Int] = {
-    if (taskIndexes.isEmpty) {
+    val offerLoc = TaskLocation(host, execId).toString
+    val returned = if (taskIndexes.isEmpty) {
       taskIndexes
     } else {
-      val offerLoc = TaskLocation(host, execId).toString
 
       if (stateLocations.contains(offerLoc)) {
         // If we have state store on the host/exec.
@@ -90,17 +93,24 @@ class StateSchedulingPlugin(
         }
       } else {
         // The host/exec has no state store running. Might be the first micro-batch.
+        // Finds a task which was not assigned to other executors previously.
+        // TODO: if there are executors lost, and new executors are allocated, we should
+        // be able to assign new tasks to new executors.
         val currentLocs = stateLocations
         val assignedTasks = currentLocs.values.flatten.toSeq
         val unassigned = taskIndexes.zipWithIndex
           .filter(p => !assignedTasks.contains(p._1))
           .map(_._2)
-        if (unassigned.nonEmpty) {
+        val currentNum = taskNumPerExec.getOrElse(offerLoc, 0)
+        if (unassigned.nonEmpty && currentNum < maxTasksPerExec) {
+          taskNumPerExec(offerLoc) = currentNum + 1
           Seq(unassigned.head)
         } else {
           Seq.empty
         }
       }
     }
+    logInfo(s"assigned: $returned for offerLoc: $offerLoc.")
+    returned
   }
 }

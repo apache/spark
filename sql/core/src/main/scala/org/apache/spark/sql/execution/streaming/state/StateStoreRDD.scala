@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
+
 import scala.reflect.ClassTag
+
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.TaskSchedulingPlugin
