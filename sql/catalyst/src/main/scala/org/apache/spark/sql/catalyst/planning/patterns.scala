@@ -297,11 +297,9 @@ object PhysicalAggregation {
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
-          case agg: AggregateExpression
-            if !equivalentAggregateExpressions.addExpr(agg) => agg
-          case udf: PythonUDF
-            if PythonUDF.isGroupedAggPandasUDF(udf) &&
-              !equivalentAggregateExpressions.addExpr(udf) => udf
+          case a
+            if AggregateExpression.isAggregate(a) && !equivalentAggregateExpressions.addExpr(a) =>
+            a
         }
       }
 
