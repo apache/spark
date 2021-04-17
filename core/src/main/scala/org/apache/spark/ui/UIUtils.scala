@@ -326,7 +326,7 @@ private[spark] object UIUtils extends Logging {
           <div class="row">
             <div class="col-12">
               <h3 style="vertical-align: bottom; white-space: nowrap; overflow: hidden;
-               text-overflow: ellipsis;">
+                text-overflow: ellipsis;">
                 {title}
                 {helpButton}
               </h3>
