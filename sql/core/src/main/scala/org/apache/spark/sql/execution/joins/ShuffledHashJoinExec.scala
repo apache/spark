@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.{RowIterator, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.{BitSet, OpenHashSet}
 
@@ -71,7 +71,9 @@ case class ShuffledHashJoinExec(
       buildBoundKeys,
       taskMemoryManager = context.taskMemoryManager(),
       // Full outer join needs support for NULL key in HashedRelation.
-      allowsNullKey = joinType == FullOuter)
+      allowsNullKey = joinType == FullOuter,
+      allowsFallbackWithNoMemory = enableShuffledHashJoinFallback,
+      testFallbackStartsAt = testFallbackStartsAt)
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
@@ -81,11 +83,22 @@ case class ShuffledHashJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
+    val spillThreshold = getSpillThreshold
+    val inMemoryThreshold = getInMemoryThreshold
+    val streamSortPlan = getStreamSortPlan
+    val buildSortPlan = getBuildSortPlan
+    val fallbackSMJPlan = SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right)
+
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
-      val hashed = buildHashedRelation(buildIter)
-      joinType match {
-        case FullOuter => fullOuterJoin(streamIter, hashed, numOutputRows)
-        case _ => join(streamIter, hashed, numOutputRows)
+      buildHashedRelation(buildIter) match {
+        case r: UnfinishedUnsafeHashedRelation =>
+          joinWithSortFallback(streamIter, buildIter, r.destructiveValues(), streamSortPlan,
+            buildSortPlan, fallbackSMJPlan, numOutputRows, spillThreshold, inMemoryThreshold)
+        case r =>
+          joinType match {
+            case FullOuter => fullOuterJoin(streamIter, r, numOutputRows)
+            case _ => join(streamIter, r, numOutputRows)
+          }
       }
     }
   }
@@ -298,9 +311,83 @@ case class ShuffledHashJoinExec(
     streamResultIter ++ buildResultIter
   }
 
+  private val enableShuffledHashJoinFallback: Boolean =
+    sqlContext.conf.enableShuffledHashJoinFallback
+
+  /**
+   * This is for testing only. We force shuffled hash join to fall back to sort merge join,
+   * once number of rows in build relation exceeds this limit.
+   */
+  private val testFallbackStartsAt: Option[Int] = {
+    sqlContext.getConf("spark.sql.ShuffledHashJoin.testFallbackStartsAt", null) match {
+      case null | "" => None
+      case fallbackStartsAt => Some(fallbackStartsAt.toInt)
+    }
+  }
+
+  /**
+   * Get [[SortExec]] plan for stream side on join keys. This is used for sort-based fallback.
+   * The return value is `Option` as the stream side may be already ordered on join keys.
+   */
+  private def getStreamSortPlan: Option[SortExec] = {
+    val requiredStreamOrdering = requiredOrders(streamedKeys)
+    if (!SortOrder.orderingSatisfies(streamedPlan.outputOrdering, requiredStreamOrdering)) {
+      Some(SortExec(requiredStreamOrdering, global = false, child = streamedPlan))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Get [[SortExec]] plan for build side on join keys. This is used for sort-based fallback.
+   * The return value is not `Option` as some of build rows may be already read and put into
+   * [[HashedRelation]], so the ordering for build side needs to be forced again.
+   */
+  private def getBuildSortPlan: SortExec = {
+    val requiredBuildOrdering = requiredOrders(buildKeys)
+    SortExec(requiredBuildOrdering, global = false, child = buildPlan)
+  }
+
+  /**
+   * Fallback to sort merge join, from shuffled hash join.
+   *
+   * Sort stream and build side on join keys if necessary, as sort merge join requires both
+   * children to be sorted on join keys. See [[SortMergeJoinExec.requiredChildOrdering]].
+   * After that execute sort merge join on sorted children.
+   */
+  private def joinWithSortFallback(
+      streamIter: Iterator[InternalRow],
+      buildIter: Iterator[InternalRow],
+      relationIter: Iterator[InternalRow],
+      streamSortPlan: Option[SortExec],
+      buildSortPlan: SortExec,
+      sortMergeJoinPlan: SortMergeJoinExec,
+      numOutputRows: SQLMetric,
+      spillThreshold: Int,
+      inMemoryThreshold: Int): Iterator[InternalRow] = {
+
+    // Sort stream and build side on join keys if necessary
+    val streamSortIter = streamSortPlan match {
+      case Some(plan) =>
+        val sorter = plan.createSorter()
+        sorter.sort(streamIter.asInstanceOf[Iterator[UnsafeRow]])
+      case _ => streamIter
+    }
+    val buildSortIter = buildSortPlan.createSorter().sort(
+      (relationIter ++ buildIter).asInstanceOf[Iterator[UnsafeRow]])
+
+    // Fallback to sort merge join
+    buildSide match {
+      case BuildLeft => sortMergeJoinPlan.executeJoinWithIterators(
+        buildSortIter, streamSortIter, numOutputRows, spillThreshold, inMemoryThreshold)
+      case BuildRight => sortMergeJoinPlan.executeJoinWithIterators(
+        streamSortIter, buildSortIter, numOutputRows, spillThreshold, inMemoryThreshold)
+    }
+  }
+
   // TODO(SPARK-32567): support full outer shuffled hash join code-gen
   override def supportCodegen: Boolean = {
-    joinType != FullOuter
+    joinType != FullOuter && !enableShuffledHashJoinFallback
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {

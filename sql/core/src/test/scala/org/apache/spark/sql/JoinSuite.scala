@@ -1394,4 +1394,32 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       checkAnswer(fullJoinDF, Row(100))
     }
   }
+
+  test("SPARK-32634: Sort-based fallback for shuffled hash join") {
+    val df1 = spark.range(300).map(_.toString).select($"value".as("k1"))
+    val df2 = spark.range(100).map(_.toString).select($"value".as("k2"))
+
+    val smjDF = df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2")
+    assert(collect(smjDF.queryExecution.executedPlan) {
+      case _: SortMergeJoinExec => true }.size === 1)
+    val smjResult = smjDF.collect()
+
+    Seq(
+      // All tasks fall back
+      0,
+      // Some tasks fall back
+      10,
+      // No task falls back
+      1000
+    ).foreach(fallbackStartsAt =>
+      withSQLConf(SQLConf.SHUFFLEDHASHJOIN_FALLBACK_ENABLED.key -> "true",
+        "spark.sql.ShuffledHashJoin.testFallbackStartsAt" -> fallbackStartsAt.toString) {
+        val shjDF = df1.join(df2.hint("SHUFFLE_HASH"), $"k1" === $"k2")
+        assert(collect(shjDF.queryExecution.executedPlan) {
+          case _: ShuffledHashJoinExec => true }.size === 1)
+        // Same result between shuffled hash join and sort merge join
+        checkAnswer(shjDF, smjResult)
+      }
+    )
+  }
 }

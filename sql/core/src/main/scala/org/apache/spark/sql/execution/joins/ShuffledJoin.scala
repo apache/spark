@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftExistence, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution, Partitioning, PartitioningCollection, UnknownPartitioning}
 
@@ -60,5 +60,30 @@ trait ShuffledJoin extends BaseJoinExec {
         throw new IllegalArgumentException(
           s"${getClass.getSimpleName} not take $x as the JoinType")
     }
+  }
+
+  /**
+   * The required sort order for the given keys.
+   */
+  protected def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
+    // This must be ascending in order to agree with the `keyOrdering` defined in
+    // `SortMergeJoinExec.executeJoinWithIterators()`.
+    keys.map(SortOrder(_, Ascending))
+  }
+
+  /**
+   * Threshold for number of rows guaranteed to be held in memory by internal buffer of sort merge
+   * join. This is used in [[SortMergeJoinExec]] and [[ShuffledHashJoinExec]].
+   */
+  protected def getInMemoryThreshold: Int = {
+    sqlContext.conf.sortMergeJoinExecBufferInMemoryThreshold
+  }
+
+  /**
+   * Threshold for number of rows to be spilled by internal buffer of sort merge join.
+   * This is used in [[SortMergeJoinExec]] and [[ShuffledHashJoinExec]].
+   */
+  protected def getSpillThreshold: Int = {
+    sqlContext.conf.sortMergeJoinExecBufferSpillThreshold
   }
 }

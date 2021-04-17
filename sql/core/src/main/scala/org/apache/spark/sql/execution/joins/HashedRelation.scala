@@ -111,6 +111,15 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def keys(): Iterator[InternalRow]
 
   /**
+   * Returns a destructive iterator for all rows. It frees any used resources on the fly.
+   * Notice: it is illegal to call any method except `close()` on the hashed relation after
+   * `destructiveValues()` has been called.
+   */
+  def destructiveValues(): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
+
+  /**
    * Returns a read-only copy of this, to be safely used in current thread.
    */
   def asReadOnlyCopy(): HashedRelation
@@ -128,6 +137,12 @@ private[execution] object HashedRelation {
    *
    * @param allowsNullKey Allow NULL keys in HashedRelation.
    *                      This is used for full outer join in `ShuffledHashJoinExec` only.
+   * @param allowsFallbackWithNoMemory Allow fallback when no enough memory to build
+   *                                   HashedRelation. This is used for sort-based fallback in
+   *                                   `ShuffledHashJoinExec` only.
+   * @param testFallbackStartsAt Fallback when number of rows exceeds this limit.
+   *                             This is for testing only.
+   *
    */
   def apply(
       input: Iterator[InternalRow],
@@ -135,7 +150,9 @@ private[execution] object HashedRelation {
       sizeEstimate: Int = 64,
       taskMemoryManager: TaskMemoryManager = null,
       isNullAware: Boolean = false,
-      allowsNullKey: Boolean = false): HashedRelation = {
+      allowsNullKey: Boolean = false,
+      allowsFallbackWithNoMemory: Boolean = false,
+      testFallbackStartsAt: Option[Int] = None): HashedRelation = {
     val mm = Option(taskMemoryManager).getOrElse {
       new TaskMemoryManager(
         new UnifiedMemoryManager(
@@ -152,7 +169,8 @@ private[execution] object HashedRelation {
       // NOTE: LongHashedRelation does not support NULL keys.
       LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
     } else {
-      UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware, allowsNullKey)
+      UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware, allowsNullKey,
+        allowsFallbackWithNoMemory, testFallbackStartsAt)
     }
   }
 }
@@ -450,7 +468,9 @@ private[joins] object UnsafeHashedRelation {
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
       isNullAware: Boolean = false,
-      allowsNullKey: Boolean = false): HashedRelation = {
+      allowsNullKey: Boolean = false,
+      allowsFallbackWithNoMemory: Boolean = false,
+      testFallbackStartsAt: Option[Int] = None): HashedRelation = {
     require(!(isNullAware && allowsNullKey),
       "isNullAware and allowsNullKey cannot be enabled at same time")
 
@@ -465,8 +485,14 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
+    val fallbackStartsAt = testFallbackStartsAt.getOrElse(Int.MaxValue)
+    var i = 0
     while (input.hasNext) {
       val row = input.next().asInstanceOf[UnsafeRow]
+      if (i >= fallbackStartsAt) {
+        return new UnfinishedUnsafeHashedRelation(numFields, binaryMap, row)
+      }
+
       numFields = row.numFields()
       val key = keyGenerator(row)
       if (!key.anyNull || allowsNullKey) {
@@ -475,15 +501,86 @@ private[joins] object UnsafeHashedRelation {
           key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
           row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
         if (!success) {
-          binaryMap.free()
-          throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
+          if (allowsFallbackWithNoMemory) {
+            return new UnfinishedUnsafeHashedRelation(numFields, binaryMap, row)
+          } else {
+            // Clean up map and throw exception
+            binaryMap.free()
+            throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
+          }
         }
       } else if (isNullAware) {
         return HashedRelationWithAllNullKeys
       }
+      i += 1
     }
 
     new UnsafeHashedRelation(key.size, numFields, binaryMap)
+  }
+}
+
+/**
+ * An unfinished version of [[UnsafeHashedRelation]].
+ * This is intended to use in sort-based fallback of [[ShuffledHashJoinExec]],
+ * when there is no enough memory to build [[UnsafeHashedRelation]].
+ *
+ * @param numFields Number of fields in each row.
+ * @param binaryMap Backed [[BytesToBytesMap]] to hold keys and rows.
+ * @param pendingRow The row which cannot be added to `binaryMap` due to memory limit.
+ */
+private[joins] class UnfinishedUnsafeHashedRelation(
+    private val numFields: Int,
+    private val binaryMap: BytesToBytesMap,
+    private val pendingRow: UnsafeRow)
+  extends HashedRelation {
+
+  override def destructiveValues(): Iterator[InternalRow] = new Iterator[InternalRow] {
+    private var hasPendingRow = true
+    private val mapIterator = binaryMap.destructiveIterator()
+    private val resultRow = new UnsafeRow(numFields)
+
+    override def hasNext: Boolean = {
+      hasPendingRow || mapIterator.hasNext
+    }
+
+    override def next: InternalRow = {
+      if (hasPendingRow) {
+        hasPendingRow = false
+        pendingRow
+      } else {
+        val loc = mapIterator.next()
+        resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+        resultRow
+      }
+    }
+  }
+
+  override def estimatedSize: Long = {
+    binaryMap.getTotalMemoryConsumption + pendingRow.getSizeInBytes
+  }
+
+  override def close(): Unit = {
+    binaryMap.free()
+  }
+
+  override def get(key: InternalRow): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException()
+  }
+
+  override def getValue(key: InternalRow): InternalRow = {
+    throw new UnsupportedOperationException()
+  }
+
+  def keyIsUnique: Boolean = {
+    throw new UnsupportedOperationException()
+  }
+
+  def keys(): Iterator[InternalRow] = {
+    throw new UnsupportedOperationException()
+  }
+
+  override def asReadOnlyCopy(): HashedRelation = {
+    throw new UnsupportedOperationException()
   }
 }
 

@@ -385,6 +385,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SHUFFLEDHASHJOIN_FALLBACK_ENABLED =
+    buildConf("spark.sql.join.enableShuffledHashJoinFallback")
+      .internal()
+      .doc("When true, enable sort-based fallback for shuffled hash join. " +
+        "The sort-based fallback is to use sort merge join when there is no enough memory " +
+        "to build hash table for shuffled hash join. This can help avoid task OOM automatically.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
@@ -3536,6 +3546,8 @@ class SQLConf extends Serializable with Logging {
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
+
+  def enableShuffledHashJoinFallback: Boolean = getConf(SHUFFLEDHASHJOIN_FALLBACK_ENABLED)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
