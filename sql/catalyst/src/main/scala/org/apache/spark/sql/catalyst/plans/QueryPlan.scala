@@ -345,7 +345,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   private def updateAttr(a: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
     attrMap.get(a) match {
-      case Some(b) => AttributeReference(a.name, b.dataType, b.nullable)(b.exprId, a.qualifier)
+      case Some(b) =>
+        AttributeReference(a.name, b.dataType, b.nullable, a.metadata)(b.exprId, a.qualifier)
       case None => a
     }
   }
