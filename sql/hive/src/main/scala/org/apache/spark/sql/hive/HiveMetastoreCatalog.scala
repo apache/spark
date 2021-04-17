@@ -19,13 +19,13 @@ package org.apache.spark.sql.hive
 
 import java.util.Locale
 
-import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.Striped
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
@@ -280,24 +280,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
   private def getDirectoryPathSeq(rootPath: Path): Seq[String] = {
     val enableSupportSubDirectories =
-      sparkSession.conf.getOption("hive.mapred.supports.subdirectories")
+      sparkSession.sparkContext.
+        hadoopConfiguration.get("hive.mapred.supports.subdirectories", "false")
 
-    if (enableSupportSubDirectories.isDefined && enableSupportSubDirectories.get.toBoolean) {
+    if (enableSupportSubDirectories.toBoolean) {
       val fs = rootPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-      val paths = new scala.collection.mutable.ListBuffer[String]
-
-      val checkingQueue = new mutable.Queue[Path]()
-      checkingQueue.enqueue(rootPath)
-      while (!checkingQueue.isEmpty) {
-        val path = checkingQueue.dequeue()
-        paths.append(path.toString)
-        fs.listStatus(path).foreach(fileStatus => {
-          if (fileStatus.isDirectory) {
-            checkingQueue.enqueue(fileStatus.getPath)
-          }
-        })
-      }
-      paths
+      SparkHadoopUtil.get.listLeafDirStatuses(fs, rootPath).map(_.getPath.toString)
     } else {
       rootPath.toString :: Nil
     }

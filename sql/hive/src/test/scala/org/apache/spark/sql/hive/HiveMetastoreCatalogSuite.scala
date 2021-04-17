@@ -368,7 +368,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
     withTempPath(dir => {
       withTable("dirTest") {
         val testData = java.util.Arrays.asList(Row(1), Row(2), Row(3), Row(4), Row(5))
-        spark.conf.set("hive.mapred.supports.subdirectories", "true")
+
+        spark.sparkContext
+          .hadoopConfiguration.set("hive.mapred.supports.subdirectories", "true")
 
         val dataFrame = spark.sqlContext
           .createDataFrame(testData, StructType(Seq(StructField("val", IntegerType))))
