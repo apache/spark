@@ -24,8 +24,8 @@ import java.util.{Base64, HashMap, Map}
 import scala.sys.process._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.parquet.crypto.keytools.{KeyToolkit, KmsClient}
 import org.apache.parquet.crypto.{KeyAccessDeniedException, ParquetCryptoRuntimeException}
+import org.apache.parquet.crypto.keytools.{KeyToolkit, KmsClient}
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
