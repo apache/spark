@@ -343,6 +343,7 @@ class KubernetesSuite extends SparkFunSuite
       .withLabel("spark-role", "executor")
       .watch(new Watcher[Pod] {
         logDebug("Beginning watch of executors")
+        override def onClose(): Unit = logInfo("Ending watch of executors")
         override def onClose(cause: WatcherException): Unit =
           logInfo("Ending watch of executors")
         override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {

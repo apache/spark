@@ -27,13 +27,16 @@ import io.fabric8.kubernetes.client.internal.readiness.Readiness
 private[spark] class SparkReadinessWatcher[T <: HasMetadata] extends Watcher[T] {
 
   private val signal = SettableFuture.create[Boolean]
+  private val readiness = Readiness.getInstance()
 
   override def eventReceived(action: Action, resource: T): Unit = {
     if ((action == Action.MODIFIED || action == Action.ADDED) &&
-        Readiness.getInstance().isReady(resource)) {
+        readiness.isReady(resource)) {
       signal.set(true)
     }
   }
+
+  override def onClose(): Unit = {}
 
   override def onClose(cause: WatcherException): Unit = {}
 

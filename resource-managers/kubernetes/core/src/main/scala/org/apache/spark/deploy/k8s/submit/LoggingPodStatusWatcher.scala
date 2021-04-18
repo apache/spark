@@ -77,6 +77,11 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
     }
   }
 
+  override def onClose(): Unit = {
+    logDebug(s"Stopping watching application $appId with last-observed phase $phase")
+    closeWatch()
+  }
+
   private def logLongStatus(): Unit = {
     logInfo("State changed, new state: " + pod.map(formatPodState).getOrElse("unknown"))
   }
