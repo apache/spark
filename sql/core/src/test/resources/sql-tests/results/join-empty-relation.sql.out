@@ -71,7 +71,7 @@ SELECT * FROM t1 LEFT SEMI JOIN empty_table
 -- !query schema
 struct<a:int>
 -- !query output
-
+1
 
 
 -- !query
@@ -79,7 +79,7 @@ SELECT * FROM t1 LEFT ANTI JOIN empty_table
 -- !query schema
 struct<a:int>
 -- !query output
-1
+
 
 
 -- !query
