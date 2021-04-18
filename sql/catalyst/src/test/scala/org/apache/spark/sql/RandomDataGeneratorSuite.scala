@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.nio.ByteBuffer
-import java.time.Duration
 import java.util.Arrays
 
 import scala.util.Random
@@ -146,15 +145,16 @@ class RandomDataGeneratorSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35116: The generated data fits the precision of DayTimeIntervalType in spark") {
-    for (seed <- 1 to 1000) {
-      val generator = RandomDataGenerator.forType(
-        DayTimeIntervalType, nullable = false, rand = new Random(seed)).get
-      val toCatalyst = CatalystTypeConverters.createToCatalystConverter(DayTimeIntervalType)
-      val toScala = CatalystTypeConverters.createToScalaConverter(DayTimeIntervalType)
-      val duration = generator.apply().asInstanceOf[Duration]
-      val micros = toCatalyst(duration)
-      val convertedBack = toScala(micros)
-      assert(duration == convertedBack)
+    Seq(DayTimeIntervalType, YearMonthIntervalType).foreach { dt =>
+      for (seed <- 1 to 1000) {
+        val generator = RandomDataGenerator.forType(dt, false, new Random(seed)).get
+        val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dt)
+        val toScala = CatalystTypeConverters.createToScalaConverter(dt)
+        val data = generator.apply()
+        val catalyst = toCatalyst(data)
+        val convertedBack = toScala(catalyst)
+        assert(data == convertedBack)
+      }
     }
   }
 }
