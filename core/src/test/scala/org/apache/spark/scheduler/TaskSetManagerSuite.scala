@@ -2351,6 +2351,7 @@ class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, pa
 
 class TestSchedulingPlugin extends TaskSchedulingPlugin {
   private var topRanked: Int = -1
+  var revoked = mutable.HashSet.empty[Int]
 
   override def rankTasks(
       execId: String, host: String, tasks: Seq[Task[_]], taskIndexes: Seq[Int]): Seq[Int] = {
@@ -2368,6 +2369,10 @@ class TestSchedulingPlugin extends TaskSchedulingPlugin {
     if (topRanked != -1 && topRanked != message.scheduledTaskIndex) {
       throw new IllegalStateException(s"scheduled task index is ${message.scheduledTaskIndex}")
     }
+  }
+
+  override def revokeAssignTask(message: TaskRevokeForSchedule): Unit = {
+    revoked.add(message.scheduledTaskIndex)
   }
 }
 
@@ -2389,6 +2394,4 @@ class TestSchedulingPlugin2 extends TaskSchedulingPlugin {
       }
     }
   }
-
-  override def informScheduledTask(message: TaskScheduledResult): Unit = {}
 }

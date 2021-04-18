@@ -121,9 +121,14 @@ object FakeTask {
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
+  def createBarrierTaskSet(numTasks: Int, schedulingPlugin: TaskSchedulingPlugin): TaskSet = {
+    createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
+      rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Some(schedulingPlugin))
+  }
+
   def createBarrierTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
     createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
-      rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, prefLocs: _*)
+      rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, prefLocs: _*)
   }
 
   def createBarrierTaskSet(
@@ -131,7 +136,7 @@ object FakeTask {
       rpId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
     createBarrierTaskSet(numTasks, stageId = 0, stageAttemptId = 0, priority = 0,
-      rpId = rpId, prefLocs: _*)
+      rpId = rpId, None, prefLocs: _*)
   }
 
   def createBarrierTaskSet(
@@ -141,12 +146,23 @@ object FakeTask {
       priority: Int,
       rpId: Int,
       prefLocs: Seq[TaskLocation]*): TaskSet = {
+    createBarrierTaskSet(numTasks, stageId, stageAttemptId, priority, rpId, None, prefLocs: _*)
+  }
+
+  def createBarrierTaskSet(
+      numTasks: Int,
+      stageId: Int,
+      stageAttemptId: Int,
+      priority: Int,
+      rpId: Int,
+      schedulingPlugin: Option[TaskSchedulingPlugin],
+      prefLocs: Seq[TaskLocation]*): TaskSet = {
     if (prefLocs.size != 0 && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
     }
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil, isBarrier = true)
     }
-    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null, rpId, schedulingPlugin)
   }
 }

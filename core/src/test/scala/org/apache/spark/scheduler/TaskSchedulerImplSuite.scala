@@ -34,7 +34,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.util.{Clock, ManualClock}
+import org.apache.spark.util.{Clock, ManualClock, Utils}
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start(): Unit = {}
@@ -1993,6 +1993,35 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskId = tasks.head.taskId
     assert(barrierTSM.runningTasksSet.contains(taskId))
     assert(!normalTSM.runningTasksSet.contains(taskId))
+  }
+
+  test("SPARK-35022: Informs scheduling plugin reverted tasks when a barrier taskSet is reset") {
+    val clock = new ManualClock()
+    val conf = new SparkConf().set(config.LEGACY_LOCALITY_WAIT_RESET, false)
+    val sched = setupTaskSchedulerForLocalityTests(clock, conf)
+
+    // Call resourceOffers() first, so executors can be used
+    // to calculate the locality levels of the TaskSetManager later
+    sched.resourceOffers(Seq(WorkerOffer("executor-0", "host1", 1, Some("host1"))).toIndexedSeq)
+
+    val plugin = Utils.loadExtensions(classOf[TaskSchedulingPlugin],
+      Seq(classOf[TestSchedulingPlugin].getName), conf).head
+    val barrierTaskSet =
+      FakeTask.createBarrierTaskSet(2, 0, 0, 0, 0,
+        Some(plugin),
+        Seq(TaskLocation("host1", "executor-0")), Seq(TaskLocation("host1", "executor-1")))
+
+    sched.submitTasks(barrierTaskSet)
+
+    // The barrier TaskSetManager can not launch all tasks because of delay scheduling.
+    // So it will revert assigned resources
+    val tasks = sched.resourceOffers(
+      Seq(WorkerOffer("executor-0", "host1", 1, Some("host1")),
+        WorkerOffer("executor-2", "host1", 1, Some("host1"))).toIndexedSeq).flatten
+    assert(0 === tasks.length)
+
+    val revertedTasks = plugin.asInstanceOf[TestSchedulingPlugin].revoked
+    assert(revertedTasks.size == 1 && revertedTasks.contains(0))
   }
 
   /**

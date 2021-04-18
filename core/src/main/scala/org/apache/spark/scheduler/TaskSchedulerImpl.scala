@@ -701,6 +701,11 @@ private[spark] class TaskSchedulerImpl(
                 }
                 // re-add the task to the schedule pending list
                 taskSet.addPendingTask(task.index)
+                // Informs scheduling pluging that Spark reverts the task assignment.
+                taskSet.schedulingPlungin.map { plunin =>
+                  plunin.revokeAssignTask(TaskRevokeForSchedule(task.execId,
+                      task.host, taskSet.tasks(task.index), task.index))
+                }
               }
             }
           } else {

@@ -200,7 +200,7 @@ private[spark] class TaskSetManager(
     t.epoch = epoch
   }
 
-  private val schedulingPlungin = taskSet.schedulingPlugin
+  private[spark] val schedulingPlungin = taskSet.schedulingPlugin
 
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
@@ -370,7 +370,7 @@ private[spark] class TaskSetManager(
       // Let the scheduling plugin know which task is chosen.
       task.foreach { taskIndex =>
         schedulingPlungin.map(
-          _.informScheduledTask(TaskWaitingForSchedule(tasks(taskIndex), taskIndex)))
+          _.informScheduledTask(TaskWaitingForSchedule(execId, host, tasks(taskIndex), taskIndex)))
       }
       task
     }

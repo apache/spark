@@ -44,13 +44,27 @@ private[spark] trait TaskSchedulingPlugin {
    * scheduler does not choose top-1 ranked task. The plugin may decide what
    * action is needed if it is happening.
    */
-  def informScheduledTask(message: TaskScheduledResult): Unit
+  def informScheduledTask(message: TaskScheduledResult): Unit = {}
+
+  /**
+   * This method is called by Spark scheduler when the scheduler resets a task assignment.
+   * For barrier task set, if the barrier tasks are partially launched, Spark scheduler will revert
+   * the task assignment for the tasks.
+   */
+  def revokeAssignTask(message: TaskRevokeForSchedule): Unit = {}
 }
 
 private[spark] trait TaskScheduledResult {
+  def execId: String
+  def host: String
   def scheduledTask: Task[_]
   def scheduledTaskIndex: Int
 }
 
-private[spark] case class TaskWaitingForSchedule(scheduledTask: Task[_], scheduledTaskIndex: Int)
+private[spark] case class TaskWaitingForSchedule(
+  execId: String, host: String, scheduledTask: Task[_], scheduledTaskIndex: Int)
+  extends TaskScheduledResult
+
+private[spark] case class TaskRevokeForSchedule(
+  execId: String, host: String, scheduledTask: Task[_], scheduledTaskIndex: Int)
   extends TaskScheduledResult
