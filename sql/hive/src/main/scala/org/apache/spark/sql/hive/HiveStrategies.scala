@@ -231,6 +231,7 @@ case class RelationConversions(
         assertNoNullTypeInSchema(query.schema)
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
+    }
   }
 }
 
