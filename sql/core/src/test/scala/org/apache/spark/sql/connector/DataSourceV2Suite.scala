@@ -682,8 +682,8 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     val RangeInputPartition(start, end) = partition
     new PartitionReader[ColumnarBatch] {
-      private lazy val i = new OnHeapColumnVector(BATCH_SIZE, IntegerType)
-      private lazy val j = new OnHeapColumnVector(BATCH_SIZE, IntegerType)
+      private lazy val i = new OnHeapColumnVector(BATCH_SIZE, "", IntegerType)
+      private lazy val j = new OnHeapColumnVector(BATCH_SIZE, "", IntegerType)
       private lazy val batch = new ColumnarBatch(Array(i, j))
 
       private var current = start

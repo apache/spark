@@ -107,7 +107,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
     if (rebase) {
       if (failIfRebase) {
-        throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+        throw DataSourceUtils.newRebaseExceptionInRead(c.colName, c.dataType(), "Parquet");
       } else {
         for (int i = 0; i < total; i += 1) {
           c.putInt(rowId + i, RebaseDateTime.rebaseJulianToGregorianDays(buffer.getInt()));
@@ -164,7 +164,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
     if (rebase) {
       if (failIfRebase) {
-        throw DataSourceUtils.newRebaseExceptionInRead("Parquet");
+        throw DataSourceUtils.newRebaseExceptionInRead(c.colName, c.dataType(), "Parquet");
       } else {
         for (int i = 0; i < total; i += 1) {
           c.putLong(rowId + i, RebaseDateTime.rebaseJulianToGregorianMicros(buffer.getLong()));

@@ -62,10 +62,10 @@ private[sql] class AvroDeserializer(
   private lazy val decimalConversions = new DecimalConversion()
 
   private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
-    datetimeRebaseMode, "Avro")
+    datetimeRebaseMode, "Avro")(_, _)
 
   private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
-    datetimeRebaseMode, "Avro")
+    datetimeRebaseMode, "Avro")(_, _)
 
   private val converter: Any => Option[Any] = try {
     rootCatalystType match {
@@ -126,7 +126,8 @@ private[sql] class AvroDeserializer(
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
       case (INT, DateType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
+        updater.setInt(ordinal,
+          dateRebaseFunc(avroType.getName, catalystType)(value.asInstanceOf[Int]))
 
       case (LONG, LongType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
@@ -137,10 +138,10 @@ private[sql] class AvroDeserializer(
         case null | _: TimestampMillis => (updater, ordinal, value) =>
           val millis = value.asInstanceOf[Long]
           val micros = DateTimeUtils.millisToMicros(millis)
-          updater.setLong(ordinal, timestampRebaseFunc(micros))
+          updater.setLong(ordinal, timestampRebaseFunc(avroType.getName, catalystType)(micros))
         case _: TimestampMicros => (updater, ordinal, value) =>
           val micros = value.asInstanceOf[Long]
-          updater.setLong(ordinal, timestampRebaseFunc(micros))
+          updater.setLong(ordinal, timestampRebaseFunc(avroType.getName, catalystType)(micros))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"Avro logical type $other cannot be converted to SQL type ${TimestampType.sql}.")
       }

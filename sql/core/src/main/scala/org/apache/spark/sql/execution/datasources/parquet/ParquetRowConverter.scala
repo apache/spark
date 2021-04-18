@@ -189,13 +189,13 @@ private[parquet] class ParquetRowConverter(
   def currentRecord: InternalRow = currentRow
 
   private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
-    datetimeRebaseMode, "Parquet")
+    datetimeRebaseMode, "Parquet")(_, _)
 
   private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
-    datetimeRebaseMode, "Parquet")
+    datetimeRebaseMode, "Parquet")(_, _)
 
   private val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
-    int96RebaseMode, "Parquet INT96")
+    int96RebaseMode, "Parquet INT96")(_, _)
 
   // Converters for each field.
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
@@ -332,7 +332,7 @@ private[parquet] class ParquetRowConverter(
       case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MICROS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(timestampRebaseFunc(value))
+            updater.setLong(timestampRebaseFunc(parquetType.getName, catalystType)(value))
           }
         }
 
@@ -340,7 +340,7 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(timestampRebaseFunc(micros))
+            updater.setLong(timestampRebaseFunc(parquetType.getName, catalystType)(micros))
           }
         }
 
@@ -350,7 +350,7 @@ private[parquet] class ParquetRowConverter(
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
             val julianMicros = ParquetRowConverter.binaryToSQLTimestamp(value)
-            val gregorianMicros = int96RebaseFunc(julianMicros)
+            val gregorianMicros = int96RebaseFunc(parquetType.getName, catalystType)(julianMicros)
             val adjTime = convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
               .getOrElse(gregorianMicros)
             updater.setLong(adjTime)
@@ -360,7 +360,7 @@ private[parquet] class ParquetRowConverter(
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
-            updater.set(dateRebaseFunc(value))
+            updater.set(dateRebaseFunc(parquetType.getName, catalystType)(value))
           }
         }
 
