@@ -126,7 +126,7 @@ class RunLengthEncodingSuite extends SparkFunSuite {
       assertResult(RunLengthEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = RunLengthEncoding.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(inputSeq.length, "", columnType.dataType)
+      val columnVector = new OnHeapColumnVector(inputSeq.length, columnType.dataType)
       decoder.decompress(columnVector, inputSeq.length)
 
       if (inputSeq.nonEmpty) {

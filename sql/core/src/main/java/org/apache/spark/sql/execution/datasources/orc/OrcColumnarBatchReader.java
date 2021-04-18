@@ -167,7 +167,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     for (int i = 0; i < requiredFields.length; i++) {
       DataType dt = requiredFields[i].dataType();
       if (requestedPartitionColIds[i] != -1) {
-        OnHeapColumnVector partitionCol = new OnHeapColumnVector(capacity, requiredFields[i].name(),dt);
+        OnHeapColumnVector partitionCol = new OnHeapColumnVector(capacity, dt);
         ColumnVectorUtils.populate(partitionCol, partitionValues, requestedPartitionColIds[i]);
         partitionCol.setIsConstant();
         orcVectorWrappers[i] = partitionCol;
@@ -175,7 +175,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         int colId = requestedDataColIds[i];
         // Initialize the missing columns once.
         if (colId == -1) {
-          OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity,  requiredFields[i].name(),  dt);
+          OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
           missingCol.putNulls(0, capacity);
           missingCol.setIsConstant();
           orcVectorWrappers[i] = missingCol;

@@ -38,8 +38,8 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       size: Int,
       dt: DataType)(
       block: WritableColumnVector => Unit): Unit = {
-    withVector(new OnHeapColumnVector(size, "", dt))(block)
-    withVector(new OffHeapColumnVector(size, "", dt))(block)
+    withVector(new OnHeapColumnVector(size, dt))(block)
+    withVector(new OffHeapColumnVector(size, dt))(block)
   }
 
   private def testVectors(
@@ -259,7 +259,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("[SPARK-22092] off-heap column vector reallocation corrupts array data") {
-    withVector(new OffHeapColumnVector(8, "", arrayType)) { testVector =>
+    withVector(new OffHeapColumnVector(8, arrayType)) { testVector =>
       val data = testVector.arrayData()
       (0 until 8).foreach(i => data.putInt(i, i))
       (0 until 8).foreach(i => testVector.putArray(i, i, 1))
@@ -275,7 +275,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("[SPARK-22092] off-heap column vector reallocation corrupts struct nullability") {
-    withVector(new OffHeapColumnVector(8, "", structType)) { testVector =>
+    withVector(new OffHeapColumnVector(8, structType)) { testVector =>
       (0 until 8).foreach(i => if (i % 2 == 0) testVector.putNull(i) else testVector.putNotNull(i))
       testVector.reserve(16)
       (0 until 8).foreach(i => assert(testVector.isNullAt(i) == (i % 2 == 0)))

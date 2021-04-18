@@ -77,8 +77,8 @@ public class JavaColumnarDataSourceV2 implements TestingV2Source {
     @Override
     public PartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
       JavaRangeInputPartition p = (JavaRangeInputPartition) partition;
-      OnHeapColumnVector i = new OnHeapColumnVector(BATCH_SIZE, "", DataTypes.IntegerType);
-      OnHeapColumnVector j = new OnHeapColumnVector(BATCH_SIZE, "", DataTypes.IntegerType);
+      OnHeapColumnVector i = new OnHeapColumnVector(BATCH_SIZE, DataTypes.IntegerType);
+      OnHeapColumnVector j = new OnHeapColumnVector(BATCH_SIZE, DataTypes.IntegerType);
       ColumnVector[] vectors = new ColumnVector[2];
       vectors[0] = i;
       vectors[1] = j;

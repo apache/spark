@@ -142,7 +142,7 @@ class DictionaryEncodingSuite extends SparkFunSuite {
       assertResult(DictionaryEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = DictionaryEncoding.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(inputSeq.length, "", columnType.dataType)
+      val columnVector = new OnHeapColumnVector(inputSeq.length, columnType.dataType)
       decoder.decompress(columnVector, inputSeq.length)
 
       if (inputSeq.nonEmpty) {

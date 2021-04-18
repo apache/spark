@@ -105,7 +105,7 @@ class BooleanBitSetSuite extends SparkFunSuite {
     assertResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
     val decoder = BooleanBitSet.decoder(buffer, BOOLEAN)
-    val columnVector = new OnHeapColumnVector(values.length, "", BooleanType)
+    val columnVector = new OnHeapColumnVector(values.length, BooleanType)
     decoder.decompress(columnVector, values.length)
 
     if (values.nonEmpty) {
@@ -175,7 +175,7 @@ class BooleanBitSetSuite extends SparkFunSuite {
     assertResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
     val decoder = BooleanBitSet.decoder(buffer, BOOLEAN)
-    val columnVector = new OnHeapColumnVector(numRows, "", BooleanType)
+    val columnVector = new OnHeapColumnVector(numRows, BooleanType)
     decoder.decompress(columnVector, numRows)
 
     (0 until numRows).foreach { rowNum =>

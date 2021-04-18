@@ -136,7 +136,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
       assertResult(scheme.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = scheme.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(input.length, "", columnType.dataType)
+      val columnVector = new OnHeapColumnVector(input.length, columnType.dataType)
       decoder.decompress(columnVector, input.length)
 
       if (input.nonEmpty) {

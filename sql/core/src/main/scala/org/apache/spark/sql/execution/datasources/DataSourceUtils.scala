@@ -131,10 +131,7 @@ object DataSourceUtils {
     }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
   }
 
-  def newRebaseExceptionInRead(
-      colName: String,
-      dataType: DataType,
-      format: String): SparkUpgradeException = {
+  def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
     val (config, option) = format match {
       case "Parquet INT96" =>
         (SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key, ParquetOptions.INT96_REBASE_MODE)
@@ -144,7 +141,7 @@ object DataSourceUtils {
         (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
       case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
     }
-    QueryExecutionErrors.sparkUpgradeInReadingDatesError(colName, dataType, format, config, option)
+    QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
   }
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
@@ -159,10 +156,10 @@ object DataSourceUtils {
 
   def creteDateRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
-      format: String)(colName: String, dataType: DataType): Int => Int = rebaseMode match {
+      format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
       if (days < RebaseDateTime.lastSwitchJulianDay) {
-        throw DataSourceUtils.newRebaseExceptionInRead(colName, dataType, format)
+        throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
       days
     case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianDays
@@ -183,10 +180,10 @@ object DataSourceUtils {
 
   def creteTimestampRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
-      format: String)(colName: String, dataType: DataType): Long => Long = rebaseMode match {
+      format: String): Long => Long = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
       if (micros < RebaseDateTime.lastSwitchJulianTs) {
-        throw DataSourceUtils.newRebaseExceptionInRead(colName, dataType, format)
+        throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
       micros
     case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianMicros

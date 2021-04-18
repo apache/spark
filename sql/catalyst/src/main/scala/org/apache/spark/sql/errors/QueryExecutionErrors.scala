@@ -394,16 +394,11 @@ object QueryExecutionErrors {
   }
 
   def sparkUpgradeInReadingDatesError(
-      colName: String,
-      dataType: DataType,
-      format: String,
-      config: String,
-      option: String): SparkUpgradeException = {
+      format: String, config: String, option: String): SparkUpgradeException = {
     new SparkUpgradeException("3.0",
       s"""
          |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z from $format
-         |files can be ambiguous when read column `${colName}` of datatype `${dataType}`,
-         |as the files may be written by Spark 2.x or legacy versions of
+         |files can be ambiguous, as the files may be written by Spark 2.x or legacy versions of
          |Hive, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic
          |Gregorian calendar. See more details in SPARK-31404. You can set the SQL config
          |'$config' or the datasource option '$option' to 'LEGACY' to rebase the datetime values

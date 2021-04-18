@@ -147,7 +147,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
 
     // Access through the column API with on heap memory
     val columnOnHeap = { i: Int =>
-      val col = new OnHeapColumnVector(count, "", IntegerType)
+      val col = new OnHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0
@@ -166,7 +166,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
 
     // Access through the column API with off heap memory
     def columnOffHeap = { i: Int => {
-      val col = new OffHeapColumnVector(count, "", IntegerType)
+      val col = new OffHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0
@@ -185,7 +185,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
 
     // Access by directly getting the buffer backing the column.
     val columnOffheapDirect = { i: Int =>
-      val col = new OffHeapColumnVector(count, "", IntegerType)
+      val col = new OffHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
         var addr = col.valuesNativeAddress()
@@ -251,7 +251,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
 
     // Adding values by appending, instead of putting.
     val onHeapAppend = { i: Int =>
-      val col = new OnHeapColumnVector(count, "", IntegerType)
+      val col = new OnHeapColumnVector(count, IntegerType)
       var sum = 0L
       for (n <- 0L until iters) {
         var i = 0
@@ -347,9 +347,9 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
 
     def column(memoryMode: MemoryMode) = { i: Int =>
       val column = if (memoryMode == MemoryMode.OFF_HEAP) {
-        new OffHeapColumnVector(count, "", BinaryType)
+        new OffHeapColumnVector(count, BinaryType)
       } else {
-        new OnHeapColumnVector(count, "", BinaryType)
+        new OnHeapColumnVector(count, BinaryType)
       }
 
       var sum = 0L
@@ -378,8 +378,8 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     val random = new Random(0)
     val count = 4 * 1000
 
-    val onHeapVector = new OnHeapColumnVector(count, "", ArrayType(IntegerType))
-    val offHeapVector = new OffHeapColumnVector(count, "", ArrayType(IntegerType))
+    val onHeapVector = new OnHeapColumnVector(count, ArrayType(IntegerType))
+    val offHeapVector = new OffHeapColumnVector(count, ArrayType(IntegerType))
 
     val minSize = 3
     val maxSize = 32
