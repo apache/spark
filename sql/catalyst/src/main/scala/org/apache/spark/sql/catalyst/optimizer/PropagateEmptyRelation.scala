@@ -88,8 +88,10 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
           // Intersect is handled as LeftSemi by `ReplaceIntersectWithSemiJoin` rule.
           // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
           case LeftOuter | LeftSemi | LeftAnti if isLeftEmpty => empty(p)
-          case LeftSemi if isRightEmpty | isFalseCondition => empty(p)
-          case LeftAnti if isRightEmpty | isFalseCondition => p.left
+          case LeftSemi if (isRightEmpty | isFalseCondition) && conditionOpt.nonEmpty => empty(p)
+          case LeftAnti if (isRightEmpty | isFalseCondition) && conditionOpt.nonEmpty => p.left
+          case LeftSemi if !isRightEmpty && conditionOpt.isEmpty => p.left
+          case LeftAnti if !isRightEmpty && conditionOpt.isEmpty => empty(p)
           case FullOuter if isLeftEmpty && isRightEmpty => empty(p)
           case LeftOuter | FullOuter if isRightEmpty =>
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
@@ -100,8 +102,6 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
           case RightOuter if isFalseCondition =>
             Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
-          case LeftSemi if conditionOpt.isEmpty => p.left
-          case LeftAnti if conditionOpt.isEmpty => empty(p)
           case _ => p
         }
       } else {
