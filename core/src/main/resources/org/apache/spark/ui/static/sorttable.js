@@ -186,7 +186,7 @@ sorttable = {
           return sorttable.sort_numeric;
         }
         // match content like '287.1 MiB (17.2 GiB Remaining)', '0.0 B'
-        else if(text.match(/^(\d+(?:\.\d+)?)\s*(b|kib|mib|gib|tib|pib)[\s\S]*/i)) {
+        else if(text.match(/^(\d+(?:\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)[\s\S]*/i)) {
           return sorttable.sort_storage_size
         }
         // check for a date: dd/mm/yyyy or dd/mm/yy 
@@ -531,10 +531,13 @@ function storageSizeConverter(data) {
     mib: 1048576,
     gib: 1073741824,
     tib: 1099511627776,
-    pib: 1125899906842624
+    pib: 1125899906842624,
+    eib: 1152921504606846976,
+    zib: 1180591620717411303424,
+    yib: 1208925819614629174706176,
   }
 
-  var matches = data.match(/^(\d+(?:\.\d+)?)\s*(b|kib|mib|gib|tib|pib)[\s\S]*/i);
+  var matches = data.match(/^(\d+(?:\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)[\s\S]*/i);
 
   if(matches) {
     var unit = matches[2].toLowerCase()
