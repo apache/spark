@@ -198,14 +198,15 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("seq") {
-    def checkSeqLiteral[T: TypeTag](a: Seq[T], elementType: DataType): Unit = {
+    def checkSeqLiteral[T: TypeTag](a: Seq[T]): Unit = {
       checkEvaluation(Literal.create(a), toCatalyst(a))
     }
-    checkSeqLiteral(Seq(1, 2, 3), IntegerType)
-    checkSeqLiteral(Seq("a", "b", "c"), StringType)
-    checkSeqLiteral(Seq(1.0, 4.0), DoubleType)
-    checkSeqLiteral(Seq(Period.ZERO), YearMonthIntervalType)
-    checkSeqLiteral(Seq(Duration.ZERO), DayTimeIntervalType)
+    checkSeqLiteral(Seq(1, 2, 3))
+    checkSeqLiteral(Seq("a", "b", "c"))
+    checkSeqLiteral(Seq(1.0, 4.0))
+    checkSeqLiteral(Seq(new CalendarInterval(1, 0, 0), new CalendarInterval(0, 1, 0)))
+    checkSeqLiteral(Seq(Period.ZERO, Period.ofMonths(1)))
+    checkSeqLiteral(Seq(Duration.ZERO, Duration.ofDays(1)))
   }
 
   test("map") {
