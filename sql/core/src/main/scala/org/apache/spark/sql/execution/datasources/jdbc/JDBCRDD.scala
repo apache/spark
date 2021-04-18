@@ -30,6 +30,8 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 /**
  * Data corresponding to one partition of a JDBCRDD.
  */
@@ -281,10 +283,13 @@ private[jdbc] class JDBCRDD(
       case Some(sql) =>
         val statement = conn.prepareStatement(sql)
         logInfo(s"Executing sessionInitStatement: $sql")
+        val isFinished = new AtomicBoolean(false)
+        startTheJobInterruptListenerThread(context, stmt, isFinished)
         try {
           statement.setQueryTimeout(options.queryTimeout)
           statement.execute()
         } finally {
+          isFinished.set(true)
           statement.close()
         }
       case None =>
@@ -301,10 +306,44 @@ private[jdbc] class JDBCRDD(
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
-    rs = stmt.executeQuery()
+
+    val isFinished = new AtomicBoolean(false)
+    startTheJobInterruptListenerThread(context, stmt, isFinished)
+    try{
+      rs = stmt.executeQuery()
+    } finally {
+      isFinished.set(true)
+    }
     val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
+  }
+
+  /**
+   * Start the job interruption listener thread, if the job is interrupted and
+   * stmt.executeQuery() is not completed, initiate a stmt.cancel() request.
+   */
+  private def startTheJobInterruptListenerThread(context: TaskContext, stmt: PreparedStatement
+                                                 , isFinished: AtomicBoolean): Unit = {
+    val thread = new Thread(() => {
+      val waitInterval = 100
+      // Always wait for job interruption or stmt.executeQuery() execution to complete
+      while (!context.isInterrupted() && !isFinished.get()) {
+        Thread.sleep(waitInterval)
+      }
+
+      // Is interrupted and stmt.executeQuery() is not completed, then initiate a cancel request
+      if (context.isInterrupted() && !isFinished.get()) {
+        logInfo(s"try to cancel query ${context.getKillReason()}")
+        try {
+          stmt.cancel()
+        } catch {
+          case e: Exception => logWarning("Exception cancel statement", e)
+        }
+      }
+    })
+    thread.setDaemon(true)
+    thread.start()
   }
 }
