@@ -105,18 +105,17 @@ private class ShuffleStatus(
 
   /**
    * The cached result of serializing the map statuses array. This cache is lazily populated when
-   * [[serializedOutputStatus]] is called. The cache is invalidated when map outputs are removed.
+   * [[serializedMapStatus]] is called. The cache is invalidated when map outputs are removed.
    */
   private[this] var cachedSerializedMapStatus: Array[Byte] = _
 
   /**
-   * Broadcast variable holding serialized map output statuses array. When
-   * [[serializedOutputStatus]] serializes the map statuses array it may detect that the result is
-   * too large to send in a single RPC, in which case it places the serialized array into a
-   * broadcast variable and then sends a serialized broadcast variable instead. This variable holds
-   * a reference to that broadcast variable in order to keep it from being garbage collected and
-   * to allow for it to be explicitly destroyed later on when the ShuffleMapStage is
-   * garbage-collected.
+   * Broadcast variable holding serialized map output statuses array. When [[serializedMapStatus]]
+   * serializes the map statuses array it may detect that the result is too large to send in a
+   * single RPC, in which case it places the serialized array into a broadcast variable and then
+   * sends a serialized broadcast variable instead. This variable holds a reference to that
+   * broadcast variable in order to keep it from being garbage collected and to allow for it to be
+   * explicitly destroyed later on when the ShuffleMapStage is garbage-collected.
    */
   private[spark] var cachedSerializedBroadcast: Broadcast[Array[Byte]] = _
 
@@ -275,88 +274,66 @@ private class ShuffleStatus(
   }
 
   /**
-   * Serializes the mapStatuses or mergeStatuses array into an efficient compressed format. See
-   * the comments on `MapOutputTracker.serializeOutputStatuses()` for more details on the
-   * serialization format.
+   * Serializes the mapStatuses array into an efficient compressed format. See the comments on
+   * `MapOutputTracker.serializeOutputStatuses()` for more details on the serialization format.
    *
    * This method is designed to be called multiple times and implements caching in order to speed
    * up subsequent requests. If the cache is empty and multiple threads concurrently attempt to
-   * serialize the statuses array then serialization will only be performed in a single thread and
+   * serialize the map statuses then serialization will only be performed in a single thread and
    * all other threads will block until the cache is populated.
    */
-  def serializedOutputStatus(
-      broadcastManager: BroadcastManager,
-      isLocal: Boolean,
-      minBroadcastSize: Int,
-      conf: SparkConf,
-      isMapOnlyOutput: Boolean): (Array[Byte], Array[Byte]) = {
-    var mapStatuses: Array[Byte] = null
-    var mergeStatuses: Array[Byte] = null
-
-    withReadLock {
-      if (isMapOnlyOutput) {
-        if (cachedSerializedMapStatus != null) {
-          mapStatuses = cachedSerializedMapStatus
-        }
-      } else {
-        if (cachedSerializedMapStatus != null) {
-          mapStatuses = cachedSerializedMapStatus
-        }
-
-        if (cachedSerializedMergeStatus != null) {
-          mergeStatuses = cachedSerializedMergeStatus
-        }
-      }
-    }
-
-    if (isMapOnlyOutput) {
-      if (mapStatuses == null) {
-        mapStatuses =
-          serializeAndCacheMapStatuses(broadcastManager, isLocal, minBroadcastSize, conf)
-      }
-    } else {
-      // If push based shuffle enabled, serialize and cache both Map and Merge Status
-      if (mapStatuses == null) {
-        mapStatuses =
-          serializeAndCacheMapStatuses(broadcastManager, isLocal, minBroadcastSize, conf)
-      }
-
-      if (mergeStatuses == null) {
-        mergeStatuses =
-          serializeAndCacheMergeStatuses(broadcastManager, isLocal, minBroadcastSize, conf)
-      }
-    }
-    (mapStatuses, mergeStatuses)
-  }
-
-  private def serializeAndCacheMapStatuses(
+  def serializedMapStatus(
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
       minBroadcastSize: Int,
       conf: SparkConf): Array[Byte] = {
-    var mapStatusesBytes: Array[Byte] = null
-    withWriteLock {
+    var result: Array[Byte] = null
+    withReadLock {
+      if (cachedSerializedMapStatus != null) {
+        result = cachedSerializedMapStatus
+      }
+    }
+
+    if (result == null) withWriteLock {
       if (cachedSerializedMapStatus == null) {
         val serResult = MapOutputTracker.serializeOutputStatuses[MapStatus](
           mapStatuses, broadcastManager, isLocal, minBroadcastSize, conf)
         cachedSerializedMapStatus = serResult._1
         cachedSerializedBroadcast = serResult._2
       }
-      // The following line has to be outside if statement since it's possible that another
-      // thread initializes cachedSerializedMapStatus in-between `withReadLock` and
-      // `withWriteLock`.
-      mapStatusesBytes = cachedSerializedMapStatus
+      // The following line has to be outside if statement since it's possible that another thread
+      // initializes cachedSerializedMapStatus in-between `withReadLock` and `withWriteLock`.
+      result = cachedSerializedMapStatus
     }
-    mapStatusesBytes
+    result
   }
 
-  private def serializeAndCacheMergeStatuses(
+  /**
+   * Serializes the mapStatuses and mergeStatuses array into an efficient compressed format.
+   * See the comments on `MapOutputTracker.serializeOutputStatuses()` for more details
+   * on the serialization format.
+   *
+   * This method is designed to be called multiple times and implements caching in order to speed
+   * up subsequent requests. If the cache is empty and multiple threads concurrently attempt to
+   * serialize the statuses array then serialization will only be performed in a single thread and
+   * all other threads will block until the cache is populated.
+   */
+  def serializedMapAndMergeStatus(
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
       minBroadcastSize: Int,
-      conf: SparkConf): Array[Byte] = {
+      conf: SparkConf): (Array[Byte], Array[Byte]) = {
+    val mapStatusesBytes: Array[Byte] =
+      serializedMapStatus(broadcastManager, isLocal, minBroadcastSize, conf)
     var mergeStatusesBytes: Array[Byte] = null
-    withWriteLock {
+
+    withReadLock {
+      if (cachedSerializedMergeStatus != null) {
+        mergeStatusesBytes = cachedSerializedMergeStatus
+      }
+    }
+
+    if (mergeStatusesBytes == null) withWriteLock {
       if (cachedSerializedMergeStatus == null) {
         val serResult = MapOutputTracker.serializeOutputStatuses[MergeStatus](
           mergeStatuses, broadcastManager, isLocal, minBroadcastSize, conf)
@@ -369,7 +346,7 @@ private class ShuffleStatus(
       // `withWriteLock`.
       mergeStatusesBytes = cachedSerializedMergeStatus
     }
-    mergeStatusesBytes
+    (mapStatusesBytes, mergeStatusesBytes)
   }
 
   // Used in testing.
@@ -429,9 +406,9 @@ private[spark] case class GetMapAndMergeResultStatuses(shuffleId: Int)
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
 private[spark] sealed trait MapOutputTrackerMasterMessage
-private[spark] case class GetMapStatusMessage(shuffleId: Int,
+private[spark] case class GetMapOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
-private[spark] case class GetMapAndMergeStatusMessage(shuffleId: Int,
+private[spark] case class GetMapAndMergeOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 
 /** RpcEndpoint class for MapOutputTrackerMaster */
@@ -445,12 +422,12 @@ private[spark] class MapOutputTrackerMasterEndpoint(
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
       logInfo(s"Asked to send map output locations for shuffle $shuffleId to $hostPort")
-      tracker.post(GetMapStatusMessage(shuffleId, context))
+      tracker.post(GetMapOutputMessage(shuffleId, context))
 
     case GetMapAndMergeResultStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
       logInfo(s"Asked to send map/merge result locations for shuffle $shuffleId to $hostPort")
-      tracker.post(GetMapAndMergeStatusMessage(shuffleId, context))
+      tracker.post(GetMapAndMergeOutputMessage(shuffleId, context))
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")
@@ -646,14 +623,19 @@ private[spark] class MapOutputTrackerMaster(
     private def handleStatusMessage(
         shuffleId: Int,
         context: RpcCallContext,
-        isMapOnlyOutput: Boolean): Unit = {
+        needMergeOutput: Boolean): Unit = {
       val hostPort = context.senderAddress.hostPort
       val shuffleStatus = shuffleStatuses.get(shuffleId).head
-      logDebug(s"Handling request to send ${if (isMapOnlyOutput) "map" else "map/merge"}" +
+      logDebug(s"Handling request to send ${if (needMergeOutput) "map" else "map/merge"}" +
         s" output locations for shuffle $shuffleId to $hostPort")
-      context.reply(
-        shuffleStatus.serializedOutputStatus(broadcastManager, isLocal,
-          minSizeForBroadcast, conf, isMapOnlyOutput = isMapOnlyOutput))
+      if (needMergeOutput) {
+        context.reply(
+          shuffleStatus.
+            serializedMapAndMergeStatus(broadcastManager, isLocal, minSizeForBroadcast, conf))
+      } else {
+        context.reply(
+          shuffleStatus.serializedMapStatus(broadcastManager, isLocal, minSizeForBroadcast, conf))
+      }
     }
 
     override def run(): Unit = {
@@ -668,10 +650,10 @@ private[spark] class MapOutputTrackerMaster(
             }
 
             data match {
-              case GetMapStatusMessage(shuffleId, context) =>
-                handleStatusMessage(shuffleId, context, true)
-              case GetMapAndMergeStatusMessage(shuffleId, context) =>
+              case GetMapOutputMessage(shuffleId, context) =>
                 handleStatusMessage(shuffleId, context, false)
+              case GetMapAndMergeOutputMessage(shuffleId, context) =>
+                handleStatusMessage(shuffleId, context, true)
             }
           } catch {
             case NonFatal(e) => logError(e.getMessage, e)
@@ -684,7 +666,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** A poison endpoint that indicates MessageLoop should exit its message loop. */
-  private val PoisonPill = GetMapStatusMessage(-99, null)
+  private val PoisonPill = GetMapOutputMessage(-99, null)
 
   // Used only in unit tests.
   private[spark] def getNumCachedSerializedBroadcast: Int = {
@@ -915,7 +897,7 @@ private[spark] class MapOutputTrackerMaster(
       } else {
         Nil
       }
-      if (!preferredLoc.isEmpty) {
+      if (preferredLoc.nonEmpty) {
         preferredLoc
       } else {
         if (shuffleLocalityEnabled && dep.rdd.partitions.length < SHUFFLE_PREF_MAP_THRESHOLD &&
@@ -1232,11 +1214,10 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           var fetchedStatuses = mapStatuses.get(shuffleId).orNull
           if (fetchedStatuses == null) {
             logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
-            val fetchedBytes =
-              askTracker[(Array[Byte], Array[Byte])](GetMapOutputStatuses(shuffleId))
+            val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
             try {
               fetchedStatuses =
-                MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, conf)
+                MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes, conf)
             } catch {
               case e: SparkException =>
                 throw new MetadataFetchFailedException(shuffleId, -1,

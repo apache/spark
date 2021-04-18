@@ -573,8 +573,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
       val fetchedBytes = mapWorkerTracker.trackerEndpoint
-        .askSync[(Array[Byte], Array[Byte])](GetMapOutputStatuses(20))
-      assert(fetchedBytes._1(0) == 1)
+        .askSync[Array[Byte]](GetMapOutputStatuses(20))
+      assert(fetchedBytes(0) == 1)
 
       // Normally `unregisterMapOutput` triggers the destroy of broadcasted value.
       // But the timing of destroying broadcasted value is indeterminate, we manually destroy
@@ -583,7 +583,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         shuffleStatus.cachedSerializedBroadcast.destroy(true)
       }
       val err = intercept[SparkException] {
-        MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, conf)
+        MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes, conf)
       }
       assert(err.getMessage.contains("Unable to deserialize broadcasted output statuses"))
     }
