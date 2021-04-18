@@ -64,8 +64,7 @@ private[spark] class ExecutorPodsWatchSnapshotSource(
     }
 
     override def onClose(): Unit = {
-      logWarning("Kubernetes client has been closed (this is expected if the application is" +
-        " shutting down.)")
+      logWarning("Kubernetes client has been closed.")
     }
   }
 
