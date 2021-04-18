@@ -178,6 +178,26 @@ class PropagateEmptyRelationSuite extends PlanTest {
     }
   }
 
+  test("SPARK-35118: Propagate empty relation through Join if join condition is empty") {
+    val testcases = Seq(
+      (Inner, None),
+      (Cross, None),
+      (LeftOuter, None),
+      (RightOuter, None),
+      (FullOuter, None),
+      (LeftAnti, Some(LocalRelation('a.int))),
+      (LeftSemi, Some(testRelation1))
+    )
+
+    testcases.foreach { case (jt, answer) =>
+      val query = testRelation1.join(testRelation2, joinType = jt, condition = None)
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer =
+        answer.getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
   test("propagate empty relation through UnaryNode") {
     val query = testRelation1
       .where(false)

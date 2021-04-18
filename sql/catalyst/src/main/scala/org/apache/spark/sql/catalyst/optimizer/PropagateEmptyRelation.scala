@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.rules._
  * 2. Unary-node Logical Plans
  *    - Project/Filter/Sample/Join/Limit/Repartition with all empty children.
  *    - Join with false condition.
+ *    - Join with empty condition.
  *    - Aggregate with all empty children and at least one grouping expression.
  *    - Generate(Explode) with all empty children. Others like Hive UDTF may return results.
  */
@@ -81,9 +82,9 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
         case Some(FalseLiteral) => true
         case _ => false
       }
-      if (isLeftEmpty || isRightEmpty || isFalseCondition) {
+      if (isLeftEmpty || isRightEmpty || isFalseCondition || conditionOpt.isEmpty) {
         joinType match {
-          case _: InnerLike => empty(p)
+          case _: InnerLike if isLeftEmpty || isRightEmpty || isFalseCondition => empty(p)
           // Intersect is handled as LeftSemi by `ReplaceIntersectWithSemiJoin` rule.
           // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
           case LeftOuter | LeftSemi | LeftAnti if isLeftEmpty => empty(p)
@@ -99,6 +100,8 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
           case RightOuter if isFalseCondition =>
             Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
+          case LeftSemi if conditionOpt.isEmpty => p.left
+          case LeftAnti if conditionOpt.isEmpty => empty(p)
           case _ => p
         }
       } else {
