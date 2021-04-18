@@ -165,7 +165,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   public WritableColumnVector reserveDictionaryIds(int capacity) {
     if (dictionaryIds == null) {
-      dictionaryIds = reserveNewColumn(capacity, DataTypes.IntegerType);
+      dictionaryIds = reserveNewColumn(capacity, colName, DataTypes.IntegerType);
     } else {
       dictionaryIds.reset();
       dictionaryIds.reserve(capacity);
@@ -678,6 +678,11 @@ public abstract class WritableColumnVector extends ColumnVector {
   public final void setIsConstant() { isConstant = true; }
 
   /**
+   * Column name of this column.
+   */
+  public String colName;
+
+  /**
    * Maximum number of rows that can be stored in this column.
    */
   protected int capacity;
@@ -717,7 +722,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * Reserve a new column.
    */
-  protected abstract WritableColumnVector reserveNewColumn(int capacity, DataType type);
+  protected abstract WritableColumnVector reserveNewColumn(int capacity, String colName, DataType type);
 
   protected boolean isArray() {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
@@ -728,8 +733,9 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected WritableColumnVector(int capacity, DataType type) {
+  protected WritableColumnVector(int capacity, String colName, DataType type) {
     super(type);
+    this.colName = colName;
     this.capacity = capacity;
 
     if (isArray()) {
@@ -742,24 +748,25 @@ public abstract class WritableColumnVector extends ColumnVector {
         childCapacity *= DEFAULT_ARRAY_LENGTH;
       }
       this.childColumns = new WritableColumnVector[1];
-      this.childColumns[0] = reserveNewColumn(childCapacity, childType);
+      this.childColumns[0] = reserveNewColumn(childCapacity, colName + ".elem", childType);
     } else if (type instanceof StructType) {
       StructType st = (StructType)type;
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
-        this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
+        this.childColumns[i] = reserveNewColumn(capacity, colName + "." + st.fields()[i].name(),
+          st.fields()[i].dataType());
       }
     } else if (type instanceof MapType) {
       MapType mapType = (MapType) type;
       this.childColumns = new WritableColumnVector[2];
-      this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
-      this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());
+      this.childColumns[0] = reserveNewColumn(capacity, colName + ".key", mapType.keyType());
+      this.childColumns[1] = reserveNewColumn(capacity, colName + ".value", mapType.valueType());
     } else if (type instanceof CalendarIntervalType) {
       // Three columns. Months as int. Days as Int. Microseconds as Long.
       this.childColumns = new WritableColumnVector[3];
-      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
+      this.childColumns[0] = reserveNewColumn(capacity, colName + ".months", DataTypes.IntegerType);
+      this.childColumns[1] = reserveNewColumn(capacity, colName + ".days", DataTypes.IntegerType);
+      this.childColumns[2] = reserveNewColumn(capacity, colName + ".microseconds", DataTypes.LongType);
     } else {
       this.childColumns = null;
     }

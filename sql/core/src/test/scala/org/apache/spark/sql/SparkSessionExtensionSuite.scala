@@ -675,7 +675,7 @@ class BrokenColumnarAdd(
       } else if (lhs.isInstanceOf[ColumnVector] && rhs.isInstanceOf[ColumnVector]) {
         val l = lhs.asInstanceOf[ColumnVector]
         val r = rhs.asInstanceOf[ColumnVector]
-        val result = new OnHeapColumnVector(batch.numRows(), dataType)
+        val result = new OnHeapColumnVector(batch.numRows(), "", dataType)
         ret = result
 
         for (i <- 0 until batch.numRows()) {
@@ -684,7 +684,7 @@ class BrokenColumnarAdd(
       } else if (rhs.isInstanceOf[ColumnVector]) {
         val l = lhs.asInstanceOf[Long]
         val r = rhs.asInstanceOf[ColumnVector]
-        val result = new OnHeapColumnVector(batch.numRows(), dataType)
+        val result = new OnHeapColumnVector(batch.numRows(), "", dataType)
         ret = result
 
         for (i <- 0 until batch.numRows()) {
@@ -693,7 +693,7 @@ class BrokenColumnarAdd(
       } else if (lhs.isInstanceOf[ColumnVector]) {
         val l = lhs.asInstanceOf[ColumnVector]
         val r = rhs.asInstanceOf[Long]
-        val result = new OnHeapColumnVector(batch.numRows(), dataType)
+        val result = new OnHeapColumnVector(batch.numRows(), "", dataType)
         ret = result
 
         for (i <- 0 until batch.numRows()) {

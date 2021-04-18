@@ -50,7 +50,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public static OnHeapColumnVector[] allocateColumns(int capacity, StructField[] fields) {
     OnHeapColumnVector[] vectors = new OnHeapColumnVector[fields.length];
     for (int i = 0; i < fields.length; i++) {
-      vectors[i] = new OnHeapColumnVector(capacity, fields[i].dataType());
+      vectors[i] = new OnHeapColumnVector(capacity, fields[i].name(), fields[i].dataType());
     }
     return vectors;
   }
@@ -73,8 +73,8 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
-  public OnHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type);
+  public OnHeapColumnVector(int capacity, String colName, DataType type) {
+    super(capacity, colName, type);
 
     reserveInternal(capacity);
     reset();
@@ -580,7 +580,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  protected OnHeapColumnVector reserveNewColumn(int capacity, DataType type) {
-    return new OnHeapColumnVector(capacity, type);
+  protected OnHeapColumnVector reserveNewColumn(int capacity, String colName, DataType type) {
+    return new OnHeapColumnVector(capacity, colName, type);
   }
 }

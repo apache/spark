@@ -44,9 +44,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
   private def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): WritableColumnVector = {
     if (memMode == MemoryMode.OFF_HEAP) {
-      new OffHeapColumnVector(capacity, dt)
+      new OffHeapColumnVector(capacity, "", dt)
     } else {
-      new OnHeapColumnVector(capacity, dt)
+      new OnHeapColumnVector(capacity, "", dt)
     }
   }
 

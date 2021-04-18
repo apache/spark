@@ -50,7 +50,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public static OffHeapColumnVector[] allocateColumns(int capacity, StructField[] fields) {
     OffHeapColumnVector[] vectors = new OffHeapColumnVector[fields.length];
     for (int i = 0; i < fields.length; i++) {
-      vectors[i] = new OffHeapColumnVector(capacity, fields[i].dataType());
+      vectors[i] = new OffHeapColumnVector(capacity, fields[i].name(), fields[i].dataType());
     }
     return vectors;
   }
@@ -64,8 +64,8 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   private long lengthData;
   private long offsetData;
 
-  public OffHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type);
+  public OffHeapColumnVector(int capacity, String colName, DataType type) {
+    super(capacity, colName, type);
 
     nulls = 0;
     data = 0;
@@ -566,7 +566,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  protected OffHeapColumnVector reserveNewColumn(int capacity, DataType type) {
-    return new OffHeapColumnVector(capacity, type);
+  protected OffHeapColumnVector reserveNewColumn(int capacity, String colName, DataType type) {
+    return new OffHeapColumnVector(capacity, colName, type);
   }
 }
