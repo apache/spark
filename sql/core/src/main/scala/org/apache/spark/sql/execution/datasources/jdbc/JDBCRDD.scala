@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, PreparedStatement, ResultSet}
-
+import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
 import scala.util.control.NonFatal
-
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -339,7 +337,7 @@ private[jdbc] class JDBCRDD(
         try {
           stmt.cancel()
         } catch {
-          case e: Exception => logWarning("Exception cancel statement", e)
+          case e: SQLException => logWarning("SQLException cancel statement", e)
         }
       }
     })
