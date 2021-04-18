@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
@@ -263,31 +263,17 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("SPARK-32608: script transform with row format delimit") {
-    assertEqual(
+    val rowFormat =
       """
-        |SELECT TRANSFORM(a, b, c)
         |  ROW FORMAT DELIMITED
         |  FIELDS TERMINATED BY ','
         |  COLLECTION ITEMS TERMINATED BY '#'
         |  MAP KEYS TERMINATED BY '@'
         |  LINES TERMINATED BY '\n'
         |  NULL DEFINED AS 'null'
-        |  USING 'cat' AS (a, b, c)
-        |  ROW FORMAT DELIMITED
-        |  FIELDS TERMINATED BY ','
-        |  COLLECTION ITEMS TERMINATED BY '#'
-        |  MAP KEYS TERMINATED BY '@'
-        |  LINES TERMINATED BY '\n'
-        |  NULL DEFINED AS 'NULL'
-        |FROM testData
-      """.stripMargin,
-    ScriptTransformation(
-      Seq('a, 'b, 'c),
-      "cat",
-      Seq(AttributeReference("a", StringType)(),
-        AttributeReference("b", StringType)(),
-        AttributeReference("c", StringType)()),
-      UnresolvedRelation(TableIdentifier("testData")),
+      """.stripMargin
+
+    val ioSchema =
       ScriptInputOutputSchema(
         Seq(("TOK_TABLEROWFORMATFIELD", ","),
           ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
@@ -297,9 +283,141 @@ class SparkSqlParserSuite extends AnalysisTest {
         Seq(("TOK_TABLEROWFORMATFIELD", ","),
           ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
           ("TOK_TABLEROWFORMATMAPKEYS", "@"),
-          ("TOK_TABLEROWFORMATNULL", "NULL"),
+          ("TOK_TABLEROWFORMATNULL", "null"),
           ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
-        List.empty, List.empty, None, None, false)))
+        List.empty, List.empty, None, None, false)
+
+    assertEqual(
+      s"""
+         |SELECT TRANSFORM(a, b, c)
+         |  $rowFormat
+         |  USING 'cat' AS (a, b, c)
+         |  $rowFormat
+         |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        Seq(UnresolvedStar(None)),
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        Project(Seq('a, 'b, 'c),
+          UnresolvedRelation(TableIdentifier("testData"))),
+        ioSchema))
+
+    assertEqual(
+      s"""
+         |SELECT TRANSFORM(a, sum(b), max(c))
+         |  $rowFormat
+         |  USING 'cat' AS (a, b, c)
+         |  $rowFormat
+         |FROM testData
+         |GROUP BY a
+         |HAVING sum(b) > 10
+      """.stripMargin,
+      ScriptTransformation(
+        Seq(UnresolvedStar(None)),
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        UnresolvedHaving(
+          GreaterThan(
+            UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
+            Literal(10)),
+          Aggregate(
+            Seq('a),
+            Seq(
+              'a,
+              UnresolvedAlias(
+                UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false), None),
+              UnresolvedAlias(
+                UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false), None)
+            ),
+            UnresolvedRelation(TableIdentifier("testData")))),
+        ioSchema))
+
+    assertEqual(
+      s"""
+         |SELECT TRANSFORM(a, sum(b) OVER w, max(c) OVER w)
+         |  $rowFormat
+         |  USING 'cat' AS (a, b, c)
+         |  $rowFormat
+         |FROM testData
+         |WINDOW w AS (PARTITION BY a ORDER BY b)
+      """.stripMargin,
+      ScriptTransformation(
+        Seq(UnresolvedStar(None)),
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        WithWindowDefinition(
+          Map("w" -> WindowSpecDefinition(
+            Seq('a),
+            Seq(SortOrder('b, Ascending, NullsFirst, Seq.empty)),
+            UnspecifiedFrame)),
+          Project(
+            Seq(
+              'a,
+              UnresolvedAlias(
+                UnresolvedWindowExpression(
+                  UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
+                  WindowSpecReference("w")), None),
+              UnresolvedAlias(
+                UnresolvedWindowExpression(
+                  UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false),
+                  WindowSpecReference("w")), None)
+            ),
+            UnresolvedRelation(TableIdentifier("testData")))),
+        ioSchema))
+
+    assertEqual(
+      s"""
+         |SELECT TRANSFORM(a, sum(b), max(c))
+         |  $rowFormat
+         |  USING 'cat' AS (a, b, c)
+         |  $rowFormat
+         |FROM testData
+         |LATERAL VIEW explode(array(array(1,2,3))) myTable AS myCol
+         |LATERAL VIEW explode(myTable.myCol) myTable2 AS myCol2
+         |GROUP BY a, myCol, myCol2
+         |HAVING sum(b) > 10
+      """.stripMargin,
+      ScriptTransformation(
+        Seq(UnresolvedStar(None)),
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        UnresolvedHaving(
+          GreaterThan(
+            UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
+            Literal(10)),
+          Aggregate(
+            Seq('a, 'myCol, 'myCol2),
+            Seq(
+              'a,
+              UnresolvedAlias(
+                UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false), None),
+              UnresolvedAlias(
+                UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false), None)
+            ),
+            Generate(
+              UnresolvedGenerator(
+                FunctionIdentifier("explode"),
+                Seq(UnresolvedAttribute("myTable.myCol"))),
+              Nil, false, Option("mytable2"), Seq('myCol2),
+              Generate(
+                UnresolvedGenerator(
+                  FunctionIdentifier("explode"),
+                  Seq(UnresolvedFunction("array",
+                    Seq(
+                      UnresolvedFunction("array", Seq(Literal(1), Literal(2), Literal(3)), false)),
+                    false))),
+                Nil, false, Option("mytable"), Seq('myCol),
+                UnresolvedRelation(TableIdentifier("testData")))))),
+        ioSchema))
   }
 
   test("SPARK-32607: Script Transformation ROW FORMAT DELIMITED" +

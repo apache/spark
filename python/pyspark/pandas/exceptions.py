@@ -16,7 +16,7 @@
 #
 
 """
-Exceptions/Errors used in Koalas.
+Exceptions/Errors used in pandas-on-Spark.
 """
 
 
@@ -79,7 +79,7 @@ class PandasNotImplementedError(NotImplementedError):
                 if deprecated:
                     msg = (
                         "The method `{0}.{1}()` is deprecated in pandas and will therefore "
-                        + "not be supported in Koalas. {2}"
+                        + "not be supported in pandas-on-Spark. {2}"
                     ).format(class_name, method_name, reason)
                 else:
                     if reason == "":
@@ -93,7 +93,7 @@ class PandasNotImplementedError(NotImplementedError):
             if deprecated:
                 msg = (
                     "The property `{0}.{1}()` is deprecated in pandas and will therefore "
-                    + "not be supported in Koalas. {2}"
+                    + "not be supported in pandas-on-Spark. {2}"
                 ).format(class_name, property_name, reason)
             else:
                 if reason == "":
@@ -116,7 +116,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.exceptions.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.exceptions tests")

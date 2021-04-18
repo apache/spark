@@ -166,6 +166,9 @@ case class InSubqueryExec(
       exprId = ExprId(0),
       resultBroadcast = null)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): InSubqueryExec =
+    copy(child = newChild)
 }
 
 /**

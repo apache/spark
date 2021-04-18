@@ -852,6 +852,9 @@ private[spark] class SparkSubmit extends Logging {
     }
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
+    if (args.verbose) {
+      childArgs ++= Seq("--verbose")
+    }
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
@@ -952,12 +955,6 @@ private[spark] class SparkSubmit extends Logging {
     } catch {
       case t: Throwable =>
         throw findCause(t)
-    } finally {
-      try {
-        SparkContext.getActive.foreach(_.stop())
-      } catch {
-        case e: Throwable => logError(s"Failed to close SparkContext: $e")
-      }
     }
   }
 

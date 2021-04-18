@@ -39,7 +39,7 @@ class CachedAccessor:
     This object is not meant to be instantiated directly. Instead, use register_dataframe_accessor,
     register_series_accessor, or register_index_accessor.
 
-    The Koalas accessor is modified based on pandas.core.accessor.
+    The pandas-on-Spark accessor is modified based on pandas.core.accessor.
     """
 
     def __init__(self, name, accessor):
@@ -77,23 +77,23 @@ def _register_accessor(name, cls):
 
     Notes
     -----
-    When accessed, your accessor will be initialiazed with the Koalas object the user is interacting
-    with. The code signature must be:
+    When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user
+    is interacting with. The code signature must be:
 
     .. code-block:: python
 
-        def __init__(self, koalas_obj):
+        def __init__(self, pandas_on_spark_obj):
             # constructor logic
         ...
 
     In the pandas API, if data passed to your accessor has an incorrect dtype, it's recommended to
-    raise an ``AttributeError`` for consistency purposes. In Koalas, ``ValueError`` is more
+    raise an ``AttributeError`` for consistency purposes. In pandas-on-Spark, ``ValueError`` is more
     frequently used to annotate when a value's datatype is unexpected for a given method/function.
 
-    Ultimately, you can structure this however you like, but Koalas would likely do something like
-    this:
+    Ultimately, you can structure this however you like, but pandas-on-Spark would likely do
+    something like this:
 
-    >>> pp.Series(['a', 'b']).dt
+    >>> ps.Series(['a', 'b']).dt
     ...
     Traceback (most recent call last):
         ...
@@ -140,18 +140,18 @@ def register_dataframe_accessor(name):
 
     Notes
     -----
-    When accessed, your accessor will be initialiazed with the Koalas object the user is interacting
-    with. The accessor's init method should always ingest the object being accessed. See the
-    examples for the init signature.
+    When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user
+    is interacting with. The accessor's init method should always ingest the object being accessed.
+    See the examples for the init signature.
 
     In the pandas API, if data passed to your accessor has an incorrect dtype, it's recommended to
-    raise an ``AttributeError`` for consistency purposes. In Koalas, ``ValueError`` is more
+    raise an ``AttributeError`` for consistency purposes. In pandas-on-Spark, ``ValueError`` is more
     frequently used to annotate when a value's datatype is unexpected for a given method/function.
 
-    Ultimately, you can structure this however you like, but Koalas would likely do something like
-    this:
+    Ultimately, you can structure this however you like, but pandas-on-Spark would likely do
+    something like this:
 
-    >>> pp.Series(['a', 'b']).dt
+    >>> ps.Series(['a', 'b']).dt
     ...
     Traceback (most recent call last):
         ...
@@ -166,8 +166,8 @@ def register_dataframe_accessor(name):
         @register_dataframe_accessor("geo")
         class GeoAccessor:
 
-            def __init__(self, koalas_obj):
-                self._obj = koalas_obj
+            def __init__(self, pandas_on_spark_obj):
+                self._obj = pandas_on_spark_obj
                 # other constructor logic
 
             @property
@@ -185,7 +185,7 @@ def register_dataframe_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import GeoAccessor
-        >>> kdf = pp.DataFrame({"longitude": np.linspace(0,10),
+        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
         >>> kdf.geo.center  # doctest: +SKIP
         (5.0, 10.0)
@@ -218,21 +218,21 @@ def register_series_accessor(name):
 
     Notes
     -----
-    When accessed, your accessor will be initialiazed with the Koalas object the user is interacting
-    with. The code signature must be::
+    When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user is
+    interacting with. The code signature must be::
 
-        def __init__(self, koalas_obj):
+        def __init__(self, pandas_on_spark_obj):
             # constructor logic
         ...
 
     In the pandas API, if data passed to your accessor has an incorrect dtype, it's recommended to
-    raise an ``AttributeError`` for consistency purposes. In Koalas, ``ValueError`` is more
+    raise an ``AttributeError`` for consistency purposes. In pandas-on-Spark, ``ValueError`` is more
     frequently used to annotate when a value's datatype is unexpected for a given method/function.
 
-    Ultimately, you can structure this however you like, but Koalas would likely do something like
-    this:
+    Ultimately, you can structure this however you like, but pandas-on-Spark would likely do
+    something like this:
 
-    >>> pp.Series(['a', 'b']).dt
+    >>> ps.Series(['a', 'b']).dt
     ...
     Traceback (most recent call last):
         ...
@@ -247,8 +247,8 @@ def register_series_accessor(name):
         @register_series_accessor("geo")
         class GeoAccessor:
 
-            def __init__(self, koalas_obj):
-                self._obj = koalas_obj
+            def __init__(self, pandas_on_spark_obj):
+                self._obj = pandas_on_spark_obj
 
             @property
             def is_valid(self):
@@ -259,7 +259,7 @@ def register_series_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import GeoAccessor
-        >>> kdf = pp.DataFrame({"longitude": np.linspace(0,10),
+        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
         >>> kdf.longitude.geo.is_valid  # doctest: +SKIP
         True
@@ -290,21 +290,21 @@ def register_index_accessor(name):
 
     Notes
     -----
-    When accessed, your accessor will be initialiazed with the Koalas object the user is interacting
-    with. The code signature must be::
+    When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user is
+    interacting with. The code signature must be::
 
-        def __init__(self, koalas_obj):
+        def __init__(self, pandas_on_spark_obj):
             # constructor logic
         ...
 
     In the pandas API, if data passed to your accessor has an incorrect dtype, it's recommended to
-    raise an ``AttributeError`` for consistency purposes. In Koalas, ``ValueError`` is more
+    raise an ``AttributeError`` for consistency purposes. In pandas-on-Spark, ``ValueError`` is more
     frequently used to annotate when a value's datatype is unexpected for a given method/function.
 
-    Ultimately, you can structure this however you like, but Koalas would likely do something like
-    this:
+    Ultimately, you can structure this however you like, but pandas-on-Spark would likely do
+    something like this:
 
-    >>> pp.Series(['a', 'b']).dt
+    >>> ps.Series(['a', 'b']).dt
     ...
     Traceback (most recent call last):
         ...
@@ -319,8 +319,8 @@ def register_index_accessor(name):
         @register_index_accessor("foo")
         class CustomAccessor:
 
-            def __init__(self, koalas_obj):
-                self._obj = koalas_obj
+            def __init__(self, pandas_on_spark_obj):
+                self._obj = pandas_on_spark_obj
                 self.item = "baz"
 
             @property
@@ -332,7 +332,7 @@ def register_index_accessor(name):
 
         >>> ## Import if the accessor is in the other file.
         >>> # from my_ext_lib import CustomAccessor
-        >>> kdf = pp.DataFrame({"longitude": np.linspace(0,10),
+        >>> kdf = ps.DataFrame({"longitude": np.linspace(0,10),
         ...                     "latitude": np.linspace(0, 20)})
         >>> kdf.index.foo.bar  # doctest: +SKIP
         'baz'
@@ -354,7 +354,7 @@ def _test():
 
     globs = pyspark.pandas.extensions.__dict__.copy()
     globs["np"] = numpy
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.extensions tests")

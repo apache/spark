@@ -63,7 +63,7 @@ case class BroadcastNestedLoopJoinExec(
   override def outputPartitioning: Partitioning = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
          (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputPartitioning
-    case _ => UnknownPartitioning(left.outputPartitioning.numPartitions)
+    case _ => super.outputPartitioning
   }
 
   override def outputOrdering: Seq[SortOrder] = (joinType, buildSide) match {
@@ -548,4 +548,8 @@ case class BroadcastNestedLoopJoinExec(
      """.stripMargin
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): BroadcastNestedLoopJoinExec =
+    copy(left = newLeft, right = newRight)
 }
