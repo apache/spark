@@ -495,7 +495,7 @@ struct<a:string,b:string,c:string>
 
 -- !query
 SELECT TRANSFORM(b, MAX(a), CAST(SUM(c) AS STRING), myCol, myCol2)
-  USING 'cat' AS (a, b, c, d, e)
+  USING 'cat' AS (a STRING, b STRING, c STRING, d ARRAY<INT>, e STRING)
 FROM script_trans
 LATERAL VIEW explode(array(array(1,2,3))) myTable AS myCol
 LATERAL VIEW explode(myTable.myCol) myTable2 AS myCol2
@@ -503,11 +503,11 @@ WHERE a <= 4
 GROUP BY b, myCol, myCol2
 HAVING max(a) > 1
 -- !query schema
-struct<a:string,b:string,c:string,d:string,e:string>
+struct<a:string,b:string,c:string,d:array<int>,e:string>
 -- !query output
-5	4	6	[1, 2, 3]	1
-5	4	6	[1, 2, 3]	2
-5	4	6	[1, 2, 3]	3
+5	4	6	[1,2,3]	1
+5	4	6	[1,2,3]	2
+5	4	6	[1,2,3]	3
 
 
 -- !query

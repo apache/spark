@@ -26,7 +26,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTable, InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics, UncacheTable}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.assertNoNullTypeInSchema
 import org.apache.spark.sql.execution._
@@ -231,16 +231,6 @@ case class RelationConversions(
         assertNoNullTypeInSchema(query.schema)
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
-
-      // Cache table
-      case c @ CacheTable(relation: HiveTableRelation, _, _, _)
-          if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
-        c.copy(table = metastoreCatalog.convert(relation))
-
-      // Uncache table
-      case u @ UncacheTable(relation: HiveTableRelation, _, _)
-          if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
-        u.copy(table = metastoreCatalog.convert(relation))
     }
   }
 }
