@@ -128,6 +128,16 @@ case class HashAggregateExec(
   // all the mode of aggregate expressions
   private val modes = aggregateExpressions.map(_.mode).distinct
 
+  // This is for testing final aggregate with number-of-rows-based fall back as specified in
+  // `testFallbackStartsAt`. In this scenario, there might be same keys exist in both fast and
+  // regular hash map. So the aggregation buffers from both maps need to be merged together
+  // to avoid correctness issue.
+  //
+  // This scenario only happens in unit test with number-of-rows-based fall back.
+  // There should not be same keys in both maps with size-based fall back in production.
+  private val isTestFinalAggregateWithFallback: Boolean = testFallbackStartsAt.isDefined &&
+    (modes.contains(Final) || modes.contains(Complete))
+
   override def usedInputs: AttributeSet = inputSet
 
   override def supportCodegen: Boolean = {
@@ -538,6 +548,34 @@ case class HashAggregateExec(
   }
 
   /**
+   * Called by generated Java class to finish merge the fast hash map into regular map.
+   * This is used for testing final aggregate only.
+   */
+  def mergeFastHashMapForTest(
+    fastHashMapRowIter: KVIterator[UnsafeRow, UnsafeRow],
+    regularHashMap: UnsafeFixedWidthAggregationMap): Unit = {
+
+    // Create a MutableProjection to merge the buffers of same key together
+    val mergeExpr = declFunctions.flatMap(_.mergeExpressions)
+    val mergeProjection = MutableProjection.create(
+      mergeExpr,
+      aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes))
+    val joinedRow = new JoinedRow()
+
+    while (fastHashMapRowIter.next()) {
+      val key = fastHashMapRowIter.getKey
+      val fastMapBuffer = fastHashMapRowIter.getValue
+      val regularMapBuffer = regularHashMap.getAggregationBufferFromUnsafeRow(key)
+
+      // Merge the aggregation buffer of fast hash map, into the buffer with same key of
+      // regular map
+      mergeProjection.target(regularMapBuffer)
+      mergeProjection(joinedRow(regularMapBuffer, fastMapBuffer))
+    }
+    fastHashMapRowIter.close()
+  }
+
+  /**
    * Generate the code for output.
    * @return function name for the result code.
    */
@@ -647,7 +685,7 @@ case class HashAggregateExec(
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
         f.dataType.isInstanceOf[CalendarIntervalType]) &&
-        bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
+        bufferSchema.nonEmpty
 
     // For vectorized hash map, We do not support byte array based decimal type for aggregate values
     // as ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
@@ -663,7 +701,7 @@ case class HashAggregateExec(
 
   private def enableTwoLevelHashMap(ctx: CodegenContext): Unit = {
     if (!checkIfFastHashMapSupported(ctx)) {
-      if (modes.forall(mode => mode == Partial || mode == PartialMerge) && !Utils.isTesting) {
+      if (!Utils.isTesting) {
         logInfo(s"${SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key} is set to true, but"
           + " current version of codegened fast hashmap does not support this aggregate.")
       }
@@ -740,8 +778,13 @@ case class HashAggregateExec(
     val finishRegularHashMap = s"$iterTerm = $thisPlan.finishAggregate(" +
       s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe);"
     val finishHashMap = if (isFastHashMapEnabled) {
+      val finishFastHashMap = if (isTestFinalAggregateWithFallback) {
+        s"$thisPlan.mergeFastHashMapForTest($fastHashMapTerm.rowIterator(), $hashMapTerm);"
+      } else {
+        s"$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();"
+      }
       s"""
-         |$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();
+         |$finishFastHashMap
          |$finishRegularHashMap
        """.stripMargin
     } else {
@@ -762,7 +805,7 @@ case class HashAggregateExec(
     val outputFunc = generateResultFunction(ctx)
 
     def outputFromFastHashMap: String = {
-      if (isFastHashMapEnabled) {
+      if (isFastHashMapEnabled && !isTestFinalAggregateWithFallback) {
         if (isVectorizedHashMapEnabled) {
           outputFromVectorizedMap
         } else {
