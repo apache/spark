@@ -18,10 +18,9 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
 import java.util.Base64
-
-import scala.sys.process._
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
@@ -44,7 +43,8 @@ class ParquetEncryptionSuite extends QueryTest with SharedSparkSession {
       withSQLConf(
         "parquet.crypto.factory.class" ->
           "org.apache.parquet.crypto.keytools.PropertiesDrivenCryptoFactory",
-        "parquet.encryption.kms.client.class" -> "org.apache.parquet.crypto.keytools.mocks.InMemoryKMS",
+        "parquet.encryption.kms.client.class" ->
+          "org.apache.parquet.crypto.keytools.mocks.InMemoryKMS",
         "parquet.encryption.key.list" ->
           s"footerKey: ${footerKey}, key1: ${key1}, key2: ${key2}") {
 
@@ -66,9 +66,27 @@ class ParquetEncryptionSuite extends QueryTest with SharedSparkSession {
   }
 
   private def verifyParquetEncrypted(parquetDir: String) = {
-    val parquetPartitionFile = Seq("ls", "-tr", parquetDir).!!.split("\\s+")(0)
-    val fullFilename = parquetDir + "/" + parquetPartitionFile
-    val magic = Seq("tail", "-c", "4", fullFilename).!!
-    assert(magic.stripLineEnd.trim() == "PARE")
+    val parquetPartitionFiles = getListOfParquetFiles(new File(parquetDir))
+    assert(parquetPartitionFiles.size >= 1)
+    val parquetFile = parquetPartitionFiles.maxBy(_.lastModified)
+
+    val magicString = "PARE"
+    val magicStringLength = magicString.length()
+    val byteArray = new Array[Byte](magicStringLength)
+    val randomAccessFile = new RandomAccessFile(parquetFile, "r")
+    try {
+      randomAccessFile.seek(randomAccessFile.length() - magicStringLength);
+      randomAccessFile.read(byteArray, 0, magicStringLength)
+    } finally {
+      randomAccessFile.close()
+    }
+    val stringRead = new String(byteArray)
+    assert(magicString == stringRead)
+  }
+
+  private def getListOfParquetFiles(dir: File): List[File] = {
+    dir.listFiles.filter(_.isFile).toList.filter { file =>
+      file.getName.endsWith("parquet")
+    }
   }
 }
