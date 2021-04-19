@@ -284,7 +284,7 @@ def assert_produces_warning(
 
     Notes
     -----
-    Replicated from pandas._testing.
+    Replicated from pandas/_testing/_warnings.py.
 
     Parameters
     ----------
