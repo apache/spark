@@ -21,6 +21,10 @@ import java.io.ObjectOutput;
  *  - implement {@link java.io.Externalizable#readExternal(ObjectInput)} for deserialization
  *  - implement {@link java.io.Externalizable#writeExternal(ObjectOutput)} for serialization
  *
+ * Since the location will be used as keys in maps or comparing with others, users must ensure that
+ * invoking {@link java.lang.Object#equals(Object)} or {@link java.lang.Object#hashCode()} on the
+ * {@link Location} instances would distinguish the different locations.
+ *
  * @since 3.2.0
  */
 @Private
