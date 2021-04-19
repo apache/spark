@@ -44,9 +44,9 @@ object BLASBenchmark extends BenchmarkBase {
     val nativeBLAS = BLAS.nativeBLAS
 
     // scalastyle:off println
-    println("nativeBLAS = " + nativeBLAS.getClass.getName)
     println("f2jBLAS    = " + f2jBLAS.getClass.getName)
     println("javaBLAS   = " + javaBLAS.getClass.getName)
+    println("nativeBLAS = " + nativeBLAS.getClass.getName)
     // scalastyle:on println
 
     runBenchmark("daxpy") {
@@ -56,7 +56,9 @@ object BLASBenchmark extends BenchmarkBase {
       val y = Array.fill(n) { rnd.nextDouble }
 
       val benchmark = new Benchmark("daxpy", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.daxpy(n, alpha, x, 1, y, 1)
@@ -82,7 +84,9 @@ object BLASBenchmark extends BenchmarkBase {
       val y = Array.fill(n) { rnd.nextFloat }
 
       val benchmark = new Benchmark("saxpy", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.saxpy(n, alpha, x, 1, y, 1)
@@ -107,7 +111,9 @@ object BLASBenchmark extends BenchmarkBase {
       val y = Array.fill(n) { rnd.nextDouble }
 
       val benchmark = new Benchmark("ddot", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.ddot(n, x, 1, y, 1)
@@ -132,7 +138,9 @@ object BLASBenchmark extends BenchmarkBase {
       val y = Array.fill(n) { rnd.nextFloat }
 
       val benchmark = new Benchmark("sdot", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.sdot(n, x, 1, y, 1)
@@ -157,7 +165,9 @@ object BLASBenchmark extends BenchmarkBase {
       val x = Array.fill(n) { rnd.nextDouble }
 
       val benchmark = new Benchmark("dscal", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dscal(n, alpha, x, 1)
@@ -182,7 +192,9 @@ object BLASBenchmark extends BenchmarkBase {
       val x = Array.fill(n) { rnd.nextFloat }
 
       val benchmark = new Benchmark("sscal", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.sscal(n, alpha, x, 1)
@@ -210,7 +222,9 @@ object BLASBenchmark extends BenchmarkBase {
       val y = Array.fill(n) { rnd.nextDouble }
 
       val benchmark = new Benchmark("dspmv[U]", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dspmv("U", n, alpha, a, x, 1, beta, y, 1)
@@ -236,7 +250,9 @@ object BLASBenchmark extends BenchmarkBase {
       val a = Array.fill(n * (n + 1) / 2) { rnd.nextDouble }
 
       val benchmark = new Benchmark("dspr[U]", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dspr("U", n, alpha, x, 1, a)
@@ -262,7 +278,9 @@ object BLASBenchmark extends BenchmarkBase {
       val a = Array.fill(n * n) { rnd.nextDouble }
 
       val benchmark = new Benchmark("dsyr[U]", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dsyr("U", n, alpha, x, 1, a, n)
@@ -292,7 +310,9 @@ object BLASBenchmark extends BenchmarkBase {
       val y = Array.fill(m) { rnd.nextDouble }
 
       val benchmark = new Benchmark("dgemv[N]", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dgemv("N", m, n, alpha, a, lda, x, 1, beta, y, 1)
@@ -322,7 +342,9 @@ object BLASBenchmark extends BenchmarkBase {
       val y = Array.fill(n) { rnd.nextDouble }
 
       val benchmark = new Benchmark("dgemv[T]", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dgemv("T", m, n, alpha, a, lda, x, 1, beta, y, 1)
@@ -352,7 +374,9 @@ object BLASBenchmark extends BenchmarkBase {
       val y = Array.fill(m) { rnd.nextFloat }
 
       val benchmark = new Benchmark("sgemv[N]", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.sgemv("N", m, n, alpha, a, lda, x, 1, beta, y, 1)
@@ -382,7 +406,9 @@ object BLASBenchmark extends BenchmarkBase {
       val y = Array.fill(n) { rnd.nextFloat }
 
       val benchmark = new Benchmark("sgemv[T]", n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.sgemv("T", m, n, alpha, a, lda, x, 1, beta, y, 1)
@@ -415,7 +441,9 @@ object BLASBenchmark extends BenchmarkBase {
       var ldc = m
 
       val benchmark = new Benchmark("dgemm[N,N]", m*n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
@@ -448,7 +476,9 @@ object BLASBenchmark extends BenchmarkBase {
       var ldc = m
 
       val benchmark = new Benchmark("dgemm[N,T]", m*n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
@@ -481,7 +511,9 @@ object BLASBenchmark extends BenchmarkBase {
       var ldc = m
 
       val benchmark = new Benchmark("dgemm[T,N]", m*n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
@@ -514,7 +546,9 @@ object BLASBenchmark extends BenchmarkBase {
       var ldc = m
 
       val benchmark = new Benchmark("dgemm[T,T]", m*n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.dgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
@@ -547,7 +581,9 @@ object BLASBenchmark extends BenchmarkBase {
       var ldc = m
 
       val benchmark = new Benchmark("sgemm[N,N]", m*n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.sgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
@@ -580,7 +616,9 @@ object BLASBenchmark extends BenchmarkBase {
       var ldc = m
 
       val benchmark = new Benchmark("sgemm[N,T]", m*n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.sgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
@@ -613,7 +651,9 @@ object BLASBenchmark extends BenchmarkBase {
       var ldc = m
 
       val benchmark = new Benchmark("sgemm[T,N]", m*n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.sgemm("T", "N", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
@@ -646,7 +686,9 @@ object BLASBenchmark extends BenchmarkBase {
       var ldc = m
 
       val benchmark = new Benchmark("sgemm[T,T]", m*n, iters,
-                                    warmupTime = 10.seconds, output = output)
+                                    warmupTime = 10.seconds,
+                                    minTime = 10.seconds,
+                                    output = output)
 
       benchmark.addCase("f2j") { _ =>
         f2jBLAS.sgemm("T", "T", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
