@@ -51,7 +51,7 @@ row_format:
 
 * **row_format**    
 
-    Spark uses the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
+    Otherwise, uses the `DELIMITED` clause to specify the native SerDe and state the delimiter, escape character, null character and so on.
 
 * **SERDE**
 
@@ -103,22 +103,17 @@ row_format:
 
 ### SerDe behavior
 
-Spark uses the Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, so columns will be casted
+Spark uses the Hive SerDe `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, so columns will be casted
 to `STRING` and combined by tabs before feeding to the user script. All `NULL` values will be converted
 to the literal string `"\N"` in order to differentiate `NULL` values from empty strings. The standard output of the
 user script will be treated as tab-separated `STRING` columns, any cell containing only `"\N"` will be re-interpreted
-as a `NULL`, and then the resulting STRING column will be cast to the data type specified in `col_type`. If the actual
+as a `NULL` value, and then the resulting STRING column will be cast to the data type specified in `col_type`. If the actual
 number of output columns is less than the number of specified output columns, insufficient output columns will be
 supplemented with `NULL`. If the actual number of output columns is more than the number of specified output columns,
 the output columns will only select the corresponding columns and the remaining part will be discarded.
-If there is no `AS` clause after `USING my_script`, Spark assumes that the output of the script contains 2 attributes:
-
-   1. key: which is before the first tab.
-   2. value: which is the rest after the first tab.
-
-If there is no enough tab, Spark will return `NULL` value. Note that this is different from specifying an `AS key, value`
-because in that case, the value will only contain the portion between the first tab and the second tab if there are multiple tabs.
-These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`. 
+If there is no `AS` clause after `USING my_script`, an output schema will be `key: STRING, value: STRING`.
+The `key` column contains all the characters before the first tab and the `value` column contains the remaining characters after the first tab.
+If there is no enough tab, Spark will return `NULL` value. These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`. 
 
 ### Examples
 
