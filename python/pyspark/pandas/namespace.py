@@ -103,7 +103,7 @@ __all__ = [
 
 
 def from_pandas(pobj: Union[pd.DataFrame, pd.Series, pd.Index]) -> Union[Series, DataFrame, Index]:
-    """Create a Koalas DataFrame, Series or Index from a pandas DataFrame, Series or Index.
+    """Create a pandas-on-Spark DataFrame, Series or Index from a pandas DataFrame, Series or Index.
 
     This is similar to Spark's `SparkSession.createDataFrame()` with pandas DataFrame,
     but this also works with pandas Series and picks the index.
@@ -116,8 +116,8 @@ def from_pandas(pobj: Union[pd.DataFrame, pd.Series, pd.Index]) -> Union[Series,
     Returns
     -------
     Series or DataFrame
-        If a pandas Series is passed in, this function returns a Koalas Series.
-        If a pandas DataFrame is passed in, this function returns a Koalas DataFrame.
+        If a pandas Series is passed in, this function returns a pandas-on-Spark Series.
+        If a pandas DataFrame is passed in, this function returns a pandas-on-Spark DataFrame.
     """
     if isinstance(pobj, pd.Series):
         return Series(pobj)
@@ -840,7 +840,7 @@ def read_excel(
     **kwds
 ) -> Union[DataFrame, Series, OrderedDict]:
     """
-    Read an Excel file into a Koalas DataFrame or Series.
+    Read an Excel file into a pandas-on-Spark DataFrame or Series.
 
     Support both `xls` and `xlsx` file extensions from a local filesystem or URL.
     Support an option to read a single sheet or a list of sheets.
@@ -943,7 +943,7 @@ def read_excel(
     date_parser : function, optional
         Function to use for converting a sequence of string columns to an array of
         datetime instances. The default uses ``dateutil.parser.parser`` to do the
-        conversion. Koalas will try to call `date_parser` in three different ways,
+        conversion. pandas-on-Spark will try to call `date_parser` in three different ways,
         advancing to the next if an exception occurs: 1) Pass one or more arrays
         (as defined by `parse_dates`) as arguments; 2) concatenate (row-wise) the
         string values from the columns defined by `parse_dates` into a single array
@@ -1792,7 +1792,7 @@ def get_dummies(
     sparse : bool, default False
         Whether the dummy-encoded columns should be be backed by
         a :class:`SparseArray` (True) or a regular NumPy array (False).
-        In Koalas, this value must be "False".
+        In pandas-on-Spark, this value must be "False".
     drop_first : bool, default False
         Whether to get k-1 dummies out of k categorical levels by removing the
         first level.
@@ -1984,7 +1984,7 @@ def get_dummies(
 # TODO: there are many parameters to implement and support. See pandas's pd.concat.
 def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[Series, DataFrame]:
     """
-    Concatenate Koalas objects along a particular axis with optional set logic
+    Concatenate pandas-on-Spark objects along a particular axis with optional set logic
     along the other axes.
 
     Parameters
@@ -2130,7 +2130,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
         objs, Iterable
     ):  # TODO: support dict
         raise TypeError(
-            "first argument must be an iterable of Koalas "
+            "first argument must be an iterable of pandas-on-Spark "
             "objects, you passed an object of type "
             '"{name}"'.format(name=type(objs).__name__)
         )

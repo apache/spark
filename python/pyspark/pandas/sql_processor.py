@@ -36,7 +36,7 @@ from builtins import locals as builtin_locals
 
 def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
     """
-    Execute a SQL query and return the result as a Koalas DataFrame.
+    Execute a SQL query and return the result as a pandas-on-Spark DataFrame.
 
     This function also supports embedding Python variables (locals, globals, and parameters)
     in the SQL statement by wrapping them in curly braces. See examples section for details.
@@ -52,8 +52,8 @@ def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
         * int
         * float
         * list, tuple, range of above types
-        * Koalas DataFrame
-        * Koalas Series
+        * pandas-on-Spark DataFrame
+        * pandas-on-Spark Series
         * pandas DataFrame
 
     Parameters
@@ -69,7 +69,7 @@ def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
 
     Returns
     -------
-    Koalas DataFrame
+    pandas-on-Spark DataFrame
 
     Examples
     --------
@@ -110,7 +110,8 @@ def sql(query: str, globals=None, locals=None, **kwargs) -> DataFrame:
     0  0
     1  1
 
-    Mixing Koalas and pandas DataFrames in a join operation. Note that the index is dropped.
+    Mixing pandas-on-Spark and pandas DataFrames in a join operation. Note that the index is
+    dropped.
 
     >>> ps.sql('''
     ...   SELECT m1.a, m2.b
@@ -287,7 +288,7 @@ class SQLProcessor(object):
         if isinstance(var, pd.DataFrame):
             return self._convert_var(ps.DataFrame(var))
         if isinstance(var, DataFrame):
-            df_id = "koalas_" + str(id(var))
+            df_id = "pandas_on_spark_" + str(id(var))
             if df_id not in self._temp_views:
                 sdf = var.to_spark()
                 sdf.createOrReplaceTempView(df_id)

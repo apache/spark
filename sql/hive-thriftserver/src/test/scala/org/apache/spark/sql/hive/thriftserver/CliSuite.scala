@@ -594,4 +594,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "BroadcastHashJoin"
     )
   }
+
+  test("SPARK-35086: --verbose should be passed to Spark SQL CLI") {
+    runCliWithin(2.minute, Seq("--verbose"))(
+      "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2;" ->
+        "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2"
+    )
+  }
 }

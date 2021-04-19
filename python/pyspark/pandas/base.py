@@ -16,7 +16,7 @@
 #
 
 """
-Base and utility classes for Koalas objects.
+Base and utility classes for pandas-on-Spark objects.
 """
 from abc import ABCMeta, abstractmethod
 import datetime
@@ -56,7 +56,7 @@ from pyspark.pandas.typedef import (
     Dtype,
     as_spark_type,
     extension_dtypes,
-    koalas_dtype,
+    pandas_on_spark_type,
     spark_type_to_pandas_dtype,
 )
 from pyspark.pandas.utils import (
@@ -211,13 +211,13 @@ def booleanize_null(scol, f) -> Column:
 
 def column_op(f):
     """
-    A decorator that wraps APIs taking/returning Spark Column so that Koalas Series can be
+    A decorator that wraps APIs taking/returning Spark Column so that pandas-on-Spark Series can be
     supported too. If this decorator is used for the `f` function that takes Spark Column and
-    returns Spark Column, decorated `f` takes Koalas Series as well and returns Koalas
-    Series.
+    returns Spark Column, decorated `f` takes pandas-on-Spark Series as well and returns
+    pandas-on-Spark Series.
 
     :param f: a function that takes Spark Column and returns Spark Column.
-    :param self: Koalas Series
+    :param self: pandas-on-Spark Series
     :param args: arguments that the function `f` takes.
     """
 
@@ -226,7 +226,7 @@ def column_op(f):
         from pyspark.pandas.series import Series
 
         # It is possible for the function `f` takes other arguments than Spark Column.
-        # To cover this case, explicitly check if the argument is Koalas Series and
+        # To cover this case, explicitly check if the argument is pandas-on-Spark Series and
         # extract Spark Column. For other arguments, they are used as are.
         cols = [arg for arg in args if isinstance(arg, IndexOpsMixin)]
 
@@ -719,7 +719,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             return result
         else:
             # TODO: support more APIs?
-            raise NotImplementedError("Koalas objects currently do not support %s." % ufunc)
+            raise NotImplementedError(
+                "pandas-on-Spark objects currently do not support %s." % ufunc)
 
     @property
     def dtype(self) -> Dtype:
@@ -802,7 +803,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             transferred to single node which can easily cause out-of-memory error currently.
 
         .. note:: Disable the Spark config `spark.sql.optimizer.nestedSchemaPruning.enabled`
-            for multi-index if you're using Koalas < 1.7.0 with PySpark 3.1.1.
+            for multi-index if you're using pandas-on-Spark < 1.7.0 with PySpark 3.1.1.
 
         Returns
         -------
@@ -880,7 +881,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             to single node which can easily cause out-of-memory error currently.
 
         .. note:: Disable the Spark config `spark.sql.optimizer.nestedSchemaPruning.enabled`
-            for multi-index if you're using Koalas < 1.7.0 with PySpark 3.1.1.
+            for multi-index if you're using pandas-on-Spark < 1.7.0 with PySpark 3.1.1.
 
         Returns
         -------
@@ -1053,7 +1054,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     def astype(self, dtype: Union[str, type, Dtype]) -> Union["Index", "Series"]:
         """
-        Cast a Koalas object to a specified dtype ``dtype``.
+        Cast a pandas-on-Spark object to a specified dtype ``dtype``.
 
         Parameters
         ----------
@@ -1085,7 +1086,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')
         Int64Index([1, 2], dtype='int64', name='a')
         """
-        dtype, spark_type = koalas_dtype(dtype)
+        dtype, spark_type = pandas_on_spark_type(dtype)
         if not spark_type:
             raise ValueError("Type {} not understood".format(dtype))
 
@@ -1652,13 +1653,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         If Index has name, keep the name up.
 
-        >>> idx = ps.Index([0, 0, 0, 1, 1, 2, 3], name='koalas')
+        >>> idx = ps.Index([0, 0, 0, 1, 1, 2, 3], name='pandas-on-Spark')
         >>> idx.value_counts().sort_index()
         0    3
         1    2
         2    1
         3    1
-        Name: koalas, dtype: int64
+        Name: pandas-on-Spark, dtype: int64
         """
         from pyspark.pandas.series import first_series
 
@@ -1705,10 +1706,10 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
             for large amount of data.
-            Note: This parameter is specific to Koalas and is not found in pandas.
+            Note: This parameter is specific to pandas-on-Spark and is not found in pandas.
         rsd: float, default 0.05
             Maximum estimation error allowed in the HyperLogLog algorithm.
-            Note: Just like ``approx`` this parameter is specific to Koalas.
+            Note: Just like ``approx`` this parameter is specific to pandas-on-Spark.
 
         Returns
         -------

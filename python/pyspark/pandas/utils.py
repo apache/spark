@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 """
-Commonly used utils in Koalas.
+Commonly used utils in pandas-on-Spark.
 """
 
 import functools
@@ -429,10 +429,10 @@ def default_session(conf=None):
     if conf is None:
         conf = dict()
 
-    builder = spark.SparkSession.builder.appName("Koalas")
+    builder = spark.SparkSession.builder.appName("pandas-on-Spark")
     for key, value in conf.items():
         builder = builder.config(key, value)
-    # Currently, Koalas is dependent on such join due to 'compute.ops_on_diff_frames'
+    # Currently, pandas-on-Spark is dependent on such join due to 'compute.ops_on_diff_frames'
     # configuration. This is needed with Spark 3.0+.
     builder.config("spark.sql.analyzer.failAmbiguousSelfJoin", False)
 
@@ -470,7 +470,7 @@ def sql_conf(pairs, *, spark=None):
 
 def validate_arguments_and_invoke_function(
     pobj: Union[pd.DataFrame, pd.Series],
-    koalas_func: Callable,
+    pandas_on_spark_func: Callable,
     pandas_func: Callable,
     input_args: Dict,
 ):
@@ -489,7 +489,7 @@ def validate_arguments_and_invoke_function(
     For example usage, look at DataFrame.to_html().
 
     :param pobj: the pandas DataFrame or Series to operate on
-    :param koalas_func: Koalas function, used to get default parameter values
+    :param pandas_on_spark_func: pandas-on-Spark function, used to get default parameter values
     :param pandas_func: pandas function, used to check whether pandas supports all the arguments
     :param input_args: arguments to pass to the pandas function, often created by using locals().
                        Make sure locals() call is at the top of the function so it captures only
@@ -509,10 +509,10 @@ def validate_arguments_and_invoke_function(
         del args["kwargs"]
         args = {**args, **kwargs}
 
-    koalas_params = inspect.signature(koalas_func).parameters
+    pandas_on_spark_params = inspect.signature(pandas_on_spark_func).parameters
     pandas_params = inspect.signature(pandas_func).parameters
 
-    for param in koalas_params.values():
+    for param in pandas_on_spark_params.values():
         if param.name not in pandas_params:
             if args[param.name] == param.default:
                 del args[param.name]
@@ -700,7 +700,7 @@ def validate_how(how: str) -> str:
     """ Check the given how for join is valid. """
     if how == "full":
         warnings.warn(
-            "Warning: While Koalas will accept 'full', you should use 'outer' "
+            "Warning: While pandas-on-Spark will accept 'full', you should use 'outer' "
             + "instead to be compatible with the pandas merge API",
             UserWarning,
         )
@@ -719,10 +719,11 @@ def verify_temp_column_name(
     df: Union["DataFrame", spark.DataFrame], column_name_or_label: Union[Any, Tuple]
 ) -> Union[Any, Tuple]:
     """
-    Verify that the given column name does not exist in the given Koalas or Spark DataFrame.
+    Verify that the given column name does not exist in the given pandas-on-Spark or
+    Spark DataFrame.
 
     The temporary column names should start and end with `__`. In addition, `column_name_or_label`
-    expects a single string, or column labels when `df` is a Koalas DataFrame.
+    expects a single string, or column labels when `df` is a pandas-on-Spark DataFrame.
 
     >>> kdf = ps.DataFrame({("x", "a"): ['a', 'b', 'c']})
     >>> kdf["__dummy__"] = 0
@@ -800,7 +801,7 @@ def verify_temp_column_name(
         )
         assert all(
             column_name_or_label != label for label in df._internal.column_labels
-        ), "The given column name `{}` already exists in the Koalas DataFrame: {}".format(
+        ), "The given column name `{}` already exists in the pandas-on-Spark DataFrame: {}".format(
             name_like_string(column_name_or_label), df.columns
         )
         df = df._internal.resolved_copy.spark_frame

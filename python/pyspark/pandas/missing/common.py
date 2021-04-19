@@ -19,7 +19,7 @@
 memory_usage = lambda f: f(
     "memory_usage",
     reason="Unlike pandas, most DataFrames are not materialized in memory in Spark "
-    "(and Koalas), and as a result memory_usage() does not do what you intend it "
+    "(and pandas-on-Spark), and as a result memory_usage() does not do what you intend it "
     "to do. Use Spark's web UI to monitor disk and memory usage of your application.",
 )
 
