@@ -52,8 +52,7 @@ import org.apache.spark.util._
  */
 private class ShuffleStatus(
     numPartitions: Int,
-    numReducers: Int,
-    isPushBasedShuffleEnabled: Boolean = false) extends Logging {
+    numReducers: Int = -1) extends Logging {
 
   private val (readLock, writeLock) = {
     val lock = new ReentrantReadWriteLock()
@@ -97,7 +96,7 @@ private class ShuffleStatus(
    * provides a reducer oriented view of the shuffle status specifically for the results of
    * merging shuffle partition blocks into per-partition merged shuffle files.
    */
-  val mergeStatuses = if (isPushBasedShuffleEnabled) {
+  val mergeStatuses = if (numReducers > 0) {
     new Array[MergeStatus](numReducers)
   } else {
     Array.empty[MergeStatus]
@@ -674,9 +673,14 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
-    if (shuffleStatuses.put(shuffleId,
-      new ShuffleStatus(numMaps, numReduces, pushBasedShuffleEnabled)).isDefined) {
-      throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
+    if (pushBasedShuffleEnabled) {
+      if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps, numReduces)).isDefined) {
+        throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
+      }
+    } else {
+      if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps)).isDefined) {
+        throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
+      }
     }
   }
 
@@ -1399,7 +1403,8 @@ private[spark] object MapOutputTracker extends Logging {
     // TODO: SPARK-35036: Instead of reading map blocks in case of AQE with Push based shuffle,
     // TODO: improve push based shuffle to read partial merged blocks satisfying the start/end
     // TODO: map indexes
-    if (mergeStatuses.isDefined && startMapIndex == 0 && endMapIndex == mapStatuses.length) {
+    if (mergeStatuses.exists(_.nonEmpty) && startMapIndex == 0
+      && endMapIndex == mapStatuses.length) {
       // We have MergeStatus and full range of mapIds are requested so return a merged block.
       val numMaps = mapStatuses.length
       mergeStatuses.get.zipWithIndex.slice(startPartition, endPartition).foreach {
@@ -1413,7 +1418,8 @@ private[spark] object MapOutputTracker extends Logging {
               ((ShuffleBlockId(shuffleId, SHUFFLE_PUSH_MAP_ID, partId), mergeStatus.totalSize, -1))
             // For the "holes" in this pre-merged shuffle partition, i.e., unmerged mapper
             // shuffle partition blocks, fetch the original map produced shuffle partition blocks
-            mergeStatus.getMissingMaps(numMaps).map(mapStatuses.zipWithIndex)
+            val mapStatusesWithIndex = mapStatuses.zipWithIndex
+            mergeStatus.getMissingMaps(numMaps).map(mapStatusesWithIndex)
           } else {
             // If MergeStatus is not available for the given partition, fall back to
             // fetching all the original mapper shuffle partition blocks
