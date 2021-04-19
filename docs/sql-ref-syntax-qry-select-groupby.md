@@ -117,7 +117,8 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 * **Nested GROUPING SETS**
 
     `GROUPING SETS` can have nested GROUPING SETS, CUBE, ROLLUP clauses, e.g. `GROUPING SETS(ROLLUP(warehouse, location), CUBE(warehouse, location))`,
-    `GROUPING SETS(warehouse, GROUPING SETS(location, GROUPING SETS(ROLLUP(warehouse, location), CUBE(warehouse, location))))`. For example,
+    `GROUPING SETS(warehouse, GROUPING SETS(location, GROUPING SETS(ROLLUP(warehouse, location), CUBE(warehouse, location))))`.
+     For nested `GROUPING SETS` in the `GROUP BY` clause, we generate a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s.For example,
     `GROUP BY warehouse, GROUPING SETS((env), GROUPING SETS((product), ()), GROUPING SETS((location, size), (location), (size), ()))`
     and `GROUP BY warehouse, GROUPING SETS((env), ROLLUP(product), CUBE(location, size))` is equivalent to 
     `GROUP BY  GROUPING SETS(
