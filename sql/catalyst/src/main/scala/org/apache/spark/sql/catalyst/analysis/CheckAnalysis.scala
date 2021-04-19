@@ -934,7 +934,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     def failOnUnsupportedCorrelatedPredicate(predicates: Seq[Expression], p: LogicalPlan): Unit = {
       if (predicates.nonEmpty) {
         // Report a non-supported case as an exception
-        failAnalysis(s"Correlated column is not allowed in predicate " +
+        failAnalysis("Correlated column is not allowed in predicate " +
           s"${predicates.map(_.sql).mkString}:\n$p")
       }
     }
@@ -1017,7 +1017,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // non-equality correlated predicates.
       case a: Aggregate =>
         failOnInvalidOuterReference(a)
-        failOnUnsupportedCorrelatedPredicate(unsupportedPredicates, a)
+        failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, a)
 
       // Join can host correlated expressions.
       case j @ Join(left, right, joinType, _, _) =>
