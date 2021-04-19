@@ -2461,6 +2461,16 @@
         <artifactId>blas</artifactId>
         <version>${netlib.ludovic.dev.version}</version>
       </dependency>
+      <dependency>
+        <groupId>dev.ludovic.netlib</groupId>
+        <artifactId>lapack</artifactId>
+        <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>dev.ludovic.netlib</groupId>
+        <artifactId>arpack</artifactId>
+        <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
