@@ -93,6 +93,9 @@ private class PartitionIterator[T](
       throw QueryExecutionErrors.endOfStreamError()
     }
     reader.currentMetricsValues.foreach { metric =>
+      assert(customMetrics.contains(metric.name()),
+        s"Custom metrics ${customMetrics.keys.mkString(", ")} do not contain the metric " +
+          s"${metric.name()}")
       customMetrics(metric.name()).set(metric.value())
     }
     valuePrepared = false

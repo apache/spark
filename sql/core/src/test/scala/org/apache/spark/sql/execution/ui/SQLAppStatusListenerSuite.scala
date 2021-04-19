@@ -37,7 +37,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.connector.CustomMetricScanBuilder
+import org.apache.spark.sql.connector.{CustomMetric, CustomTaskMetric, RangeInputPartition, SimpleScanBuilder}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -923,4 +924,51 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
       }
     }
   }
+}
+
+class SimpleCustomMetric extends CustomMetric {
+  override def name(): String = "custom_metric"
+  override def description(): String = "a simple custom metric"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    s"custom_metric: ${taskMetrics.mkString(", ")}"
+  }
+}
+
+// The followings are for custom metrics of V2 data source.
+object CustomMetricReaderFactory extends PartitionReaderFactory {
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val RangeInputPartition(start, end) = partition
+    new PartitionReader[InternalRow] {
+      private var current = start - 1
+
+      override def next(): Boolean = {
+        current += 1
+        current < end
+      }
+
+      override def get(): InternalRow = InternalRow(current, -current)
+
+      override def close(): Unit = {}
+
+      override def currentMetricsValues(): Array[CustomTaskMetric] = {
+        val metric = new CustomTaskMetric {
+          override def name(): String = "custom_metric"
+          override def value(): Long = 12345
+        }
+        Array(metric)
+      }
+    }
+  }
+}
+
+class CustomMetricScanBuilder extends SimpleScanBuilder {
+  override def planInputPartitions(): Array[InputPartition] = {
+    Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
+  }
+
+  override def supportedCustomMetrics(): Array[CustomMetric] = {
+    Array(new SimpleCustomMetric)
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = CustomMetricReaderFactory
 }

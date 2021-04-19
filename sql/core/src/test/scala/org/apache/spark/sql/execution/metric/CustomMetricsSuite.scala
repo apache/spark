@@ -46,8 +46,7 @@ class CustomMetricsSuite extends SparkFunSuite {
     val metric = new CustomAvgMetric
 
     val metricValues1 = Array(0L, 1L, 5L, 5L, 7L, 10L)
-    assert(metric.aggregateTaskMetrics(metricValues1) ==
-      (metricValues1.sum / metricValues1.length).toString)
+    assert(metric.aggregateTaskMetrics(metricValues1) == "4.667")
 
     val metricValues2 = Array.empty[Long]
     assert(metric.aggregateTaskMetrics(metricValues2) == "0")

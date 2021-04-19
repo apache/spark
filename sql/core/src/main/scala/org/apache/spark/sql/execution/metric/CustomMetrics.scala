@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.metric
 
+import java.text.NumberFormat
+import java.util.Locale
+
 import org.apache.spark.sql.connector.CustomMetric
 
 object CustomMetrics {
@@ -35,12 +38,10 @@ object CustomMetrics {
    * `CustomMetric` class name.
    */
   def parseV2CustomMetricType(metricType: String): Option[String] = {
-    val className = metricType.stripPrefix(s"${V2_CUSTOM}_")
-
-    if (className == metricType) {
-      None
+    if (metricType.startsWith(s"${V2_CUSTOM}_")) {
+      Some(metricType.drop(V2_CUSTOM.length + 1))
     } else {
-      Some(className)
+      None
     }
   }
 }
@@ -68,10 +69,11 @@ class CustomAvgMetric extends CustomMetric {
 
   override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
     val average = if (taskMetrics.isEmpty) {
-      0L
+      0.0
     } else {
-      taskMetrics.sum / taskMetrics.length
+      taskMetrics.sum.toDouble / taskMetrics.length
     }
-    average.toString
+    val numberFormat = NumberFormat.getNumberInstance(Locale.US)
+    numberFormat.format(average)
   }
 }
