@@ -727,7 +727,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
-        RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
+        RDDScanExec(
+          r.output, r.rdd, "ExistingRDD", Some(r.outputPartitioning), r.outputOrdering) :: Nil
       case _: UpdateTable =>
         throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("UPDATE TABLE")
       case _: MergeIntoTable =>

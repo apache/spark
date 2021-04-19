@@ -67,6 +67,8 @@ case class ExternalRDDScanExec[T](
 
   override val nodeName: String = s"Scan$rddName"
 
+  override def outputPartitioning: Partitioning = UnknownPartitioning(rdd.partitions.length)
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     rdd.mapPartitionsInternal { iter =>
@@ -87,10 +89,13 @@ case class ExternalRDDScanExec[T](
 case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    outputPartitioning: Partitioning = UnknownPartitioning(0),
+    partitioning: Option[Partitioning] = None,
     override val outputOrdering: Seq[SortOrder] = Nil,
     override val isStreaming: Boolean = false)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
+
+  def outputPartitioning: Partitioning =
+    partitioning.getOrElse(UnknownPartitioning(rdd.partitions.length))
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
@@ -113,7 +118,7 @@ case class LogicalRDD(
     LogicalRDD(
       output.map(rewrite),
       rdd,
-      rewrittenPartitioning,
+      Some(rewrittenPartitioning),
       rewrittenOrdering,
       isStreaming
     )(session).asInstanceOf[this.type]
@@ -133,7 +138,7 @@ case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     name: String,
-    override val outputPartitioning: Partitioning = UnknownPartitioning(0),
+    partitioning: Option[Partitioning] = None,
     override val outputOrdering: Seq[SortOrder] = Nil) extends LeafExecNode with InputRDDCodegen {
 
   private def rddName: String = Option(rdd.name).map(n => s" $n").getOrElse("")
@@ -142,6 +147,9 @@ case class RDDScanExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  override val outputPartitioning: Partitioning =
+    partitioning.getOrElse(UnknownPartitioning(rdd.partitions.length))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")

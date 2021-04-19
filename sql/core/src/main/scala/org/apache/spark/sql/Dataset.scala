@@ -716,7 +716,7 @@ class Dataset[T] private[sql](
         LogicalRDD(
           logicalPlan.output,
           internalRdd,
-          outputPartitioning,
+          Some(outputPartitioning),
           physicalPlan.outputOrdering,
           isStreaming
         )(sparkSession)).as[T]

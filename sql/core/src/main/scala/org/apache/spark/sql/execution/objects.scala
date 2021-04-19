@@ -633,6 +633,9 @@ case class CoGroupExec(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     leftGroup.map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
 
+  override def outputPartitioning: Partitioning =
+    UnknownPartitioning(left.outputPartitioning.numPartitions)
+
   override protected def doExecute(): RDD[InternalRow] = {
     left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)

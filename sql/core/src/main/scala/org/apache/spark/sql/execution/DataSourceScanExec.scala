@@ -110,6 +110,8 @@ case class RowDataSourceScanExec(
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
+  override def outputPartitioning: Partitioning = UnknownPartitioning(rdd.partitions.length)
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 

@@ -63,7 +63,12 @@ case class BroadcastNestedLoopJoinExec(
   override def outputPartitioning: Partitioning = (joinType, buildSide) match {
     case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
          (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputPartitioning
-    case _ => super.outputPartitioning
+    case (LeftSemi, BuildLeft) | (LeftAnti, BuildLeft) if condition.isEmpty =>
+      // We can not decide outputPartitioning number here since leftExistenceJoin may use emptyRDD
+      // instead of makeRDD
+      super.outputPartitioning
+    case _ =>
+      UnknownPartitioning(left.outputPartitioning.numPartitions + sparkContext.defaultParallelism)
   }
 
   override def outputOrdering: Seq[SortOrder] = (joinType, buildSide) match {

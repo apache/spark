@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
@@ -80,7 +80,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
       new DataSourcePartitioning(
         s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
 
-    case _ => super.outputPartitioning
+    case _ => UnknownPartitioning(partitions.length)
   }
 
   override def supportsColumnar: Boolean = {

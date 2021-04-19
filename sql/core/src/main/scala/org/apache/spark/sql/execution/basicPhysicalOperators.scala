@@ -694,6 +694,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     }
   }
 
+  override def outputPartitioning: Partitioning =
+    UnknownPartitioning(children.map(_.outputPartitioning.numPartitions).sum)
+
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
 
