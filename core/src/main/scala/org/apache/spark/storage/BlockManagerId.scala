@@ -23,8 +23,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.shuffle.api.Location
-import org.apache.spark.storage.BlockManagerId.getCachedBlockManagerId
+import org.apache.spark.shuffle.api.ExecutorLocation
 import org.apache.spark.util.Utils
 
 /**
@@ -42,7 +41,7 @@ class BlockManagerId private (
     private var host_ : String,
     private var port_ : Int,
     private var topologyInfo_ : Option[String])
-  extends Location {
+  extends ExecutorLocation {
 
   private def this() = this(null, null, 0, None)  // For deserialization only
 

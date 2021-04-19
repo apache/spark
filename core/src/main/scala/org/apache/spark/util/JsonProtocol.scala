@@ -439,7 +439,14 @@ private[spark] object JsonProtocol {
     val reason = Utils.getFormattedClassName(taskEndReason)
     val json: JObject = taskEndReason match {
       case fetchFailed: FetchFailed =>
-        val blockManagerAddress = Option(fetchFailed.bmAddress.asInstanceOf[BlockManagerId]).
+        val blockManagerAddress = Option {
+          fetchFailed.bmAddress match {
+            case bmId: BlockManagerId =>
+              bmId
+            case _ =>
+              // TODO: support custom locations
+              null
+          }}.
           map(blockManagerIdToJson).getOrElse(JNothing)
         ("Block Manager Address" -> blockManagerAddress) ~
         ("Shuffle ID" -> fetchFailed.shuffleId) ~

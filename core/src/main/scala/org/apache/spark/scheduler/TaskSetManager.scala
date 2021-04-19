@@ -32,7 +32,7 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.shuffle.api.ExecutorLocation
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
@@ -866,9 +866,12 @@ private[spark] class TaskSetManager(
         }
         isZombie = true
 
-        val bmId = fetchFailed.bmAddress.asInstanceOf[BlockManagerId]
-        if (bmId != null) {
-          healthTracker.foreach(_.updateExcludedForFetchFailure(bmId.host, bmId.executorId))
+        if (fetchFailed.bmAddress != null) {
+          fetchFailed.bmAddress match {
+            case el: ExecutorLocation =>
+              healthTracker.foreach(_.updateExcludedForFetchFailure(el.host(), el.executorId()))
+            case _ =>
+          }
         }
 
         None

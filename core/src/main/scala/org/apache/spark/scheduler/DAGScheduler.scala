@@ -41,6 +41,7 @@ import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
+import org.apache.spark.shuffle.api.{ExecutorLocation, HostLocation}
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
@@ -1704,7 +1705,12 @@ private[spark] class DAGScheduler(
         }
 
       case FetchFailed(bmAddress, shuffleId, _, mapIndex, _, failureMessage) =>
-        val bmId = bmAddress.asInstanceOf[BlockManagerId]
+        val (hostOpt, execIdOpt) = bmAddress match {
+          case el: ExecutorLocation => (Some(el.host()), Some(el.executorId()))
+          case hl: HostLocation => (Some(hl.host()), None)
+          case _ => (None, None)
+        }
+
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
@@ -1737,7 +1743,7 @@ private[spark] class DAGScheduler(
             mapOutputTracker.unregisterAllMapOutput(shuffleId)
           } else if (mapIndex != -1) {
             // Mark the map whose fetch failed as broken in the map stage
-            mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmId)
+            mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
           }
 
           if (failedStage.rdd.isBarrier()) {
@@ -1862,11 +1868,13 @@ private[spark] class DAGScheduler(
           }
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
-          if (bmId != null) {
+          if (bmAddress != null) {
             val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
-            val isHostDecommissioned = taskScheduler
-              .getExecutorDecommissionState(bmId.executorId)
-              .exists(_.workerHost.isDefined)
+            val isHostDecommissioned = execIdOpt.exists { execId =>
+              taskScheduler
+                .getExecutorDecommissionState(execId)
+                .exists(_.workerHost.isDefined)
+            }
 
             // Shuffle output of all executors on host `bmId.host` may be lost if:
             // - External shuffle service is enabled, so we assume that all shuffle data on node is
@@ -1876,14 +1884,14 @@ private[spark] class DAGScheduler(
               isHostDecommissioned
             val hostToUnregisterOutputs = if (shuffleOutputOfEntireHostLost
               && unRegisterOutputOnHostOnFetchFailure) {
-              Some(bmId.host)
+              hostOpt
             } else {
               // Unregister shuffle data just for one executor (we don't have any
               // reason to believe shuffle data has been lost for the entire host).
               None
             }
             removeExecutorAndUnregisterOutputs(
-              execId = bmId.executorId,
+              execIdOpt = execIdOpt,
               fileLost = true,
               hostToUnregisterOutputs = hostToUnregisterOutputs,
               maybeEpoch = Some(task.epoch),
@@ -2037,7 +2045,7 @@ private[spark] class DAGScheduler(
     // from a Standalone cluster, where the shuffle service lives in the Worker.)
     val fileLost = workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled
     removeExecutorAndUnregisterOutputs(
-      execId = execId,
+      execIdOpt = Some(execId),
       fileLost = fileLost,
       hostToUnregisterOutputs = workerHost,
       maybeEpoch = None)
@@ -2047,7 +2055,7 @@ private[spark] class DAGScheduler(
    * Handles removing an executor from the BlockManagerMaster as well as unregistering shuffle
    * outputs for the executor or optionally its host.
    *
-   * @param execId executor to be removed
+   * @param execIdOpt executor to be removed
    * @param fileLost If true, indicates that we assume we've lost all shuffle blocks associated
    *   with the executor; this happens if the executor serves its own blocks (i.e., we're not
    *   using an external shuffle service), the entire Standalone worker is lost, or a FetchFailed
@@ -2058,11 +2066,15 @@ private[spark] class DAGScheduler(
    *   reprocessing for follow-on fetch failures)
    */
   private def removeExecutorAndUnregisterOutputs(
-      execId: String,
+      execIdOpt: Option[String],
       fileLost: Boolean,
       hostToUnregisterOutputs: Option[String],
       maybeEpoch: Option[Long] = None,
       ignoreShuffleFileLostEpoch: Boolean = false): Unit = {
+    // This method assumes an executor lost. Thus, it should be no-op for
+    // the storage system whose location isn't based on executors.
+    if (execIdOpt.isEmpty) return
+    val execId = execIdOpt.get
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     logDebug(s"Considering removal of executor $execId; " +
       s"fileLost: $fileLost, currentEpoch: $currentEpoch")
