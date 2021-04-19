@@ -1829,8 +1829,11 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-35080: correlated equality predicates contain only outer references") {
-    checkAnswer(
-      sql("select c, d, (select count(*) from l where c + 1 = d) from t"),
-      Row(2, 3.0, 8) :: Row(2, 3.0, 8) :: Row(3, 2.0, 0) :: Row(4, 1.0, 0) :: Nil)
+    withTempView("t") {
+      Seq((0, 1), (1, 1)).toDF("c1", "c2").createOrReplaceTempView("t")
+      checkAnswer(
+        sql("select c1, c2, (select count(*) from l where c1 = c2) from t"),
+        Row(0, 1, 0) :: Row(1, 1, 8) :: Nil)
+    }
   }
 }
