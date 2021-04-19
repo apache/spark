@@ -25,7 +25,7 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeRollingGroupby,
 )
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils
 
 
 class ExpandingRollingTest(ReusedSQLTestCase, TestUtils):

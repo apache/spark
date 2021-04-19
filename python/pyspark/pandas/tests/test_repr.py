@@ -22,7 +22,7 @@ import pyspark
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option, option_context
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import ReusedSQLTestCase
 
 
 class ReprTest(ReusedSQLTestCase):

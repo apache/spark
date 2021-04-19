@@ -24,7 +24,7 @@ import pandas as pd
 import numpy as np
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils
 
 
 def normalize_text(s):

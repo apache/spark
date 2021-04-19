@@ -32,7 +32,7 @@ from pyspark.pandas.missing.indexes import (
     MissingPandasLikeIndex,
     MissingPandasLikeMultiIndex,
 )
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
 
 class IndexesTest(ReusedSQLTestCase, TestUtils):

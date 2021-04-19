@@ -20,7 +20,8 @@ from pyspark.sql.utils import AnalysisException
 from pyspark.sql import functions as F
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.pandasutils import ReusedSQLTestCase
+from pyspark.testing.utils import SQLTestUtils
 
 
 class SparkIndexOpsMethodsTest(ReusedSQLTestCase, SQLTestUtils):

@@ -21,7 +21,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils
 
 
 class CategoricalIndexTest(ReusedSQLTestCase, TestUtils):

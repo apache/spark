@@ -21,8 +21,8 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
 from pyspark.pandas.window import Expanding
+from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils
 
 
 class ExpandingTest(ReusedSQLTestCase, TestUtils):

@@ -27,11 +27,8 @@ except ImportError:
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.pandas.testing.utils import (
-    ReusedSQLTestCase,
-    SQLTestUtils,
-    SPARK_CONF_ARROW_ENABLED,
-)
+from pyspark.testing.pandasutils import ReusedSQLTestCase, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.utils import SQLTestUtils
 
 
 class StatsTest(ReusedSQLTestCase, SQLTestUtils):

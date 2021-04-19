@@ -20,8 +20,9 @@ import itertools
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.pandas.namespace import _get_index_map
+from pyspark.testing.pandasutils import ReusedSQLTestCase
+from pyspark.testing.utils import SQLTestUtils
 
 
 class NamespaceTest(ReusedSQLTestCase, SQLTestUtils):

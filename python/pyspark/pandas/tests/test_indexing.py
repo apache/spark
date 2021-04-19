@@ -24,7 +24,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import SparkPandasIndexingError
-from pyspark.pandas.testing.utils import ComparisonTestBase, ReusedSQLTestCase, compare_both
+from pyspark.testing.pandasutils import ComparisonTestBase, ReusedSQLTestCase, compare_both
 
 
 class BasicIndexingTest(ComparisonTestBase):

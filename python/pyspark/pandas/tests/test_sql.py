@@ -16,9 +16,9 @@
 #
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
-
 from pyspark.sql.utils import ParseException
+from pyspark.testing.pandasutils import ReusedSQLTestCase
+from pyspark.testing.utils import SQLTestUtils
 
 
 class SQLTest(ReusedSQLTestCase, SQLTestUtils):
