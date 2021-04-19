@@ -21,7 +21,7 @@ import os
 import pandas as pd
 import pyspark
 
-from pyspark import pandas as pp
+from pyspark import pandas as ps
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils
 
@@ -31,7 +31,7 @@ class SparkFrameMethodsTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
         with self.assertRaisesRegex(
             ValueError, "The output of the function.* pyspark.sql.DataFrame.*int"
         ):
-            pp.range(10).spark.apply(lambda scol: 1)
+            ps.range(10).spark.apply(lambda scol: 1)
 
     def test_hint(self):
         pdf1 = pd.DataFrame(
@@ -40,8 +40,8 @@ class SparkFrameMethodsTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
         pdf2 = pd.DataFrame(
             {"rkey": ["foo", "bar", "baz", "foo"], "value": [5, 6, 7, 8]}
         ).set_index("rkey")
-        kdf1 = pp.from_pandas(pdf1)
-        kdf2 = pp.from_pandas(pdf2)
+        kdf1 = ps.from_pandas(pdf1)
+        kdf2 = ps.from_pandas(pdf2)
 
         if LooseVersion(pyspark.__version__) >= LooseVersion("3.0"):
             hints = ["broadcast", "merge", "shuffle_hash", "shuffle_replicate_nl"]
@@ -69,7 +69,7 @@ class SparkFrameMethodsTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
             )
 
     def test_repartition(self):
-        kdf = pp.DataFrame({"age": [5, 5, 2, 2], "name": ["Bob", "Bob", "Alice", "Alice"]})
+        kdf = ps.DataFrame({"age": [5, 5, 2, 2], "name": ["Bob", "Bob", "Alice", "Alice"]})
         num_partitions = kdf.to_spark().rdd.getNumPartitions() + 1
 
         num_partitions += 1
@@ -92,7 +92,7 @@ class SparkFrameMethodsTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
         self.assert_eq(kdf2.sort_index(), (kdf + 1).spark.repartition(num_partitions).sort_index())
 
         # Reserves MultiIndex
-        kdf = pp.DataFrame({"a": ["a", "b", "c"]}, index=[[1, 2, 3], [4, 5, 6]])
+        kdf = ps.DataFrame({"a": ["a", "b", "c"]}, index=[[1, 2, 3], [4, 5, 6]])
         num_partitions = kdf.to_spark().rdd.getNumPartitions() + 1
         new_kdf = kdf.spark.repartition(num_partitions)
         self.assertEqual(new_kdf.to_spark().rdd.getNumPartitions(), num_partitions)
@@ -100,7 +100,7 @@ class SparkFrameMethodsTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
 
     def test_coalesce(self):
         num_partitions = 10
-        kdf = pp.DataFrame({"age": [5, 5, 2, 2], "name": ["Bob", "Bob", "Alice", "Alice"]})
+        kdf = ps.DataFrame({"age": [5, 5, 2, 2], "name": ["Bob", "Bob", "Alice", "Alice"]})
         kdf = kdf.spark.repartition(num_partitions)
 
         num_partitions -= 1
@@ -123,7 +123,7 @@ class SparkFrameMethodsTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
         self.assert_eq(kdf2.sort_index(), (kdf + 1).spark.coalesce(num_partitions).sort_index())
 
         # Reserves MultiIndex
-        kdf = pp.DataFrame({"a": ["a", "b", "c"]}, index=[[1, 2, 3], [4, 5, 6]])
+        kdf = ps.DataFrame({"a": ["a", "b", "c"]}, index=[[1, 2, 3], [4, 5, 6]])
         num_partitions -= 1
         kdf = kdf.spark.repartition(num_partitions)
 
@@ -135,13 +135,13 @@ class SparkFrameMethodsTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
     def test_checkpoint(self):
         with self.temp_dir() as tmp:
             self.spark.sparkContext.setCheckpointDir(tmp)
-            kdf = pp.DataFrame({"a": ["a", "b", "c"]})
+            kdf = ps.DataFrame({"a": ["a", "b", "c"]})
             new_kdf = kdf.spark.checkpoint()
             self.assertIsNotNone(os.listdir(tmp))
             self.assert_eq(kdf, new_kdf)
 
     def test_local_checkpoint(self):
-        kdf = pp.DataFrame({"a": ["a", "b", "c"]})
+        kdf = ps.DataFrame({"a": ["a", "b", "c"]})
         new_kdf = kdf.spark.local_checkpoint()
         self.assert_eq(kdf, new_kdf)
 
