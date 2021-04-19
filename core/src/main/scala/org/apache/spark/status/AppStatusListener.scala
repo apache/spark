@@ -1018,7 +1018,7 @@ private[spark] class AppStatusListener(
    */
   def activeStages(): Seq[v1.StageData] = {
     liveStages.values.asScala
-      .filter(_.info.submissionTime.isDefined)
+      .filter(s => Option(s.info).exists(_.submissionTime.isDefined))
       .map(_.toApi())
       .toList
       .sortBy(_.stageId)
@@ -1179,7 +1179,7 @@ private[spark] class AppStatusListener(
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {
     val stage = liveStages.computeIfAbsent((info.stageId, info.attemptNumber),
-      (_: (Int, Int)) => new LiveStage())
+      (_: (Int, Int)) => new LiveStage(info))
     stage.info = info
     stage
   }

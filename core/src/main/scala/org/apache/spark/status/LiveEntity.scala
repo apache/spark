@@ -393,14 +393,13 @@ private class LiveExecutorStageSummary(
 
 }
 
-private class LiveStage extends LiveEntity {
+private class LiveStage(var info: StageInfo) extends LiveEntity {
 
   import LiveEntityHelpers._
 
   var jobs = Seq[LiveJob]()
   var jobIds = Set[Int]()
 
-  var info: StageInfo = null
   var status = v1.StageStatus.PENDING
 
   var description: Option[String] = None
