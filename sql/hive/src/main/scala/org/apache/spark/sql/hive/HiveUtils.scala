@@ -75,7 +75,7 @@ private[spark] object HiveUtils extends Logging {
         "<code>3.0.0</code> through <code>3.1.2</code>.")
     .version("1.4.0")
     .stringConf
-    .checkValue(ver => isCompatibleHiveVersion(ver), s"Unsupported Hive Metastore version")
+    .checkValue(isCompatibleHiveVersion, "Unsupported Hive Metastore version")
     .createWithDefault(builtinHiveVersion)
 
   val HIVE_METASTORE_JARS = buildStaticConf("spark.sql.hive.metastore.jars")
