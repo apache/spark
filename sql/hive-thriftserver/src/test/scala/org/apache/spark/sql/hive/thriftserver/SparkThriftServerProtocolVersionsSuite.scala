@@ -462,9 +462,9 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
 
     test(s"SPARK-35017: $version get day-time interval type") {
       testExecuteStatementWithProtocolVersion(
-        version, "SELECT date'2021-01-01' - date'2020-12-31' AS dt") { rs =>
+        version, "SELECT INTERVAL '1 10:11:12' DAY TO SECOND AS dt") { rs =>
         assert(rs.next())
-        assert(rs.getObject(1) === new HiveIntervalDayTime(1, 0, 0, 0, 0))
+        assert(rs.getObject(1) === new HiveIntervalDayTime(1, 10, 11, 12, 0))
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "dt")
         assert(metaData.getColumnTypeName(1) === "interval_day_time")
