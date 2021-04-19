@@ -283,13 +283,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createCartesianProduct() = {
-          joinType match {
-            case _: InnerLike =>
-              Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
-            case LeftOuter | RightOuter | FullOuter if condition.isEmpty =>
-              Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
-            case _ =>
-              None
+          if (joinType.isInstanceOf[InnerLike]) {
+            Some(Seq(joins.CartesianProductExec(planLater(left), planLater(right), condition)))
+          } else {
+            None
           }
         }
 

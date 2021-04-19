@@ -124,6 +124,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * - right outer -> inner if the left side has such predicates
  * - full outer -> left outer if only the left side has such predicates
  * - full outer -> right outer if only the right side has such predicates
+ * - left / right / full outer -> inner if join condition is not defined
  *
  * This rule should be executed before pushing down the Filter
  */
@@ -165,6 +166,8 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+    case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, None, _) =>
+      j.copy(joinType = Inner)
   }
 }
 

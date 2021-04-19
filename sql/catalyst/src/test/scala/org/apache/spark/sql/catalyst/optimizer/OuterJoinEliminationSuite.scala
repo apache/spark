@@ -251,4 +251,13 @@ class OuterJoinEliminationSuite extends PlanTest {
       comparePlans(optimized, originalQuery.analyze)
     }
   }
+
+  test("SPARK-35121: left / right / full outer -> inner if join condition is not defined") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+    Seq(LeftOuter, RightOuter, FullOuter).foreach { joinType =>
+      val optimized = Optimize.execute(x.join(y, joinType, None).analyze)
+      comparePlans(optimized, x.join(y, Inner, None).analyze)
+    }
+  }
 }
