@@ -84,6 +84,9 @@ private[spark] trait WritablePartitionedIterator {
   def nextPartition(): Int
 }
 
+/**
+ * Default implementation of `WritablePartitionedIterator`.
+ */
 private[spark] class DefaultWritablePartitionedIterator[K, V](it: Iterator[((Int, K), V)])
   extends WritablePartitionedIterator {
   private[this] var cur = if (it.hasNext) it.next() else null
