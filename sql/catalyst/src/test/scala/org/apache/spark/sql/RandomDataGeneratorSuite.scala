@@ -143,4 +143,18 @@ class RandomDataGeneratorSuite extends SparkFunSuite with SQLHelper {
     assert(!Arrays.equals(array1, arrayExpected))
     assert(Arrays.equals(array2, arrayExpected))
   }
+
+  test("SPARK-35116: The generated data fits the precision of DayTimeIntervalType in spark") {
+    Seq(DayTimeIntervalType, YearMonthIntervalType).foreach { dt =>
+      for (seed <- 1 to 1000) {
+        val generator = RandomDataGenerator.forType(dt, false, new Random(seed)).get
+        val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dt)
+        val toScala = CatalystTypeConverters.createToScalaConverter(dt)
+        val data = generator.apply()
+        val catalyst = toCatalyst(data)
+        val convertedBack = toScala(catalyst)
+        assert(data == convertedBack)
+      }
+    }
+  }
 }
