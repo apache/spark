@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistr
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
@@ -42,12 +43,8 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case YearMonthIntervalType | DayTimeIntervalType | NullType => TypeCheckResult.TypeCheckSuccess
-    case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
-    case other => TypeCheckResult.TypeCheckFailure(
-      s"function average requires numeric or interval types, not ${other.catalogString}")
-  }
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "average")
 
   override def nullable: Boolean = true
 
