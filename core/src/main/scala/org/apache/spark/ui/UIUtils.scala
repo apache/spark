@@ -460,11 +460,11 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       reasonToNumKilled: Map[String, Int],
       total: Int): Seq[Node] = {
-    val ratio = if (total == 0) 100.0 else (completed.toDouble/total)*100
+    val ratio = if (total == 0) 100.0 else (completed.toDouble / total) * 100
     val completeWidth = "width: %s%%".format(ratio)
     // started + completed can be > total when there are speculative tasks
     val boundedStarted = math.min(started, total - completed)
-    val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble/total)*100
+    val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
     val startWidth = "width: %s%%".format(startRatio)
 
     <div class="progress">
