@@ -372,6 +372,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
         spark.sparkContext
           .hadoopConfiguration.set("hive.mapred.supports.subdirectories", "true")
 
+        spark.sparkContext
+          .hadoopConfiguration.set("mapred.input.dir.recursive", "true")
+
         val dataFrame = spark.sqlContext
           .createDataFrame(testData, StructType(Seq(StructField("val", IntegerType))))
 
