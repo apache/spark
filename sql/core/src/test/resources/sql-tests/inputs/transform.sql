@@ -263,14 +263,17 @@ FROM script_trans
 WHERE a <= 4
 WINDOW w AS (PARTITION BY b ORDER BY a);
 
-SELECT TRANSFORM(b, MAX(a), CAST(SUM(c) AS STRING), myCol, myCol2)
-  USING 'cat' AS (a, b, c, d, e)
-FROM script_trans
-LATERAL VIEW explode(array(array(1,2,3))) myTable AS myCol
-LATERAL VIEW explode(myTable.myCol) myTable2 AS myCol2
-WHERE a <= 4
-GROUP BY b, myCol, myCol2
-HAVING max(a) > 1;
+SELECT a, b, c, CAST(d AS STriNG), e
+FROM (
+  SELECT TRANSFORM(b, MAX(a), CAST(SUM(c) AS STRING), myCol, myCol2)
+    USING 'cat' AS (a, b, c, d, e)
+  FROM script_trans
+  LATERAL VIEW explode(array(array(1,2,3))) myTable AS myCol
+  LATERAL VIEW explode(myTable.myCol) myTable2 AS myCol2
+  WHERE a <= 4
+  GROUP BY b, myCol, myCol2
+  HAVING max(a) > 1
+) tmp;
 
 FROM(
   FROM script_trans
