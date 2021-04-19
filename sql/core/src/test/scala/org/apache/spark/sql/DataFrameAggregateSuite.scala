@@ -1151,6 +1151,44 @@ class DataFrameAggregateSuite extends QueryTest
     }
     assert(error2.toString contains "java.lang.ArithmeticException: long overflow")
   }
+
+  test("SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`") {
+    val df = Seq((1, Period.ofMonths(10), Duration.ofDays(10)),
+      (2, Period.ofMonths(1), Duration.ofDays(1)),
+      (2, null, null),
+      (3, Period.ofMonths(-3), Duration.ofDays(-6)),
+      (3, Period.ofMonths(21), Duration.ofDays(-5)))
+      .toDF("class", "year-month", "day-time")
+
+    val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
+      (Period.ofMonths(10), Duration.ofDays(10)))
+      .toDF("year-month", "day-time")
+
+    val avgDF = df.select(avg($"year-month"), avg($"day-time"))
+    checkAnswer(avgDF, Row(Period.ofMonths(7), Duration.ofDays(0)))
+    assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(avgDF.schema == StructType(Seq(StructField("avg(year-month)", YearMonthIntervalType),
+      StructField("avg(day-time)", DayTimeIntervalType))))
+
+    val avgDF2 = df.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
+    checkAnswer(avgDF2, Row(1, Period.ofMonths(10), Duration.ofDays(10)) ::
+      Row(2, Period.ofMonths(1), Duration.ofDays(1)) ::
+      Row(3, Period.ofMonths(9), Duration.ofDays(-5).plusHours(-12)) ::Nil)
+    assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    assert(avgDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
+      StructField("avg(year-month)", YearMonthIntervalType),
+      StructField("avg(day-time)", DayTimeIntervalType))))
+
+    val error = intercept[SparkException] {
+      checkAnswer(df2.select(avg($"year-month")), Nil)
+    }
+    assert(error.toString contains "java.lang.ArithmeticException: integer overflow")
+
+    val error2 = intercept[SparkException] {
+      checkAnswer(df2.select(avg($"day-time")), Nil)
+    }
+    assert(error2.toString contains "java.lang.ArithmeticException: long overflow")
+  }
 }
 
 case class B(c: Option[Double])

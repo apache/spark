@@ -40,10 +40,11 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function average")
+    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "average")
 
   override def nullable: Boolean = true
 
@@ -53,11 +54,15 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
+    case _: YearMonthIntervalType => YearMonthIntervalType
+    case _: DayTimeIntervalType => DayTimeIntervalType
     case _ => DoubleType
   }
 
   private lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
+    case _: YearMonthIntervalType => YearMonthIntervalType
+    case _: DayTimeIntervalType => DayTimeIntervalType
     case _ => DoubleType
   }
 
@@ -82,6 +87,8 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal(
         Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
+    case _: YearMonthIntervalType => DivideYMInterval(sum, count)
+    case _: DayTimeIntervalType => DivideDTInterval(sum, count)
     case _ =>
       Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
   }
