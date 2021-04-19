@@ -2872,6 +2872,10 @@ class Frame(object, metaclass=ABCMeta):
         str
             Series or DataFrame in Markdown-friendly format.
 
+        Notes
+        -----
+        Requires the `tabulate <https://pypi.org/project/tabulate>`_ package.
+
         Examples
         --------
         >>> kser = ps.Series(["elk", "pig", "dog", "quetzal"], name="animal")

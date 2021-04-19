@@ -50,6 +50,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, DateType), null)
     checkEvaluation(Literal.create(null, TimestampType), null)
     checkEvaluation(Literal.create(null, CalendarIntervalType), null)
+    checkEvaluation(Literal.create(null, YearMonthIntervalType), null)
+    checkEvaluation(Literal.create(null, DayTimeIntervalType), null)
     checkEvaluation(Literal.create(null, ArrayType(ByteType, true)), null)
     checkEvaluation(Literal.create(null, ArrayType(StringType, true)), null)
     checkEvaluation(Literal.create(null, MapType(StringType, IntegerType)), null)
@@ -77,6 +79,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
     }
     checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0, 0L))
+    checkEvaluation(Literal.default(YearMonthIntervalType), 0)
+    checkEvaluation(Literal.default(DayTimeIntervalType), 0L)
     checkEvaluation(Literal.default(ArrayType(StringType)), Array())
     checkEvaluation(Literal.default(MapType(IntegerType, StringType)), Map())
     checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))
@@ -188,20 +192,21 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkArrayLiteral(Array(1, 2, 3))
     checkArrayLiteral(Array("a", "b", "c"))
     checkArrayLiteral(Array(1.0, 4.0))
-    checkArrayLiteral(Array(MICROS_PER_DAY, MICROS_PER_HOUR))
+    checkArrayLiteral(Array(new CalendarInterval(1, 0, 0), new CalendarInterval(0, 1, 0)))
     val arr = collection.mutable.WrappedArray.make(Array(1.0, 4.0))
     checkEvaluation(Literal(arr), toCatalyst(arr))
   }
 
   test("seq") {
-    def checkSeqLiteral[T: TypeTag](a: Seq[T], elementType: DataType): Unit = {
+    def checkSeqLiteral[T: TypeTag](a: Seq[T]): Unit = {
       checkEvaluation(Literal.create(a), toCatalyst(a))
     }
-    checkSeqLiteral(Seq(1, 2, 3), IntegerType)
-    checkSeqLiteral(Seq("a", "b", "c"), StringType)
-    checkSeqLiteral(Seq(1.0, 4.0), DoubleType)
-    checkSeqLiteral(Seq(MICROS_PER_DAY, MICROS_PER_HOUR),
-      CalendarIntervalType)
+    checkSeqLiteral(Seq(1, 2, 3))
+    checkSeqLiteral(Seq("a", "b", "c"))
+    checkSeqLiteral(Seq(1.0, 4.0))
+    checkSeqLiteral(Seq(new CalendarInterval(1, 0, 0), new CalendarInterval(0, 1, 0)))
+    checkSeqLiteral(Seq(Period.ZERO, Period.ofMonths(1)))
+    checkSeqLiteral(Seq(Duration.ZERO, Duration.ofDays(1)))
   }
 
   test("map") {
@@ -210,6 +215,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkMapLiteral(Map("a" -> 1, "b" -> 2, "c" -> 3))
     checkMapLiteral(Map("1" -> 1.0, "2" -> 2.0, "3" -> 3.0))
+    checkMapLiteral(Map(Period.ofMonths(1) -> Duration.ZERO))
     assert(Literal.create(Map("a" -> 1)).toString === "map(keys: [a], values: [1])")
   }
 
@@ -220,6 +226,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkStructLiteral((1, 3.0, "abcde"))
     checkStructLiteral(("de", 1, 2.0f))
     checkStructLiteral((1, ("fgh", 3.0)))
+    checkStructLiteral((Period.ZERO, ("abc", Duration.ofDays(1))))
   }
 
   test("unsupported types (map and struct) in Literal.apply") {
@@ -337,6 +344,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(Array(1.toByte, 2.toByte, 3.toByte), BinaryType))
     assert(Literal(Array("1", "2", "3")) ==
       Literal.create(Array("1", "2", "3"), ArrayType(StringType)))
+    assert(Literal(Array(Period.ofMonths(1))) ==
+      Literal.create(Array(Period.ofMonths(1)), ArrayType(YearMonthIntervalType)))
   }
 
   test("SPARK-34342: Date/Timestamp toString") {

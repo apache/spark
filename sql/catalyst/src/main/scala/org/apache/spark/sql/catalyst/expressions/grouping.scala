@@ -277,3 +277,22 @@ object GroupingAnalytics {
     }
   }
 }
+
+/**
+ * A reference to an grouping expression in [[Aggregate]] node.
+ *
+ * @param ordinal The ordinal of the grouping expression in [[Aggregate]] that this expression
+ *                refers to.
+ * @param dataType The [[DataType]] of the referenced grouping expression.
+ * @param nullable True if null is a valid value for the referenced grouping expression.
+ */
+case class GroupingExprRef(
+    ordinal: Int,
+    dataType: DataType,
+    nullable: Boolean)
+  extends LeafExpression with Unevaluable {
+
+  override def stringArgs: Iterator[Any] = {
+    Iterator(ordinal)
+  }
+}
