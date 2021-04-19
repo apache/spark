@@ -576,12 +576,6 @@ $(document).ready(function () {
                                     }
                                 },
                                 {
-                                    data: function(row, type) {
-                                        return (formatBytes(row.memoryUsed, type) + ' / ' +
-                                            formatBytes(row.maxMemory, type));
-                                    }
-                                },
-                                {
                                     data: "totalCores"
                                 },
                                 {

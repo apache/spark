@@ -788,8 +788,8 @@ private[spark] class ApplicationMaster(
         val hostPort = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
         val yarnAMID = "yarn-am"
         val info = new MiscellaneousProcessDetails(hostPort,
-          sparkConf.get(AM_CORES), Runtime.getRuntime().maxMemory(), extractLogUrls)
-        driver.send(MiscellaneousProcessInfo(System.currentTimeMillis(), yarnAMID, info))
+          sparkConf.get(AM_CORES), extractLogUrls)
+        driver.send(MiscellaneousProcessAdded(System.currentTimeMillis(), yarnAMID, info))
       }
     }
 

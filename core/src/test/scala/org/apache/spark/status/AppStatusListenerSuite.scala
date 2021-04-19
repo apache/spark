@@ -1819,8 +1819,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     var logUrlMap: Map[String, String] = Map("stdout" -> stdout,
       "stderr" -> stderr)
     var hostport = "yarnAmHost:2453"
-    var info = new MiscellaneousProcessDetails(hostport, 1, 512, logUrlMap)
-    listener.onOtherEvent(MiscellaneousProcessAdded(123678L, processId, info))
+    var info = new MiscellaneousProcessDetails(hostport, 1, logUrlMap)
+    listener.onOtherEvent(SparkListenerMiscellaneousProcessAdded(123678L, processId, info))
     checkInfoPopulated(listener, logUrlMap, processId)
 
     // Launch new AM in case of failure
@@ -1830,8 +1830,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     logUrlMap = Map("stdout" -> stdout,
       "stderr" -> stderr)
     hostport = "yarnAmHost:2451"
-    info = new MiscellaneousProcessDetails(hostport, 1, 512, logUrlMap)
-    listener.onOtherEvent(MiscellaneousProcessAdded(123678L, processId, info))
+    info = new MiscellaneousProcessDetails(hostport, 1, logUrlMap)
+    listener.onOtherEvent(SparkListenerMiscellaneousProcessAdded(123678L, processId, info))
     checkInfoPopulated(listener, logUrlMap, processId)
   }
 

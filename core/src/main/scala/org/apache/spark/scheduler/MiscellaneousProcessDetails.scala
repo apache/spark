@@ -27,5 +27,4 @@ import org.apache.spark.annotation.DeveloperApi
 class MiscellaneousProcessDetails(
     val hostPort: String,
     val cores: Int,
-    val memory: Long,
     val logUrlInfo: Map[String, String]) extends Serializable

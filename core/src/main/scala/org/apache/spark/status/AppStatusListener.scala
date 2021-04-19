@@ -108,7 +108,7 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
-    case processInfoEvent: MiscellaneousProcessAdded =>
+    case processInfoEvent: SparkListenerMiscellaneousProcessAdded =>
       onMiscellaneousProcessAdded(processInfoEvent)
     case _ =>
   }
@@ -1363,13 +1363,8 @@ private[spark] class AppStatusListener(
     }
   }
 
-  /**
-   *
-   * @param processInfoEvent Miscellaneous Process Info Event
-   *
-   */
   private def onMiscellaneousProcessAdded(
-      processInfoEvent: MiscellaneousProcessAdded): Unit = {
+      processInfoEvent: SparkListenerMiscellaneousProcessAdded): Unit = {
     val processInfo = processInfoEvent.info
     val miscellaneousProcess =
       getOrCreateOtherProcess(processInfoEvent.processId, processInfoEvent.time)
@@ -1377,7 +1372,6 @@ private[spark] class AppStatusListener(
     miscellaneousProcess.hostPort = processInfo.hostPort
     miscellaneousProcess.isActive = true
     miscellaneousProcess.totalCores = processInfo.cores
-    miscellaneousProcess.maxMemory = processInfo.memory
     update(miscellaneousProcess, System.nanoTime())
   }
 

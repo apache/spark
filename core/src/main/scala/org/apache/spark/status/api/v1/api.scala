@@ -492,8 +492,6 @@ class ProcessSummary private[spark](
      val hostPort: String,
      val isActive: Boolean,
      val totalCores: Int,
-     val memoryUsed: Long,
-     val maxMemory: Long,
      val addTime: Date,
      val removeTime: Option[Date],
      val processLogs: Map[String, String])
