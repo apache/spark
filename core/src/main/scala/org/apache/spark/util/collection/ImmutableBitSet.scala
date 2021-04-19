@@ -33,26 +33,26 @@ class ImmutableBitSet(val numBits: Int, val bitsToSet: Int*) extends BitSet(numB
   }
 
   override def clear(): Unit = {
-    new UnsupportedOperationException(ErrorMessage.msg)
+    throw new UnsupportedOperationException(ErrorMessage.msg)
   }
 
   override def clearUntil(bitIndex: Int): Unit = {
-    new UnsupportedOperationException(ErrorMessage.msg)
+    throw new UnsupportedOperationException(ErrorMessage.msg)
   }
 
   override def set(index: Int): Unit = {
-    new UnsupportedOperationException(ErrorMessage.msg)
+    throw new UnsupportedOperationException(ErrorMessage.msg)
   }
 
   override def setUntil(bitIndex: Int): Unit = {
-    new UnsupportedOperationException(ErrorMessage.msg)
+    throw new UnsupportedOperationException(ErrorMessage.msg)
   }
 
   override def unset(index: Int): Unit = {
-    new UnsupportedOperationException(ErrorMessage.msg)
+    throw new UnsupportedOperationException(ErrorMessage.msg)
   }
 
   override def union(other: BitSet): Unit = {
-    new UnsupportedOperationException(ErrorMessage.msg)
+    throw new UnsupportedOperationException(ErrorMessage.msg)
   }
 }
