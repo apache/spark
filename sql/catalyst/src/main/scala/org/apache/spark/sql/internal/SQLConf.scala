@@ -3142,6 +3142,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENABLE_SUBDIRECTORY_SUPPORT_WITH_NON_PARTITIONED_TABLE =
+    buildConf("spark.sql.nonPartitionedTable.subdirectory.read.enabled")
+      .doc("When set to true, Spark SQL could read the files of " +
+        " Non-partitioned hive table from subdirectories under root path of table")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3828,6 +3836,9 @@ class SQLConf extends Serializable with Logging {
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
   def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
+
+  def nonPartitionedTableSubDirectoryReadSupport: Boolean =
+    getConf(ENABLE_SUBDIRECTORY_SUPPORT_WITH_NON_PARTITIONED_TABLE)
 
   /** ********************** SQLConf functionality methods ************ */
 

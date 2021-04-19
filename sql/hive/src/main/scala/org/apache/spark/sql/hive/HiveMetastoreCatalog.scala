@@ -280,10 +280,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
   private def getDirectoryPathSeq(rootPath: Path): Seq[String] = {
     val enableSupportSubDirectories =
-      sparkSession.sparkContext.
-        hadoopConfiguration.getBoolean("hive.mapred.supports.subdirectories", false) &&
-        sparkSession.sparkContext.
-          hadoopConfiguration.getBoolean("mapred.input.dir.recursive", false)
+      sparkSession.sessionState.conf.nonPartitionedTableSubDirectoryReadSupport
 
     if (enableSupportSubDirectories) {
       val fs = rootPath.getFileSystem(sparkSession.sessionState.newHadoopConf())

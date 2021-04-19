@@ -367,28 +367,25 @@ class DataSourceWithHiveMetastoreCatalogSuite
   test("SPARK-28098: allow reader could read files from subdirectories") {
     withTempPath(dir => {
       withTable("dirTest") {
-        val testData = java.util.Arrays.asList(Row(1), Row(2), Row(3), Row(4), Row(5))
+        withSQLConf(
+          "spark.sql.nonPartitionedTable.subdirectory.read.enabled" -> "true") {
+          val testData = java.util.Arrays.asList(Row(1), Row(2), Row(3), Row(4), Row(5))
 
-        spark.sparkContext
-          .hadoopConfiguration.set("hive.mapred.supports.subdirectories", "true")
+          val dataFrame = spark.sqlContext
+            .createDataFrame(testData, StructType(Seq(StructField("val", IntegerType))))
 
-        spark.sparkContext
-          .hadoopConfiguration.set("mapred.input.dir.recursive", "true")
+          dataFrame
+            .coalesce(1)
+            .write
+            .mode(SaveMode.Overwrite)
+            .format("orc")
+            .save(s"${dir.getCanonicalPath}/sub1/sub2")
 
-        val dataFrame = spark.sqlContext
-          .createDataFrame(testData, StructType(Seq(StructField("val", IntegerType))))
+          spark.sql("CREATE EXTERNAL TABLE dirTest (val INT)" +
+            s" STORED AS ORC LOCATION '${dir.toURI}'")
 
-        dataFrame
-          .coalesce(1)
-          .write
-          .mode(SaveMode.Overwrite)
-          .format("orc")
-          .save(s"${dir.getCanonicalPath}/sub1/sub2")
-
-        spark.sql("CREATE EXTERNAL TABLE dirTest (val INT)" +
-          s" STORED AS ORC LOCATION '${dir.toURI}'")
-
-        checkAnswer(spark.sql("select * from dirTest"), dataFrame)
+          checkAnswer(spark.sql("select * from dirTest"), dataFrame)
+        }
       }
     })
   }
