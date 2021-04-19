@@ -30,7 +30,7 @@ private[spark] object BLAS extends Serializable {
   private val nativeL1Threshold: Int = 256
 
   // For level-1 function dspmv, use javaBLAS for better performance.
-  private[ml] def javaBLAS: NetlibBLAS = {
+  private[spark] def javaBLAS: NetlibBLAS = {
     if (_javaBLAS == null) {
       _javaBLAS = NetlibBLAS.getInstance
     }
@@ -38,7 +38,7 @@ private[spark] object BLAS extends Serializable {
   }
 
   // For level-3 routines, we use the native BLAS.
-  private[ml] def nativeBLAS: NetlibBLAS = {
+  private[spark] def nativeBLAS: NetlibBLAS = {
     if (_nativeBLAS == null) {
       _nativeBLAS =
         try { NetlibNativeBLAS.getInstance } catch { case _: Throwable =>
@@ -48,7 +48,7 @@ private[spark] object BLAS extends Serializable {
     _nativeBLAS
   }
 
-  private[ml] def getBLAS(vectorSize: Int): NetlibBLAS = {
+  private[spark] def getBLAS(vectorSize: Int): NetlibBLAS = {
     if (vectorSize < nativeL1Threshold) {
       javaBLAS
     } else {
