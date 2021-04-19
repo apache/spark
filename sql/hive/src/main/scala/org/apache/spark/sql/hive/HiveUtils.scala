@@ -55,14 +55,14 @@ private[spark] object HiveUtils extends Logging {
   val builtinHiveVersion: String = HiveVersionInfo.getVersion
 
   val BUILTIN_HIVE_VERSION = buildStaticConf("spark.sql.hive.version")
-    .doc(s"The compiled, a.k.a, builtin Hive version of the Spark distribution bundled with." +
-        s" Note that, this a read-only conf and only used to report the built-in hive version." +
-        s" If you want a different metastore client for Spark to call, please refer to" +
-        s" spark.sql.hive.metastore.version.")
+    .doc("The compiled, a.k.a, builtin Hive version of the Spark distribution bundled with." +
+        " Note that, this a read-only conf and only used to report the built-in hive version." +
+        " If you want a different metastore client for Spark to call, please refer to" +
+        " spark.sql.hive.metastore.version.")
     .version("1.1.1")
     .stringConf
     .checkValue(_ == builtinHiveVersion,
-      s"The builtin Hive version is read-only, please use spark.sql.hive.metastore.version")
+      "The builtin Hive version is read-only, please use spark.sql.hive.metastore.version")
     .createWithDefault(builtinHiveVersion)
 
   private def isCompatibleHiveVersion(hiveVersionStr: String): Boolean = {
