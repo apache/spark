@@ -16,7 +16,7 @@
 #
 
 """
-MLflow-related functions to load models and apply them to Koalas dataframes.
+MLflow-related functions to load models and apply them to pandas-on-Spark dataframes.
 """
 from pyspark.sql.types import DataType
 import pandas as pd
@@ -35,7 +35,7 @@ class PythonModelWrapper(object):
     """
     A wrapper around MLflow's Python object model.
 
-    This wrapper acts as a predictor on koalas
+    This wrapper acts as a predictor on pandas-on-Spark
 
     """
 
@@ -82,7 +82,7 @@ class PythonModelWrapper(object):
         """
         Returns a prediction on the data.
 
-        If the data is a koalas DataFrame, the return is a Koalas Series.
+        If the data is a pandas-on-Spark DataFrame, the return is a pandas-on-Spark Series.
 
         If the data is a pandas Dataframe, the return is the expected output of the underlying
         pyfunc object (typically a pandas Series or a numpy array).
@@ -106,7 +106,8 @@ class PythonModelWrapper(object):
 
 def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     """
-    Loads an MLflow model into an wrapper that can be used both for pandas and Koalas DataFrame.
+    Loads an MLflow model into an wrapper that can be used both for pandas and pandas-on-Spark
+    DataFrame.
 
     Parameters
     ----------
@@ -126,7 +127,7 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     Examples
     --------
     Here is a full example that creates a model with scikit-learn and saves the model with
-     MLflow. The model is then loaded as a predictor that can be applied on a Koalas
+     MLflow. The model is then loaded as a predictor that can be applied on a pandas-on-Spark
      Dataframe.
 
     We first initialize our MLflow environment:
@@ -134,7 +135,7 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     >>> from mlflow.tracking import MlflowClient, set_tracking_uri
     >>> import mlflow.sklearn
     >>> from tempfile import mkdtemp
-    >>> d = mkdtemp("koalas_mlflow")
+    >>> d = mkdtemp("pandas_on_spark_mlflow")
     >>> set_tracking_uri("file:%s"%d)
     >>> client = MlflowClient()
     >>> exp = mlflow.create_experiment("my_experiment")
@@ -153,7 +154,8 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     ...     mlflow.sklearn.log_model(lr, "model")
     LinearRegression(...)
 
-    Now that our model is logged using MLflow, we load it back and apply it on a Koalas dataframe:
+    Now that our model is logged using MLflow, we load it back and apply it on a pandas-on-Spark
+    dataframe:
 
     >>> from pyspark.pandas.mlflow import load_model
     >>> run_info = client.list_run_infos(exp)[-1]
