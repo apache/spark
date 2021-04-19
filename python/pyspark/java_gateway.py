@@ -97,6 +97,15 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 popen_kwargs['preexec_fn'] = preexec_func
                 proc = Popen(command, **popen_kwargs)
             else:
+                # If an argument contains an ampersand (e.g. a URI to a cloud resource),
+                # we need to apply a double quoting mechanism to correctly pass the
+                # value through the submit shell scripts.
+                command = [
+                    '"""' + s.replace("&", "^^^&") + '"""' 
+                    if '&' in s else s
+                    for s in command
+                ]
+                
                 # preexec_fn not supported on Windows
                 proc = Popen(command, **popen_kwargs)
 
