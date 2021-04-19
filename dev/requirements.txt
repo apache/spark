@@ -1,5 +1,5 @@
 flake8==3.5.0
-jira==1.0.3
+jira==2.0.0
 PyGithub==1.26.0
 sphinx
 pydata_sphinx_theme
