@@ -85,7 +85,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   // We can't directly use `/` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
-      DecimalPrecision.decimalAndDecimal(
+      DecimalPrecision.decimalAndDecimal()(
         Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _: YearMonthIntervalType => DivideYMInterval(sum, count)
     case _: DayTimeIntervalType => DivideDTInterval(sum, count)
