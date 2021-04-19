@@ -82,7 +82,7 @@ WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeSys
 WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeRefBLAS
 ```
 
-If native libraries are not properly configured in the system, the Java implementation (f2jBLAS) will be used as fallback option.
+If native libraries are not properly configured in the system, the Java implementation (javaBLAS) will be used as fallback option.
 
 ## Spark Configuration
 
