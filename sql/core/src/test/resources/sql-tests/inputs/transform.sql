@@ -206,7 +206,7 @@ FROM script_trans
 LIMIT 1;
 
 SELECT TRANSFORM(
-  b AS d5, a,
+  b, a,
   CASE
     WHEN c > 100 THEN 1
     WHEN c < 100 THEN 2
@@ -225,46 +225,46 @@ SELECT TRANSFORM(*)
 FROM script_trans
 WHERE a <= 4;
 
-SELECT TRANSFORM(b AS d, MAX(a) as max_a, CAST(SUM(c) AS STRING))
+SELECT TRANSFORM(b, MAX(a), CAST(SUM(c) AS STRING))
   USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b;
 
-SELECT TRANSFORM(b AS d, MAX(a) FILTER (WHERE a > 3) AS max_a, CAST(SUM(c) AS STRING))
+SELECT TRANSFORM(b, MAX(a) FILTER (WHERE a > 3), CAST(SUM(c) AS STRING))
   USING 'cat' AS (a,b,c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b;
 
-SELECT TRANSFORM(b, MAX(a) as max_a, CAST(sum(c) AS STRING))
+SELECT TRANSFORM(b, MAX(a), CAST(sum(c) AS STRING))
   USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 2
 GROUP BY b;
 
-SELECT TRANSFORM(b, MAX(a) as max_a, CAST(SUM(c) AS STRING))
+SELECT TRANSFORM(b, MAX(a), CAST(SUM(c) AS STRING))
   USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b
-HAVING max_a > 0;
+HAVING MAX(a) > 0;
 
-SELECT TRANSFORM(b, MAX(a) as max_a, CAST(SUM(c) AS STRING))
+SELECT TRANSFORM(b, MAX(a), CAST(SUM(c) AS STRING))
   USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b
-HAVING max(a) > 1;
+HAVING MAX(a) > 1;
 
-SELECT TRANSFORM(b, MAX(a) OVER w as max_a, CAST(SUM(c) OVER w AS STRING))
+SELECT TRANSFORM(b, MAX(a) OVER w, CAST(SUM(c) OVER w AS STRING))
   USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 WINDOW w AS (PARTITION BY b ORDER BY a);
 
-SELECT TRANSFORM(b, MAX(a) as max_a, CAST(SUM(c) AS STRING), myCol, myCol2)
-  USING 'cat' AS (a, b, c, d, e)
+SELECT TRANSFORM(b, MAX(a), CAST(SUM(c) AS STRING), myCol, myCol2)
+  USING 'cat' AS (a STRING, b STRING, c STRING, d ARRAY<INT>, e STRING)
 FROM script_trans
 LATERAL VIEW explode(array(array(1,2,3))) myTable AS myCol
 LATERAL VIEW explode(myTable.myCol) myTable2 AS myCol2
@@ -280,7 +280,7 @@ FROM(
 SELECT a + 1;
 
 FROM(
-  SELECT TRANSFORM(a, SUM(b) b)
+  SELECT TRANSFORM(a, SUM(b))
     USING 'cat' AS (`a` INT, b STRING)
   FROM script_trans
   GROUP BY a
@@ -308,14 +308,6 @@ HAVING true;
 
 SET spark.sql.legacy.parser.havingWithoutGroupByAsWhere=false;
 
-SET spark.sql.parser.quotedRegexColumnNames=true;
-
-SELECT TRANSFORM(`(a|b)?+.+`)
-  USING 'cat' AS (c)
-FROM script_trans;
-
-SET spark.sql.parser.quotedRegexColumnNames=false;
-
 -- SPARK-34634: self join using CTE contains transform
 WITH temp AS (
   SELECT TRANSFORM(a) USING 'cat' AS (b string) FROM t
@@ -331,3 +323,22 @@ SELECT TRANSFORM(ALL b, a, c)
   USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;
+
+-- SPARK-35070: TRANSFORM not support alias in inputs
+SELECT TRANSFORM(b AS b_1, MAX(a), CAST(sum(c) AS STRING))
+  USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 2
+GROUP BY b;
+
+SELECT TRANSFORM(b b_1, MAX(a), CAST(sum(c) AS STRING))
+  USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 2
+GROUP BY b;
+
+SELECT TRANSFORM(b, MAX(a) AS max_a, CAST(sum(c) AS STRING))
+  USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 2
+GROUP BY b;

@@ -50,7 +50,7 @@ class RollingAndExpanding(object):
     def _apply_as_series_or_frame(self, func):
         """
         Wraps a function that handles Spark column in order
-        to support it in both Koalas Series and DataFrame.
+        to support it in both pandas-on-Spark Series and DataFrame.
         Note that the given `func` name should be same as the API's method name.
         """
         raise NotImplementedError(
@@ -654,7 +654,7 @@ class RollingGroupby(Rolling):
     def _apply_as_series_or_frame(self, func):
         """
         Wraps a function that handles Spark column in order
-        to support it in both Koalas Series and DataFrame.
+        to support it in both pandas-on-Spark Series and DataFrame.
         Note that the given `func` name should be same as the API's method name.
         """
         from pyspark.pandas import DataFrame

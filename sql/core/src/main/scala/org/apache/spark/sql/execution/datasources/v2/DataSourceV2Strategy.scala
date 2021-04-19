@@ -415,7 +415,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CacheTableAsSelectExec(r.tempViewName, r.plan, r.originalText, r.isLazy, r.options) :: Nil
 
     case r: UncacheTable =>
-      UncacheTableExec(r.table, cascade = !r.isTempView) :: Nil
+      def isTempView(table: LogicalPlan): Boolean = table match {
+        case SubqueryAlias(_, v: View) => v.isTempView
+        case _ => false
+      }
+      UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
 
     case SetTableLocation(table: ResolvedTable, partitionSpec, location) =>
       if (partitionSpec.nonEmpty) {

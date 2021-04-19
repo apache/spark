@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
@@ -627,6 +628,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       .map(typedVisit[Expression])
   }
 
+  override def visitExpressionSeq(ctx: ExpressionSeqContext): Seq[Expression] = {
+    Option(ctx).toSeq
+      .flatMap(_.expression.asScala)
+      .map(typedVisit[Expression])
+  }
+
   /**
    * Create a logical plan using a having clause.
    */
@@ -680,8 +687,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val plan = visitCommonSelectQueryClausePlan(
       relation,
+      visitExpressionSeq(transformClause.expressionSeq),
       lateralView,
-      transformClause.namedExpressionSeq,
       whereClause,
       aggregationClause,
       havingClause,
@@ -726,8 +733,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val plan = visitCommonSelectQueryClausePlan(
       relation,
+      visitNamedExpressionSeq(selectClause.namedExpressionSeq),
       lateralView,
-      selectClause.namedExpressionSeq,
       whereClause,
       aggregationClause,
       havingClause,
@@ -740,8 +747,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
   def visitCommonSelectQueryClausePlan(
       relation: LogicalPlan,
+      expressions: Seq[Expression],
       lateralView: java.util.List[LateralViewContext],
-      namedExpressionSeq: NamedExpressionSeqContext,
       whereClause: WhereClauseContext,
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
@@ -752,8 +759,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     // Add where.
     val withFilter = withLateralView.optionalMap(whereClause)(withWhereClause)
-
-    val expressions = visitNamedExpressionSeq(namedExpressionSeq)
 
     // Add aggregation or a project.
     val namedExpressions = expressions.map {
@@ -2302,12 +2307,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
+   * Create a [[CalendarInterval]] or ANSI interval literal expression.
+   * Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
    * - from-to unit, for instance: interval '1-2' year to month.
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
-    Literal(parseIntervalLiteral(ctx), CalendarIntervalType)
+    val calendarInterval = parseIntervalLiteral(ctx)
+    if (ctx.errorCapturingUnitToUnitInterval != null && !conf.legacyIntervalEnabled) {
+      // Check the `to` unit to distinguish year-month and day-time intervals because
+      // `CalendarInterval` doesn't have enough info. For instance, new CalendarInterval(0, 0, 0)
+      // can be derived from INTERVAL '0-0' YEAR TO MONTH as well as from
+      // INTERVAL '0 00:00:00' DAY TO SECOND.
+      val toUnit = ctx.errorCapturingUnitToUnitInterval.body.to.getText.toLowerCase(Locale.ROOT)
+      if (toUnit == "month") {
+        assert(calendarInterval.days == 0 && calendarInterval.microseconds == 0)
+        Literal(calendarInterval.months, YearMonthIntervalType)
+      } else {
+        assert(calendarInterval.months == 0)
+        val micros = IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS)
+        Literal(micros, DayTimeIntervalType)
+      }
+    } else {
+      Literal(calendarInterval, CalendarIntervalType)
+    }
   }
 
   /**

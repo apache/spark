@@ -66,7 +66,7 @@ else:
     _all_kinds = PlotAccessor._all_kinds
 
 
-class KoalasBarPlot(PandasBarPlot, TopNPlotBase):
+class PandasOnSparkBarPlot(PandasBarPlot, TopNPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_top_n(data), **kwargs)
 
@@ -75,7 +75,7 @@ class KoalasBarPlot(PandasBarPlot, TopNPlotBase):
         return ax.bar(x, y, w, bottom=start, log=log, **kwds)
 
 
-class KoalasBoxPlot(PandasBoxPlot, BoxPlotBase):
+class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
     def boxplot(
         self,
         ax,
@@ -251,14 +251,14 @@ class KoalasBoxPlot(PandasBoxPlot, BoxPlotBase):
         data = self.data
 
         # Updates all props with the rc defaults from matplotlib
-        self.kwds.update(KoalasBoxPlot.rc_defaults(**self.kwds))
+        self.kwds.update(PandasOnSparkBoxPlot.rc_defaults(**self.kwds))
 
         # Gets some important kwds
         showfliers = self.kwds.get("showfliers", False)
         whis = self.kwds.get("whis", 1.5)
         labels = self.kwds.get("labels", [colname])
 
-        # This one is Koalas specific to control precision for approx_percentile
+        # This one is pandas-on-Spark specific to control precision for approx_percentile
         precision = self.kwds.get("precision", 0.01)
 
         # # Computes mean, median, Q1 and Q3 with approx_percentile and precision
@@ -370,7 +370,7 @@ class KoalasBoxPlot(PandasBoxPlot, BoxPlotBase):
         )
 
 
-class KoalasHistPlot(PandasHistPlot, HistogramPlotBase):
+class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
     def _args_adjust(self):
         if is_list_like(self.bottom):
             self.bottom = np.array(self.bottom)
@@ -418,7 +418,7 @@ class KoalasHistPlot(PandasHistPlot, HistogramPlotBase):
         return patches
 
 
-class KoalasPiePlot(PandasPiePlot, TopNPlotBase):
+class PandasOnSparkPiePlot(PandasPiePlot, TopNPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_top_n(data), **kwargs)
 
@@ -427,7 +427,7 @@ class KoalasPiePlot(PandasPiePlot, TopNPlotBase):
         super()._make_plot()
 
 
-class KoalasAreaPlot(PandasAreaPlot, SampledPlotBase):
+class PandasOnSparkAreaPlot(PandasAreaPlot, SampledPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_sampled(data), **kwargs)
 
@@ -436,7 +436,7 @@ class KoalasAreaPlot(PandasAreaPlot, SampledPlotBase):
         super()._make_plot()
 
 
-class KoalasLinePlot(PandasLinePlot, SampledPlotBase):
+class PandasOnSparkLinePlot(PandasLinePlot, SampledPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_sampled(data), **kwargs)
 
@@ -445,7 +445,7 @@ class KoalasLinePlot(PandasLinePlot, SampledPlotBase):
         super()._make_plot()
 
 
-class KoalasBarhPlot(PandasBarhPlot, TopNPlotBase):
+class PandasOnSparkBarhPlot(PandasBarhPlot, TopNPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_top_n(data), **kwargs)
 
@@ -454,7 +454,7 @@ class KoalasBarhPlot(PandasBarhPlot, TopNPlotBase):
         super()._make_plot()
 
 
-class KoalasScatterPlot(PandasScatterPlot, TopNPlotBase):
+class PandasOnSparkScatterPlot(PandasScatterPlot, TopNPlotBase):
     def __init__(self, data, x, y, **kwargs):
         super().__init__(self.get_top_n(data), x, y, **kwargs)
 
@@ -463,7 +463,7 @@ class KoalasScatterPlot(PandasScatterPlot, TopNPlotBase):
         super()._make_plot()
 
 
-class KoalasKdePlot(PandasKdePlot, KdePlotBase):
+class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
     def _compute_plot_data(self):
         self.data = KdePlotBase.prepare_kde_data(self.data)
 
@@ -506,25 +506,25 @@ class KoalasKdePlot(PandasKdePlot, KdePlotBase):
 
 
 _klasses = [
-    KoalasHistPlot,
-    KoalasBarPlot,
-    KoalasBoxPlot,
-    KoalasPiePlot,
-    KoalasAreaPlot,
-    KoalasLinePlot,
-    KoalasBarhPlot,
-    KoalasScatterPlot,
-    KoalasKdePlot,
+    PandasOnSparkHistPlot,
+    PandasOnSparkBarPlot,
+    PandasOnSparkBoxPlot,
+    PandasOnSparkPiePlot,
+    PandasOnSparkAreaPlot,
+    PandasOnSparkLinePlot,
+    PandasOnSparkBarhPlot,
+    PandasOnSparkScatterPlot,
+    PandasOnSparkKdePlot,
 ]
 _plot_klass = {getattr(klass, "_kind"): klass for klass in _klasses}
 _common_kinds = {"area", "bar", "barh", "box", "hist", "kde", "line", "pie"}
 _series_kinds = _common_kinds.union(set())
 _dataframe_kinds = _common_kinds.union({"scatter", "hexbin"})
-_koalas_all_kinds = _common_kinds.union(_series_kinds).union(_dataframe_kinds)
+_pandas_on_spark_all_kinds = _common_kinds.union(_series_kinds).union(_dataframe_kinds)
 
 
-def plot_koalas(data, kind, **kwargs):
-    if kind not in _koalas_all_kinds:
+def plot_pandas_on_spark(data, kind, **kwargs):
+    if kind not in _pandas_on_spark_all_kinds:
         raise ValueError("{} is not a valid plot kind".format(kind))
 
     from pyspark.pandas import DataFrame, Series
@@ -869,7 +869,7 @@ def _plot(data, x=None, y=None, subplots=False, ax=None, kind="line", **kwds):
     from pyspark.pandas import DataFrame
 
     # function copied from pandas.plotting._core
-    # and adapted to handle Koalas DataFrame and Series
+    # and adapted to handle pandas-on-Spark DataFrame and Series
 
     kind = kind.lower().strip()
     kind = {"density": "kde"}.get(kind, kind)

@@ -56,7 +56,7 @@ class Int64Index(IntegerIndex):
 
     See Also
     --------
-    Index : The base Koalas Index type.
+    Index : The base pandas-on-Spark Index type.
     Float64Index : A special case of :class:`Index` with purely float labels.
 
     Notes
@@ -110,7 +110,7 @@ class Float64Index(NumericIndex):
 
     See Also
     --------
-    Index : The base Koalas Index type.
+    Index : The base pandas-on-Spark Index type.
     Int64Index : A special case of :class:`Index` with purely integer labels.
 
     Notes

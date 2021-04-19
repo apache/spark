@@ -28,10 +28,10 @@ import org.codehaus.janino.InternalCompilerException
 
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
+import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
-import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
@@ -712,16 +712,6 @@ object QueryExecutionErrors {
       "Dictionary encoding should not be used because of dictionary overflow.")
   }
 
-  def hashJoinCannotTakeJoinTypeWithBuildLeftError(joinType: JoinType): Throwable = {
-    new IllegalArgumentException(
-      s"HashJoin should not take $joinType as the JoinType with building left side")
-  }
-
-  def hashJoinCannotTakeJoinTypeWithBuildRightError(joinType: JoinType): Throwable = {
-    new IllegalArgumentException(
-      s"HashJoin should not take $joinType as the JoinType with building right side")
-  }
-
   def endOfIteratorError(): Throwable = {
     new NoSuchElementException("End of the iterator")
   }
@@ -730,9 +720,13 @@ object QueryExecutionErrors {
     new IOException("Could not allocate memory to grow BytesToBytesMap")
   }
 
-  def cannotAcquireMemoryToBuildHashRelationError(size: Long, got: Long): Throwable = {
+  def cannotAcquireMemoryToBuildLongHashedRelationError(size: Long, got: Long): Throwable = {
     new SparkException(s"Can't acquire $size bytes memory to build hash relation, " +
       s"got $got bytes")
+  }
+
+  def cannotAcquireMemoryToBuildUnsafeHashedRelationError(): Throwable = {
+    new SparkOutOfMemoryError("There is not enough memory to build hash map")
   }
 
   def rowLargerThan256MUnsupportedError(): Throwable = {

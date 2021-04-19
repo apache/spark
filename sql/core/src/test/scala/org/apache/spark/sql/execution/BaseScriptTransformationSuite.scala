@@ -302,14 +302,16 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           script = "cat",
           output = Seq(
             AttributeReference("a", CalendarIntervalType)(),
-            AttributeReference("b", StringType)(),
-            AttributeReference("c", StringType)(),
-            AttributeReference("d", StringType)(),
+            AttributeReference("b", ArrayType(IntegerType))(),
+            AttributeReference("c", MapType(StringType, IntegerType))(),
+            AttributeReference("d", StructType(
+              Array(StructField("_1", IntegerType),
+                StructField("_2", IntegerType))))(),
             AttributeReference("e", new SimpleTupleUDT)()),
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select('a, 'b.cast("string"), 'c.cast("string"), 'd.cast("string"), 'e).collect())
+        df.select('a, 'b, 'c, 'd, 'e).collect())
     }
   }
 
@@ -468,6 +470,60 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         Row("1\u00012\u00013") ::
           Row("2\u00013\u00014") ::
           Row("3\u00014\u00015") :: Nil)
+    }
+  }
+
+  test("SPARK-31936: Script transform support ArrayType/MapType/StructType (no serde)") {
+    assume(TestUtils.testCommandAvailable("python"))
+    withTempView("v") {
+      val df = Seq(
+        (Array(0, 1, 2), Array(Array(0, 1), Array(2)),
+          Map("a" -> 1), Map("b" -> Array("a", "b"))),
+        (Array(3, 4, 5), Array(Array(3, 4), Array(5)),
+          Map("b" -> 2), Map("c" -> Array("c", "d"))),
+        (Array(6, 7, 8), Array(Array(6, 7), Array(8)),
+          Map("c" -> 3), Map("d" -> Array("e", "f")))
+      ).toDF("a", "b", "c", "d")
+        .select('a, 'b, 'c, 'd,
+          struct('a, 'b).as("e"),
+          struct('a, 'd).as("f"),
+          struct(struct('a, 'b), struct('a, 'd)).as("g")
+        )
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr,
+            df.col("c").expr,
+            df.col("d").expr,
+            df.col("e").expr,
+            df.col("f").expr,
+            df.col("g").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", ArrayType(IntegerType))(),
+            AttributeReference("b", ArrayType(ArrayType(IntegerType)))(),
+            AttributeReference("c", MapType(StringType, IntegerType))(),
+            AttributeReference("d", MapType(StringType, ArrayType(StringType)))(),
+            AttributeReference("e", StructType(
+              Array(StructField("a", ArrayType(IntegerType)),
+                StructField("b", ArrayType(ArrayType(IntegerType))))))(),
+            AttributeReference("f", StructType(
+              Array(StructField("a", ArrayType(IntegerType)),
+                StructField("d", MapType(StringType, ArrayType(StringType))))))(),
+            AttributeReference("g", StructType(
+              Array(StructField("col1", StructType(
+                Array(StructField("a", ArrayType(IntegerType)),
+                  StructField("b", ArrayType(ArrayType(IntegerType)))))),
+                StructField("col2", StructType(
+                  Array(StructField("a", ArrayType(IntegerType)),
+                    StructField("d", MapType(StringType, ArrayType(StringType)))))))))()),
+          child = child,
+          ioschema = defaultIOSchema
+        ),
+        df.select('a, 'b, 'c, 'd, 'e, 'f, 'g).collect())
     }
   }
 

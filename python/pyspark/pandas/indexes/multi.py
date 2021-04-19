@@ -51,8 +51,8 @@ from pyspark.pandas.typedef import Scalar
 
 class MultiIndex(Index):
     """
-    Koalas MultiIndex that corresponds to pandas MultiIndex logically. This might hold Spark Column
-    internally.
+    pandas-on-Spark MultiIndex that corresponds to pandas MultiIndex logically. This might hold
+    Spark Column internally.
 
     Parameters
     ----------
@@ -730,7 +730,7 @@ class MultiIndex(Index):
         ...                        ['speed', 'weight', 'length']],
         ...                       [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                        [0, 0, 0, 0, 1, 2, 0, 1, 2]])
-        >>> midx2 = pd.MultiIndex([['koalas', 'cow', 'falcon'],
+        >>> midx2 = pd.MultiIndex([['pandas-on-Spark', 'cow', 'falcon'],
         ...                        ['speed', 'weight', 'length']],
         ...                       [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                        [0, 0, 0, 0, 1, 2, 0, 1, 2]])
@@ -740,28 +740,28 @@ class MultiIndex(Index):
         ...              index=midx2)
 
         >>> s1.index.symmetric_difference(s2.index)  # doctest: +SKIP
-        MultiIndex([('koalas', 'speed'),
+        MultiIndex([('pandas-on-Spark', 'speed'),
                     (  'lama', 'speed')],
                    )
 
         You can set names of result Index.
 
         >>> s1.index.symmetric_difference(s2.index, result_name=['a', 'b'])  # doctest: +SKIP
-        MultiIndex([('koalas', 'speed'),
+        MultiIndex([('pandas-on-Spark', 'speed'),
                     (  'lama', 'speed')],
                    names=['a', 'b'])
 
         You can set sort to `True`, if you want to sort the resulting index.
 
         >>> s1.index.symmetric_difference(s2.index, sort=True)  # doctest: +SKIP
-        MultiIndex([('koalas', 'speed'),
+        MultiIndex([('pandas-on-Spark', 'speed'),
                     (  'lama', 'speed')],
                    )
 
         You can also use the ``^`` operator:
 
         >>> s1.index ^ s2.index  # doctest: +SKIP
-        MultiIndex([('koalas', 'speed'),
+        MultiIndex([('pandas-on-Spark', 'speed'),
                     (  'lama', 'speed')],
                    )
         """
