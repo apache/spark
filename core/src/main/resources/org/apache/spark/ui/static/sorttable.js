@@ -3,19 +3,19 @@
   version 2
   7th April 2007
   Stuart Langridge, http://www.kryogenix.org/code/browser/sorttable/
-  
+
   Instructions:
   Download this file
   Add <script src="sorttable.js"></script> to your HTML
   Add class="sortable" to any table you'd like to make sortable
   Click on the headers to sort
-  
+
   Thanks to many, many people for contributions and suggestions.
   Licenced as X11: http://www.kryogenix.org/code/browser/licence.html
   This basically means: do what you want with it.
 */
 
- 
+
 var stIsIE = /*@cc_on!@*/false;
 
 sorttable = {
@@ -26,19 +26,19 @@ sorttable = {
     arguments.callee.done = true;
     // kill the timer
     if (_timer) clearInterval(_timer);
-    
+
     if (!document.createElement || !document.getElementsByTagName) return;
-    
+
     sorttable.DATE_RE = /^(\d\d?)[\/\.-](\d\d?)[\/\.-]((\d\d)?\d\d)$/;
-    
+
     forEach(document.getElementsByTagName('table'), function(table) {
       if (table.className.search(/\bsortable\b/) != -1) {
         sorttable.makeSortable(table);
       }
     });
-    
+
   },
-  
+
   makeSortable: function(table) {
     if (table.getElementsByTagName('thead').length == 0) {
       // table doesn't have a tHead. Since it should have, create one and
@@ -49,9 +49,9 @@ sorttable = {
     }
     // Safari doesn't support table.tHead, sigh
     if (table.tHead == null) table.tHead = table.getElementsByTagName('thead')[0];
-    
+
     if (table.tHead.rows.length != 1) return; // can't cope with two header rows
-    
+
     // Sorttable v1 put rows with a class of "sortbottom" at the bottom (as
     // "total" rows, for example). This is B&R, since what you're supposed
     // to do is put them in a tfoot. So, if there are sortbottom rows,
@@ -73,7 +73,7 @@ sorttable = {
       }
       delete sortbottomrows;
     }
-    
+
     // work through each column and calculate its type
     headrow = table.tHead.rows[0].cells;
     for (var i=0; i<headrow.length; i++) {
@@ -92,16 +92,16 @@ sorttable = {
         dean_addEvent(headrow[i],"click", sorttable.innerSortFunction = function(e) {
 
           if (this.className.search(/\bsorttable_sorted\b/) != -1) {
-            // if we're already sorted by this column, just 
+            // if we're already sorted by this column, just
             // reverse the table, which is quicker
             sorttable.reverse(this.sorttable_tbody);
             this.className = this.className.replace('sorttable_sorted',
-                                                    'sorttable_sorted_reverse');
+                'sorttable_sorted_reverse');
             rowlists = this.parentNode.getElementsByTagName("span");
             for (var j=0; j < rowlists.length; j++) {
-                if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1) {
-                    rowlists[j].parentNode.removeChild(rowlists[j]);
-                }
+              if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1) {
+                rowlists[j].parentNode.removeChild(rowlists[j]);
+              }
             }
             sortrevind = document.createElement('span');
             sortrevind.className = "sorttable_sortrevind";
@@ -110,16 +110,16 @@ sorttable = {
             return;
           }
           if (this.className.search(/\bsorttable_sorted_reverse\b/) != -1) {
-            // if we're already sorted by this column in reverse, just 
+            // if we're already sorted by this column in reverse, just
             // re-reverse the table, which is quicker
             sorttable.reverse(this.sorttable_tbody);
             this.className = this.className.replace('sorttable_sorted_reverse',
-                                                  'sorttable_sorted');
+                'sorttable_sorted');
             rowlists = this.parentNode.getElementsByTagName("span");
             for (var j=0; j < rowlists.length; j++) {
-                if (rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
-                    rowlists[j].parentNode.removeChild(rowlists[j]);
-                }
+              if (rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
+                rowlists[j].parentNode.removeChild(rowlists[j]);
+              }
             }
             sortfwdind = document.createElement('span');
             sortfwdind.className = "sorttable_sortfwdind";
@@ -138,10 +138,10 @@ sorttable = {
           });
           rowlists = this.parentNode.getElementsByTagName("span");
           for (var j=0; j < rowlists.length; j++) {
-              if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1
-                  || rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
-                  rowlists[j].parentNode.removeChild(rowlists[j]);
-              }
+            if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1
+                || rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
+              rowlists[j].parentNode.removeChild(rowlists[j]);
+            }
           }
 
           this.className += ' sorttable_sorted';
@@ -164,18 +164,18 @@ sorttable = {
           //sorttable.shaker_sort(row_array, this.sorttable_sortfunction);
           /* and comment out this one */
           row_array.sort(this.sorttable_sortfunction);
-        
+
           tb = this.sorttable_tbody;
           for (var j=0; j<row_array.length; j++) {
             tb.appendChild(row_array[j][1]);
           }
-        
+
           delete row_array;
         });
       }
     }
   },
-  
+
   guessType: function(table, column) {
     // guess the type of a column based on its first non-blank row
     sortfn = sorttable.sort_alpha;
@@ -184,12 +184,11 @@ sorttable = {
       if (text != '') {
         if (text.match(/^-?[£$¤]?[\d,.]+%?$/)) {
           return sorttable.sort_numeric;
+        } else if (text.match(/^(\d+(?:\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)[\s\S]*/i)) {
+          // match content like '287.1 MiB (17.2 GiB Remaining)', '0.0 B'
+          return sorttable.sort_storage_size;
         }
-        // match content like '287.1 MiB (17.2 GiB Remaining)', '0.0 B'
-        else if(text.match(/^(\d+(?:\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)[\s\S]*/i)) {
-          return sorttable.sort_storage_size
-        }
-        // check for a date: dd/mm/yyyy or dd/mm/yy 
+        // check for a date: dd/mm/yyyy or dd/mm/yy
         // can have / or . or - as separator
         // can be mm/dd as well
         possdate = text.match(sorttable.DATE_RE)
@@ -212,18 +211,18 @@ sorttable = {
     }
     return sortfn;
   },
-  
+
   getInnerText: function(node) {
     // gets the text we want to use for sorting for a cell.
     // strips leading and trailing whitespace.
     // this is *not* a generic getInnerText function; it's special to sorttable.
     // for example, you can override the cell text with a customkey attribute.
     // it also gets .value for <input> fields.
-    
+
     if (!node) return "";
 
     hasInputs = (typeof node.getElementsByTagName == 'function') &&
-                 node.getElementsByTagName('input').length;
+        node.getElementsByTagName('input').length;
 
     if (node.nodeType == 1 && node.getAttribute("sorttable_customkey") != null) {
       return node.getAttribute("sorttable_customkey");
@@ -259,7 +258,7 @@ sorttable = {
       }
     }
   },
-  
+
   reverse: function(tbody) {
     // reverse the rows in a tbody
     newrows = [];
@@ -267,31 +266,31 @@ sorttable = {
       newrows[newrows.length] = tbody.rows[i];
     }
     for (var i=newrows.length-1; i>=0; i--) {
-       tbody.appendChild(newrows[i]);
+      tbody.appendChild(newrows[i]);
     }
     delete newrows;
   },
-  
+
   /* sort functions
      each sort function takes two parameters, a and b
      you are comparing a[0] and b[0] */
   sort_numeric: function(a,b) {
     aa = parseFloat(a[0].replace(/[^0-9.-]/g,''));
     if (isNaN(aa)) aa = 0;
-    bb = parseFloat(b[0].replace(/[^0-9.-]/g,'')); 
+    bb = parseFloat(b[0].replace(/[^0-9.-]/g,''));
     if (isNaN(bb)) bb = 0;
     return aa-bb;
   },
   sort_storage_size: function(src, dst) {
-    if(src[0].toLowerCase() === dst[0].toLowerCase()) {
+    if (src[0].toLowerCase() === dst[0].toLowerCase()) {
       return 0;
     }
-    srcSize = storageSizeConverter(src[0])
-    dstSize = storageSizeConverter(dst[0])
+    srcSize = storageSizeConverter(src[0]);
+    dstSize = storageSizeConverter(dst[0]);
 
-    if(srcSize === dstSize) {
+    if (srcSize === dstSize) {
       return 0;
-    }else {
+    } else {
       return srcSize > dstSize ? 1 : -1;
     }
   },
@@ -330,7 +329,7 @@ sorttable = {
     if (dt1<dt2) return -1;
     return 1;
   },
-  
+
   shaker_sort: function(list, comp_func) {
     // A stable sort function to allow multi-level sorting of data
     // see: http://en.wikipedia.org/wiki/Cocktail_sort
@@ -342,10 +341,10 @@ sorttable = {
     while(swap) {
       swap = false;
       for(var i = b; i < t; ++i) {
-          if ( comp_func(list[i], list[i+1]) > 0 ) {
-              var q = list[i]; list[i] = list[i+1]; list[i+1] = q;
-              swap = true;
-          }
+        if ( comp_func(list[i], list[i+1]) > 0 ) {
+          var q = list[i]; list[i] = list[i+1]; list[i+1] = q;
+          swap = true;
+        }
       } // for
       t--;
 
@@ -355,11 +354,11 @@ sorttable = {
         if ( comp_func(list[i], list[i-1]) < 0 ) {
           var q = list[i]; list[i] = list[i-1]; list[i-1] = q;
           swap = true;
-          }
+        }
       } // for
       b++;
     } // while(swap)
-  }  
+  }
 }
 
 /* ******************************************************************
@@ -370,7 +369,7 @@ sorttable = {
 
 /* for Mozilla/Opera9 */
 if (document.addEventListener) {
-    document.addEventListener("DOMContentLoaded", sorttable.init, false);
+  document.addEventListener("DOMContentLoaded", sorttable.init, false);
 }
 
 /* for Internet Explorer */
@@ -422,15 +421,15 @@ function dean_addEvent(element, type, handler) {
     // store the event handler in the hash table
     handlers[handler.$$guid] = handler;
     // assign a global event handler to do all the work
-   element["on" + type] = handleEvent;
-    }
+    element["on" + type] = handleEvent;
+  }
 };
 // a counter used to create unique IDs
 dean_addEvent.guid = 1;
 
 function removeEvent(element, type, handler) {
   if (element.removeEventListener) {
-  element.removeEventListener(type, handler, false);
+    element.removeEventListener(type, handler, false);
   } else {
     // delete the event handler from the hash table
     if (element.events && element.events[type]) {
@@ -505,26 +504,26 @@ var forEach = function(object, block, context) {
   if (object) {
     var resolve = Object; // default
     if (object instanceof Function) {
-    // functions have a "length" property
-    resolve = Function;
-  } else if (object.forEach instanceof Function) {
-    // the object implements a custom forEach method so use that
-    object.forEach(block, context);
-    return;
-  } else if (typeof object == "string") {
-    // the object is a string
-    resolve = String;
-  } else if (typeof object.length == "number") {
-    // the object is array-like
-    resolve = Array;
-  }
-  resolve.forEach(object, block, context);
+      // functions have a "length" property
+      resolve = Function;
+    } else if (object.forEach instanceof Function) {
+      // the object implements a custom forEach method so use that
+      object.forEach(block, context);
+      return;
+    } else if (typeof object == "string") {
+      // the object is a string
+      resolve = String;
+    } else if (typeof object.length == "number") {
+      // the object is array-like
+      resolve = Array;
+    }
+    resolve.forEach(object, block, context);
   }
 };
 
 // getStorageSize from str like '9.75 Mib'/'1290 B'
 function storageSizeConverter(data) {
-  var data =data.toString()
+  var data = data.toString();
   var multipliers = {
     b: 1,
     kib: 1024,
@@ -535,15 +534,14 @@ function storageSizeConverter(data) {
     eib: 1152921504606846976,
     zib: 1180591620717411303424,
     yib: 1208925819614629174706176,
-  }
+  };
 
   var matches = data.match(/^(\d+(?:\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)[\s\S]*/i);
 
-  if(matches) {
-    var unit = matches[2].toLowerCase()
+  if (matches) {
+    var unit = matches[2].toLowerCase();
     return parseFloat(matches[1]) * multipliers[unit];
-  }
-  else {
+  } else {
     return -1;
   }
 };
