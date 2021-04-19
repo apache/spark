@@ -189,8 +189,7 @@ private[spark] object JsonProtocol {
   }
 
   def blockManagerAddedToJson(blockManagerAdded: SparkListenerBlockManagerAdded): JValue = {
-    val blockManagerId = blockManagerIdToJson(
-      blockManagerAdded.blockManagerId)
+    val blockManagerId = blockManagerIdToJson(blockManagerAdded.blockManagerId)
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockManagerAdded) ~
     ("Block Manager ID" -> blockManagerId) ~
     ("Maximum Memory" -> blockManagerAdded.maxMem) ~
