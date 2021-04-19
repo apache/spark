@@ -29,7 +29,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   val fixedLengthTypes = Array[DataType](
     BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-    DateType, TimestampType)
+    DateType, TimestampType, YearMonthIntervalType, DayTimeIntervalType)
 
   val variableLengthTypes = Array(
     StringType, DecimalType.defaultConcreteType, CalendarIntervalType, BinaryType,
@@ -41,13 +41,15 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   testBothCodegenAndInterpreted("fixed-length types") {
-    val inputRow = InternalRow.fromSeq(Seq(true, 3.toByte, 15.toShort, -83, 129L, 1.0f, 5.0, 1, 2L))
+    val inputRow = InternalRow.fromSeq(Seq(
+      true, 3.toByte, 15.toShort, -83, 129L, 1.0f, 5.0, 1, 2L, Int.MaxValue, Long.MinValue))
     val proj = createMutableProjection(fixedLengthTypes)
     assert(proj(inputRow) === inputRow)
   }
 
   testBothCodegenAndInterpreted("unsafe buffer") {
-    val inputRow = InternalRow.fromSeq(Seq(false, 1.toByte, 9.toShort, -18, 53L, 3.2f, 7.8, 4, 9L))
+    val inputRow = InternalRow.fromSeq(Seq(
+      false, 1.toByte, 9.toShort, -18, 53L, 3.2f, 7.8, 4, 9L, Int.MinValue, Long.MaxValue))
     val numBytes = UnsafeRow.calculateBitSetWidthInBytes(fixedLengthTypes.length)
     val unsafeBuffer = UnsafeRow.createFromByteArray(numBytes, fixedLengthTypes.length)
     val proj = createMutableProjection(fixedLengthTypes)
