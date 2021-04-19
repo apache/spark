@@ -19,13 +19,9 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 import java.nio.charset.StandardCharsets
-import java.util.{Base64, HashMap, Map}
+import java.util.Base64
 
 import scala.sys.process._
-
-import org.apache.hadoop.conf.Configuration
-import org.apache.parquet.crypto.{KeyAccessDeniedException, ParquetCryptoRuntimeException}
-import org.apache.parquet.crypto.keytools.{KeyToolkit, KmsClient}
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
@@ -48,7 +44,7 @@ class ParquetEncryptionSuite extends QueryTest with SharedSparkSession {
       withSQLConf(
         "parquet.crypto.factory.class" ->
           "org.apache.parquet.crypto.keytools.PropertiesDrivenCryptoFactory",
-        "parquet.encryption.kms.client.class" -> "org.apache.spark.sql.hive.InMemoryKMS",
+        "parquet.encryption.kms.client.class" -> "org.apache.parquet.crypto.keytools.mocks.InMemoryKMS",
         "parquet.encryption.key.list" ->
           s"footerKey: ${footerKey}, key1: ${key1}, key2: ${key2}") {
 
@@ -74,75 +70,5 @@ class ParquetEncryptionSuite extends QueryTest with SharedSparkSession {
     val fullFilename = parquetDir + "/" + parquetPartitionFile
     val magic = Seq("tail", "-c", "4", fullFilename).!!
     assert(magic.stripLineEnd.trim() == "PARE")
-  }
-}
-
-/**
- * This is a mock class, built just for parquet encryption testing in Spark
- * and based on InMemoryKMS in parquet-hadoop tests.
- * Don't use it as an example of a KmsClient implementation.
- * Use parquet-hadoop/src/test/java/org/apache/parquet/crypto/keytools/samples/VaultClient.java
- * as a sample implementation instead.
- */
-class InMemoryKMS extends KmsClient {
-  private var masterKeyMap: Map[String, Array[Byte]] = null
-
-  override def initialize(
-      configuration: Configuration,
-      kmsInstanceID: String,
-      kmsInstanceURL: String,
-      accessToken: String): Unit = { // Parse master  keys
-    val masterKeys: Array[String] =
-      configuration.getTrimmedStrings(InMemoryKMS.KEY_LIST_PROPERTY_NAME)
-    if (null == masterKeys || masterKeys.length == 0) {
-      throw new ParquetCryptoRuntimeException("No encryption key list")
-    }
-    masterKeyMap = InMemoryKMS.parseKeyList(masterKeys)
-  }
-
-  @throws[KeyAccessDeniedException]
-  @throws[UnsupportedOperationException]
-  override def wrapKey(keyBytes: Array[Byte], masterKeyIdentifier: String): String = {
-    // Always use the latest key version for writing
-    val masterKey = masterKeyMap.get(masterKeyIdentifier)
-    if (null == masterKey) {
-      throw new ParquetCryptoRuntimeException("Key not found: " + masterKeyIdentifier)
-    }
-    KeyToolkit.encryptKeyLocally(keyBytes, masterKey, null /* AAD */ )
-  }
-
-  @throws[KeyAccessDeniedException]
-  @throws[UnsupportedOperationException]
-  override def unwrapKey(wrappedKey: String, masterKeyIdentifier: String): Array[Byte] = {
-    val masterKey: Array[Byte] = masterKeyMap.get(masterKeyIdentifier)
-    if (null == masterKey) {
-      throw new ParquetCryptoRuntimeException("Key not found: " + masterKeyIdentifier)
-    }
-    KeyToolkit.decryptKeyLocally(wrappedKey, masterKey, null /* AAD */ )
-  }
-}
-
-object InMemoryKMS {
-  val KEY_LIST_PROPERTY_NAME: String = "parquet.encryption.key.list"
-
-  private def parseKeyList(masterKeys: Array[String]): Map[String, Array[Byte]] = {
-    val keyMap: Map[String, Array[Byte]] = new HashMap[String, Array[Byte]]
-    val nKeys: Int = masterKeys.length
-    for (i <- 0 until nKeys) {
-      val parts: Array[String] = masterKeys(i).split(":")
-      val keyName: String = parts(0).trim
-      if (parts.length != 2) {
-        throw new IllegalArgumentException("Key '" + keyName + "' is not formatted correctly")
-      }
-      val key: String = parts(1).trim
-      try {
-        val keyBytes: Array[Byte] = Base64.getDecoder.decode(key)
-        keyMap.put(keyName, keyBytes)
-      } catch {
-        case e: IllegalArgumentException =>
-          throw e
-      }
-    }
-    keyMap
   }
 }
