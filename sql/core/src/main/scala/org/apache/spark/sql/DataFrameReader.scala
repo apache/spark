@@ -815,9 +815,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Parquet-specific option(s) for reading Parquet files can be found in
    * <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
-   *   Data Source Option</a>.
-   * Note that you should refer to the documentation of the specific version you're using
-   * because the link above always points out the latest documentation.
+   *   Data Source Option</a> in the version you use.
    *
    * @since 1.4.0
    */
