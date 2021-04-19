@@ -1023,12 +1023,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       Rollup(groupingSets.toSeq)
     } else {
       assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-      val groupingSets = groupingAnalytics.nestedGroupingSet.asScala.flatMap { expr =>
+      val groupingSets = groupingAnalytics.groupingElement.asScala.flatMap { expr =>
         val groupingAnalytics = expr.groupingAnalytics()
         if (groupingAnalytics != null) {
           resolveGroupingAnalytics(groupingAnalytics).selectedGroupByExprs
         } else {
-          Seq(expr.expression().asScala.map(e => expression(e)))
+          Seq(expr.groupingSet().expression().asScala.map(e => expression(e)).toSeq)
         }
       }
       GroupingSets(groupingSets.toSeq)
