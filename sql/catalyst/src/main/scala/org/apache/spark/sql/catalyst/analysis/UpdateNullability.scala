@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GroupingExprRef, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
@@ -50,5 +50,24 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
         case attr: Attribute if nullabilities.contains(attr.exprId) =>
           attr.withNullability(nullabilities(attr.exprId))
       }
+  }
+}
+
+/**
+ * Updates nullability of [[GroupingExprRef]]s in a resolved LogicalPlan by using the nullability of
+ * referenced grouping expression.
+ */
+object UpdateGroupingExprRefNullability extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a: Aggregate =>
+      val nullabilities = a.groupingExpressions.map(_.nullable).toArray
+
+      val newAggregateExpressions =
+        a.aggregateExpressions.map(_.transform {
+          case g: GroupingExprRef if g.nullable != nullabilities(g.ordinal) =>
+            g.copy(nullable = nullabilities(g.ordinal))
+        }.asInstanceOf[NamedExpression])
+
+      a.copy(aggregateExpressions = newAggregateExpressions)
   }
 }
