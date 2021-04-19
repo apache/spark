@@ -1003,7 +1003,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
-  def resolveGroupingAnalytics(groupingAnalytics: GroupingAnalyticsContext): BaseGroupingSets = {
+  private def resolveGroupingAnalytics(
+      groupingAnalytics: GroupingAnalyticsContext): BaseGroupingSets = {
     val groupingSets = groupingAnalytics.groupingSet.asScala
       .map(_.expression.asScala.map(e => expression(e)).toSeq)
     if (groupingAnalytics.CUBE != null) {
