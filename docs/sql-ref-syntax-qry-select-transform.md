@@ -35,7 +35,7 @@ SELECT TRANSFORM ( expression [ , ... ] )
     [ RECORDREADER record_reader_class ]
 
 row_format:    
-    : SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ]
+    SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ]
     | DELIMITED [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escaped_char ] ] 
         [ COLLECTION ITEMS TERMINATED BY collection_items_terminated_char ] 
         [ MAP KEYS TERMINATED BY map_key_terminated_char ]
@@ -103,24 +103,21 @@ row_format:
 
 ### SerDe behavior
 
-Spark uses Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, columns will be casted
+Spark uses the Hive Serde `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, so columns will be casted
 to `STRING` and combined by tabs before feeding to the user script. All `NULL` values will be converted
 to the literal string `"\N"` in order to differentiate `NULL` values from empty strings. The standard output of the
-user script will be treated as TAB-separated STRING columns, any cell containing only `"\N"` will be re-interpreted
-as a `NULL`, and then the resulting STRING column will be cast to the data type specified in the table declaration
-in the usual way. If the actual number of output columns is less than the number of specified output columns,
+user script will be treated as tab-separated `STRING` columns, any cell containing only `"\N"` will be re-interpreted
+as a `NULL`, and then the resulting STRING column will be cast to the data type specified in `col_type`. If the actual number of output columns is less than the number of specified output columns,
 insufficient output columns will be supplemented with `NULL`. If the actual number of output columns is more than the
 number of specified output columns, the output columns will only select the corresponding columns and the remaining part
-will be discarded. If there is no `AS` clause after `USING my_script`, Spark assumes that the output of the script contains 2 parts:
+will be discarded. If there is no `AS` clause after `USING my_script`, Spark assumes that the output of the script contains 2 attributes:
 
    1. key: which is before the first tab.
    2. value: which is the rest after the first tab.
 
 If there is no enough tab, Spark will return `NULL` value in `SERDE` mode or throw `ArrayOutOfBoundsException` in `DELIMITED` mode.
 Note that this is different from specifying an `AS key, value` because in that case, the value will only contain the portion
-between the first tab and the second tab if there are multiple tabs. 
-User scripts can output debug information to standard error which will be shown on the task detail
-page on Spark. These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`. 
+between the first tab and the second tab if there are multiple tabs. These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`. 
 
 ### Examples
 
