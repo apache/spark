@@ -24,6 +24,8 @@ import socket
 import platform
 import tempfile
 import time
+
+from re import subn
 from subprocess import Popen, PIPE
 
 from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParameters
@@ -97,14 +99,15 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 popen_kwargs['preexec_fn'] = preexec_func
                 proc = Popen(command, **popen_kwargs)
             else:
-                # If an argument contains an ampersand (e.g. a URI to a cloud resource),
-                # we need to apply a double quoting mechanism to correctly pass the
-                # value through the submit shell scripts.
-                command = [
-                    '"""' + s.replace("&", "^^^&") + '"""' 
-                    if '&' in s else s
-                    for s in command
-                ]
+                # If an argument contains a character that needs escaping (e.g. an 
+                # ampersand) we need to apply a double quoting mechanism to correctly 
+                # pass the value through the submit shell scripts.
+                def quote(s):
+                    r, count = subn(r"([&<>()|,;^])", r"^^^\1", s)
+                    if count:
+                        return '"""' + r + '"""'
+                    return s
+                command = [quote(s) for s in command]
                 
                 # preexec_fn not supported on Windows
                 proc = Popen(command, **popen_kwargs)
