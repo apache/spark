@@ -40,14 +40,13 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
-  def input: Seq[Expression]
   def script: String
   def output: Seq[Attribute]
   def child: SparkPlan
   def ioschema: ScriptTransformationIOSchema
 
   protected lazy val inputExpressionsWithoutSerde: Seq[Expression] = {
-    input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
+    child.output.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
   }
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet

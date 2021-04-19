@@ -40,13 +40,11 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
   import ScriptTransformationIOSchema._
 
   override def createScriptTransformationExec(
-      input: Seq[Expression],
       script: String,
       output: Seq[Attribute],
       child: SparkPlan,
       ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
     HiveScriptTransformationExec(
-      input = input,
       script = script,
       output = output,
       child = child,
@@ -68,7 +66,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     checkAnswer(
       rowsDf,
       (child: SparkPlan) => createScriptTransformationExec(
-        input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
@@ -86,7 +83,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       checkAnswer(
         rowsDf,
         (child: SparkPlan) => createScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
@@ -107,7 +103,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     val e = intercept[SparkException] {
       val plan =
         createScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
@@ -129,7 +124,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     checkAnswer(
       rowsDf,
       (child: SparkPlan) => createScriptTransformationExec(
-        input = Seq(rowsDf.col("name").expr),
         script = "cat",
         output = Seq(AttributeReference("name", StringType)()),
         child = child,
@@ -146,7 +140,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     val e = intercept[SparkException] {
       val plan =
         createScriptTransformationExec(
-          input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
@@ -336,10 +329,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
-          input = Seq(
-            df.col("c").expr,
-            df.col("d").expr,
-            df.col("e").expr),
           script = "cat",
           output = Seq(
             AttributeReference("c", ArrayType(IntegerType))(),
@@ -387,7 +376,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
       val e1 = intercept[SparkException] {
         val plan = createScriptTransformationExec(
-          input = Seq(df.col("a").expr, df.col("b").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", IntegerType)(),
@@ -400,7 +388,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
       val e2 = intercept[SparkException] {
         val plan = createScriptTransformationExec(
-          input = Seq(df.col("a").expr, df.col("c").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", IntegerType)(),
@@ -551,11 +538,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
-          input = Seq(
-            df.col("a").expr,
-            df.col("b").expr,
-            df.col("c").expr,
-            df.col("d").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", DayTimeIntervalType)(),
@@ -578,7 +560,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         checkAnswer(
           df,
           (child: SparkPlan) => createScriptTransformationExec(
-            input = Seq(df.col("a").expr),
             script = "cat",
             output = Seq(AttributeReference("a", DayTimeIntervalType)()),
             child = child,
