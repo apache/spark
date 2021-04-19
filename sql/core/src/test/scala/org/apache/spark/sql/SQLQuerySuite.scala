@@ -3596,6 +3596,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row("A", null, 5) :: Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
           Row("B", null, 1) :: Row("B", "{\"i\": 1}", 1) ::
           Row("C", null, 3) :: Row("C", "{\"i\": 1}", 3) :: Nil)
+
+      assert(spark.table("t").groupBy($"c.json_string").count().schema.fieldNames ===
+        Seq("json_string", "count"))
     }
   }
 
