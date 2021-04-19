@@ -110,7 +110,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 command = [quote(s) for s in command]
                 
                 # preexec_fn not supported on Windows
-                proc = Popen(command, **popen_kwargs)
+                proc = Popen(" ".join(command), **popen_kwargs)
 
             # Wait for the file to appear, or for the process to exit, whichever happens first.
             while not proc.poll() and not os.path.isfile(conn_info_file):
