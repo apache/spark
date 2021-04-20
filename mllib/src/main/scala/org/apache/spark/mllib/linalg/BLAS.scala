@@ -43,8 +43,8 @@ private[spark] object BLAS extends Serializable with Logging {
   private[spark] def nativeBLAS: NetlibBLAS = {
     if (_nativeBLAS == null) {
       _nativeBLAS =
-        try { NetlibNativeBLAS.getInstance } catch { case _: Throwable =>
-          try { NativeBLAS.getInstance } catch { case t: Throwable =>
+        try { NativeBLAS.getInstance } catch { case t: Throwable =>
+          try { NetlibNativeBLAS.getInstance } catch { case _: Throwable =>
             javaBLAS } }
     }
     _nativeBLAS
