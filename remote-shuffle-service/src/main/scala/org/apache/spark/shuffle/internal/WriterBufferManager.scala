@@ -28,24 +28,29 @@ case class BufferManagerOptions(individualBufferSize: Int, individualBufferMax: 
 
 case class WriterBufferManagerValue(serializeStream: SerializationStream, output: Output)
 
-class WriteBufferManager(serializer: Serializer,
+class WriteBufferManager[K, V](serializer: Serializer,
                          bufferSize: Int,
                          maxBufferSize: Int,
-                         spillSize: Int) extends Logging {
+                         spillSize: Int,
+                         createCombiner: Option[V => Any] = None)
+    extends RecordSerializationBuffer[K, V]
+    with Logging {
   private val map: Map[Int, WriterBufferManagerValue] = Map()
 
   private var totalBytes = 0
 
   private val serializerInstance = serializer.newInstance()
 
-  def addRecord(partitionId: Int, record: Product2[Any, Any]): Seq[(Int, Array[Byte])] = {
+  def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte])] = {
+    val key: Any = record._1
+    val value: Any = createCombiner.map(_.apply(record._2)).getOrElse(record._2)
     var result: mutable.Buffer[(Int, Array[Byte])] = null
     map.get(partitionId) match {
       case Some(v) =>
         val stream = v.serializeStream
         val oldSize = v.output.position()
-        stream.writeKey(record._1)
-        stream.writeValue(record._2)
+        stream.writeKey(key)
+        stream.writeValue(value)
         val newSize = v.output.position()
         if (newSize >= bufferSize) {
           // partition buffer is full, add it to the result as spill data
@@ -63,8 +68,8 @@ class WriteBufferManager(serializer: Serializer,
       case None =>
         val output = new Output(bufferSize, maxBufferSize)
         val stream = serializerInstance.serializeStream(output)
-        stream.writeKey(record._1)
-        stream.writeValue(record._2)
+        stream.writeKey(key)
+        stream.writeValue(value)
         val newSize = output.position()
         if (newSize >= bufferSize) {
           // partition buffer is full, add it to the result as spill data

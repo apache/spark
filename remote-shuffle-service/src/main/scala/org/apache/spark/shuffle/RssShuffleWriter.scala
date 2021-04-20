@@ -26,7 +26,7 @@ import org.apache.spark.remoteshuffle.common.{AppTaskAttemptId, ServerList}
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidStateException
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.internal.{BufferManagerOptions, RssUtils, WriteBufferManager}
+import org.apache.spark.shuffle.internal.{BufferManagerOptions, RecordSerializationBuffer, RssUtils, WriteBufferManager}
 
 class RssShuffleWriter[K, V, C](
                                  rssServers: ServerList,
@@ -49,11 +49,18 @@ class RssShuffleWriter[K, V, C](
   private val writeClientCloseLock = new Object()
   private var mapStatus: MapStatus = null
 
-  private val bufferManager = new WriteBufferManager(
+  private val createCombiner = if (shuffleDependency.mapSideCombine) {
+    Some(shuffleDependency.aggregator.get.createCombiner)
+  } else {
+    None
+  }
+
+  private val bufferManager: RecordSerializationBuffer[K, V] = new WriteBufferManager[K, V](
     serializer = serializer,
     bufferSize = bufferOptions.individualBufferSize,
     maxBufferSize = bufferOptions.individualBufferMax,
-    spillSize = bufferOptions.bufferSpillThreshold)
+    spillSize = bufferOptions.bufferSpillThreshold,
+    createCombiner = createCombiner)
 
   private val compressor = LZ4Factory.fastestInstance.fastCompressor
 
@@ -90,17 +97,9 @@ class RssShuffleWriter[K, V, C](
 
       var spilledData: Seq[(Int, Array[Byte])] = null
 
-      if (shuffleDependency.mapSideCombine) {
-        val createCombiner = shuffleDependency.aggregator.get.createCombiner
-        val c = createCombiner(record._2)
-        val serializeStartTime = System.nanoTime()
-        spilledData = bufferManager.addRecord(partition, (record._1, c))
-        serializeTime += (System.nanoTime() - serializeStartTime)
-      } else {
-        val serializeStartTime = System.nanoTime()
-        spilledData = bufferManager.addRecord(partition, record)
-        serializeTime += (System.nanoTime() - serializeStartTime)
-      }
+      val serializeStartTime = System.nanoTime()
+      spilledData = bufferManager.addRecord(partition, record)
+      serializeTime += (System.nanoTime() - serializeStartTime)
       sendDataBlocks(spilledData, partitionLengths)
 
       numRecords = numRecords + 1
