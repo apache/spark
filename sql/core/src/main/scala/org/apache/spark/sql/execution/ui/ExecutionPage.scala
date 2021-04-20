@@ -74,9 +74,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         <div>
           <span id="sql-dag-viz" class="expand-dag-viz" onclick={s"toggleDagViz();"}>
             <span class="expand-dag-viz-arrow arrow-closed"></span>
-            <a data-toggle="tooltip" data-placement="top">
-              SQL DAG Visualization
-            </a>
+            <a>SQL DAG Visualization</a>
           </span>
         </div>
 
