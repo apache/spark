@@ -18,7 +18,7 @@
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
 # TODO(SPARK-34943): minimum version should be 3.8+
-MINIMUM_FLAKE8="3.5.0"
+MINIMUM_FLAKE8="2.0.0"
 MYPY_BUILD="mypy"
 PYCODESTYLE_BUILD="pycodestyle"
 MINIMUM_PYCODESTYLE="2.7.0"
