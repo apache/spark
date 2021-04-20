@@ -40,8 +40,8 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  EXISTS_SUBQUERY, EXPRESSION_WITH_RANDOM_SEED, IN_SUBQUERY, NATURAL_LIKE_JOIN, PLAN_EXPRESSION,
-  SCALAR_SUBQUERY, WINDOW_EXPRESSION
+  EXISTS_SUBQUERY, EXPRESSION_WITH_RANDOM_SEED, FILTER, IN_SUBQUERY, NATURAL_LIKE_JOIN,
+  PLAN_EXPRESSION, SCALAR_SUBQUERY, WINDOW_EXPRESSION
 }
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
@@ -3793,7 +3793,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
+    plan.resolveOperatorsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, FILTER), ruleId) {
       case f @ Filter(_, a: Aggregate) if f.resolved =>
         f.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
           case s: SubqueryExpression if s.children.nonEmpty =>
