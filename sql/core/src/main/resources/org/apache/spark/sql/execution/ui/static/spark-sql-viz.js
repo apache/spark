@@ -117,6 +117,34 @@ function preprocessGraphLayout(g) {
 }
 
 /*
+ * Show or hide the SQL DAG visualization.
+ *
+ * The graph is only rendered the first time this is called.
+ */
+function toggleDagViz() {
+  var status = window.localStorage.getItem("expand-sql-dag-viz-arrow") === "true";
+  status = !status;
+
+  var arrowSelector = ".expand-dag-viz-arrow";
+  $(arrowSelector).toggleClass('arrow-closed');
+  $(arrowSelector).toggleClass('arrow-open');
+  
+  var shouldShow = $(arrowSelector).hasClass("arrow-open");
+  if (shouldShow) {
+    if (shouldRenderPlanViz()) {
+      renderPlanViz();
+    }
+    d3.select("#show-metric-release-id").style("display", "block");
+    d3.select("#plan-viz-graph").style("display", "block");
+  } else {
+    d3.select("#show-metric-release-id").style("display", "none");
+    d3.select("#plan-viz-graph").style("display", "none");
+  }
+
+  window.localStorage.setItem("expand-sql-dag-viz-arrow", "" + status);
+}
+
+/*
  * Helper function to size the SVG appropriately such that all elements are displayed.
  * This assumes that all outermost elements are clusters (rectangles).
  */
