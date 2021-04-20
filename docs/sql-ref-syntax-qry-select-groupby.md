@@ -24,7 +24,7 @@ license: |
 The `GROUP BY` clause is used to group the rows based on a set of specified grouping expressions and compute aggregations on
 the group of rows based on one or more specified aggregate functions. Spark also supports advanced aggregations to do multiple
 aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
-The grouping expressions and advanced aggregations can be mixed in the `GROUP BY` clause and nested in `GROUPING SETS` clause.
+The grouping expressions and advanced aggregations can be mixed in the `GROUP BY` clause and nested in a `GROUPING SETS` clause.
 See more details in the `Mixed/Nested Grouping Analytics` section. When a FILTER clause is attached to
 an aggregate function, only the matching rows are passed to that function.
 
@@ -98,7 +98,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 * **Mixed/Nested Grouping Analytics**
 
     A GROUP BY clause can include multiple `group_expression`s and multiple `CUBE|ROLLUP|GROUPING SETS`s.
-    Also `GROUPING SETS` can have nested `CUBE|ROLLUP|GROUPING SETS` clauses, e.g.
+    `GROUPING SETS` can also have nested `CUBE|ROLLUP|GROUPING SETS` clauses, e.g.
     `GROUPING SETS(ROLLUP(warehouse, location), CUBE(warehouse, location))`,
     `GROUPING SETS(warehouse, GROUPING SETS(location, GROUPING SETS(ROLLUP(warehouse, location), CUBE(warehouse, location))))`.
     `CUBE|ROLLUP` is just a syntax sugar for `GROUPING SETS`, please refer to the sections above for

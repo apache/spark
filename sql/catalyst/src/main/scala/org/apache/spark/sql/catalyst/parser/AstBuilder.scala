@@ -994,7 +994,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           .map(groupByExpr => {
             val groupingAnalytics = groupByExpr.groupingAnalytics
             if (groupingAnalytics != null) {
-              resolveGroupingAnalytics(groupingAnalytics)
+              visitGroupingAnalytics(groupingAnalytics)
             } else {
               expression(groupByExpr.expression)
             }
@@ -1003,7 +1003,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
-  private def resolveGroupingAnalytics(
+  override def visitGroupingAnalytics(
       groupingAnalytics: GroupingAnalyticsContext): BaseGroupingSets = {
     val groupingSets = groupingAnalytics.groupingSet.asScala
       .map(_.expression.asScala.map(e => expression(e)).toSeq)
@@ -1026,7 +1026,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val groupingSets = groupingAnalytics.groupingElement.asScala.flatMap { expr =>
         val groupingAnalytics = expr.groupingAnalytics()
         if (groupingAnalytics != null) {
-          resolveGroupingAnalytics(groupingAnalytics).selectedGroupByExprs
+          visitGroupingAnalytics(groupingAnalytics).selectedGroupByExprs
         } else {
           Seq(expr.groupingSet().expression().asScala.map(e => expression(e)).toSeq)
         }
