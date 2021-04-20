@@ -476,9 +476,7 @@ private[joins] object UnsafeHashedRelation {
           row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
         if (!success) {
           binaryMap.free()
-          // scalastyle:off throwerror
-          throw new SparkOutOfMemoryError("There is not enough memory to build hash map")
-          // scalastyle:on throwerror
+          throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
         }
       } else if (isNullAware) {
         return HashedRelationWithAllNullKeys
@@ -577,7 +575,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     val got = acquireMemory(size)
     if (got < size) {
       freeMemory(got)
-      throw QueryExecutionErrors.cannotAcquireMemoryToBuildHashRelationError(size, got)
+      throw QueryExecutionErrors.cannotAcquireMemoryToBuildLongHashedRelationError(size, got)
     }
   }
 

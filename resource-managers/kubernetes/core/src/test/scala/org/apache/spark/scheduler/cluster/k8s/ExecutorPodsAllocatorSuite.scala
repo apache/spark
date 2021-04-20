@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
@@ -76,7 +76,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private var labeledPods: LABELED_PODS = _
 
   @Mock
-  private var driverPodOperations: PodResource[Pod, DoneablePod] = _
+  private var driverPodOperations: PodResource[Pod] = _
 
   @Mock
   private var executorBuilder: KubernetesExecutorBuilder = _

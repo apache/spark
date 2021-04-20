@@ -443,6 +443,51 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-34715: Add round trip tests for period <-> month and duration <-> micros") {
+    // Months -> Period -> Months
+    Seq(
+      0,
+      MONTHS_PER_YEAR - 1,
+      MONTHS_PER_YEAR + 1,
+      MONTHS_PER_YEAR,
+      -MONTHS_PER_YEAR,
+      Int.MaxValue - MONTHS_PER_YEAR,
+      Int.MinValue + MONTHS_PER_YEAR,
+      Int.MaxValue,
+      Int.MinValue).foreach { months =>
+      val period = monthsToPeriod(months)
+      assert(periodToMonths(period) === months)
+    }
+    // Period -> Months -> Period
+    Seq(
+      monthsToPeriod(0),
+      monthsToPeriod(MONTHS_PER_YEAR - 1),
+      monthsToPeriod(MONTHS_PER_YEAR + 1),
+      monthsToPeriod(MONTHS_PER_YEAR),
+      monthsToPeriod(-MONTHS_PER_YEAR),
+      monthsToPeriod(Int.MaxValue - MONTHS_PER_YEAR),
+      monthsToPeriod(Int.MinValue + MONTHS_PER_YEAR),
+      monthsToPeriod(Int.MaxValue),
+      monthsToPeriod(Int.MinValue)).foreach { period =>
+      val months = periodToMonths(period)
+      assert(monthsToPeriod(months) === period)
+    }
+    // Duration -> micros -> Duration
+    Seq(
+      microsToDuration(0),
+      microsToDuration(MICROS_PER_SECOND - 1),
+      microsToDuration(-MICROS_PER_SECOND + 1),
+      microsToDuration(MICROS_PER_SECOND),
+      microsToDuration(-MICROS_PER_SECOND),
+      microsToDuration(Long.MaxValue - MICROS_PER_SECOND),
+      microsToDuration(Long.MinValue + MICROS_PER_SECOND),
+      microsToDuration(Long.MaxValue),
+      microsToDuration(Long.MinValue)).foreach { duration =>
+      val micros = durationToMicros(duration)
+      assert(microsToDuration(micros) === duration)
+    }
+  }
+
   test("SPARK-35016: format year-month intervals") {
     Seq(
       0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),

@@ -57,34 +57,63 @@ jobs:
             await new Promise(r => setTimeout(r, 3000))
 
             const runs = await github.request(endpoint, params)
-            const runID = runs.data.workflow_runs[0].id
-            // TODO: If no workflows were found, it's likely GitHub Actions was not enabled
-
-            if (runs.data.workflow_runs[0].head_sha != context.payload.pull_request.head.sha) {
-              throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
-            }
-
-            const runUrl = 'https://github.com/'
-              + context.payload.pull_request.head.repo.full_name
-              + '/actions/runs/'
-              + runID
 
             const name = 'Build and test'
             const head_sha = context.payload.pull_request.head.sha
-            const status = 'queued'
+            let status = 'queued'
 
-            github.checks.create({
-              ...context.repo,
-              name,
-              head_sha,
-              status,
-              output: {
-                title: 'Test results',
-                summary: runUrl,
-                text: JSON.stringify({
-                  owner: context.payload.pull_request.head.repo.owner.login,
-                  repo: context.payload.pull_request.head.repo.name,
-                  run_id: runID
-                })
+            if (runs.data.workflow_runs.length === 0) {
+              status = 'completed'
+              const conclusion = 'action_required'
+
+              github.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: name,
+                head_sha: head_sha,
+                status: status,
+                conclusion: conclusion,
+                output: {
+                  title: 'Workflow run detection failed',
+                  summary: `
+            Unable to detect the workflow run for testing the changes in your PR.
+
+            1. If you did not enable GitHub Actions in your forked repository, please enable it. See also [Disabling or limiting GitHub Actions for a repository](https://docs.github.com/en/github/administering-a-repository/disabling-or-limiting-github-actions-for-a-repository) for more details.
+            2. It is possible your branch is based on the old \`master\` branch in Apache Spark, please sync your branch to the latest master branch. For example as below:
+                \`\`\`bash
+                git fetch upstream
+                git rebase upstream/master
+                git push origin YOUR_BRANCH --force
+                \`\`\``
+                }
+              })
+            } else {
+              const runID = runs.data.workflow_runs[0].id
+
+              if (runs.data.workflow_runs[0].head_sha != context.payload.pull_request.head.sha) {
+                throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
               }
-            })
+
+              const runUrl = 'https://github.com/'
+                + context.payload.pull_request.head.repo.full_name
+                + '/actions/runs/'
+                + runID
+
+              github.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: name,
+                head_sha: head_sha,
+                status: status,
+                output: {
+                  title: 'Test results',
+                  summary: '[See test results](' + runUrl + ')',
+                  text: JSON.stringify({
+                    owner: context.payload.pull_request.head.repo.owner.login,
+                    repo: context.payload.pull_request.head.repo.name,
+                    run_id: runID
+                  })
+                },
+                details_url: runUrl,
+              })
+            }
