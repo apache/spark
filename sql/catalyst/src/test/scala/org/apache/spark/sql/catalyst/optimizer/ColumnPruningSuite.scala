@@ -218,28 +218,6 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("Column pruning for ScriptTransformation") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val query =
-      ScriptTransformation(
-        "func",
-        Seq.empty,
-        input,
-        null).analyze
-    val optimized = Optimize.execute(query)
-
-    val expected =
-      ScriptTransformation(
-        "func",
-        Seq.empty,
-        Project(
-          Seq('a, 'b),
-          input),
-        null).analyze
-
-    comparePlans(optimized, expected)
-  }
-
   test("Column pruning on Filter") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
     val plan1 = Filter('a > 1, input).analyze

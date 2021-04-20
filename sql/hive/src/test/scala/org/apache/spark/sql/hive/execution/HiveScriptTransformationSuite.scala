@@ -327,7 +327,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
       // Hive serde support ArrayType/MapType/StructType as input and output data type
       checkAnswer(
-        df,
+        df.select('c, 'd, 'e),
         (child: SparkPlan) => createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -380,7 +380,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           output = Seq(
             AttributeReference("a", IntegerType)(),
             AttributeReference("b", CalendarIntervalType)()),
-          child = df.queryExecution.sparkPlan,
+          child = df.select('a, 'b).queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
@@ -392,7 +392,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           output = Seq(
             AttributeReference("a", IntegerType)(),
             AttributeReference("c", new TestUDT.MyDenseVectorUDT)()),
-          child = df.queryExecution.sparkPlan,
+          child = df.select('a, 'c).queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage

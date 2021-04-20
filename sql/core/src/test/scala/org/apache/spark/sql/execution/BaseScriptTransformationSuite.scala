@@ -161,7 +161,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'b.cast("string").as("value")).collect())
 
       checkAnswer(
-        df,
+        df.select('a, 'b),
         (child: SparkPlan) => createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -175,7 +175,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'b.cast("string").as("value")).collect())
 
       checkAnswer(
-        df,
+        df.select('a),
         (child: SparkPlan) => createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -376,7 +376,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
 
     checkAnswer(
-      df,
+      df.select('a, 'b),
       (child: SparkPlan) => createScriptTransformationExec(
         script = "cat",
         output = Seq(
