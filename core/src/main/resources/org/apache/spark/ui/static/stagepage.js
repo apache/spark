@@ -762,6 +762,9 @@ $(document).ready(function () {
                             data.numTasks = totalTasksToShow;
                             data.columnIndexToSort = columnIndexToSort;
                             data.columnNameToSort = columnNameToSort;
+                            if (data.length === -1) {
+                                data.length = totalTasksToShow;
+                            }
                         },
                         "dataSrc": function (jsons) {
                             var jsonStr = JSON.stringify(jsons);
