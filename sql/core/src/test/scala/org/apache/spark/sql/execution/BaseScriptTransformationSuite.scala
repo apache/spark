@@ -458,14 +458,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
-          input = Seq(
-            df.col("a").expr,
-            df.col("b").expr,
-            df.col("c").expr,
-            df.col("d").expr,
-            df.col("e").expr,
-            df.col("f").expr,
-            df.col("g").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", ArrayType(IntegerType))(),
