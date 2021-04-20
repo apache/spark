@@ -14,18 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapList, HasMetadata, Pod, PodList}
-import io.fabric8.kubernetes.client.dsl.{FilterWatchListDeletable, MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource, Resource}
+package org.apache.spark.sql.catalyst.optimizer
 
-object Fabric8Aliases {
-  type PODS = MixedOperation[Pod, PodList, PodResource[Pod]]
-  type CONFIG_MAPS = MixedOperation[
-    ConfigMap, ConfigMapList, Resource[ConfigMap]]
-  type LABELED_PODS = FilterWatchListDeletable[Pod, PodList]
-  type LABELED_CONFIG_MAPS = FilterWatchListDeletable[ConfigMap, ConfigMapList]
-  type SINGLE_POD = PodResource[Pod]
-  type RESOURCE_LIST = NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[
-    HasMetadata]
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.Rule
+
+/**
+ * This rule ensures that [[Aggregate]] nodes contain all required [[GroupingExprRef]]
+ * references for optimization phase.
+ */
+object EnforceGroupingReferencesInAggregates extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transform {
+      case a: Aggregate =>
+        Aggregate.withGroupingRefs(a.groupingExpressions, a.aggregateExpressions, a.child)
+    }
+  }
 }

@@ -264,7 +264,7 @@ WHERE a <= 4
 WINDOW w AS (PARTITION BY b ORDER BY a);
 
 SELECT TRANSFORM(b, MAX(a), CAST(SUM(c) AS STRING), myCol, myCol2)
-  USING 'cat' AS (a, b, c, d, e)
+  USING 'cat' AS (a STRING, b STRING, c STRING, d ARRAY<INT>, e STRING)
 FROM script_trans
 LATERAL VIEW explode(array(array(1,2,3))) myTable AS myCol
 LATERAL VIEW explode(myTable.myCol) myTable2 AS myCol2

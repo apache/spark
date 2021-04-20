@@ -74,8 +74,9 @@ import org.apache.spark.sql.types._
  */
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
-    InConversion ::
-      WidenSetOperationTypes ::
+    WidenSetOperationTypes ::
+    CombinedTypeCoercionRule(
+      InConversion ::
       PromoteStringLiterals ::
       DecimalPrecision ::
       FunctionArgumentConversion ::
@@ -90,8 +91,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion ::
-      Nil
+      StringLiteralCoercion :: Nil) :: Nil
 
   override def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
     (t1, t2) match {
@@ -260,15 +260,14 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    */
   object PromoteStringLiterals extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
-      (expr.dataType, targetType) match {
-        case (NullType, dt) => Literal.create(null, targetType)
-        case (l, dt) if (l != dt) => Cast(expr, targetType)
+      expr.dataType match {
+        case NullType => Literal.create(null, targetType)
+        case l if l != targetType => Cast(expr, targetType)
         case _ => expr
       }
     }
 
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
