@@ -30,7 +30,7 @@ case class PlanAdaptiveSubqueries(
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressionsWithPruning(
-      _.containsAnyPattern(DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY)) {
+      _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
       case expressions.ScalarSubquery(_, _, exprId) =>
         execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
       case expressions.InSubquery(values, ListQuery(_, _, exprId, _)) =>
