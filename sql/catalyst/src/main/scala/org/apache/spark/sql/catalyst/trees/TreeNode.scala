@@ -74,8 +74,11 @@ object CurrentOrigin {
   }
 
   def withOrigin[A](o: Origin)(f: => A): A = {
+    // remember the previous one so it can be reset to this
+    // this way withOrigin can be recursive
+    val previous = get
     set(o)
-    val ret = try f finally { reset() }
+    val ret = try f finally { set(previous) }
     ret
   }
 }
