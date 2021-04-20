@@ -587,7 +587,7 @@ case class IntegralDivide(
         }
       }
 
-    dataType match {
+    left.dataType match {
       case LongType if failOnError =>
         (x: Any, y: Any) => {
           if (x == Long.MinValue && y == -1) {
