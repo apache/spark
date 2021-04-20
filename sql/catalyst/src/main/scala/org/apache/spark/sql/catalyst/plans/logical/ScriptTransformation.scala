@@ -32,7 +32,7 @@ case class ScriptTransformation(
     child: LogicalPlan,
     ioschema: ScriptInputOutputSchema) extends UnaryNode {
   @transient
-  override lazy val references: AttributeSet = AttributeSet(child.output.flatMap(_.references))
+  override lazy val references: AttributeSet = AttributeSet(child.output)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): ScriptTransformation =
     copy(child = newChild)
