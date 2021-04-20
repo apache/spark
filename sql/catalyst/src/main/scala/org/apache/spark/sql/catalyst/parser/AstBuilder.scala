@@ -696,8 +696,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       isDistinct = false)
 
     ScriptTransformation(
-      // TODO: Remove this logic and see SPARK-34035
-      Seq(UnresolvedStar(None)),
       string(transformClause.script),
       attributes,
       plan,

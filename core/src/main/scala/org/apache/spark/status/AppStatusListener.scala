@@ -78,6 +78,7 @@ private[spark] class AppStatusListener(
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
   private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
+  private[spark] val liveMiscellaneousProcess = new HashMap[String, LiveMiscellaneousProcess]()
 
   private val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   // Keep the active executor count as a separate variable to avoid having to do synchronization
@@ -107,6 +108,8 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
+    case processInfoEvent: SparkListenerMiscellaneousProcessAdded =>
+      onMiscellaneousProcessAdded(processInfoEvent)
     case _ =>
   }
 
@@ -1124,6 +1127,13 @@ private[spark] class AppStatusListener(
     })
   }
 
+  private def getOrCreateOtherProcess(processId: String,
+      addTime: Long): LiveMiscellaneousProcess = {
+    liveMiscellaneousProcess.getOrElseUpdate(processId, {
+      new LiveMiscellaneousProcess(processId, addTime)
+    })
+  }
+
   private def updateStreamBlock(event: SparkListenerBlockUpdated, stream: StreamBlockId): Unit = {
     val storageLevel = event.blockUpdatedInfo.storageLevel
     if (storageLevel.isValid) {
@@ -1351,6 +1361,18 @@ private[spark] class AppStatusListener(
     } else {
       0L
     }
+  }
+
+  private def onMiscellaneousProcessAdded(
+      processInfoEvent: SparkListenerMiscellaneousProcessAdded): Unit = {
+    val processInfo = processInfoEvent.info
+    val miscellaneousProcess =
+      getOrCreateOtherProcess(processInfoEvent.processId, processInfoEvent.time)
+    miscellaneousProcess.processLogs = processInfo.logUrlInfo
+    miscellaneousProcess.hostPort = processInfo.hostPort
+    miscellaneousProcess.isActive = true
+    miscellaneousProcess.totalCores = processInfo.cores
+    update(miscellaneousProcess, System.nanoTime())
   }
 
 }

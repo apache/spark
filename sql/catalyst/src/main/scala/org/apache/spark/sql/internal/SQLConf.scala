@@ -2427,6 +2427,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_INNER_QUERY_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateInnerQuery.enabled")
+      .internal()
+      .doc("Decorrelate inner query by eliminating correlated references and build domain joins.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()
@@ -3828,6 +3836,8 @@ class SQLConf extends Serializable with Logging {
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
   def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
+
+  def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
