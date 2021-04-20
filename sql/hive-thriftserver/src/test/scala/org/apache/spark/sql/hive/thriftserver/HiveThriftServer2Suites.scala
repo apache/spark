@@ -675,21 +675,53 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
       }
       assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
     }
+
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval '3-1' year to month;")
+      assert(rs.next())
+      assert(rs.getString(1) === "3-1")
+    }
+
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval '3 1:1:1' day to second;")
+      assert(rs.next())
+      assert(rs.getString(1) === "3 01:01:01.000000000")
+    }
   }
 
   test("Query Intervals in VIEWs through thrift server") {
     val viewName1 = "view_interval_1"
     val viewName2 = "view_interval_2"
-    val ddl1 = s"CREATE GLOBAL TEMP VIEW $viewName1 AS SELECT INTERVAL 1 DAY AS i"
+    val ddl1 =
+      s"""
+         |CREATE GLOBAL TEMP VIEW $viewName1
+         |AS SELECT
+         | INTERVAL 1 DAY AS a,
+         | INTERVAL '2-1' YEAR TO MONTH AS b,
+         | INTERVAL '3 1:1:1' DAY TO SECOND AS c
+       """.stripMargin
     val ddl2 = s"CREATE TEMP VIEW $viewName2 as select * from global_temp.$viewName1"
     withJdbcStatement(viewName1, viewName2) { statement =>
       statement.executeQuery(ddl1)
       statement.executeQuery(ddl2)
-      val rs = statement.executeQuery(s"SELECT v1.i as a, v2.i as b FROM global_temp.$viewName1" +
-        s" v1 join $viewName2 v2 on date_part('DAY', v1.i) = date_part('DAY', v2.i)")
+      val rs = statement.executeQuery(
+        s"""
+           |SELECT v1.a AS a1, v2.a AS a2,
+           | v1.b AS b1, v2.b AS b2,
+           | v1.c AS c1, v2.c AS c2
+           |FROM global_temp.$viewName1 v1
+           |JOIN $viewName2 v2
+           |ON date_part('DAY', v1.a) = date_part('DAY', v2.a)
+           |  AND v1.b = v2.b
+           |  AND v1.c = v2.c
+           |""".stripMargin)
       while (rs.next()) {
-        assert(rs.getString("a") === "1 days")
-        assert(rs.getString("b") === "1 days")
+        assert(rs.getString("a1") === "1 days")
+        assert(rs.getString("a2") === "1 days")
+        assert(rs.getString("b1") === "2-1")
+        assert(rs.getString("b2") === "2-1")
+        assert(rs.getString("c1") === "3 01:01:01.000000000")
+        assert(rs.getString("c2") === "3 01:01:01.000000000")
       }
     }
   }
