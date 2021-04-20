@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, LIST_SUBQUERY,
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LIST_SUBQUERY,
   SCALAR_SUBQUERY}
 import org.apache.spark.sql.types._
 
@@ -166,7 +166,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
     var newPlan = plan
     val newExprs = exprs.map { e =>
-      e transformDown {
+      e.transformDownWithPruning(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
         case Exists(sub, conditions, _) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           newPlan =
