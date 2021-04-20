@@ -70,7 +70,7 @@ case class DynamicPruningSubquery(
       pruningKey.dataType == buildKeys(broadcastKeyIndex).dataType
   }
 
-  override def nodePatternsInternal: Seq[TreePattern] = Seq(DYNAMIC_PRUNING_SUBQUERY)
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(DYNAMIC_PRUNING_SUBQUERY)
 
   override def toString: String = s"dynamicpruning#${exprId.id} $conditionString"
 

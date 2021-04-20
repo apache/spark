@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, LIST_SUBQUERY,
+  SCALAR_SUBQUERY}
 import org.apache.spark.sql.types._
 
 /*
@@ -308,7 +310,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       if (newCond.isEmpty) oldCond else newCond
     }
 
-    plan transformExpressions {
+    plan.transformExpressionsWithPruning(_.containsAnyPattern(
+      SCALAR_SUBQUERY, EXISTS_SUBQUERY, LIST_SUBQUERY
+    )) {
       case ScalarSubquery(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
         ScalarSubquery(newPlan, getJoinCondition(newCond, children), exprId)

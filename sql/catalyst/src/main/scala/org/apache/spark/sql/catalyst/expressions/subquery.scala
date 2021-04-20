@@ -259,7 +259,7 @@ case class ScalarSubquery(
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): ScalarSubquery = copy(children = newChildren)
 
-  override def nodePatternsInternal: Seq[TreePattern] = Seq(SCALAR_SUBQUERY)
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(SCALAR_SUBQUERY)
 }
 
 object ScalarSubquery {
@@ -309,7 +309,7 @@ case class ListQuery(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ListQuery =
     copy(children = newChildren)
 
-  override def nodePatternsInternal: Seq[TreePattern] = Seq(LIST_SUBQUERY)
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(LIST_SUBQUERY)
 }
 
 /**
@@ -356,5 +356,5 @@ case class Exists(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Exists =
     copy(children = newChildren)
 
-  override def nodePatternsInternal: Seq[TreePattern] = Seq(EXISTS_SUBQUERY)
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(EXISTS_SUBQUERY)
 }
