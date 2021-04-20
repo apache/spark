@@ -118,7 +118,6 @@ function preprocessGraphLayout(g) {
 
 /*
  * Show or hide the SQL DAG visualization.
- *
  * The graph is only rendered the first time this is called.
  */
 function toggleDagViz() {
