@@ -23,20 +23,19 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 /**
  * A test suite that tests parquet modular encryption usage.
  */
-class ParquetEncryptionSuite extends QueryTest with SharedSparkSession {
+class ParquetEncryptionSuite extends QueryTest with TestHiveSingleton {
+  import spark.implicits._
 
   private val encoder = Base64.getEncoder
   private val footerKey =
     encoder.encodeToString("0123456789012345".getBytes(StandardCharsets.UTF_8))
   private val key1 = encoder.encodeToString("1234567890123450".getBytes(StandardCharsets.UTF_8))
   private val key2 = encoder.encodeToString("1234567890123451".getBytes(StandardCharsets.UTF_8))
-
-  import testImplicits._
 
   test("SPARK-34990: Write and read an encrypted parquet") {
     withTempDir { dir =>
