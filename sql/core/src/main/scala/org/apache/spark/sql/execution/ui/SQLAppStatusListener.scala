@@ -220,7 +220,7 @@ class SQLAppStatusListener(
             method
           } catch {
             case NonFatal(_) =>
-              // Cannot initiaize custom metric object, we might be in history server that does
+              // Cannot initialize custom metric object, we might be in history server that does
               // not have the custom metric class.
               val defaultMethod = (_: Array[Long], _: Array[Long]) => "N/A"
               metricAggregationMap.put(className, defaultMethod)
