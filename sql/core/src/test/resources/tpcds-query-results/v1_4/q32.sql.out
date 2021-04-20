@@ -4,3 +4,5 @@
 struct<excess discount amount :int>
 -- !query output
 1
+1
+1
