@@ -747,7 +747,7 @@ $(document).ready(function () {
                     "info": true,
                     "processing": true,
                     "lengthMenu": [[20, 40, 60, 100, totalTasksToShow], [20, 40, 60, 100, "All"]],
-                    "stateSave": false,
+                    "stateSave": false ,
                     "orderMulti": false,
                     "bAutoWidth": false,
                     "ajax": {
