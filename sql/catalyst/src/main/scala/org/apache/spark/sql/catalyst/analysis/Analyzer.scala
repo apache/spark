@@ -898,9 +898,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
-  // If we are resolving relations insides views, we need to expand single-part relation names with
-  // the current catalog and namespace of when the view was created.
-  private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
+  // If we are resolving relations insides views, we may need to expand single or multi-part
+  // identifiers with the current catalog and namespace of when the view was created.
+  private def expandIdentifier(nameParts: Seq[String]): Seq[String] = {
     if (!isResolvingView || isReferredTempViewName(nameParts)) return nameParts
 
     if (nameParts.length == 1) {
@@ -1043,7 +1043,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         identifier: Seq[String],
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean): Option[LogicalPlan] =
-      expandRelationName(identifier) match {
+      expandIdentifier(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
             case Some(table) =>
@@ -1156,7 +1156,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
-      expandRelationName(identifier) match {
+      expandIdentifier(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
@@ -1176,7 +1176,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         identifier: Seq[String],
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean): Option[LogicalPlan] = {
-      expandRelationName(identifier) match {
+      expandIdentifier(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
@@ -2047,7 +2047,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               }
 
               resultExpression.getOrElse(
-                expandRelationName(parts) match {
+                expandIdentifier(parts) match {
                   case NonSessionCatalogAndIdentifier(catalog: FunctionCatalog, ident) =>
                     lookupV2Function(catalog, ident, arguments, isDistinct, filter, ignoreNulls)
                   case _ => u

@@ -94,7 +94,7 @@ private[sql] object CatalogV2Implicits {
         functionCatalog
       case _ =>
         throw new UnsupportedOperationException(
-          s"Cannot use catalog ${plugin.name}: not a FunctionCatalog")
+          s"Cannot use catalog '${plugin.name}': not a FunctionCatalog")
     }
   }
 

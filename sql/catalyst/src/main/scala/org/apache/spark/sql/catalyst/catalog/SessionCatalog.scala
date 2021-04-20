@@ -1670,8 +1670,8 @@ class SessionCatalog(
   }
 
   /**
-   * Return a optional [[Expression]] for the input built-in or temporary function with name
-   * `name`. None if the function doesn't exist.
+   * Looks up a built-in or temporary function with the given `name`. Returns `None` if the
+   * function doesn't exist.
    */
   def lookupBuiltinOrTempFunction(name: String, children: Seq[Expression]): Option[Expression] = {
     lookupBuiltinOrTempFunctionInfo[Expression](name, children, functionRegistry)
