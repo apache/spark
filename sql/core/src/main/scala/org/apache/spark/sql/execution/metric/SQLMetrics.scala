@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.sql.connector.CustomMetric
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
@@ -104,6 +105,15 @@ object SQLMetrics {
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
     acc.register(sc, name = Some(name), countFailedValues = false)
+    acc
+  }
+
+  /**
+   * Create a metric to report data source v2 custom metric.
+   */
+  def createV2CustomMetric(sc: SparkContext, customMetric: CustomMetric): SQLMetric = {
+    val acc = new SQLMetric(CustomMetrics.buildV2CustomMetricTypeName(customMetric))
+    acc.register(sc, name = Some(customMetric.name()), countFailedValues = false)
     acc
   }
 
