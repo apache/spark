@@ -453,14 +453,16 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
-    val checkIntegralDivideOverflow = if (failOnError && isIntegralDivide) {
-      s"""
-         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
-         |  throw QueryExecutionErrors.overflowInIntegralDivideError();
-         |""".stripMargin
-    } else {
-      ""
+    val checkIntegralDivideOverflow = left.dataType match {
+      case LongType if failOnError && isIntegralDivide =>
+        s"""
+          |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
+          |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+          |""".stripMargin
+
+      case _ => ""
     }
+
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
