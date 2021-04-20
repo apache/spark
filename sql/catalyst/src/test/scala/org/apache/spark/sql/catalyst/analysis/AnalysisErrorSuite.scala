@@ -641,12 +641,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     val t1 = LocalRelation(a, b)
     val t2 = LocalRelation(c)
     val conditions = Seq(
-      (abs($"a") === $"c", "abs(`a`) = outer()"),
-      (abs($"a") <=> $"c", "abs(`a`) <=> outer()"),
-      ($"a" + 1 === $"c", "(`a` + 1) = outer()"),
-      ($"a" + $"b" === $"c", "(`a` + `b`) = outer()"),
-      ($"a" + $"c" === $"b", "(`a` + outer()) = `b`"),
-      (And($"a" === $"c", Cast($"a", IntegerType) === $"c"), "CAST(`a` AS INT) = outer()"))
+      (abs($"a") === $"c", "abs(`a`) = outer(`c`)"),
+      (abs($"a") <=> $"c", "abs(`a`) <=> outer(`c`)"),
+      ($"a" + 1 === $"c", "(`a` + 1) = outer(`c`)"),
+      ($"a" + $"b" === $"c", "(`a` + `b`) = outer(`c`)"),
+      ($"a" + $"c" === $"b", "(`a` + outer(`c`)) = `b`"),
+      (And($"a" === $"c", Cast($"a", IntegerType) === $"c"), "CAST(`a` AS INT) = outer(`c`)"))
     conditions.foreach { case (cond, msg) =>
       val plan = Project(
         ScalarSubquery(
