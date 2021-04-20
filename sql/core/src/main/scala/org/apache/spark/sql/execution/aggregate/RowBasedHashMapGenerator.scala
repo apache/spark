@@ -70,10 +70,10 @@ class RowBasedHashMapGenerator(
        |
        |
        |  public $generatedClassName(
-       |    org.apache.spark.memory.TaskMemoryManager taskMemoryManager,
+       |    org.apache.spark.TaskContext taskContext,
        |    InternalRow emptyAggregationBuffer) {
        |    batch = org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch
-       |      .allocate($keySchema, $valueSchema, taskMemoryManager, capacity);
+       |      .allocate($keySchema, $valueSchema, taskContext.taskMemoryManager(), capacity);
        |
        |    final UnsafeProjection valueProjection = UnsafeProjection.create($valueSchema);
        |    final byte[] emptyBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
@@ -87,6 +87,18 @@ class RowBasedHashMapGenerator(
        |
        |    buckets = new int[numBuckets];
        |    java.util.Arrays.fill(buckets, -1);
+       |
+       |    // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be
+       |    // freed at the end of the task. This is necessary to avoid memory leaks in when the
+       |    // downstream operator does not fully consume the aggregation map's output
+       |    // (e.g. aggregate followed by limit).
+       |    taskContext.addTaskCompletionListener(
+       |      new org.apache.spark.util.TaskCompletionListener() {
+       |        @Override
+       |        public void onTaskCompletion(org.apache.spark.TaskContext context) {
+       |          close();
+       |        }
+       |    });
        |  }
      """.stripMargin
   }

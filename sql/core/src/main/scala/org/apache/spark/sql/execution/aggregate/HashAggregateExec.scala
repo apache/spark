@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 
 import org.apache.spark.TaskContext
-import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
+import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -445,8 +445,8 @@ case class HashAggregateExec(
     )
   }
 
-  def getTaskMemoryManager(): TaskMemoryManager = {
-    TaskContext.get().taskMemoryManager()
+  def getTaskContext(): TaskContext = {
+    TaskContext.get()
   }
 
   def getEmptyAggregationBuffer(): InternalRow = {
@@ -755,7 +755,7 @@ case class HashAggregateExec(
           "org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>",
           "fastHashMapIter", forceInline = true)
         val create = s"$fastHashMapTerm = new $fastHashMapClassName(" +
-          s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());"
+          s"$thisPlan.getTaskContext(), $thisPlan.getEmptyAggregationBuffer());"
         (iter, create)
       }
     } else ("", "")
@@ -804,6 +804,8 @@ case class HashAggregateExec(
     val bufferTerm = ctx.freshName("aggBuffer")
     val outputFunc = generateResultFunction(ctx)
 
+    val limitNotReachedCondition = limitNotReachedCond
+
     def outputFromFastHashMap: String = {
       if (isFastHashMapEnabled && !isTestFinalAggregateWithFallback) {
         if (isVectorizedHashMapEnabled) {
@@ -816,7 +818,7 @@ case class HashAggregateExec(
 
     def outputFromRowBasedMap: String = {
       s"""
-         |while ($iterTermForFastHashMap.next()) {
+         |while ($limitNotReachedCondition $iterTermForFastHashMap.next()) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTermForFastHashMap.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTermForFastHashMap.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);
@@ -841,7 +843,7 @@ case class HashAggregateExec(
           BoundReference(groupingKeySchema.length + i, attr.dataType, attr.nullable)
         })
       s"""
-         |while ($iterTermForFastHashMap.hasNext()) {
+         |while ($limitNotReachedCondition $iterTermForFastHashMap.hasNext()) {
          |  InternalRow $row = (InternalRow) $iterTermForFastHashMap.next();
          |  ${generateKeyRow.code}
          |  ${generateBufferRow.code}
@@ -856,7 +858,7 @@ case class HashAggregateExec(
 
     def outputFromRegularHashMap: String = {
       s"""
-         |while ($limitNotReachedCond $iterTerm.next()) {
+         |while ($limitNotReachedCondition $iterTerm.next()) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);
