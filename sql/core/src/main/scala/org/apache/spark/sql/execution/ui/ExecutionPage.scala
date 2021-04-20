@@ -72,8 +72,12 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
           </ul>
         </div>
         <div>
-          <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
-          <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+          <span id="sql-dag-viz" class="expand-dag-viz" onclick={s"toggleDagViz();"}>
+            <span class="expand-dag-viz-arrow arrow-closed"></span>
+            <a data-toggle="tooltip" data-placement="top">
+              SQL DAG Visualization
+            </a>
+          </span>
         </div>
 
       val metrics = sqlStore.executionMetrics(executionId)
@@ -111,6 +115,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     }
 
     <div>
+      <div id="show-metric-release-id" style="display:none">
+        <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
+        <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+      </div>
       <div id="plan-viz-graph"></div>
       <div id="plan-viz-metadata" style="display:none">
         <div class="dot-file">
@@ -120,7 +128,6 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         {metadata}
       </div>
       {planVisualizationResources(request)}
-      <script>$(function() {{ if (shouldRenderPlanViz()) {{ renderPlanViz(); }} }})</script>
     </div>
   }
 
