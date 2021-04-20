@@ -146,6 +146,10 @@ object QueryExecutionErrors {
     new ArithmeticException("Overflow in sum of decimals.")
   }
 
+  def overflowInIntegralDivideError(): ArithmeticException = {
+    new ArithmeticException("Overflow in integral divide.")
+  }
+
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
     new RuntimeException(s"Unsuccessful try to zip maps with $size " +
       "unique keys due to exceeding the array size limit " +

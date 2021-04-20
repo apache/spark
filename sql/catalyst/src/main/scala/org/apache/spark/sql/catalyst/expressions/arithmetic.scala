@@ -404,6 +404,9 @@ trait DivModLike extends BinaryArithmetic {
 
   protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
 
+  // When it is an integral divide, we need to check whether overflow happens in ANSI mode.
+  protected def isIntegralDivide: Boolean = false
+
   override def nullable: Boolean = true
 
   private lazy val isZero: Any => Boolean = right.dataType match {
@@ -450,6 +453,14 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
+    val checkIntegralDivideOverflow = if (failOnError && isIntegralDivide) {
+      s"""
+         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
+         |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+         |""".stripMargin
+    } else {
+      ""
+    }
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
@@ -465,6 +476,7 @@ trait DivModLike extends BinaryArithmetic {
           $divByZero
         } else {
           ${eval1.code}
+          $checkIntegralDivideOverflow
           ${ev.value} = $operation;
         }""")
     } else {
@@ -486,6 +498,7 @@ trait DivModLike extends BinaryArithmetic {
             ${ev.isNull} = true;
           } else {
             $failOnErrorBranch
+            $checkIntegralDivideOverflow
             ${ev.value} = $operation;
           }
         }""")
@@ -546,6 +559,8 @@ case class IntegralDivide(
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
+  override def isIntegralDivide: Boolean = true
+
   override def inputType: AbstractDataType = TypeCollection(LongType, DecimalType)
 
   override def dataType: DataType = LongType
@@ -562,13 +577,27 @@ case class IntegralDivide(
       case d: DecimalType =>
         d.asIntegral.asInstanceOf[Integral[Any]]
     }
-    (x, y) => {
-      val res = integral.quot(x, y)
-      if (res == null) {
-        null
-      } else {
-        integral.asInstanceOf[Integral[Any]].toLong(res)
+    val _div =
+      (x: Any, y: Any) => {
+        val res = integral.quot(x, y)
+        if (res == null) {
+          null
+        } else {
+          integral.asInstanceOf[Integral[Any]].toLong(res)
+        }
       }
+
+    dataType match {
+      case LongType if failOnError =>
+        (x: Any, y: Any) => {
+          if (x == Long.MinValue && y == -1) {
+            throw QueryExecutionErrors.overflowInIntegralDivideError()
+          }
+          _div(x, y)
+        }
+
+      case _ =>
+        _div
     }
   }
 
