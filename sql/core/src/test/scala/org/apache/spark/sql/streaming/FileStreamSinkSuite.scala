@@ -590,14 +590,8 @@ abstract class FileStreamSinkSuite extends StreamTest {
           }
           assert(e.getMessage == "cannot access metadata log")
         }
-        def assertSucceed(): Unit = {
-          spark.read.format("text").load(path)
-        }
 
         assertFail()
-        withSQLConf(SQLConf.FILE_SINK_FORMAT_CHECK_ENABLED.key -> "false") {
-          assertSucceed()
-        }
       }
     }
   }
