@@ -649,7 +649,9 @@ class MetaAlgorithmReadWrite:
         else:
             pySubStages = []
 
-        nestedStages=[MetaAlgorithmReadWrite.getAllNestedStages(pySubStage) for pySubStage in pySubStages]
+        nestedStages = []
+        for pySubStage in pySubStages:
+            nestedStages.extend(MetaAlgorithmReadWrite.getAllNestedStages(pySubStage))
 
         return [pyInstance] + nestedStages
 
