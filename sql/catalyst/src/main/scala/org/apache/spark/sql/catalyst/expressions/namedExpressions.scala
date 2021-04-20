@@ -378,6 +378,7 @@ case class OuterReference(e: NamedExpression)
   override def nullable: Boolean = e.nullable
   override def prettyName: String = "outer"
 
+  override def sql: String = s"$prettyName(${e.sql})"
   override def name: String = e.name
   override def qualifier: Seq[String] = e.qualifier
   override def exprId: ExprId = e.exprId
