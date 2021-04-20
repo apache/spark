@@ -184,7 +184,7 @@ sorttable = {
       if (text != '') {
         if (text.match(/^-?[£$¤]?[\d,.]+%?$/)) {
           return sorttable.sort_numeric;
-        } else if (text.match(/^(\d+(?:\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)/i)) {
+        } else if (text.match(/^(\d+(\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)/i)) {
           // match content like '287.1 MiB (17.2 GiB Remaining)', '0.0 B'
           return sorttable.sort_storage_size;
         }
@@ -536,7 +536,7 @@ function storageSizeConverter(data) {
     yib: 1208925819614629174706176,
   };
 
-  var matches = data.match(/^(\d+(?:\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)/i);
+  var matches = data.match(/^(\d+(\.\d+)?)\s*(b|[k|m|g|t|p|e|z|y]ib)/i);
 
   if (matches) {
     var unit = matches[2].toLowerCase();
