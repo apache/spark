@@ -23,8 +23,7 @@ import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.DateTimeException
 
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.InternalCompilerException
+import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
