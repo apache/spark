@@ -416,7 +416,7 @@ class DefaultParamsWriter(MLWriter):
                                                                  sc,
                                                                  extraMetadata,
                                                                  paramMap)
-        sc.parallelize([metadataJson], 1).saveAsTextFile(metadataPath)
+        sc.parallelize([metadataJson]).saveAsTextFile(metadataPath)
 
     @staticmethod
     def _get_metadata_to_save(instance, sc, extraMetadata=None, paramMap=None):
@@ -434,7 +434,9 @@ class DefaultParamsWriter(MLWriter):
         # User-supplied param values
         params = instance._paramMap
 
-        jsonParams = {paramMap if paramMap is not None else p.name: params[p] for p in params}
+        jsonDefaultParams = {}
+        for p in instance._defaultParamMap:
+            jsonDefaultParams[p.name] = instance._defaultParamMap[p]
 
         # Default param values
         defaultParamMap = instance._defaultParamMap
