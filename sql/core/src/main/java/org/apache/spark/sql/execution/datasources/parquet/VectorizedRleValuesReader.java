@@ -493,7 +493,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
               long julianMicros = data.readLong();
-              c.putLong(rowId + i, VectorizedColumnReader.rebaseMicros(julianMicros, failIfRebase, c));
+              c.putLong(rowId + i,
+                   VectorizedColumnReader.rebaseMicros(julianMicros, failIfRebase, c));
             } else {
               c.putNull(rowId + i);
             }

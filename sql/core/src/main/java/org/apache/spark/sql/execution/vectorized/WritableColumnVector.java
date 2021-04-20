@@ -722,7 +722,10 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * Reserve a new column.
    */
-  protected abstract WritableColumnVector reserveNewColumn(int capacity, String colName, DataType type);
+  protected abstract WritableColumnVector reserveNewColumn(
+      int capacity,
+      String colName,
+      DataType type);
 
   protected boolean isArray() {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
@@ -766,7 +769,8 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns = new WritableColumnVector[3];
       this.childColumns[0] = reserveNewColumn(capacity, colName + ".months", DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, colName + ".days", DataTypes.IntegerType);
-      this.childColumns[2] = reserveNewColumn(capacity, colName + ".microseconds", DataTypes.LongType);
+      this.childColumns[2] =
+          reserveNewColumn(capacity, colName + ".microseconds", DataTypes.LongType);
     } else {
       this.childColumns = null;
     }
