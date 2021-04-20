@@ -741,9 +741,10 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val df1 = Seq("""{"c2": [19], "c1": 123456}""").toDF("c0")
     checkAnswer(df1.select(from_json($"c0", st)), Row(Row(123456, null)))
     val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
-    checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
+    checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))),
+      Row(Row(Row(123456, null))))
     val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
-    checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
+    checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Seq(Row(123456, null))))
     val df4 = Seq("""{"c2": [19]}""").toDF("c0")
     checkAnswer(df4.select(from_json($"c0", MapType(StringType, st))), Row(null))
   }
@@ -839,5 +840,30 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         checkAnswer(df, Seq(Row("""{"a" 1, "b": 11}"""), Row(null)))
       }
     }
+  }
+
+  test("SPARK-35094: Spark from_json(JsonToStruct) function return wrong value " +
+    "in permissive mode in case best effort") {
+    val s1 = StructField("name", StringType, nullable = true)
+    val s2_1 =
+      StructField(
+        "badNestedField",
+        StructType(
+          Seq(StructField("SomethingWhichNotInJsonMessage", IntegerType, nullable = true))))
+    val s2 =
+      StructField("nestedField", StructType(Seq(s2_1, s1)))
+    val customSchema = StructType(Seq(s1, s2))
+
+    val jsonStringToTest =
+      """{"name":"v1","nestedField":{"badNestedField":"14","name":"v2"}}"""
+    val df = List(jsonStringToTest)
+      .toDF("json")
+      .select(from_json($"json", customSchema).as("toBeFlatten"))
+      .select("toBeFlatten.*")
+
+    assert(
+      df.select("name").as[String].first() == "v1",
+      "wrong value in root schema, parser take value from column with same name " +
+        "but in another nested elvel")
   }
 }

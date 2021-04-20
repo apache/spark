@@ -398,8 +398,10 @@ class JacksonParser(
             skipRow = structFilters.skipRow(row, index)
           } catch {
             case e: SparkUpgradeException => throw e
-            case NonFatal(e) if isRoot =>
-              badRecordException = badRecordException.orElse(Some(e))
+            case NonFatal(e) =>
+              if (isRoot) {
+                badRecordException = badRecordException.orElse(Some(e))
+              }
               parser.skipChildren()
           }
         case None =>
