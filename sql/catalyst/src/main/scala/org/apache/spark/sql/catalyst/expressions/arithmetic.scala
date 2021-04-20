@@ -584,7 +584,7 @@ case class IntegralDivide(
       case d: DecimalType =>
         d.asIntegral.asInstanceOf[Integral[Any]]
     }
-    (x: Any, y: Any) => {
+    (x, y) => {
       val res = integral.quot(x, y)
       if (res == null) {
         null
