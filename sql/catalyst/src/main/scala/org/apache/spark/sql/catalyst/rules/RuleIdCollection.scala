@@ -51,7 +51,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushLeftSemiLeftAntiThroughJoin" ::
-      "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" :: Nil
+      "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.ReplaceNullWithFalseInPredicate" :: Nil
   }
 
   // Maps rule names to ids. Rule ids are continuous natural numbers starting from 0.
