@@ -1393,3 +1393,14 @@ case class CollectMetrics(
   override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =
     copy(child = newChild)
 }
+
+/**
+ * A placeholder for domain join that can be added when decorrelating subqueries.
+ * It should be rewritten during the optimization phase.
+ */
+case class DomainJoin(domainAttrs: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output ++ domainAttrs
+  override def producedAttributes: AttributeSet = AttributeSet(domainAttrs)
+  override protected def withNewChildInternal(newChild: LogicalPlan): DomainJoin =
+    copy(child = newChild)
+}

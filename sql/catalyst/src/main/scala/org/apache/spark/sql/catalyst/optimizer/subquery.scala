@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /*
@@ -272,22 +273,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     val baseConditions = predicateMap.values.flatten.toSeq
     val (newPlan, newCond) = if (outer.nonEmpty) {
       val outputSet = outer.map(_.outputSet).reduce(_ ++ _)
-      val duplicates = transformed.outputSet.intersect(outputSet)
-      val (plan, deDuplicatedConditions) = if (duplicates.nonEmpty) {
-        val aliasMap = AttributeMap(duplicates.map { dup =>
-          dup -> Alias(dup, dup.toString)()
-        }.toSeq)
-        val aliasedExpressions = transformed.output.map { ref =>
-          aliasMap.getOrElse(ref, ref)
-        }
-        val aliasedProjection = Project(aliasedExpressions, transformed)
-        val aliasedConditions = baseConditions.map(_.transform {
-          case ref: Attribute => aliasMap.getOrElse(ref, ref).toAttribute
-        })
-        (aliasedProjection, aliasedConditions)
-      } else {
-        (transformed, baseConditions)
-      }
+      val (plan, deDuplicatedConditions) =
+        DecorrelateInnerQuery.deduplicate(transformed, baseConditions, outputSet)
       (plan, stripOuterReferences(deDuplicatedConditions))
     } else {
       (transformed, stripOuterReferences(baseConditions))
@@ -308,9 +295,17 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       if (newCond.isEmpty) oldCond else newCond
     }
 
+    def decorrelate(sub: LogicalPlan, outer: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
+      if (SQLConf.get.decorrelateInnerQueryEnabled) {
+        DecorrelateInnerQuery(sub, outer)
+      } else {
+        pullOutCorrelatedPredicates(sub, outer)
+      }
+    }
+
     plan transformExpressions {
       case ScalarSubquery(sub, children, exprId) if children.nonEmpty =>
-        val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
+        val (newPlan, newCond) = decorrelate(sub, outerPlans)
         ScalarSubquery(newPlan, getJoinCondition(newCond, children), exprId)
       case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
@@ -379,7 +374,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       bindings: Map[ExprId, Expression]): Expression = {
     val rewrittenExpr = expr transform {
       case r: AttributeReference =>
-        bindings.getOrElse(r.exprId, Literal.default(NullType))
+        bindings.getOrElse(r.exprId, Literal.create(null, r.dataType))
     }
 
     tryEvalExpr(rewrittenExpr)
@@ -394,9 +389,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     // Also replace attribute refs (for example, for grouping columns) with NULL.
     val rewrittenExpr = expr transform {
       case a @ AggregateExpression(aggFunc, _, _, resultId, _) =>
-        aggFunc.defaultResult.getOrElse(Literal.default(NullType))
+        aggFunc.defaultResult.getOrElse(Literal.create(null, aggFunc.dataType))
 
-      case _: AttributeReference => Literal.default(NullType)
+      case a: AttributeReference => Literal.create(null, a.dataType)
     }
 
     tryEvalExpr(rewrittenExpr)
@@ -525,7 +520,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       subqueries: ArrayBuffer[ScalarSubquery]): (LogicalPlan, AttributeMap[Attribute]) = {
     val subqueryAttrMapping = ArrayBuffer[(Attribute, Attribute)]()
     val newChild = subqueries.foldLeft(child) {
-      case (currentChild, ScalarSubquery(query, conditions, _)) =>
+      case (currentChild, ScalarSubquery(sub, conditions, _)) =>
+        val query = DecorrelateInnerQuery.rewriteDomainJoins(currentChild, sub, conditions)
         val origOutput = query.output.head
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
