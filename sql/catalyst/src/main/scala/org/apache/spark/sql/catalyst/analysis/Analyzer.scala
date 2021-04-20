@@ -1381,9 +1381,6 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
-      // TODO: Remove this logic and see SPARK-34035
-      case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(input = t.child.output)
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
 
