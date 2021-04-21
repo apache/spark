@@ -122,7 +122,8 @@ class InputFormatTests(ReusedPySparkTestCase):
 
     def test_binary_files(self):
         path = os.path.join(self.tempdir.name, "binaryfiles")
-        os.mkdir(path)
+        if not os.path.isdir(path):
+            os.mkdir(path)
         data = b"short binary data"
         with open(os.path.join(path, "part-0000"), 'wb') as f:
             f.write(data)
@@ -132,7 +133,8 @@ class InputFormatTests(ReusedPySparkTestCase):
 
     def test_binary_records(self):
         path = os.path.join(self.tempdir.name, "binaryrecords")
-        os.mkdir(path)
+        if not os.path.isdir(path):
+            os.mkdir(path)
         with open(os.path.join(path, "part-0000"), 'w') as f:
             for i in range(100):
                 f.write('%04d' % i)
