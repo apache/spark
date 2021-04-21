@@ -1659,7 +1659,7 @@ private[spark] class DAGScheduler(
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
             shuffleStage.pendingPartitions -= task.partitionId
             val status = event.result.asInstanceOf[MapStatus]
-            val execId = status.location.asInstanceOf[BlockManagerId].executorId
+            val execId = event.taskInfo.executorId
             logDebug("ShuffleMapTask finished on " + execId)
             if (executorFailureEpoch.contains(execId) &&
                 smt.epoch <= executorFailureEpoch(execId)) {
