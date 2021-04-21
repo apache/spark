@@ -1243,6 +1243,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           spark.sql(queryToInsertTable).collect()
           checkAnswer(spark.table("t2").orderBy("k1"),
             spark.table("t1").orderBy("k1"))
+
+          withSQLConf(SQLConf.MAX_RECORDS_PER_FILE.key -> "1") {
+            spark.sql(queryToInsertTable).collect()
+            checkAnswer(spark.table("t2").orderBy("k1"),
+              spark.table("t1").orderBy("k1"))
+          }
         }
       }
     }

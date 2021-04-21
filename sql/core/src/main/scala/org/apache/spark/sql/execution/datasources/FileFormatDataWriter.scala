@@ -274,25 +274,22 @@ abstract class BaseDynamicPartitionDataWriter(
   }
 
   /**
-   * Checks if number of records exceeding limit. Open a new OutputWriter if needed.
+   * Increase the file counter and open a new OutputWriter.
+   * This is used when number of records records exceeding limit.
    *
    * @param partitionValues the partition which all tuples being written by this `OutputWriter`
    *                        belong to
    * @param bucketId the bucket which all tuples being written by this `OutputWriter` belong to
    */
-  protected def checkRecordsInFile(
+  protected def increaseFileCounter(
       partitionValues: Option[InternalRow],
       bucketId: Option[Int]): Unit = {
-    if (description.maxRecordsPerFile > 0 &&
-      recordsInFile >= description.maxRecordsPerFile) {
-      // Exceeded the threshold in terms of the number of records per file.
-      // Create a new file by increasing the file counter.
-      fileCounter += 1
-      assert(fileCounter < MAX_FILE_COUNTER,
-        s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
-
-      newOutputWriter(partitionValues, bucketId, closeCurrentWriter = true)
-    }
+    // Exceeded the threshold in terms of the number of records per file.
+    // Create a new file by increasing the file counter.
+    fileCounter += 1
+    assert(fileCounter < MAX_FILE_COUNTER,
+      s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
+    newOutputWriter(partitionValues, bucketId, closeCurrentWriter = true)
   }
 
   /**
@@ -338,8 +335,9 @@ class DynamicPartitionDataSingleWriter(
 
       fileCounter = 0
       newOutputWriter(currentPartitionValues, currentBucketId, true)
-    } else {
-      checkRecordsInFile(currentPartitionValues, currentBucketId)
+    } else if (description.maxRecordsPerFile > 0 &&
+      recordsInFile >= description.maxRecordsPerFile) {
+      increaseFileCounter(currentPartitionValues, currentBucketId)
     }
     writeRecord(record)
   }
@@ -408,7 +406,19 @@ class DynamicPartitionDataConcurrentWriter(
     if (currentWriterId.partitionValues != nextPartitionValues ||
       currentWriterId.bucketId != nextBucketId) {
       // See a new partition or bucket - write to a new partition dir (or a new bucket file).
-      updateCurrentWriterStatusInMap()
+      if (currentWriter != null) {
+        if (!sortBased) {
+          // Update writer status in concurrent writers map, because the writer is probably needed
+          // again later for writing other rows.
+          updateCurrentWriterStatusInMap()
+        } else {
+          // Remove writer status in concurrent writers map and release current writer resource,
+          // because the writer is not needed any more.
+          concurrentWriters.remove(currentWriterId)
+          releaseCurrentWriter()
+        }
+      }
+
       if (isBucketed) {
         currentWriterId.bucketId = nextBucketId
       }
@@ -421,7 +431,12 @@ class DynamicPartitionDataConcurrentWriter(
       retrieveWriterInMap()
     }
 
-    checkRecordsInFile(currentWriterId.partitionValues, currentWriterId.bucketId)
+    if (description.maxRecordsPerFile > 0 &&
+      recordsInFile >= description.maxRecordsPerFile) {
+      increaseFileCounter(currentWriterId.partitionValues, currentWriterId.bucketId)
+      // Update writer status in concurrent writers map, as a new writer is created.
+      updateCurrentWriterStatusInMap()
+    }
     writeRecord(record)
   }
 
@@ -444,24 +459,13 @@ class DynamicPartitionDataConcurrentWriter(
   }
 
   /**
-   * Update current writer status when a new writer is needed for writing row.
+   * Update current writer status in map.
    */
   private def updateCurrentWriterStatusInMap(): Unit = {
-    if (currentWriterId.partitionValues.isDefined || currentWriterId.bucketId.isDefined) {
-      if (!sortBased) {
-        // Update writer status in concurrent writers map, because the writer is probably needed
-        // again later for writing other rows.
-        val status = concurrentWriters(currentWriterId)
-        status.outputWriter = currentWriter
-        status.recordsInFile = recordsInFile
-        status.fileCounter = fileCounter
-      } else {
-        // Remove writer status in concurrent writers map and release writer resource,
-        // because the writer is not needed any more.
-        concurrentWriters.remove(currentWriterId)
-        super.releaseResources()
-      }
-    }
+    val status = concurrentWriters(currentWriterId)
+    status.outputWriter = currentWriter
+    status.recordsInFile = recordsInFile
+    status.fileCounter = fileCounter
   }
 
   /**
