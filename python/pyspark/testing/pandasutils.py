@@ -239,7 +239,7 @@ class TestUtils(object):
             yield tempfile.mktemp(dir=tmp)
 
 
-class ComparisonTestBase(ReusedSQLTestCase):
+class ComparisonTestBase(PandasOnSparkTestCase):
     @property
     def kdf(self):
         return ps.from_pandas(self.pdf)
