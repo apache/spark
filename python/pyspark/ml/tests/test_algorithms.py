@@ -25,7 +25,7 @@ from pyspark.ml.classification import FMClassifier, LogisticRegression, \
     MultilayerPerceptronClassifier, OneVsRest
 from pyspark.ml.clustering import DistributedLDAModel, KMeans, LocalLDAModel, LDA, LDAModel
 from pyspark.ml.fpm import FPGrowth
-from pyspark.ml.linalg import Matrices, Vectors, VectorUDT
+from pyspark.ml.linalg import Matrices, Vectors, DenseVector
 from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import GeneralizedLinearRegression, LinearRegression
 from pyspark.sql import Row
@@ -125,9 +125,8 @@ class OneVsRestTests(SparkSessionTestCase):
         lr = LogisticRegression(maxIter=5, regParam=0.01)
         ovr = OneVsRest(classifier=lr, parallelism=1)
         model = ovr.fit(df)
-        output = model.transform(df).head()
-        self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
-        self.assertIsInstance(output.schema["rawPrediction"].dataType, VectorUDT)
+        row = model.transform(df).head()
+        self.assertIsInstance(row["rawPrediction"], DenseVector)
 
     def test_parallelism_does_not_change_output(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
