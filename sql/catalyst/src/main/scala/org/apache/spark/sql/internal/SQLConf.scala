@@ -1353,6 +1353,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SCALAR_SUBQUERY_MERGE_ENABLED =
+    buildConf("spark.sql.scalarSubqueyMerge.enabled")
+      .internal()
+      .doc("When true, the planner will try to merge scalar subqueries and re-use them.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val REMOVE_REDUNDANT_PROJECTS_ENABLED = buildConf("spark.sql.execution.removeRedundantProjects")
     .internal()
     .doc("Whether to remove redundant project exec node based on children's output and " +
@@ -3472,6 +3480,8 @@ class SQLConf extends Serializable with Logging {
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
+
+  def scalarSubqueryMergeEabled: Boolean = getConf(SCALAR_SUBQUERY_MERGE_ENABLED)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 

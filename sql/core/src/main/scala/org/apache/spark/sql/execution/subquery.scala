@@ -106,6 +106,50 @@ case class ScalarSubquery(
   }
 }
 
+case class MultiScalarSubqueryExec(
+    plan: BaseSubqueryExec,
+    exprId: ExprId)
+  extends ExecSubqueryExpression with LeafLike[Expression] {
+
+  override def dataType: DataType = plan.schema
+  override def nullable: Boolean = true
+  override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
+  override def withNewPlan(query: BaseSubqueryExec): MultiScalarSubqueryExec = copy(plan = query)
+
+  override def semanticEquals(other: Expression): Boolean = other match {
+    case s: MultiScalarSubqueryExec => plan.sameResult(s.plan)
+    case _ => false
+  }
+
+  // the first column in first row from `query`.
+  @volatile private var result: Any = _
+  @volatile private var updated: Boolean = false
+
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
+    if (rows.length > 1) {
+      sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
+    }
+    if (rows.length == 1) {
+      result = rows(0)
+    } else {
+      // If there is no rows returned, the result should be null.
+      result = null
+    }
+    updated = true
+  }
+
+  override def eval(input: InternalRow): Any = {
+    require(updated, s"$this has not finished")
+    result
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    require(updated, s"$this has not finished")
+    Literal.create(result, dataType).doGenCode(ctx, ev)
+  }
+}
+
 /**
  * The physical node of in-subquery. This is for Dynamic Partition Pruning only, as in-subquery
  * coming from the original query will always be converted to joins.
@@ -182,6 +226,12 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         ScalarSubquery(
           SubqueryExec.createForScalarSubquery(
             s"scalar-subquery#${subquery.exprId.id}", executedPlan),
+          subquery.exprId)
+      case subquery: expressions.MultiScalarSubquery =>
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
+        MultiScalarSubqueryExec(
+          SubqueryExec.createForScalarSubquery(
+            s"multi-scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
       case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
         val expr = if (values.length == 1) {

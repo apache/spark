@@ -30,6 +30,8 @@ case class PlanAdaptiveSubqueries(
     plan.transformAllExpressions {
       case expressions.ScalarSubquery(_, _, exprId) =>
         execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
+      case expressions.MultiScalarSubquery(_, exprId) =>
+        execution.MultiScalarSubqueryExec(subqueryMap(exprId.id), exprId)
       case expressions.InSubquery(values, ListQuery(_, _, exprId, _)) =>
         val expr = if (values.length == 1) {
           values.head

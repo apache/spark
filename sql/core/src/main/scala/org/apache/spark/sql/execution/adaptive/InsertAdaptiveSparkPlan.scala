@@ -121,6 +121,13 @@ case class InsertAdaptiveSparkPlan(
         val subquery = SubqueryExec.createForScalarSubquery(
           s"subquery#${exprId.id}", executedPlan)
         subqueryMap.put(exprId.id, subquery)
+      case expressions.MultiScalarSubquery(p, exprId)
+        if !subqueryMap.contains(exprId.id) =>
+        val executedPlan = compileSubquery(p)
+        verifyAdaptivePlan(executedPlan, p)
+        val subquery = SubqueryExec.createForScalarSubquery(
+          s"subquery#${exprId.id}", executedPlan)
+        subqueryMap.put(exprId.id, subquery)
       case expressions.InSubquery(_, ListQuery(query, _, exprId, _))
           if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(query)

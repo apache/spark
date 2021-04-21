@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 
@@ -255,6 +256,28 @@ object ScalarSubquery {
       case s: ScalarSubquery => s.children.nonEmpty
       case _ => false
     }.isDefined
+  }
+}
+
+case class MultiScalarSubquery(
+    plan: LogicalPlan,
+    exprId: ExprId = NamedExpression.newExprId)
+  extends SubqueryExpression(plan, Seq.empty, exprId) with LeafLike[Expression] with Unevaluable {
+  override def dataType: DataType = {
+    assert(plan.schema.nonEmpty, "Multi-column scalar subquery should have columns")
+    plan.schema
+  }
+
+  override def nullable: Boolean = true
+
+  override def withNewPlan(plan: LogicalPlan): MultiScalarSubquery = copy(plan = plan)
+
+  override def toString: String = s"multi-scalar-subquery#${exprId.id}"
+
+  override lazy val canonicalized: Expression = {
+    MultiScalarSubquery(
+      plan.canonicalized,
+      ExprId(0))
   }
 }
 
