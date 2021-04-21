@@ -2578,12 +2578,12 @@ case class SubtractDates(
     left: Expression,
     right: Expression,
     legacyInterval: Boolean)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryOperator with ImplicitCastInputTypes with NullIntolerant {
 
   def this(left: Expression, right: Expression) =
     this(left, right, SQLConf.get.legacyIntervalEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
+  override def inputType: AbstractDataType = DateType
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
 
@@ -2610,8 +2610,7 @@ case class SubtractDates(
       })
   }
 
-  override def toString: String = s"($left - $right)"
-  override def sql: String = s"(${left.sql} - ${right.sql})"
+  override def symbol: String = "-"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): SubtractDates =
