@@ -117,7 +117,7 @@ class OneVsRestTests(SparkSessionTestCase):
         self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
 
     def test_raw_prediction_column_is_of_vector_type(self):
-        # SPARK-35142
+        # SPARK-35142: `OneVsRestModel` outputs raw prediction as a string column
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
