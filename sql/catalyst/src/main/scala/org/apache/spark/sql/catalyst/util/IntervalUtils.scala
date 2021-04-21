@@ -123,6 +123,24 @@ object IntervalUtils {
     }
   }
 
+  def safeFromDayTimeString(input: UTF8String): Option[Long] = {
+    try {
+      if (input == null || input.toString == null) {
+        throw new IllegalArgumentException("Interval day-second string must be not null")
+      } else {
+        val regex = "INTERVAL '([-|+]?[0-9]+-[-|+]?[0-9]+)' DAY TO SECOND".r
+        // scalastyle:off caselocale .toLowerCase
+        val intervalString = input.trimAll().toUpperCase.toString
+        // scalastyle:on
+        val interval = regex.findFirstMatchIn(intervalString)
+          .map(_.group(1)).getOrElse(intervalString)
+        Some(fromDayTimeString(interval).microseconds)
+      }
+    } catch {
+      case _: IllegalArgumentException => None
+    }
+  }
+
   /**
    * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
    *

@@ -72,6 +72,7 @@ object Cast {
     case (TimestampType, DateType) => true
 
     case (StringType, CalendarIntervalType) => true
+    case (StringType, DayTimeIntervalType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -533,6 +534,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[UTF8String](_, s => IntervalUtils.safeStringToInterval(s))
   }
 
+  private[this] def castToDayTimeInterval(from: DataType): Any => Any = from match {
+    case StringType =>
+      buildCast[UTF8String](_, s => IntervalUtils.safeFromDayTimeString(s).orNull)
+  }
+
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
@@ -837,6 +843,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         case decimal: DecimalType => castToDecimal(from, decimal)
         case TimestampType => castToTimestamp(from)
         case CalendarIntervalType => castToInterval(from)
+        case DayTimeIntervalType => castToDayTimeInterval(from)
         case BooleanType => castToBoolean(from)
         case ByteType => castToByte(from)
         case ShortType => castToShort(from)
@@ -895,6 +902,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
+    case DayTimeIntervalType => castToDayTimeIntervalCode(from, ctx)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
@@ -1351,6 +1359,23 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
            }
          """.stripMargin
 
+  }
+
+  private[this] def castToDayTimeIntervalCode(
+      from: DataType,
+      ctx: CodegenContext): CastFunction = from match {
+    case StringType =>
+      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      val longOpt = ctx.freshVariable("intOpt", classOf[Option[Long]])
+      (c, evPrim, evNull) =>
+        code"""
+           scala.Option<Long> $longOpt = $util.safeFromDayTimeString($c);
+           if ($longOpt.isDefined()) {
+              $evPrim = ((Long) $longOpt.get()).longValue();
+            } else {
+              $evNull = true;
+            }
+         """.stripMargin
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
@@ -1912,6 +1937,7 @@ object AnsiCast {
     case (DateType, TimestampType) => true
 
     case (StringType, _: CalendarIntervalType) => true
+    case (StringType, DayTimeIntervalType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
