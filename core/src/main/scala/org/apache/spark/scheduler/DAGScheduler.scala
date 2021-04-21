@@ -1443,7 +1443,7 @@ private[spark] class DAGScheduler(
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
-        stage.resourceProfileId, stage.rdd.getTaskSchedulingPlugin()))
+        stage.resourceProfileId, getTaskSchedulingPlugin(stage.rdd)))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run
@@ -2295,6 +2295,40 @@ private[spark] class DAGScheduler(
       visit(waitingForVisit.remove(0))
     }
     visitedRdds.contains(target.rdd)
+  }
+
+  private[spark]
+  def getTaskSchedulingPlugin(rdd: RDD[_]): Option[TaskSchedulingPlugin] = {
+    getTaskSchedulingPluginInternal(rdd, new HashSet)
+  }
+
+  private def getTaskSchedulingPluginInternal(
+       rdd: RDD[_],
+       visited: HashSet[RDD[_]]): Option[TaskSchedulingPlugin] = {
+    // If the partition has already been visited, no need to re-visit.
+    // This avoids exponential path exploration.
+    if (!visited.add(rdd)) {
+      return None
+    }
+
+    val rddSchedulingPlugin = rdd.getTaskSchedulingPlugin()
+    if (rddSchedulingPlugin.nonEmpty) {
+      return rddSchedulingPlugin
+    }
+
+    // If the RDD has narrow dependencies, pick the first narrow dependency
+    // that has scheduling plugin.
+    rdd.dependencies.foreach {
+      case n: NarrowDependency[_] =>
+        val schedulingPlugin = getTaskSchedulingPluginInternal(n.rdd, visited)
+        if (schedulingPlugin.nonEmpty) {
+          return schedulingPlugin
+        }
+
+      case _ =>
+    }
+
+    None
   }
 
   /**

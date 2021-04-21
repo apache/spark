@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.mockito.Mockito.spy
@@ -3393,6 +3394,27 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(rprofsE === Set())
   }
 
+  test("SPARK-35022: get scheduling from narrow dependency") {
+    val inputRDD = sc.makeRDD(Range(0, 10).toArray[Int], 10)
+    val schedulingPlugin = Utils.loadExtensions(classOf[TaskSchedulingPlugin],
+      Seq(classOf[TestSchedulingPlugin].getName), conf).head
+    val customSchedulingRDD = new CustomSchedulingRDD[Int](inputRDD, schedulingPlugin)
+
+    val plugin1 = scheduler.getTaskSchedulingPlugin(customSchedulingRDD)
+    assert(plugin1.nonEmpty && plugin1.get.isInstanceOf[TestSchedulingPlugin])
+
+    val nextRDD = customSchedulingRDD.map(_ + 1)
+    val dependency = nextRDD.dependencies.head
+    assert(dependency.isInstanceOf[NarrowDependency[_]] && dependency.rdd == customSchedulingRDD)
+
+    val plugin2 = scheduler.getTaskSchedulingPlugin(nextRDD)
+    assert(plugin2.nonEmpty && plugin2.get.isInstanceOf[TestSchedulingPlugin])
+
+    // For non-narrow dependency, don't take previous RDD's scheduling plugin.
+    val shuffled = customSchedulingRDD.repartition(10)
+    assert(scheduler.getTaskSchedulingPlugin(shuffled).isEmpty)
+  }
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
@@ -3458,4 +3480,15 @@ object DAGSchedulerSuite {
 
 object FailThisAttempt {
   val _fail = new AtomicBoolean(true)
+}
+
+class CustomSchedulingRDD[T: ClassTag](
+    @transient val prev: RDD[T],
+    val schedulingPlugin: TaskSchedulingPlugin) extends RDD[T](prev) {
+  override protected def getPartitions: Array[Partition] = prev.partitions
+
+  override def compute(partition: Partition, context: TaskContext): Iterator[T] =
+    null.asInstanceOf[Iterator[T]]
+
+  override def getTaskSchedulingPlugin(): Option[TaskSchedulingPlugin] = Some(schedulingPlugin)
 }
