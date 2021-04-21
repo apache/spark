@@ -17,8 +17,9 @@
 
 package org.apache.spark.ml.linalg
 
-import dev.ludovic.netlib.{BLAS => NetlibBLAS}
-import dev.ludovic.netlib.blas.{NativeBLAS, NetlibNativeBLAS}
+import dev.ludovic.netlib.{BLAS => NetlibBLAS,
+                           JavaBLAS => NetlibJavaBLAS,
+                           NativeBLAS => NetlibNativeBLAS}
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
@@ -32,7 +33,7 @@ private[spark] object BLAS extends Serializable {
   // For level-1 function dspmv, use javaBLAS for better performance.
   private[spark] def javaBLAS: NetlibBLAS = {
     if (_javaBLAS == null) {
-      _javaBLAS = NetlibBLAS.getInstance
+      _javaBLAS = NetlibJavaBLAS.getInstance
     }
     _javaBLAS
   }
@@ -41,9 +42,7 @@ private[spark] object BLAS extends Serializable {
   private[spark] def nativeBLAS: NetlibBLAS = {
     if (_nativeBLAS == null) {
       _nativeBLAS =
-        try { NativeBLAS.getInstance } catch { case t: Throwable =>
-          try { NetlibNativeBLAS.getInstance } catch { case _: Throwable =>
-            javaBLAS } }
+        try { NetlibNativeBLAS.getInstance } catch { case _: Throwable => javaBLAS }
     }
     _nativeBLAS
   }

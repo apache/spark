@@ -17,8 +17,9 @@
 
 package org.apache.spark.mllib.linalg
 
-import dev.ludovic.netlib.{LAPACK => NetlibLAPACK}
-import dev.ludovic.netlib.lapack.{NetlibNativeLAPACK}
+import dev.ludovic.netlib.{JavaLAPACK => NetlibJavaLAPACK,
+                           LAPACK => NetlibLAPACK,
+                           NativeLAPACK => NetlibNativeLAPACK}
 
 /**
  * LAPACK routines for MLlib's vectors and matrices.
@@ -30,7 +31,7 @@ private[spark] object LAPACK extends Serializable {
 
   private[spark] def javaLAPACK: NetlibLAPACK = {
     if (_javaLAPACK == null) {
-      _javaLAPACK = NetlibLAPACK.getInstance
+      _javaLAPACK = NetlibJavaLAPACK.getInstance
     }
     _javaLAPACK
   }
@@ -38,8 +39,7 @@ private[spark] object LAPACK extends Serializable {
   private[spark] def nativeLAPACK: NetlibLAPACK = {
     if (_nativeLAPACK == null) {
       _nativeLAPACK =
-        try { NetlibNativeLAPACK.getInstance } catch { case _: Throwable =>
-            javaLAPACK }
+        try { NetlibNativeLAPACK.getInstance } catch { case _: Throwable => javaLAPACK }
     }
     _nativeLAPACK
   }
