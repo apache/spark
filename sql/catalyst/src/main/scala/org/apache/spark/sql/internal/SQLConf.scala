@@ -206,6 +206,17 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
+      "For example, Spark will throw an exception at runtime instead of returning null results " +
+      "when the inputs to a SQL operator/function are invalid." +
+      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
+      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
+      "standard directly, but their behaviors align with ANSI SQL's style")
+    .version("3.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -1092,8 +1103,9 @@ object SQLConf {
     .createWithDefault(true)
 
   val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
-    .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
-      "an analysis exception is thrown in the case.")
+    .doc("This configuration is only effective when ANSI mode is disabled. When it is true and " +
+      s"${ANSI_ENABLED.key} is false, aliases in a select list can be used in group by clauses. " +
+      "Otherwise, an analysis exception is thrown in the case.")
     .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
@@ -2348,17 +2360,6 @@ object SQLConf {
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
-  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
-      "For example, Spark will throw an exception at runtime instead of returning null results " +
-      "when the inputs to a SQL operator/function are invalid." +
-      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
-      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
-      "standard directly, but their behaviors align with ANSI SQL's style")
-    .version("3.0.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -2426,6 +2427,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_INNER_QUERY_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateInnerQuery.enabled")
+      .internal()
+      .doc("Decorrelate inner query by eliminating correlated references and build domain joins.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()
@@ -2451,6 +2460,16 @@ object SQLConf {
     .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val CSV_INPUT_BUFFER_SIZE = buildConf("spark.sql.csv.parser.inputBufferSize")
+    .internal()
+    .doc("If it is set, it configures the buffer size of CSV input during parsing. " +
+      "It is the same as inputBufferSize option in CSV which has a higher priority. " +
+      "Note that this is a workaround for the parsing library's regression, and this " +
+      "configuration is internal and supposed to be removed in the near future.")
+    .version("3.0.3")
+    .intConf
+    .createOptional
 
   val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
@@ -3817,6 +3836,8 @@ class SQLConf extends Serializable with Logging {
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
   def legacyIntervalEnabled: Boolean = getConf(LEGACY_INTERVAL_ENABLED)
+
+  def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

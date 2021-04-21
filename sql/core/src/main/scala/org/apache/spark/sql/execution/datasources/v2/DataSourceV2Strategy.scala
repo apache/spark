@@ -138,8 +138,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
       withProjection :: Nil
 
-    case WriteToDataSourceV2(writer, query) =>
-      WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
+    case WriteToDataSourceV2(relationOpt, writer, query) =>
+      val invalidateCacheFunc: () => Unit = () => relationOpt match {
+        case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
+        case None => ()
+      }
+      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query)) :: Nil
 
     case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -411,7 +415,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CacheTableAsSelectExec(r.tempViewName, r.plan, r.originalText, r.isLazy, r.options) :: Nil
 
     case r: UncacheTable =>
-      UncacheTableExec(r.table, cascade = !r.isTempView) :: Nil
+      def isTempView(table: LogicalPlan): Boolean = table match {
+        case SubqueryAlias(_, v: View) => v.isTempView
+        case _ => false
+      }
+      UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
 
     case SetTableLocation(table: ResolvedTable, partitionSpec, location) =>
       if (partitionSpec.nonEmpty) {

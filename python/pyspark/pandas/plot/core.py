@@ -399,7 +399,7 @@ class KdePlotBase:
         return kd.estimate(list(map(float, ind)))
 
 
-class KoalasPlotAccessor(PandasObject):
+class PandasOnSparkPlotAccessor(PandasObject):
     """
     Series/Frames plotting accessor and method.
 
@@ -427,10 +427,10 @@ class KoalasPlotAccessor(PandasObject):
     @staticmethod
     def _find_backend(backend):
         """
-        Find a Koalas plotting backend
+        Find a pandas-on-Spark plotting backend
         """
         try:
-            return KoalasPlotAccessor._backends[backend]
+            return PandasOnSparkPlotAccessor._backends[backend]
         except KeyError:
             try:
                 module = importlib.import_module(backend)
@@ -438,10 +438,10 @@ class KoalasPlotAccessor(PandasObject):
                 # We re-raise later on.
                 pass
             else:
-                if hasattr(module, "plot") or hasattr(module, "plot_koalas"):
+                if hasattr(module, "plot") or hasattr(module, "plot_pandas_on_spark"):
                     # Validate that the interface is implemented when the option
                     # is set, rather than at plot time.
-                    KoalasPlotAccessor._backends[backend] = module
+                    PandasOnSparkPlotAccessor._backends[backend] = module
                     return module
 
         raise ValueError(
@@ -454,8 +454,8 @@ class KoalasPlotAccessor(PandasObject):
     def _get_plot_backend(backend=None):
         backend = backend or get_option("plotting.backend")
         # Shortcut
-        if backend in KoalasPlotAccessor._backends:
-            return KoalasPlotAccessor._backends[backend]
+        if backend in PandasOnSparkPlotAccessor._backends:
+            return PandasOnSparkPlotAccessor._backends[backend]
 
         if backend == "matplotlib":
             # Because matplotlib is an optional dependency,
@@ -470,7 +470,7 @@ class KoalasPlotAccessor(PandasObject):
                     "default backend 'matplotlib' is selected."
                 ) from None
 
-            KoalasPlotAccessor._backends["matplotlib"] = module
+            PandasOnSparkPlotAccessor._backends["matplotlib"] = module
         elif backend == "plotly":
             try:
                 # test if plotly can be imported
@@ -482,28 +482,28 @@ class KoalasPlotAccessor(PandasObject):
                     "default backend 'plotly' is selected."
                 ) from None
 
-            KoalasPlotAccessor._backends["plotly"] = module
+            PandasOnSparkPlotAccessor._backends["plotly"] = module
         else:
-            module = KoalasPlotAccessor._find_backend(backend)
-            KoalasPlotAccessor._backends[backend] = module
+            module = PandasOnSparkPlotAccessor._find_backend(backend)
+            PandasOnSparkPlotAccessor._backends[backend] = module
         return module
 
     def __call__(self, kind="line", backend=None, **kwargs):
-        plot_backend = KoalasPlotAccessor._get_plot_backend(backend)
+        plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
         plot_data = self.data
 
         kind = {"density": "kde"}.get(kind, kind)
-        if hasattr(plot_backend, "plot_koalas"):
-            # use if there's koalas specific method.
-            return plot_backend.plot_koalas(plot_data, kind=kind, **kwargs)
+        if hasattr(plot_backend, "plot_pandas_on_spark"):
+            # use if there's pandas-on-Spark specific method.
+            return plot_backend.plot_pandas_on_spark(plot_data, kind=kind, **kwargs)
         else:
             # fallback to use pandas'
-            if not KoalasPlotAccessor.pandas_plot_data_map[kind]:
+            if not PandasOnSparkPlotAccessor.pandas_plot_data_map[kind]:
                 raise NotImplementedError(
                     "'%s' plot is not supported with '%s' plot "
                     "backend yet." % (kind, plot_backend.__name__)
                 )
-            plot_data = KoalasPlotAccessor.pandas_plot_data_map[kind](plot_data)
+            plot_data = PandasOnSparkPlotAccessor.pandas_plot_data_map[kind](plot_data)
             return plot_backend.plot(plot_data, kind=kind, **kwargs)
 
     def line(self, x=None, y=None, **kwargs):
@@ -545,7 +545,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 3, 2])
+            >>> s = ps.Series([1, 3, 2])
             >>> s.plot.line()  # doctest: +SKIP
 
         For DataFrame:
@@ -555,7 +555,7 @@ class KoalasPlotAccessor(PandasObject):
             The following example shows the populations for some animals
             over the years.
 
-            >>> df = pp.DataFrame({'pig': [20, 18, 489, 675, 1776],
+            >>> df = ps.DataFrame({'pig': [20, 18, 489, 675, 1776],
             ...                    'horse': [4, 25, 281, 600, 1900]},
             ...                   index=[1990, 1997, 2003, 2009, 2014])
             >>> df.plot.line()  # doctest: +SKIP
@@ -565,7 +565,7 @@ class KoalasPlotAccessor(PandasObject):
             The following example shows the relationship between both
             populations.
 
-            >>> df = pp.DataFrame({'pig': [20, 18, 489, 675, 1776],
+            >>> df = ps.DataFrame({'pig': [20, 18, 489, 675, 1776],
             ...                    'horse': [4, 25, 281, 600, 1900]},
             ...                   index=[1990, 1997, 2003, 2009, 2014])
             >>> df.plot.line(x='pig', y='horse')  # doctest: +SKIP
@@ -586,7 +586,8 @@ class KoalasPlotAccessor(PandasObject):
             If not specified, all numerical columns are used.
         **kwds : optional
             Additional keyword arguments are documented in
-            :meth:`Koalas.Series.plot` or :meth:`Koalas.DataFrame.plot`.
+            :meth:`pyspark.pandas.Series.plot` or
+            :meth:`pyspark.pandas.DataFrame.plot`.
 
         Returns
         -------
@@ -602,14 +603,14 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 3, 2])
+            >>> s = ps.Series([1, 3, 2])
             >>> s.plot.bar()  # doctest: +SKIP
 
         For DataFrame:
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
+            >>> df = ps.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
             >>> df.plot.bar(x='lab', y='val')  # doctest: +SKIP
 
         Plot a whole dataframe to a bar plot. Each column is stacked with a
@@ -621,7 +622,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.bar()  # doctest: +SKIP
 
@@ -635,7 +636,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> fig = (make_subplots(rows=2, cols=1)
             ...        .add_trace(df.plot.bar(y='speed').data[0], row=1, col=1)
@@ -651,7 +652,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.bar(y='speed')  # doctest: +SKIP
 
@@ -663,7 +664,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.bar(x='lifespan')  # doctest: +SKIP
         """
@@ -711,14 +712,14 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
+            >>> df = ps.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
             >>> df.val.plot.barh()  # doctest: +SKIP
 
         For DataFrame:
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
+            >>> df = ps.DataFrame({'lab': ['A', 'B', 'C'], 'val': [10, 30, 20]})
             >>> df.plot.barh(x='lab', y='val')  # doctest: +SKIP
 
         Plot a whole DataFrame to a horizontal bar plot
@@ -729,7 +730,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.barh()  # doctest: +SKIP
 
@@ -741,7 +742,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.barh(y='speed')  # doctest: +SKIP
 
@@ -753,7 +754,7 @@ class KoalasPlotAccessor(PandasObject):
             >>> lifespan = [2, 8, 70, 1.5, 25, 12, 28]
             >>> index = ['snail', 'pig', 'elephant',
             ...          'rabbit', 'giraffe', 'coyote', 'horse']
-            >>> df = pp.DataFrame({'speed': speed,
+            >>> df = ps.DataFrame({'speed': speed,
             ...                    'lifespan': lifespan}, index=index)
             >>> df.plot.barh(x='lifespan')  # doctest: +SKIP
         """
@@ -772,10 +773,10 @@ class KoalasPlotAccessor(PandasObject):
         ----------
         **kwds : optional
             Additional keyword arguments are documented in
-            :meth:`Koalas.Series.plot`.
+            :meth:`pyspark.pandas.Series.plot`.
 
         precision: scalar, default = 0.01
-            This argument is used by Koalas to compute approximate statistics
+            This argument is used by pandas-on-Spark to compute approximate statistics
             for building a boxplot. Use *smaller* values to get more precise
             statistics (matplotlib-only).
 
@@ -787,12 +788,12 @@ class KoalasPlotAccessor(PandasObject):
 
         Notes
         -----
-        There are behavior differences between Koalas and pandas.
+        There are behavior differences between pandas-on-Spark and pandas.
 
-        * Koalas computes approximate statistics - expect differences between
-          pandas and Koalas boxplots, especially regarding 1st and 3rd quartiles.
+        * pandas-on-Spark computes approximate statistics - expect differences between
+          pandas and pandas-on-Spark boxplots, especially regarding 1st and 3rd quartiles.
         * The `whis` argument is only supported as a single number.
-        * Koalas doesn't support the following argument(s) (matplotlib-only).
+        * pandas-on-Spark doesn't support the following argument(s) (matplotlib-only).
 
           * `bootstrap` argument is not supported
           * `autorange` argument is not supported
@@ -807,7 +808,7 @@ class KoalasPlotAccessor(PandasObject):
         .. plotly::
 
             >>> data = np.random.randn(25, 4)
-            >>> df = pp.DataFrame(data, columns=list('ABCD'))
+            >>> df = ps.DataFrame(data, columns=list('ABCD'))
             >>> df['A'].plot.box()  # doctest: +SKIP
 
         This is an unsupported function for DataFrame type
@@ -853,7 +854,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 3, 2])
+            >>> s = ps.Series([1, 3, 2])
             >>> s.plot.hist()  # doctest: +SKIP
 
         For DataFrame:
@@ -864,7 +865,7 @@ class KoalasPlotAccessor(PandasObject):
             ...     np.random.randint(1, 7, 6000),
             ...     columns=['one'])
             >>> df['two'] = df['one'] + np.random.randint(1, 7, 6000)
-            >>> df = pp.from_pandas(df)
+            >>> df = ps.from_pandas(df)
             >>> df.plot.hist(bins=12, alpha=0.5)  # doctest: +SKIP
         """
         return self(kind="hist", bins=bins, **kwds)
@@ -884,7 +885,7 @@ class KoalasPlotAccessor(PandasObject):
             KDE is evaluated at the points passed. If `ind` is an integer,
             `ind` number of equally spaced points are used.
         **kwargs : optional
-            Keyword arguments to pass on to :meth:`Koalas.Series.plot`.
+            Keyword arguments to pass on to :meth:`pandas-on-Spark.Series.plot`.
 
         Returns
         -------
@@ -900,12 +901,12 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 2, 2.5, 3, 3.5, 4, 5])
+            >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
             >>> s.plot.kde(bw_method=0.3)  # doctest: +SKIP
 
         .. plotly::
 
-            >>> s = pp.Series([1, 2, 2.5, 3, 3.5, 4, 5])
+            >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
             >>> s.plot.kde(bw_method=3)  # doctest: +SKIP
 
         The `ind` parameter determines the evaluation points for the
@@ -913,14 +914,14 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> s = pp.Series([1, 2, 2.5, 3, 3.5, 4, 5])
+            >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
             >>> s.plot.kde(ind=[1, 2, 3, 4, 5], bw_method=0.3)  # doctest: +SKIP
 
         For DataFrame, it works in the same way as Series:
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
@@ -928,7 +929,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
@@ -936,7 +937,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
@@ -979,7 +980,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'sales': [3, 2, 3, 9, 10, 6],
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
@@ -991,7 +992,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({
+            >>> df = ps.DataFrame({
             ...     'sales': [3, 2, 3, 9, 10, 6],
             ...     'signups': [5, 5, 6, 12, 14, 13],
             ...     'visits': [20, 42, 28, 62, 81, 50],
@@ -1020,7 +1021,7 @@ class KoalasPlotAccessor(PandasObject):
             Label or position of the column to plot.
             If not provided, ``subplots=True`` argument must be passed (matplotlib-only).
         **kwds
-            Keyword arguments to pass on to :meth:`Koalas.Series.plot`.
+            Keyword arguments to pass on to :meth:`pandas-on-Spark.Series.plot`.
 
         Returns
         -------
@@ -1035,7 +1036,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'mass': [0.330, 4.87, 5.97],
+            >>> df = ps.DataFrame({'mass': [0.330, 4.87, 5.97],
             ...                    'radius': [2439.7, 6051.8, 6378.1]},
             ...                   index=['Mercury', 'Venus', 'Earth'])
             >>> df.mass.plot.pie()  # doctest: +SKIP
@@ -1045,7 +1046,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame({'mass': [0.330, 4.87, 5.97],
+            >>> df = ps.DataFrame({'mass': [0.330, 4.87, 5.97],
             ...                    'radius': [2439.7, 6051.8, 6378.1]},
             ...                   index=['Mercury', 'Venus', 'Earth'])
             >>> df.plot.pie(y='mass')  # doctest: +SKIP
@@ -1113,7 +1114,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame([[5.1, 3.5, 0], [4.9, 3.0, 0], [7.0, 3.2, 1],
+            >>> df = ps.DataFrame([[5.1, 3.5, 0], [4.9, 3.0, 0], [7.0, 3.2, 1],
             ...                    [6.4, 3.2, 1], [5.9, 3.0, 2]],
             ...                   columns=['length', 'width', 'species'])
             >>> df.plot.scatter(x='length', y='width')  # doctest: +SKIP
@@ -1122,7 +1123,7 @@ class KoalasPlotAccessor(PandasObject):
 
         .. plotly::
 
-            >>> df = pp.DataFrame([[5.1, 3.5, 0], [4.9, 3.0, 0], [7.0, 3.2, 1],
+            >>> df = ps.DataFrame([[5.1, 3.5, 0], [4.9, 3.0, 0], [7.0, 3.2, 1],
             ...                    [6.4, 3.2, 1], [5.9, 3.0, 2]],
             ...                   columns=['length', 'width', 'species'])
             >>> fig = df.plot.scatter(x='length', y='width')
