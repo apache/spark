@@ -2819,7 +2819,7 @@ abstract class JsonSuite
             val errorMsg = intercept[AnalysisException] {
               readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
             }.getMessage
-            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+            assert(errorMsg.contains("cannot resolve 'AAA'"))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(
@@ -2842,6 +2842,31 @@ abstract class JsonSuite
       val readback = spark.read
         .json(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(jsonTableName, """\\$1""")}")
       assert(readback.collect sameElements Array(Row(0), Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-35104: Fix wrong indentation for multiple JSON even if `pretty` option is true") {
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+      withTempPath { path =>
+        val basePath = path.getCanonicalPath
+        val df = Seq("a", "b", "c").toDF
+        df.write.option("pretty", "true").json(basePath)
+
+        val expectedText =
+          s"""{
+             |  "value" : "a"
+             |}
+             |{
+             |  "value" : "b"
+             |}
+             |{
+             |  "value" : "c"
+             |}
+             |""".stripMargin
+        val actualText = spark.read.option("wholetext", "true")
+          .text(basePath).map(_.getString(0)).collect().mkString
+        assert(actualText === expectedText)
+      }
     }
   }
 }

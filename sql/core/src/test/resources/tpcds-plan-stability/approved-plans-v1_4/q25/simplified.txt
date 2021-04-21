@@ -41,8 +41,7 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_net_profit,cs_sold_date_sk]
-                                                    SubqueryBroadcast [d_date_sk] #3
-                                                      ReusedExchange [d_date_sk] #4
+                                                    ReusedSubquery [d_date_sk] #2
                                   InputAdapter
                                     BroadcastExchange #2
                                       WholeStageCodegen (3)

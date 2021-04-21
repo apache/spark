@@ -261,24 +261,24 @@ Input [7]: [ss_ticket_number#5, bought_city#31, amt#32, profit#33, c_current_add
 Arguments: [c_current_addr_sk#36 ASC NULLS FIRST], false, 0
 
 (47) ReusedExchange [Reuses operator id: 30]
-Output [2]: [ca_address_sk#22, ca_city#23]
+Output [2]: [ca_address_sk#41, ca_city#42]
 
 (48) Sort [codegen id : 15]
-Input [2]: [ca_address_sk#22, ca_city#23]
-Arguments: [ca_address_sk#22 ASC NULLS FIRST], false, 0
+Input [2]: [ca_address_sk#41, ca_city#42]
+Arguments: [ca_address_sk#41 ASC NULLS FIRST], false, 0
 
 (49) SortMergeJoin [codegen id : 16]
 Left keys [1]: [c_current_addr_sk#36]
-Right keys [1]: [ca_address_sk#22]
-Join condition: NOT (ca_city#23 = bought_city#31)
+Right keys [1]: [ca_address_sk#41]
+Join condition: NOT (ca_city#42 = bought_city#31)
 
 (50) Project [codegen id : 16]
-Output [7]: [c_last_name#38, c_first_name#37, ca_city#23, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
-Input [9]: [ss_ticket_number#5, bought_city#31, amt#32, profit#33, c_current_addr_sk#36, c_first_name#37, c_last_name#38, ca_address_sk#22, ca_city#23]
+Output [7]: [c_last_name#38, c_first_name#37, ca_city#42, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
+Input [9]: [ss_ticket_number#5, bought_city#31, amt#32, profit#33, c_current_addr_sk#36, c_first_name#37, c_last_name#38, ca_address_sk#41, ca_city#42]
 
 (51) TakeOrderedAndProject
-Input [7]: [c_last_name#38, c_first_name#37, ca_city#23, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
-Arguments: 100, [c_last_name#38 ASC NULLS FIRST, c_first_name#37 ASC NULLS FIRST, ca_city#23 ASC NULLS FIRST, bought_city#31 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#38, c_first_name#37, ca_city#23, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
+Input [7]: [c_last_name#38, c_first_name#37, ca_city#42, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
+Arguments: 100, [c_last_name#38 ASC NULLS FIRST, c_first_name#37 ASC NULLS FIRST, ca_city#42 ASC NULLS FIRST, bought_city#31 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#38, c_first_name#37, ca_city#42, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
 
 ===== Subqueries =====
 

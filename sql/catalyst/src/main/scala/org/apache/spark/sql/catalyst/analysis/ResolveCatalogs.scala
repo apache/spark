@@ -98,19 +98,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
       createAlterTable(nameParts, catalog, tbl, changes)
 
-    case AlterTableSetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), props) =>
-      val changes = props.map { case (key, value) =>
-        TableChange.setProperty(key, value)
-      }.toSeq
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
-    case AlterTableUnsetPropertiesStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), keys, _) =>
-      val changes = keys.map(key => TableChange.removeProperty(key))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)

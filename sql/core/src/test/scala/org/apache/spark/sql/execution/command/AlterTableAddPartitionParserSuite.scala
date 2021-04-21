@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.plans.logical.AlterTableAddPartition
+import org.apache.spark.sql.catalyst.plans.logical.AddPartitions
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableAddPartitionParserSuite extends AnalysisTest with SharedSparkSession {
@@ -29,7 +29,7 @@ class AlterTableAddPartitionParserSuite extends AnalysisTest with SharedSparkSes
       |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
       |(dt='2009-09-09', country='uk')""".stripMargin
     val parsed = parsePlan(sql)
-    val expected = AlterTableAddPartition(
+    val expected = AddPartitions(
       UnresolvedTable(
         Seq("a", "b", "c"),
         "ALTER TABLE ... ADD PARTITION ...",
@@ -44,7 +44,7 @@ class AlterTableAddPartitionParserSuite extends AnalysisTest with SharedSparkSes
   test("add partition") {
     val sql = "ALTER TABLE a.b.c ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
     val parsed = parsePlan(sql)
-    val expected = AlterTableAddPartition(
+    val expected = AddPartitions(
       UnresolvedTable(
         Seq("a", "b", "c"),
         "ALTER TABLE ... ADD PARTITION ...",

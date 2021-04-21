@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.UnresolvedTable
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableRecoverPartitions, LocalRelation, LogicalPlan, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, RecoverPartitions, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
@@ -416,17 +416,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  private def uncacheView(viewDef: LogicalPlan): Unit = {
+  private def uncacheView(viewDef: View): Unit = {
     try {
       // If view text is defined, it means we are not storing analyzed logical plan for the view
       // and instead its behavior follows that of a permanent view (see SPARK-33142 for more
       // details). Therefore, when uncaching the view we should also do in a cascade fashion, the
       // same way as how a permanent view is handled. This also avoids a potential issue where a
       // dependent view becomes invalid because of the above while its data is still cached.
-      val viewText = viewDef match {
-        case v: View => v.desc.viewText
-        case _ => None
-      }
+      val viewText = viewDef.desc.viewText
       val plan = sparkSession.sessionState.executePlan(viewDef)
       sparkSession.sharedState.cacheManager.uncacheQuery(
         sparkSession, plan.analyzed, cascade = viewText.isDefined)
@@ -448,7 +445,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def recoverPartitions(tableName: String): Unit = {
     val multiPartIdent = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     sparkSession.sessionState.executePlan(
-      AlterTableRecoverPartitions(
+      RecoverPartitions(
         UnresolvedTable(multiPartIdent, "recoverPartitions()", None))).toRdd
   }
 
@@ -491,8 +488,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def uncacheTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !sessionCatalog.isTempView(tableIdent)
-    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName), cascade)
+    sessionCatalog.lookupTempView(tableIdent).map(uncacheView).getOrElse {
+      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName),
+        cascade = true)
+    }
   }
 
   /**
@@ -550,7 +549,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // Re-caches the logical plan of the relation.
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,
-    // this will clear the relation cache and caches of all its dependants.
+    // this will clear the relation cache and caches of all its dependents.
     relation match {
       case SubqueryAlias(_, relationPlan) =>
         sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)

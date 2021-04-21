@@ -228,8 +228,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("simple writable data source") {
-    // TODO: java implementation.
-    Seq(classOf[SimpleWritableDataSource]).foreach { cls =>
+    Seq(classOf[SimpleWritableDataSource], classOf[JavaSimpleWritableDataSource]).foreach { cls =>
       withTempPath { file =>
         val path = file.getCanonicalPath
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)

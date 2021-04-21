@@ -582,21 +582,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-33992: char/varchar resolution in correlated sub query") {
-    withTable("t1", "t2") {
-      sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
-      sql(s"CREATE TABLE t2(v VARCHAR(3), c CHAR(5)) USING $format")
-      sql("INSERT INTO t1 VALUES ('c', 'b')")
-      sql("INSERT INTO t2 VALUES ('a', 'b')")
-
-      checkAnswer(sql(
-        """
-          |SELECT v FROM t1
-          |WHERE 'a' IN (SELECT v FROM t2 WHERE t1.c = t2.c )""".stripMargin),
-        Row("c"))
-    }
-  }
-
   test("SPARK-34003: fix char/varchar fails w/ both group by and order by ") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), i INT) USING $format")
@@ -629,6 +614,48 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(v VARCHAR(3)) USING $format")
       sql("INSERT INTO t VALUES ('c ')")
       checkAnswer(spark.table("t"), Row("c "))
+    }
+  }
+
+  test("SPARK-34833: right-padding applied correctly for correlated subqueries - join keys") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
+      sql(s"CREATE TABLE t2(v VARCHAR(5), c CHAR(8)) USING $format")
+      sql("INSERT INTO t1 VALUES ('c', 'b')")
+      sql("INSERT INTO t2 VALUES ('a', 'b')")
+      Seq("t1.c = t2.c", "t2.c = t1.c",
+        "t1.c = 'b'", "'b' = t1.c", "t1.c = 'b    '", "'b    ' = t1.c",
+        "t1.c = 'b      '", "'b      ' = t1.c").foreach { predicate =>
+        checkAnswer(sql(
+          s"""
+             |SELECT v FROM t1
+             |WHERE 'a' IN (SELECT v FROM t2 WHERE $predicate)
+           """.stripMargin),
+          Row("c"))
+      }
+    }
+  }
+
+  test("SPARK-34833: right-padding applied correctly for correlated subqueries - other preds") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(c0 INT, c1 CHAR(5), c2 CHAR(7)) USING $format")
+      sql("INSERT INTO t VALUES (1, 'abc', 'abc')")
+      Seq("c1 = 'abc'", "'abc' = c1", "c1 = 'abc  '", "'abc  ' = c1",
+        "c1 = 'abc    '", "'abc    ' = c1", "c1 = c2", "c2 = c1",
+        "c1 IN ('xxx', 'abc', 'xxxxx')", "c1 IN ('xxx', 'abc  ', 'xxxxx')",
+        "c1 IN ('xxx', 'abc    ', 'xxxxx')",
+        "c1 IN (c2)", "c2 IN (c1)").foreach { predicate =>
+        checkAnswer(sql(
+          s"""
+             |SELECT c0 FROM t t1
+             |WHERE (
+             |  SELECT count(*) AS c
+             |  FROM t
+             |  WHERE c0 = t1.c0 AND $predicate
+             |) > 0
+         """.stripMargin),
+          Row(1))
+      }
     }
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
+import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.time.{Instant, LocalDate}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
@@ -141,7 +142,7 @@ object JdbcUtils extends Logging {
       val tableColumnNames = tableSchema.get.fieldNames
       rddSchema.fields.map { col =>
         val normalizedName = tableColumnNames.find(f => columnNameEquality(f, col.name)).getOrElse {
-          throw new AnalysisException(s"""Column "${col.name}" not found in schema $tableSchema""")
+          throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
         }
         dialect.quoteIdentifier(normalizedName)
       }.mkString(",")
@@ -177,7 +178,7 @@ object JdbcUtils extends Logging {
 
   def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
-      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
+      throw QueryExecutionErrors.cannotGetJdbcTypeError(dt))
   }
 
   /**
@@ -226,11 +227,11 @@ object JdbcUtils extends Logging {
       case java.sql.Types.REAL          => DoubleType
       case java.sql.Types.REF           => StringType
       case java.sql.Types.REF_CURSOR    => null
-      case java.sql.Types.ROWID         => LongType
+      case java.sql.Types.ROWID         => StringType
       case java.sql.Types.SMALLINT      => IntegerType
       case java.sql.Types.SQLXML        => StringType
       case java.sql.Types.STRUCT        => StringType
-      case java.sql.Types.TIME          => IntegerType
+      case java.sql.Types.TIME          => TimestampType
       case java.sql.Types.TIME_WITH_TIMEZONE
                                         => null
       case java.sql.Types.TIMESTAMP     => TimestampType
@@ -240,12 +241,12 @@ object JdbcUtils extends Logging {
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
       case _                            =>
-        throw new SQLException("Unrecognized SQL type " + sqlType)
+        throw QueryExecutionErrors.unrecognizedSqlTypeError(sqlType)
       // scalastyle:on
     }
 
     if (answer == null) {
-      throw new SQLException("Unsupported type " + JDBCType.valueOf(sqlType).getName)
+      throw QueryExecutionErrors.unsupportedJdbcTypeError(JDBCType.valueOf(sqlType).getName)
     }
     answer
   }
@@ -310,11 +311,15 @@ object JdbcUtils extends Logging {
       val metadata = new MetadataBuilder()
       metadata.putLong("scale", fieldScale)
 
-      // SPARK-33888
-      // - include TIME type metadata
-      // - always build the metadata
-      if (dataType == java.sql.Types.TIME) {
-        metadata.putBoolean("logical_time_type", true)
+      dataType match {
+        case java.sql.Types.TIME =>
+          // SPARK-33888
+          // - include TIME type metadata
+          // - always build the metadata
+          metadata.putBoolean("logical_time_type", true)
+        case java.sql.Types.ROWID =>
+          metadata.putBoolean("rowid", true)
+        case _ =>
       }
 
       val columnType =
@@ -421,23 +426,6 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setFloat(pos, rs.getFloat(pos + 1))
 
-
-    // SPARK-33888 - sql TIME type represents as physical int in millis
-    // Represents a time of day, with no reference to a particular calendar,
-    // time zone or date, with a precision of one millisecond.
-    // It stores the number of milliseconds after midnight, 00:00:00.000.
-    case IntegerType if metadata.contains("logical_time_type") =>
-      (rs: ResultSet, row: InternalRow, pos: Int) => {
-        val rawTime = rs.getTime(pos + 1)
-        if (rawTime != null) {
-          val rawTimeInNano = rawTime.toLocalTime().toNanoOfDay()
-          val timeInMillis = Math.toIntExact(TimeUnit.NANOSECONDS.toMillis(rawTimeInNano))
-          row.setInt(pos, timeInMillis)
-        } else {
-          row.update(pos, null)
-        }
-      }
-
     case IntegerType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setInt(pos, rs.getInt(pos + 1))
@@ -465,10 +453,33 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setByte(pos, rs.getByte(pos + 1))
 
+    case StringType if metadata.contains("rowid") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos, UTF8String.fromString(rs.getRowId(pos + 1).toString))
+
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
         row.update(pos, UTF8String.fromString(rs.getString(pos + 1)))
+
+    // SPARK-34357 - sql TIME type represents as zero epoch timestamp.
+    // It is mapped as Spark TimestampType but fixed at 1970-01-01 for day,
+    // time portion is time of day, with no reference to a particular calendar,
+    // time zone or date, with a precision till microseconds.
+    // It stores the number of milliseconds after midnight, 00:00:00.000000
+    case TimestampType if metadata.contains("logical_time_type") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) => {
+        val rawTime = rs.getTime(pos + 1)
+        if (rawTime != null) {
+          val localTimeMicro = TimeUnit.NANOSECONDS.toMicros(
+            rawTime.toLocalTime().toNanoOfDay())
+          val utcTimeMicro = DateTimeUtils.toUTCTime(
+            localTimeMicro, SQLConf.get.sessionLocalTimeZone)
+          row.setLong(pos, utcTimeMicro)
+        } else {
+          row.update(pos, null)
+        }
+      }
 
     case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -511,11 +522,10 @@ object JdbcUtils extends Logging {
             }
 
         case LongType if metadata.contains("binarylong") =>
-          throw new IllegalArgumentException(s"Unsupported array element " +
-            s"type ${dt.catalogString} based on binary")
+          throw QueryExecutionErrors.unsupportedArrayElementTypeBasedOnBinaryError(dt)
 
         case ArrayType(_, _) =>
-          throw new IllegalArgumentException("Nested arrays unsupported")
+          throw QueryExecutionErrors.nestedArraysUnsupportedError()
 
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
@@ -526,7 +536,7 @@ object JdbcUtils extends Logging {
           array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
-    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.catalogString}")
+    case _ => throw QueryExecutionErrors.unsupportedJdbcTypeError(dt.catalogString)
   }
 
   private def nullSafeConvert[T](input: T, f: T => Any): Any = {
@@ -616,8 +626,7 @@ object JdbcUtils extends Logging {
 
     case _ =>
       (_: PreparedStatement, _: Row, pos: Int) =>
-        throw new IllegalArgumentException(
-          s"Can't translate non-null value for field $pos")
+        throw QueryExecutionErrors.cannotTranslateNonNullValueForFieldError(pos)
   }
 
   /**
@@ -815,9 +824,8 @@ object JdbcUtils extends Logging {
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
       schema.find(f => nameEquality(f.name, col)).getOrElse {
-        throw new AnalysisException(
-          s"createTableColumnTypes option column $col not found in schema " +
-            schema.catalogString)
+        throw QueryCompilationErrors.createTableColumnTypesOptionColumnNotFoundInSchemaError(
+          col, schema)
       }
     }
 
@@ -872,9 +880,8 @@ object JdbcUtils extends Logging {
 
     val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
     val repartitionedDF = options.numPartitions match {
-      case Some(n) if n <= 0 => throw new IllegalArgumentException(
-        s"Invalid value `$n` for parameter `${JDBCOptions.JDBC_NUM_PARTITIONS}` in table writing " +
-          "via JDBC. The minimum value is 1.")
+      case Some(n) if n <= 0 => throw QueryExecutionErrors.invalidJdbcNumPartitionsError(
+        n, JDBCOptions.JDBC_NUM_PARTITIONS)
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
@@ -941,8 +948,7 @@ object JdbcUtils extends Logging {
         metaData.getDatabaseMajorVersion)(0))
     } else {
       if (!metaData.supportsTransactions) {
-        throw new SQLFeatureNotSupportedException("The target JDBC server does not support " +
-          "transaction and can only support ALTER TABLE with a single action.")
+        throw QueryExecutionErrors.transactionUnsupportedByJdbcServerError()
       } else {
         conn.setAutoCommit(false)
         val statement = conn.createStatement

@@ -17,10 +17,11 @@
 #
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
+# TODO(SPARK-34943): minimum version should be 3.8+
 MINIMUM_FLAKE8="3.5.0"
 MYPY_BUILD="mypy"
 PYCODESTYLE_BUILD="pycodestyle"
-MINIMUM_PYCODESTYLE="2.6.0"
+MINIMUM_PYCODESTYLE="2.7.0"
 
 SPHINX_BUILD="sphinx-build"
 
@@ -274,7 +275,8 @@ SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 
 pushd "$SPARK_ROOT_DIR" &> /dev/null
 
-PYTHON_SOURCE="$(find . -name "*.py")"
+# skipping local ruby bundle directory from the search
+PYTHON_SOURCE="$(find . -path ./docs/.local_ruby_bundle -prune -false -o -name "*.py")"
 
 compile_python_test "$PYTHON_SOURCE"
 pycodestyle_test "$PYTHON_SOURCE"

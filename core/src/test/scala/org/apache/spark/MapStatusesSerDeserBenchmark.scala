@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import org.scalatest.Assertions._
-
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.benchmark.BenchmarkBase
 import org.apache.spark.scheduler.CompressedMapStatus
@@ -28,7 +26,7 @@ import org.apache.spark.storage.BlockManagerId
  * Benchmark for MapStatuses serialization & deserialization performance.
  * {{{
  *   To run this benchmark:
- *   1. without sbt: bin/spark-submit --class <this class> --jars <core test jar>
+ *   1. without sbt: bin/spark-submit --class <this class> <spark core test jar>
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
  *      Results will be written to "benchmarks/MapStatusesSerDeserBenchmark-results.txt".

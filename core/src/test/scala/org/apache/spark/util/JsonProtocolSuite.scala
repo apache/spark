@@ -31,7 +31,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
-import org.apache.spark.rdd.RDDOperationScope
+import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -168,7 +168,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
-    testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
+    testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L, DeterministicLevel.DETERMINATE))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(
@@ -983,9 +983,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
     )
   }
 
-  private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
+  private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long,
+      deterministic: DeterministicLevel.Value) = {
     val r =
-      new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, false, Seq(1, 4, 7), a.toString)
+      new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, false, Seq(1, 4, 7), a.toString,
+        outputDeterministicLevel = deterministic)
     r.numCachedPartitions = c
     r.memSize = d
     r.diskSize = e
@@ -999,7 +1001,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
       d: Long,
       e: Long,
       rpId: Int = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) = {
-    val rddInfos = (0 until a % 5).map { i => makeRddInfo(a + i, b + i, c + i, d + i, e + i) }
+    val rddInfos = (0 until a % 5).map { i =>
+      if (i == (a % 5) - 1) {
+        makeRddInfo(a + i, b + i, c + i, d + i, e + i, DeterministicLevel.INDETERMINATE)
+      } else {
+        makeRddInfo(a + i, b + i, c + i, d + i, e + i, DeterministicLevel.DETERMINATE)
+      }
+    }
     val stageInfo = new StageInfo(a, 0, "greetings", b, rddInfos, Seq(100, 200, 300), "details",
       resourceProfileId = rpId)
     val (acc1, acc2) = (makeAccumulableInfo(1), makeAccumulableInfo(2))
@@ -1171,6 +1179,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Replication": 1
       |        },
       |        "Barrier" : false,
+      |        "DeterministicLevel" : "INDETERMINATE",
       |        "Number of Partitions": 201,
       |        "Number of Cached Partitions": 301,
       |        "Memory Size": 401,
@@ -1695,6 +1704,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "INDETERMINATE",
       |          "Number of Partitions": 200,
       |          "Number of Cached Partitions": 300,
       |          "Memory Size": 400,
@@ -1741,6 +1751,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "DETERMINATE",
       |          "Number of Partitions": 400,
       |          "Number of Cached Partitions": 600,
       |          "Memory Size": 800,
@@ -1758,6 +1769,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "INDETERMINATE",
       |          "Number of Partitions": 401,
       |          "Number of Cached Partitions": 601,
       |          "Memory Size": 801,
@@ -1804,6 +1816,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "DETERMINATE",
       |          "Number of Partitions": 600,
       |          "Number of Cached Partitions": 900,
       |          "Memory Size": 1200,
@@ -1821,6 +1834,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "DETERMINATE",
       |          "Number of Partitions": 601,
       |          "Number of Cached Partitions": 901,
       |          "Memory Size": 1201,
@@ -1838,6 +1852,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "INDETERMINATE",
       |          "Number of Partitions": 602,
       |          "Number of Cached Partitions": 902,
       |          "Memory Size": 1202,
@@ -1884,6 +1899,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "DETERMINATE",
       |          "Number of Partitions": 800,
       |          "Number of Cached Partitions": 1200,
       |          "Memory Size": 1600,
@@ -1901,6 +1917,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "DETERMINATE",
       |          "Number of Partitions": 801,
       |          "Number of Cached Partitions": 1201,
       |          "Memory Size": 1601,
@@ -1918,6 +1935,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "DETERMINATE",
       |          "Number of Partitions": 802,
       |          "Number of Cached Partitions": 1202,
       |          "Memory Size": 1602,
@@ -1935,6 +1953,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            "Replication": 1
       |          },
       |          "Barrier" : false,
+      |          "DeterministicLevel" : "INDETERMINATE",
       |          "Number of Partitions": 803,
       |          "Number of Cached Partitions": 1203,
       |          "Memory Size": 1603,

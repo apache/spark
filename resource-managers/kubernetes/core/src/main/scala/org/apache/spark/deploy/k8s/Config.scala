@@ -54,6 +54,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
 
+  val KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION =
+    ConfigBuilder("spark.kubernetes.driver.service.deleteOnTermination")
+      .doc("If true, driver service will be deleted on Spark application termination. " +
+        "If false, it will be cleaned up when the driver pod is deletion.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")
@@ -272,7 +280,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT =
     ConfigBuilder("spark.kubernetes.allocation.executor.timeout")
-      .doc("Time to wait before considering a pending executor timedout.")
+      .doc("Time to wait before a newly created executor POD request, which does not reached " +
+        "the POD pending state yet, considered timedout and will be deleted.")
       .version("3.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
@@ -441,6 +450,13 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
+
+  val KUBERNETES_TRUST_CERTIFICATES =
+    ConfigBuilder("spark.kubernetes.trust.certificates")
+      .doc("If set to true then client can submit to kubernetes cluster only with token")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
 

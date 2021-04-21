@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
@@ -69,7 +69,7 @@ case class CreateDatabaseCommand(
     path: Option[String],
     comment: Option[String],
     props: Map[String, String])
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -105,7 +105,7 @@ case class DropDatabaseCommand(
     databaseName: String,
     ifExists: Boolean,
     cascade: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sessionState.catalog.dropDatabase(databaseName, ifExists, cascade)
@@ -125,7 +125,7 @@ case class DropDatabaseCommand(
 case class AlterDatabasePropertiesCommand(
     databaseName: String,
     props: Map[String, String])
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -146,7 +146,7 @@ case class AlterDatabasePropertiesCommand(
  * }}}
  */
 case class AlterDatabaseSetLocationCommand(databaseName: String, location: String)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -169,8 +169,9 @@ case class AlterDatabaseSetLocationCommand(databaseName: String, location: Strin
  */
 case class DescribeDatabaseCommand(
     databaseName: String,
-    extended: Boolean)
-  extends RunnableCommand {
+    extended: Boolean,
+    override val output: Seq[Attribute])
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbMetadata: CatalogDatabase =
@@ -195,11 +196,6 @@ case class DescribeDatabaseCommand(
       result
     }
   }
-
-  override val output: Seq[Attribute] = {
-    AttributeReference("database_description_item", StringType, nullable = false)() ::
-      AttributeReference("database_description_value", StringType, nullable = false)() :: Nil
-  }
 }
 
 /**
@@ -215,7 +211,7 @@ case class DropTableCommand(
     tableName: TableIdentifier,
     ifExists: Boolean,
     isView: Boolean,
-    purge: Boolean) extends RunnableCommand {
+    purge: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -268,12 +264,11 @@ case class AlterTableSetPropertiesCommand(
     tableName: TableIdentifier,
     properties: Map[String, String],
     isView: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView)
     // This overrides old properties and update the comment parameter of CatalogTable
     // with the newly added/modified comment since CatalogTable also holds comment as its
     // direct property.
@@ -300,12 +295,11 @@ case class AlterTableUnsetPropertiesCommand(
     propKeys: Seq[String],
     ifExists: Boolean,
     isView: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView)
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k) && k != TableCatalog.PROP_COMMENT) {
@@ -339,7 +333,7 @@ case class AlterTableUnsetPropertiesCommand(
 case class AlterTableChangeColumnCommand(
     tableName: TableIdentifier,
     columnName: String,
-    newColumn: StructField) extends RunnableCommand {
+    newColumn: StructField) extends LeafRunnableCommand {
 
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -408,7 +402,7 @@ case class AlterTableSerDePropertiesCommand(
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
     partSpec: Option[TablePartitionSpec])
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   // should never happen if we parsed things correctly
   require(serdeClassName.isDefined || serdeProperties.isDefined,
@@ -417,7 +411,6 @@ case class AlterTableSerDePropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException("Operation not allowed: ALTER TABLE SET " +
@@ -461,12 +454,11 @@ case class AlterTableAddPartitionCommand(
     tableName: TableIdentifier,
     partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
     ifNotExists: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE ADD PARTITION")
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
@@ -517,12 +509,11 @@ case class AlterTableRenamePartitionCommand(
     tableName: TableIdentifier,
     oldPartition: TablePartitionSpec,
     newPartition: TablePartitionSpec)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE RENAME PARTITION")
 
     val normalizedOldPartition = PartitioningUtils.normalizePartitionSpec(
@@ -565,12 +556,11 @@ case class AlterTableDropPartitionCommand(
     ifExists: Boolean,
     purge: Boolean,
     retainData: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
     val normalizedSpecs = specs.map { spec =>
@@ -597,18 +587,20 @@ case class AlterTableDropPartitionCommand(
 case class PartitionStatistics(numFiles: Int, totalSize: Long)
 
 /**
- * Recover Partitions in ALTER TABLE: recover all the partition in the directory of a table and
+ * Repair a table by recovering all the partition in the directory of the table and
  * update the catalog.
  *
  * The syntax of this command is:
  * {{{
  *   ALTER TABLE table RECOVER PARTITIONS;
- *   MSCK REPAIR TABLE table;
+ *   MSCK REPAIR TABLE table [{ADD|DROP|SYNC} PARTITIONS];
  * }}}
  */
-case class AlterTableRecoverPartitionsCommand(
+case class RepairTableCommand(
     tableName: TableIdentifier,
-    cmd: String = "ALTER TABLE RECOVER PARTITIONS") extends RunnableCommand {
+    enableAddPartitions: Boolean,
+    enableDropPartitions: Boolean,
+    cmd: String = "MSCK REPAIR TABLE") extends LeafRunnableCommand {
 
   // These are list of statistics that can be collected quickly without requiring a scan of the data
   // see https://github.com/apache/hive/blob/master/
@@ -636,7 +628,6 @@ case class AlterTableRecoverPartitionsCommand(
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
@@ -652,34 +643,40 @@ case class AlterTableRecoverPartitionsCommand(
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
-    val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
-    val pathFilter = getPathFilter(hadoopConf)
+    val droppedAmount = if (enableDropPartitions) {
+      dropPartitions(catalog, fs)
+    } else 0
+    val addedAmount = if (enableAddPartitions) {
+      val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
+      val pathFilter = getPathFilter(hadoopConf)
 
-    val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
-    val partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)] =
-      try {
-        scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
-          spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
-      } finally {
-        evalPool.shutdown()
+      val evalPool = ThreadUtils.newForkJoinPool("RepairTableCommand", 8)
+      val partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)] =
+        try {
+          scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
+            spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
+        } finally {
+          evalPool.shutdown()
+        }
+      val total = partitionSpecsAndLocs.length
+      logInfo(s"Found $total partitions in $root")
+
+      val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
+        gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
+      } else {
+        GenMap.empty[String, PartitionStatistics]
       }
-    val total = partitionSpecsAndLocs.length
-    logInfo(s"Found $total partitions in $root")
+      logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
-    val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
-      gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
-    } else {
-      GenMap.empty[String, PartitionStatistics]
-    }
-    logInfo(s"Finished to gather the fast stats for all $total partitions.")
-
-    addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
+      addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
+      total
+    } else 0
     // Updates the table to indicate that its partition metadata is stored in the Hive metastore.
     // This is always the case for Hive format tables, but is not true for Datasource tables created
     // before Spark 2.1 unless they are converted via `msck repair table`.
     spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
     spark.catalog.refreshTable(tableIdentWithDB)
-    logInfo(s"Recovered all partitions ($total).")
+    logInfo(s"Recovered all partitions: added ($addedAmount), dropped ($droppedAmount).")
     Seq.empty[Row]
   }
 
@@ -798,8 +795,28 @@ case class AlterTableRecoverPartitionsCommand(
       logDebug(s"Recovered ${parts.length} partitions ($done/$total so far)")
     }
   }
-}
 
+  // Drops the partitions that do not exist in the file system
+  private def dropPartitions(catalog: SessionCatalog, fs: FileSystem): Int = {
+    val dropPartSpecs = ThreadUtils.parmap(
+      catalog.listPartitions(tableName),
+      "RepairTableCommand: non-existing partitions",
+      maxThreads = 8) { partition =>
+      partition.storage.locationUri.flatMap { uri =>
+        if (fs.exists(new Path(uri))) None else Some(partition.spec)
+      }
+    }.flatten
+    catalog.dropPartitions(
+      tableName,
+      dropPartSpecs,
+      ignoreIfNotExists = true,
+      purge = false,
+      // Since we have already checked that partition directories do not exist, we can avoid
+      // additional calls to the file system at the catalog side by setting this flag.
+      retainData = true)
+    dropPartSpecs.length
+  }
+}
 
 /**
  * A command that sets the location of a table or a partition.
@@ -816,19 +833,23 @@ case class AlterTableSetLocationCommand(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
     location: String)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     val locUri = CatalogUtils.stringToURI(location)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     partitionSpec match {
       case Some(spec) =>
         DDLUtils.verifyPartitionProviderIsHive(
           sparkSession, table, "ALTER TABLE ... SET LOCATION")
         // Partition spec is specified, so we set the location only for this partition
-        val part = catalog.getPartition(table.identifier, spec)
+        val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
+          spec,
+          table.partitionSchema,
+          table.identifier.quotedString,
+          sparkSession.sessionState.conf.resolver)
+        val part = catalog.getPartition(table.identifier, normalizedSpec)
         val newPart = part.copy(storage = part.storage.copy(locationUri = Some(locUri)))
         catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>

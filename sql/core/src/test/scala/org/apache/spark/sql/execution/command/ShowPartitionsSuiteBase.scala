@@ -69,7 +69,9 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $t")
       }.getMessage
-      assert(errMsg.contains("not allowed on a table that is not partitioned"))
+      assert(errMsg.contains("not allowed on a table that is not partitioned") ||
+        // V2 error message.
+        errMsg.contains(s"Table $t is not partitioned"))
     }
   }
 
@@ -152,17 +154,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"ALTER TABLE $t ADD PARTITION(part = 'a')")
       val partitions = sql(s"show partitions $t")
       assert(partitions.first().getString(0) === "part=a")
-    }
-  }
-
-  test("SPARK-33591: null as string partition literal value 'null' after setting legacy conf") {
-    withSQLConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
-      withNamespaceAndTable("ns", "tbl") { t =>
-        sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
-        sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
-        runShowPartitionsSql(s"SHOW PARTITIONS $t", Row("p1=null") :: Nil)
-        runShowPartitionsSql(s"SHOW PARTITIONS $t PARTITION (p1 = null)", Row("p1=null") :: Nil)
-      }
     }
   }
 }

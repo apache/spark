@@ -131,11 +131,27 @@ class OrcFileFormat
     }
   }
 
+  private def supportBatchForNestedColumn(
+      sparkSession: SparkSession,
+      schema: StructType): Boolean = {
+    val hasNestedColumn = schema.map(_.dataType).exists {
+      case _: ArrayType | _: MapType | _: StructType => true
+      case _ => false
+    }
+    if (hasNestedColumn) {
+      sparkSession.sessionState.conf.orcVectorizedReaderNestedColumnEnabled
+    } else {
+      true
+    }
+  }
+
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
     conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
-      schema.forall(_.dataType.isInstanceOf[AtomicType])
+      schema.forall(s => supportDataType(s.dataType) &&
+        !s.dataType.isInstanceOf[UserDefinedType[_]]) &&
+      supportBatchForNestedColumn(sparkSession, schema)
   }
 
   override def isSplitable(
@@ -230,7 +246,7 @@ class OrcFileFormat
 
           val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-          val deserializer = new OrcDeserializer(dataSchema, requiredSchema, requestedColIds)
+          val deserializer = new OrcDeserializer(requiredSchema, requestedColIds)
 
           if (partitionSchema.length == 0) {
             iter.map(value => unsafeProjection(deserializer.deserialize(value)))

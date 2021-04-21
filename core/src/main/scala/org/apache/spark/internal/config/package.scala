@@ -488,6 +488,17 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxDiskSize")
+      .doc("Maximum disk space to use to store shuffle blocks before rejecting remote " +
+        "shuffle blocks. Rejecting remote shuffle blocks means that an executor will not receive " +
+        "any shuffle migrations, and if there are no other executors available for migration " +
+        "then shuffle blocks will be lost unless " +
+        s"${STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH.key} is configured.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createOptional
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")
@@ -669,6 +680,16 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
 
+  private[spark] val SHUFFLE_SERVICE_NAME =
+    ConfigBuilder("spark.shuffle.service.name")
+      .doc("The configured name of the Spark shuffle service the client should communicate with. " +
+        "This must match the name used to configure the Shuffle within the YARN NodeManager " +
+        "configuration (`yarn.nodemanager.aux-services`). Only takes effect when " +
+        s"$SHUFFLE_SERVICE_ENABLED is set to true.")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefault("spark_shuffle")
+
   private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
     .version("3.0.0")
@@ -704,6 +725,18 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val YARN_KERBEROS_FILESYSTEM_RENEWAL_EXCLUDE =
+    ConfigBuilder("spark.yarn.kerberos.renewal.excludeHadoopFileSystems")
+      .doc("The list of Hadoop filesystem URLs whose hosts will be excluded from " +
+        "delegation token renewal at resource scheduler. Currently this is known to " +
+        "work under YARN, so YARN Resource Manager won't renew tokens for the application. " +
+        "Note that as resource scheduler does not renew token, so any application running " +
+        "longer than the original token expiration that tries to use that token will likely fail.")
+      .version("3.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .version("1.0.0")
@@ -813,6 +846,13 @@ package object config {
     ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
       .version("3.1.0")
       .withAlternative("spark.blacklist.killBlacklistedExecutors")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors.decommission")
+      .doc("Attempt decommission of excluded nodes instead of going directly to kill")
+      .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -1019,7 +1059,7 @@ package object config {
       .doc("When true, HadoopRDD/NewHadoopRDD will not create partitions for empty input splits.")
       .version("2.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SECRET_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.regex")
@@ -1029,7 +1069,7 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token".r)
+      .createWithDefault("(?i)secret|password|token|access[.]key".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -1680,6 +1720,13 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
+  private[spark] val IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED =
+    ConfigBuilder("spark.io.compression.zstd.bufferPool.enabled")
+      .doc("If true, enable buffer pool of ZSTD JNI library.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
     ConfigBuilder("spark.io.compression.zstd.level")
       .doc("Compression level for Zstd compression codec. Increasing the compression " +
@@ -1701,9 +1748,10 @@ package object config {
     ConfigBuilder("spark.eventLog.compression.codec")
       .doc("The codec used to compress event log. By default, Spark provides four codecs: " +
         "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
-        "the codec. If this is not given, spark.io.compression.codec will be used.")
+        "the codec.")
       .version("3.0.0")
-      .fallbackConf(IO_COMPRESSION_CODEC)
+      .stringConf
+      .createWithDefault("zstd")
 
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
@@ -1940,12 +1988,22 @@ package object config {
 
   private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
     ConfigBuilder("spark.executor.decommission.killInterval")
-      .doc("Duration after which a decommissioned executor will be killed forcefully." +
+      .doc("Duration after which a decommissioned executor will be killed forcefully " +
+        "*by an outside* (e.g. non-spark) service. " +
         "This config is useful for cloud environments where we know in advance when " +
         "an executor is going to go down after decommissioning signal i.e. around 2 mins " +
         "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
         "used to decide what tasks running on decommission executors to speculate.")
       .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
+
+  private[spark] val EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT =
+    ConfigBuilder("spark.executor.decommission.forceKillTimeout")
+      .doc("Duration after which a Spark will force a decommissioning executor to exit." +
+        " this should be set to a high value in most situations as low values will prevent " +
+        " block migrations from having enough time to complete.")
+      .version("3.2.0")
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 

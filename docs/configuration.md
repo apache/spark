@@ -924,6 +924,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections between shuffle servers and clients to be marked
+    as idled and closed if there are still outstanding fetch requests but no traffic no the channel
+    for at least `connectionTimeout`.
+  </td>
+  <td>1.2.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
@@ -1007,6 +1017,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>2.3.0</td>
 </tr>
+<tr>
+  <td><code>spark.files.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections for fetching files in Spark RPC environments to be marked
+    as idled and closed if there are still outstanding files being downloaded but no traffic no the channel
+    for at least `connectionTimeout`.
+  </td>
+  <td>1.6.0</td>
+</tr>
 </table>
 
 ### Spark UI
@@ -1040,10 +1060,15 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.compression.codec</code></td>
-  <td></td>
+  <td>zstd</td>
   <td>
-    The codec to compress logged events. If this is not given,
-    <code>spark.io.compression.codec</code> will be used.
+    The codec to compress logged events. By default, Spark provides four codecs:
+    <code>lz4</code>, <code>lzf</code>, <code>snappy</code>, and <code>zstd</code>.
+    You can also use fully qualified class names to specify the codec, e.g.
+    <code>org.apache.spark.io.LZ4CompressionCodec</code>,
+    <code>org.apache.spark.io.LZFCompressionCodec</code>,
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>,
+    and <code>org.apache.spark.io.ZStdCompressionCodec</code>.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1991,6 +2016,16 @@ Apart from these, the following properties are also available, and may be useful
     external shuffle service is at least 2.3.0.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.rpc.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections between RPC peers to be marked as idled and closed
+    if there are outstanding RPC requests but no traffic on the channel for at least
+    `connectionTimeout`.
+  </td>
+  <td>1.2.0</td>
 </tr>
 </table>
 

@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Stable
  *
  * Please use the singleton `DataTypes.CalendarIntervalType` to refer the type.
  *
- * @note Calendar intervals support comparison and ordering since 3.0.0.
+ * @note Calendar intervals are not comparable.
  *
  * @since 1.5.0
  */

@@ -689,7 +689,7 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq("cannot resolve", "`a`", "given input columns", "x, y"))
+    assertAnalysisError(parsedPlan, Seq("cannot resolve", "a", "given input columns", "x, y"))
 
     val tableAcceptAnySchema = TestRelationAcceptAnySchema(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
@@ -698,6 +698,6 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
     val parsedPlan2 = OverwriteByExpression.byPosition(tableAcceptAnySchema, query,
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
     assertNotResolved(parsedPlan2)
-    assertAnalysisError(parsedPlan2, Seq("cannot resolve", "`a`", "given input columns", "x, y"))
+    assertAnalysisError(parsedPlan2, Seq("cannot resolve", "a", "given input columns", "x, y"))
   }
 }

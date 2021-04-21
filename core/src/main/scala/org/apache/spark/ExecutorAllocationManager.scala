@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import com.codahale.metrics.{Gauge, MetricRegistry}
+import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
@@ -135,14 +135,14 @@ private[spark] class ExecutorAllocationManager(
   validateSettings()
 
   // Number of executors to add for each ResourceProfile in the next round
-  private val numExecutorsToAddPerResourceProfileId = new mutable.HashMap[Int, Int]
+  private[spark] val numExecutorsToAddPerResourceProfileId = new mutable.HashMap[Int, Int]
   numExecutorsToAddPerResourceProfileId(defaultProfileId) = 1
 
   // The desired number of executors at this moment in time. If all our executors were to die, this
   // is the number of executors we would immediately want from the cluster manager.
   // Note every profile will be allowed to have initial number,
   // we may want to make this configurable per Profile in the future
-  private val numExecutorsTargetPerResourceProfileId = new mutable.HashMap[Int, Int]
+  private[spark] val numExecutorsTargetPerResourceProfileId = new mutable.HashMap[Int, Int]
   numExecutorsTargetPerResourceProfileId(defaultProfileId) = initialNumExecutors
 
   // A timestamp of when an addition should be triggered, or NOT_SET if it is not set
@@ -155,14 +155,15 @@ private[spark] class ExecutorAllocationManager(
   // Listener for Spark events that impact the allocation policy
   val listener = new ExecutorAllocationListener
 
-  val executorMonitor = new ExecutorMonitor(conf, client, listenerBus, clock)
-
   // Executor that handles the scheduling task.
   private val executor =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("spark-dynamic-executor-allocation")
 
   // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
-  val executorAllocationManagerSource = new ExecutorAllocationManagerSource
+  val executorAllocationManagerSource = new ExecutorAllocationManagerSource(this)
+
+  val executorMonitor =
+    new ExecutorMonitor(conf, client, listenerBus, clock, executorAllocationManagerSource)
 
   // Whether we are still waiting for the initial set of executors to be allocated.
   // While this is true, we will not cancel outstanding executor requests. This is
@@ -288,7 +289,7 @@ private[spark] class ExecutorAllocationManager(
    * The maximum number of executors, for the ResourceProfile id passed in, that we would need
    * under the current load to satisfy all running and pending tasks, rounded up.
    */
-  private def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
+  private[spark] def maxNumExecutorsNeededPerResourceProfile(rpId: Int): Int = {
     val pending = listener.totalPendingTasksPerResourceProfile(rpId)
     val pendingSpeculative = listener.pendingSpeculativeTasksPerResourceProfile(rpId)
     val unschedulableTaskSets = listener.pendingUnschedulableTaskSetsPerResourceProfile(rpId)
@@ -967,34 +968,47 @@ private[spark] class ExecutorAllocationManager(
         rplocalityToCount.map { case (k, v) => (k, v.toMap)}.toMap
     }
   }
+}
 
-  /**
-   * Metric source for ExecutorAllocationManager to expose its internal executor allocation
-   * status to MetricsSystem.
-   * Note: These metrics heavily rely on the internal implementation of
-   * ExecutorAllocationManager, metrics or value of metrics will be changed when internal
-   * implementation is changed, so these metrics are not stable across Spark version.
-   */
-  private[spark] class ExecutorAllocationManagerSource extends Source {
-    val sourceName = "ExecutorAllocationManager"
-    val metricRegistry = new MetricRegistry()
+/**
+ * Metric source for ExecutorAllocationManager to expose its internal executor allocation
+ * status to MetricsSystem.
+ * Note: These metrics heavily rely on the internal implementation of
+ * ExecutorAllocationManager, metrics or value of metrics will be changed when internal
+ * implementation is changed, so these metrics are not stable across Spark version.
+ */
+private[spark] class ExecutorAllocationManagerSource(
+    executorAllocationManager: ExecutorAllocationManager) extends Source {
+  val sourceName = "ExecutorAllocationManager"
+  val metricRegistry = new MetricRegistry()
 
-    private def registerGauge[T](name: String, value: => T, defaultValue: T): Unit = {
-      metricRegistry.register(MetricRegistry.name("executors", name), new Gauge[T] {
-        override def getValue: T = synchronized { Option(value).getOrElse(defaultValue) }
-      })
-    }
-
-    // The metrics are going to return the sum for all the different ResourceProfiles.
-    registerGauge("numberExecutorsToAdd",
-      numExecutorsToAddPerResourceProfileId.values.sum, 0)
-    registerGauge("numberExecutorsPendingToRemove", executorMonitor.pendingRemovalCount, 0)
-    registerGauge("numberAllExecutors", executorMonitor.executorCount, 0)
-    registerGauge("numberTargetExecutors",
-      numExecutorsTargetPerResourceProfileId.values.sum, 0)
-    registerGauge("numberMaxNeededExecutors", numExecutorsTargetPerResourceProfileId.keys
-        .map(maxNumExecutorsNeededPerResourceProfile(_)).sum, 0)
+  private def registerGauge[T](name: String, value: => T, defaultValue: T): Unit = {
+    metricRegistry.register(MetricRegistry.name("executors", name), new Gauge[T] {
+      override def getValue: T = synchronized { Option(value).getOrElse(defaultValue) }
+    })
   }
+
+  private def getCounter(name: String): Counter = {
+    metricRegistry.counter(MetricRegistry.name("executors", name))
+  }
+
+  val gracefullyDecommissioned: Counter = getCounter("numberExecutorsGracefullyDecommissioned")
+  val decommissionUnfinished: Counter = getCounter("numberExecutorsDecommissionUnfinished")
+  val driverKilled: Counter = getCounter("numberExecutorsKilledByDriver")
+  val exitedUnexpectedly: Counter = getCounter("numberExecutorsExitedUnexpectedly")
+
+  // The metrics are going to return the sum for all the different ResourceProfiles.
+  registerGauge("numberExecutorsToAdd",
+    executorAllocationManager.numExecutorsToAddPerResourceProfileId.values.sum, 0)
+  registerGauge("numberExecutorsPendingToRemove",
+    executorAllocationManager.executorMonitor.pendingRemovalCount, 0)
+  registerGauge("numberAllExecutors",
+    executorAllocationManager.executorMonitor.executorCount, 0)
+  registerGauge("numberTargetExecutors",
+    executorAllocationManager.numExecutorsTargetPerResourceProfileId.values.sum, 0)
+  registerGauge("numberMaxNeededExecutors",
+    executorAllocationManager.numExecutorsTargetPerResourceProfileId.keys
+      .map(executorAllocationManager.maxNumExecutorsNeededPerResourceProfile(_)).sum, 0)
 }
 
 private object ExecutorAllocationManager {

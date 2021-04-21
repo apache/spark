@@ -1574,6 +1574,19 @@ setMethod("overlay",
   })
 
 #' @details
+#' \code{product}: Returns the product of the values in a group.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases product product,Column-method
+#' @note product since 3.2.0
+setMethod("product",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "product", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions

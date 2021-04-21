@@ -48,7 +48,7 @@
       <id>matei</id>
       <name>Matei Zaharia</name>
       <email>matei.zaharia@gmail.com</email>
-      <url>http://www.cs.berkeley.edu/~matei</url>
+      <url>https://cs.stanford.edu/people/matei</url>
       <organization>Apache Software Foundation</organization>
       <organizationUrl>http://spark.apache.org</organizationUrl>
     </developer>
@@ -136,9 +136,9 @@
     <kafka.version>2.6.0</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
-    <parquet.version>1.11.1</parquet.version>
+    <parquet.version>1.12.0</parquet.version>
     <orc.version>1.6.7</orc.version>
-    <jetty.version>9.4.34.v20201102</jetty.version>
+    <jetty.version>9.4.39.v20210325</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.9.5</chill.version>
     <ivy.version>2.4.0</ivy.version>
@@ -148,10 +148,10 @@
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
     <codahale.metrics.version>4.1.1</codahale.metrics.version>
-    <avro.version>1.10.1</avro.version>
-    <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
+    <avro.version>1.10.2</avro.version>
+    <aws.kinesis.client.version>1.14.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
-    <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
+    <aws.java.sdk.version>1.11.844</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
@@ -169,12 +169,12 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.11.4</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.12.2</fasterxml.jackson.version>
     <snappy.version>1.1.8.2</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.20</commons-compress.version>
-    <commons-io.version>2.5</commons-io.version>
+    <commons-io.version>2.8.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -195,6 +195,7 @@
     <htmlunit.version>2.40.0</htmlunit.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
+    <commons-cli.version>1.2</commons-cli.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -209,6 +210,11 @@
     <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
+
+    <test.jdwp.address>localhost:0</test.jdwp.address>
+    <test.jdwp.suspend>y</test.jdwp.suspend>
+    <test.jdwp.server>y</test.jdwp.server>
+    <test.debug.suite>false</test.debug.suite>
 
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.sparkproject</spark.shade.packageName>
@@ -700,7 +706,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.8-3</version>
+        <version>1.4.9-1</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1023,7 +1029,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.2.6</version>
+        <version>42.2.19</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1079,19 +1085,19 @@
       <!-- Hadoop 3.x dependencies -->
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-client-api</artifactId>
+        <artifactId>${hadoop-client-api.artifact}</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-client-runtime</artifactId>
+        <artifactId>${hadoop-client-runtime.artifact}</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-client-minicluster</artifactId>
+        <artifactId>${hadoop-client-minicluster.artifact}</artifactId>
         <version>${yarn.version}</version>
         <scope>test</scope>
       </dependency>
@@ -1234,6 +1240,10 @@
           <exclusion>
             <groupId>javax.annotation</groupId>
             <artifactId>javax.annotation-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1404,6 +1414,26 @@
         <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-server-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk15on</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk15on</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.fusesource.leveldbjni</groupId>
             <artifactId>leveldbjni-all</artifactId>
           </exclusion>
@@ -1422,6 +1452,10 @@
           <exclusion>
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -2061,7 +2095,7 @@
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service-rpc</artifactId>
           </exclusion>
-          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.10.1 -->
+          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.12.0 -->
           <exclusion>
             <groupId>org.apache.parquet</groupId>
             <artifactId>parquet-hadoop-bundle</artifactId>
@@ -2416,6 +2450,11 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <dependency>
+        <groupId>commons-cli</groupId>
+        <artifactId>commons-cli</artifactId>
+        <version>${commons-cli.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -2534,7 +2573,6 @@
             <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
             <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
             <recompileMode>incremental</recompileMode>
-            <useZincServer>true</useZincServer>
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
@@ -2620,6 +2658,7 @@
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <spark.memory.debugFill>true</spark.memory.debugFill>
+              <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
             </systemProperties>
@@ -3267,6 +3306,13 @@
 
     <profile>
       <id>scala-2.12</id>
+      <properties>
+        <!-- 
+         SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
+         property correctly. 
+        -->
+        <scala.version>2.12.10</scala.version>
+      </properties>
       <build>
         <pluginManagement>
           <plugins>
@@ -3278,7 +3324,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.4</scala.version>
+        <scala.version>2.13.5</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <dependencyManagement>
@@ -3414,6 +3460,15 @@
           <arch>aarch64</arch>
         </os>
       </activation>
+    </profile>
+    <profile>
+      <id>jdwp-test-debug</id>
+      <properties>
+        <jdwp.arg.line>-agentlib:jdwp=transport=dt_socket,suspend=${test.jdwp.suspend},server=${test.jdwp.server},address=${test.jdwp.address}</jdwp.arg.line>
+        <debugArgLine>${jdwp.arg.line}</debugArgLine>
+        <maven.surefire.debug>${jdwp.arg.line}</maven.surefire.debug>
+        <debugForkedProcess>${test.debug.suite}</debugForkedProcess>
+      </properties>
     </profile>
   </profiles>
 </project>

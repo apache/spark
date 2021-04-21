@@ -105,6 +105,13 @@ class ParserUtilsSuite extends SparkFunSuite {
 
     // String including surrogate pair characters (U+1F408 is a cat and U+1F415 is a dog in Emoji).
     assert(unescapeSQLString("\"\\U0001F408 \\U0001F415\"") == "\uD83D\uDC08 \uD83D\uDC15")
+
+    // String including escaped normal characters.
+    assert(unescapeSQLString(
+      """"ab\
+        |cd\ef"""".stripMargin) ==
+      """ab
+        |cdef""".stripMargin)
     // scalastyle:on nonascii
   }
 

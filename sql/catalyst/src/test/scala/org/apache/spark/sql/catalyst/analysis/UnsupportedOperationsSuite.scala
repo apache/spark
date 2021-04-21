@@ -34,7 +34,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
 
 /** A dummy command for testing unsupported operations. */
-case class DummyCommand() extends Command
+case class DummyCommand() extends LeafCommand
 
 class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
@@ -62,7 +62,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   assertNotSupportedInBatchPlan(
     "select on streaming source",
-    streamRelation.select($"count(*)"),
+    streamRelation.select($"`count(*)`"),
     Seq("with streaming source", "start"))
 
 
@@ -76,7 +76,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   testError(
     "streaming plan - no streaming source",
     Seq("without streaming source", "start")) {
-    UnsupportedOperationChecker.checkForStreaming(batchRelation.select($"count(*)"), Append)
+    UnsupportedOperationChecker.checkForStreaming(batchRelation.select($"`count(*)`"), Append)
   }
 
   // Commands
@@ -998,6 +998,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   case class StreamingPlanWrapper(child: LogicalPlan) extends UnaryNode {
     override def output: Seq[Attribute] = child.output
     override def isStreaming: Boolean = true
+    override protected def withNewChildInternal(newChild: LogicalPlan): StreamingPlanWrapper =
+      copy(child = newChild)
   }
 
   case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {

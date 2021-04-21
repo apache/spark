@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.{mutable, Map}
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -30,10 +31,13 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.sql.catalyst.{AliasIdentifier, IdentifierWithDatabase}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
+import org.apache.spark.sql.catalyst.rules.RuleId
+import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.rules.UnknownRuleId
+import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
@@ -41,6 +45,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
@@ -78,8 +83,13 @@ object CurrentOrigin {
 // A tag of a `TreeNode`, which defines name and type
 case class TreeNodeTag[T](name: String)
 
+// A functor that always returns true.
+object AlwaysProcess {
+  val fn: TreePatternBits => Boolean = { _ => true}
+}
+
 // scalastyle:off
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
+abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with TreePatternBits {
 // scalastyle:on
   self: BaseType =>
 
@@ -90,6 +100,72 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
    */
   private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
+
+  /**
+   * Default tree pattern [[BitSet] for a [[TreeNode]].
+   */
+  protected def getDefaultTreePatternBits: BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    // Propagate node pattern bits
+    val nodePatternIterator = nodePatterns.iterator
+    while (nodePatternIterator.hasNext) {
+      bits.set(nodePatternIterator.next().id)
+    }
+    // Propagate children's pattern bits
+    val childIterator = children.iterator
+    while (childIterator.hasNext) {
+      bits.union(childIterator.next().treePatternBits)
+    }
+    bits
+  }
+
+  /**
+   * A BitSet of tree patterns for this TreeNode and its subtree. If this TreeNode and its
+   * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
+   */
+  override lazy val treePatternBits: BitSet = getDefaultTreePatternBits
+
+  /**
+   * A BitSet of rule ids to record ineffective rules for this TreeNode and its subtree.
+   * If a rule R (which does not read a varying, external state for each invocation) is
+   * ineffective in one apply call for this TreeNode and its subtree, R will still be
+   * ineffective for subsequent apply calls on this tree because query plan structures are
+   * immutable.
+   */
+  private val ineffectiveRules: BitSet = new BitSet(RuleIdCollection.NumRules)
+
+  /**
+   * @return a sequence of tree pattern enums in a TreeNode T. It does not include propagated
+   *         patterns in the subtree of T.
+   */
+  protected val nodePatterns: Seq[TreePattern] = Seq()
+
+  /**
+   * Mark that a rule (with id `ruleId`) is ineffective for this TreeNode and its subtree.
+   *
+   * @param ruleId the unique identifier of the rule. If `ruleId` is UnknownId, it is a no-op.
+   */
+  protected def markRuleAsIneffective(ruleId : RuleId): Unit = {
+    if (ruleId eq UnknownRuleId) {
+      return
+    }
+    ineffectiveRules.set(ruleId.id)
+  }
+
+  /**
+   * Whether this TreeNode and its subtree have been marked as ineffective for the rule with id
+   * `ruleId`.
+   *
+   * @param ruleId the unique id of the rule
+   * @return true if the rule has been marked as ineffective; false otherwise. If `ruleId` is
+   *         UnknownId, it returns false.
+   */
+  protected def isRuleIneffective(ruleId : RuleId): Boolean = {
+    if (ruleId eq UnknownRuleId) {
+      return false
+    }
+    ineffectiveRules.get(ruleId.id)
+  }
 
   def copyTagsFrom(other: BaseType): Unit = {
     // SPARK-32753: it only makes sense to copy tags to a new node
@@ -246,11 +322,50 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     arr
   }
 
+  private def childrenFastEquals(
+      originalChildren: IndexedSeq[BaseType], newChildren: IndexedSeq[BaseType]): Boolean = {
+    val size = originalChildren.size
+    var i = 0
+    while (i < size) {
+      if (!originalChildren(i).fastEquals(newChildren(i))) return false
+      i += 1
+    }
+    true
+  }
+
+  // This is a temporary solution, we will change the type of children to IndexedSeq in a
+  // followup PR
+  private def asIndexedSeq(seq: Seq[BaseType]): IndexedSeq[BaseType] = {
+    if (seq.isInstanceOf[IndexedSeq[BaseType]]) {
+      seq.asInstanceOf[IndexedSeq[BaseType]]
+    } else {
+      seq.toIndexedSeq
+    }
+  }
+
+  final def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
+    val childrenIndexedSeq = asIndexedSeq(children)
+    val newChildrenIndexedSeq = asIndexedSeq(newChildren)
+    assert(newChildrenIndexedSeq.size == childrenIndexedSeq.size, "Incorrect number of children")
+    if (childrenIndexedSeq.isEmpty ||
+        childrenFastEquals(newChildrenIndexedSeq, childrenIndexedSeq)) {
+      this
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newChildrenIndexedSeq)
+        res.copyTagsFrom(this)
+        res
+      }
+    }
+  }
+
+  protected def withNewChildrenInternal(newChildren: IndexedSeq[BaseType]): BaseType
+
   /**
    * Returns a copy of this node with the children replaced.
    * TODO: Validate somewhere (in debug mode?) that children are ordered correctly.
    */
-  def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
+  protected final def legacyWithNewChildren(newChildren: Seq[BaseType]): BaseType = {
     assert(newChildren.size == children.size, "Incorrect number of children")
     var changed = false
     val remainingNewChildren = newChildren.toBuffer
@@ -300,10 +415,32 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformDown or transformUp should be used.
    *
-   * @param rule the function use to transform this nodes children
+   * @param rule the function used to transform this nodes children
    */
   def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     transformDown(rule)
+  }
+
+  /**
+   * Returns a copy of this node where `rule` has been recursively applied to the tree.
+   * When `rule` does not apply to a given node it is left unchanged.
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * transformDown or transformUp should be used.
+   *
+   * @param rule   the function used to transform this nodes children
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
+  : BaseType = {
+    transformDownWithPruning(cond, ruleId)(rule)
   }
 
   /**
@@ -313,17 +450,46 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param rule the function used to transform this nodes children
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    transformDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+  }
+
+  /**
+   * Returns a copy of this node where `rule` has been recursively applied to it and all of its
+   * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
+   *
+   * @param rule   the function used to transform this nodes children
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformDownWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
+  : BaseType = {
+    if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+      return this
+    }
     val afterRule = CurrentOrigin.withOrigin(origin) {
       rule.applyOrElse(this, identity[BaseType])
     }
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
-      mapChildren(_.transformDown(rule))
+      val rewritten_plan = mapChildren(_.transformDownWithPruning(cond, ruleId)(rule))
+      if (this eq rewritten_plan) {
+        markRuleAsIneffective(ruleId)
+        this
+      } else {
+        rewritten_plan
+      }
     } else {
       // If the transform function replaces this node with a new one, carry over the tags.
       afterRule.copyTagsFrom(this)
-      afterRule.mapChildren(_.transformDown(rule))
+      afterRule.mapChildren(_.transformDownWithPruning(cond, ruleId)(rule))
     }
   }
 
@@ -332,10 +498,34 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
    * unchanged.
    *
-   * @param rule the function use to transform this nodes children
+   * @param rule   the function used to transform this nodes children
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRuleOnChildren = mapChildren(_.transformUp(rule))
+    transformUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+  }
+
+  /**
+   * Returns a copy of this node where `rule` has been recursively applied first to all of its
+   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
+   * unchanged.
+   *
+   * @param rule   the function used to transform this nodes children
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def transformUpWithPruning(cond: TreePatternBits => Boolean,
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
+  : BaseType = {
+    if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+      return this
+    }
+    val afterRuleOnChildren = mapChildren(_.transformUpWithPruning(cond, ruleId)(rule))
     val newNode = if (this fastEquals afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
@@ -345,9 +535,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
       }
     }
-    // If the transform function replaces this node with a new one, carry over the tags.
-    newNode.copyTagsFrom(this)
-    newNode
+    if (this eq newNode) {
+      markRuleAsIneffective(ruleId)
+      this
+    } else {
+      // If the transform function replaces this node with a new one, carry over the tags.
+      newNode.copyTagsFrom(this)
+      newNode
+    }
   }
 
   /**
@@ -355,7 +550,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
     if (containsChild.nonEmpty) {
-      mapChildren(f, forceCopy = false)
+      withNewChildren(children.map(f))
     } else {
       this
     }
@@ -465,7 +660,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   private def makeCopy(
       newArgs: Array[AnyRef],
-      allowEmptyArgs: Boolean): BaseType = attachTree(this, "makeCopy") {
+      allowEmptyArgs: Boolean): BaseType = {
     val allCtors = getClass.getConstructors
     if (newArgs.isEmpty && allCtors.isEmpty) {
       // This is a singleton object which doesn't have any constructor. Just return `this` as we
@@ -504,8 +699,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
-        throw new TreeNodeException(
-          this,
+        throw new IllegalStateException(
           s"""
              |Failed to copy node.
              |Is otherCopyArgs specified correctly for $nodeName.
@@ -536,6 +730,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
+  private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
+    // For security reason, redact the map value if the key is in centain patterns
+    val redactedMap = SQLConf.get.redactOptions(map.toMap)
+    // construct the redacted map as strings of the format "key=value"
+    val keyValuePairs = redactedMap.toSeq.map { item =>
+      item._1 + "=" + item._2
+    }
+    truncatedString(keyValuePairs, "[", ", ", "]", maxFields) :: Nil
+  }
+
   /** Returns a string representing the arguments to this node, minus any children */
   def argString(maxFields: Int): String = stringArgs.flatMap {
     case tn: TreeNode[_] if allChildren.contains(tn) => Nil
@@ -552,8 +756,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case None => Nil
     case Some(null) => Nil
     case Some(any) => any :: Nil
-    case map: CaseInsensitiveStringMap => truncatedString(
-      map.asCaseSensitiveMap().entrySet().toArray(), "[", ", ", "]", maxFields) :: Nil
+    case map: CaseInsensitiveStringMap =>
+      redactMapString(map.asCaseSensitiveMap().asScala, maxFields)
+    case map: Map[_, _] =>
+      redactMapString(map, maxFields)
     case table: CatalogTable =>
       table.storage.serde match {
         case Some(serde) => table.identifier :: serde :: Nil
@@ -829,4 +1035,134 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case storage: CatalogStorageFormat => true
     case _ => false
   }
+}
+
+trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  override final def children: Seq[T] = Nil
+  override final def mapChildren(f: T => T): T = this.asInstanceOf[T]
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
+}
+
+trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def child: T
+  @transient override final lazy val children: Seq[T] = IndexedSeq(child)
+
+  override final def mapChildren(f: T => T): T = {
+    val newChild = f(child)
+    if (newChild fastEquals child) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildInternal(newChild)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
+    assert(newChildren.size == 1, "Incorrect number of children")
+    withNewChildInternal(newChildren.head)
+  }
+
+  protected def withNewChildInternal(newChild: T): T
+}
+
+trait BinaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def left: T
+  def right: T
+  @transient override final lazy val children: Seq[T] = IndexedSeq(left, right)
+
+  override final def mapChildren(f: T => T): T = {
+    var newLeft = f(left)
+    newLeft = if (newLeft fastEquals left) left else newLeft
+    var newRight = f(right)
+    newRight = if (newRight fastEquals right) right else newRight
+
+    if (newLeft.eq(left) && newRight.eq(right)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newLeft, newRight)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
+    assert(newChildren.size == 2, "Incorrect number of children")
+    withNewChildrenInternal(newChildren(0), newChildren(1))
+  }
+
+  protected def withNewChildrenInternal(newLeft: T, newRight: T): T
+}
+
+trait TernaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def first: T
+  def second: T
+  def third: T
+  @transient override final lazy val children: Seq[T] = IndexedSeq(first, second, third)
+
+  override final def mapChildren(f: T => T): T = {
+    var newFirst = f(first)
+    newFirst = if (newFirst fastEquals first) first else newFirst
+    var newSecond = f(second)
+    newSecond = if (newSecond fastEquals second) second else newSecond
+    var newThird = f(third)
+    newThird = if (newThird fastEquals third) third else newThird
+
+    if (newFirst.eq(first) && newSecond.eq(second) && newThird.eq(third)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newFirst, newSecond, newThird)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
+    assert(newChildren.size == 3, "Incorrect number of children")
+    withNewChildrenInternal(newChildren(0), newChildren(1), newChildren(2))
+  }
+
+  protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T): T
+}
+
+trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
+  def first: T
+  def second: T
+  def third: T
+  def fourth: T
+  @transient override final lazy val children: Seq[T] = IndexedSeq(first, second, third, fourth)
+
+  override final def mapChildren(f: T => T): T = {
+    var newFirst = f(first)
+    newFirst = if (newFirst fastEquals first) first else newFirst
+    var newSecond = f(second)
+    newSecond = if (newSecond fastEquals second) second else newSecond
+    var newThird = f(third)
+    newThird = if (newThird fastEquals third) third else newThird
+    var newFourth = f(fourth)
+    newFourth = if (newFourth fastEquals fourth) fourth else newFourth
+
+    if (newFirst.eq(first) && newSecond.eq(second) && newThird.eq(third) && newFourth.eq(fourth)) {
+      this.asInstanceOf[T]
+    } else {
+      CurrentOrigin.withOrigin(origin) {
+        val res = withNewChildrenInternal(newFirst, newSecond, newThird, newFourth)
+        res.copyTagsFrom(this.asInstanceOf[T])
+        res
+      }
+    }
+  }
+
+  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
+    assert(newChildren.size == 4, "Incorrect number of children")
+    withNewChildrenInternal(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+  }
+
+  protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
 }

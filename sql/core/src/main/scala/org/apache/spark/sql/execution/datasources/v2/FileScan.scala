@@ -24,8 +24,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
@@ -84,11 +85,24 @@ trait FileScan extends Scan
 
   protected def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
+  private lazy val (normalizedPartitionFilters, normalizedDataFilters) = {
+    val output = readSchema().toAttributes
+    val partitionFilterAttributes = AttributeSet(partitionFilters).map(a => a.name -> a).toMap
+    val dataFiltersAttributes = AttributeSet(dataFilters).map(a => a.name -> a).toMap
+    val normalizedPartitionFilters = ExpressionSet(partitionFilters.map(
+      QueryPlan.normalizeExpressions(_,
+        output.map(a => partitionFilterAttributes.getOrElse(a.name, a)))))
+    val normalizedDataFilters = ExpressionSet(dataFilters.map(
+      QueryPlan.normalizeExpressions(_,
+        output.map(a => dataFiltersAttributes.getOrElse(a.name, a)))))
+    (normalizedPartitionFilters, normalizedDataFilters)
+  }
+
   override def equals(obj: Any): Boolean = obj match {
     case f: FileScan =>
-      fileIndex == f.fileIndex && readSchema == f.readSchema
-        ExpressionSet(partitionFilters) == ExpressionSet(f.partitionFilters) &&
-        ExpressionSet(dataFilters) == ExpressionSet(f.dataFilters)
+      fileIndex == f.fileIndex && readSchema == f.readSchema &&
+        normalizedPartitionFilters == f.normalizedPartitionFilters &&
+        normalizedDataFilters == f.normalizedDataFilters
 
     case _ => false
   }

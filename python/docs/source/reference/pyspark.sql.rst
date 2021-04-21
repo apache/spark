@@ -73,6 +73,17 @@ See also :class:`SparkSession`.
     SparkSession.version
 
 
+Configuration
+-------------
+
+.. currentmodule:: pyspark.sql.conf
+
+.. autosummary::
+    :toctree: api/
+
+    RuntimeConfig
+
+
 Input and Output
 ----------------
 
@@ -463,6 +474,7 @@ Functions
     posexplode
     posexplode_outer
     pow
+    product
     quarter
     radians
     raise_error

@@ -30,7 +30,7 @@ import org.apache.spark.{SparkException, SparkFiles, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
@@ -47,7 +47,14 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   def ioschema: ScriptTransformationIOSchema
 
   protected lazy val inputExpressionsWithoutSerde: Seq[Expression] = {
-    input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
+    input.map { in =>
+      in.dataType match {
+        case _: ArrayType | _: MapType | _: StructType =>
+          new StructsToJson(ioschema.inputSerdeProps.toMap, in)
+            .withTimeZone(conf.sessionLocalTimeZone)
+        case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
+      }
+    }
   }
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
@@ -220,6 +227,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
+      case _: ArrayType | _: MapType | _: StructType =>
+        val complexTypeFactory = JsonToStructs(attr.dataType,
+          ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
+        wrapperConvertException(data =>
+          complexTypeFactory.nullSafeEval(UTF8String.fromString(data)), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>

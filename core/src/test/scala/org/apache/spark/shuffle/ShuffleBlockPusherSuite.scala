@@ -52,7 +52,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   override def beforeEach(): Unit = {
     super.beforeEach()
     conf = new SparkConf(loadDefaults = false)
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     when(dependency.partitioner).thenReturn(new HashPartitioner(8))
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
     when(dependency.getMergerLocs).thenReturn(Seq(BlockManagerId("test-client", "test-client", 1)))
