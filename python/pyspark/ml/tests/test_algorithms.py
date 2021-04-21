@@ -115,6 +115,18 @@ class OneVsRestTests(SparkSessionTestCase):
         model = ovr.fit(df)
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
+
+    def test_SPARK_35142(self):
+        # https://issues.apache.org/jira/browse/SPARK-35142
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr, parallelism=1)
+        model = ovr.fit(df)
+        output = model.transform(df).head()
+        self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
         self.assertIsInstance(output.schema["rawPrediction"].dataType, VectorUDT)
 
     def test_parallelism_does_not_change_output(self):
