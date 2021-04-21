@@ -75,6 +75,10 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Specifies buckets numbers, which is used in `CLUSTERED BY` clause.
 
+* **row_format** 
+   
+    All descriptions about syntax in `row_format` can refer to [HIVE FORMAT](sql-ref-syntax-hive-format.html)
+
 * **STORED AS**
 
     File format for table storage, could be TEXTFILE, ORC, PARQUET, etc.
@@ -94,10 +98,6 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 * **AS select_statement**
 
     The table is populated using the data from the select statement.
-
-* **row_format** 
-   
-    All descriptions about syntax in `row_format` can refer to [HIVE FORMAT](sql-ref-syntax-hive-format.html)
 
 ### Examples
 
