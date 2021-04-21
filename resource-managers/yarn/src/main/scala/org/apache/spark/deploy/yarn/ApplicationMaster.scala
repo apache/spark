@@ -577,11 +577,6 @@ private[spark] class ApplicationMaster(
         failureCount = 0
       } catch {
         case i: InterruptedException => // do nothing
-        case e: ApplicationAttemptNotFoundException if isClusterMode =>
-          failureCount += 1
-          logError("Exception from Reporter thread.", e)
-          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
-            e.getMessage)
         case e: Throwable =>
           failureCount += 1
           if (!NonFatal(e)) {
