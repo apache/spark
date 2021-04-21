@@ -817,7 +817,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
-    case NestedColumnAliasing(p) => p
+    case NestedColumnAliasing(p) if conf.nestedSchemaPruningEnabled => p
 
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
