@@ -71,8 +71,16 @@ abstract class FileFormatDataWriter(
     releaseCurrentWriter()
   }
 
-  /** Writes a record */
+  /** Writes a record. */
   def write(record: InternalRow): Unit
+
+
+  /** Write an iterator of records. */
+  def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
+    while (iterator.hasNext) {
+      write(iterator.next())
+    }
+  }
 
   /**
    * Returns the summary of relative information which
@@ -297,15 +305,6 @@ abstract class BaseDynamicPartitionDataWriter(
     currentWriter.write(outputRow)
     statsTrackers.foreach(_.newRow(outputRow))
     recordsInFile += 1
-  }
-
-  /**
-   * Write an iterator of records.
-   */
-  def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
-    while (iterator.hasNext) {
-      write(iterator.next())
-    }
   }
 }
 

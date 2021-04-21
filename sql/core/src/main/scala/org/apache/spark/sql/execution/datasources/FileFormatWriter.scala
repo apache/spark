@@ -301,14 +301,7 @@ object FileFormatWriter extends Logging {
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
-        dataWriter match {
-          case w: BaseDynamicPartitionDataWriter =>
-            w.writeWithIterator(iterator)
-          case _ =>
-            while (iterator.hasNext) {
-              dataWriter.write(iterator.next())
-            }
-        }
+        dataWriter.writeWithIterator(iterator)
         dataWriter.commit()
       })(catchBlock = {
         // If there is an error, abort the task
