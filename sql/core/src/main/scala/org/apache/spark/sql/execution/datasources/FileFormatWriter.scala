@@ -289,15 +289,20 @@ object FileFormatWriter extends Logging {
       } else if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
         new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
       } else {
-        new DynamicPartitionDataWriter(
-          description, taskAttemptContext, committer, concurrentOutputWriterSpec)
+        concurrentOutputWriterSpec match {
+          case Some(spec) =>
+            new DynamicPartitionDataConcurrentWriter(
+              description, taskAttemptContext, committer, spec)
+          case _ =>
+            new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
+        }
       }
 
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
         dataWriter match {
-          case w: DynamicPartitionDataWriter if concurrentOutputWriterSpec.isDefined =>
+          case w: DynamicPartitionDataConcurrentWriter =>
             w.writeWithIterator(iterator)
           case _ =>
             while (iterator.hasNext) {
