@@ -184,7 +184,7 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions)
-  extends RDD[InternalRow](sc, Nil) {
+    extends RDD[InternalRow](sc, Nil) {
 
   /**
    * Retrieve the list of partitions corresponding to this RDD.
@@ -324,8 +324,10 @@ private[jdbc] class JDBCRDD(
    * Start the job interruption listener thread, if the job is interrupted and
    * stmt.executeQuery() is not completed, initiate a stmt.cancel() request.
    */
-  private def startTheJobInterruptListenerThread(context: TaskContext, stmt: PreparedStatement
-                                                 , isFinished: AtomicBoolean): Unit = {
+  private def startTheJobInterruptListenerThread(
+      context: TaskContext,
+      stmt: PreparedStatement,
+      isFinished: AtomicBoolean): Unit = {
     val thread = new Thread(() => {
       val waitInterval = 100
       // Always wait for job interruption or stmt.executeQuery() execution to complete
