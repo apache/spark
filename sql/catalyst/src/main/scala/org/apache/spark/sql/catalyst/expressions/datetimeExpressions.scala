@@ -2519,15 +2519,12 @@ case class SubtractTimestamps(
     right: Expression,
     legacyInterval: Boolean,
     timeZoneId: Option[String] = None)
-  extends BinaryExpression
-  with TimeZoneAwareExpression
-  with ExpectsInputTypes
-  with NullIntolerant {
+  extends BinaryOperator with TimeZoneAwareExpression with NullIntolerant {
 
   def this(endTimestamp: Expression, startTimestamp: Expression) =
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
+  override def inputType: AbstractDataType = TimestampType
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType
 
@@ -2556,8 +2553,7 @@ case class SubtractTimestamps(
         s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
   }
 
-  override def toString: String = s"($left - $right)"
-  override def sql: String = s"(${left.sql} - ${right.sql})"
+  override def symbol: String = "-"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): SubtractTimestamps =
