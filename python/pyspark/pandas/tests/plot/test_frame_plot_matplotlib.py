@@ -28,7 +28,8 @@ from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import (
     have_matplotlib,
     matplotlib_requirement_message,
-    ReusedSQLTestCase, TestUtils
+    ReusedSQLTestCase,
+    TestUtils,
 )
 
 if have_matplotlib:
