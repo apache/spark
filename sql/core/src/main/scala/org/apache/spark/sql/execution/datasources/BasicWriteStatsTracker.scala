@@ -170,7 +170,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
         "This could be due to the output format not writing empty files, " +
         "or files being not immediately visible in the filesystem.")
     }
-    BasicWriteTaskStats(partitions, numFiles, numBytes, numRows)
+    BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows)
   }
 }
 
