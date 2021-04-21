@@ -725,40 +725,59 @@ case class HashAggregateExec(
 
     val thisPlan = ctx.addReferenceObj("plan", this)
 
-    // Create a name for the iterator from the fast hash map, and the code to create fast hash map.
-    val (iterTermForFastHashMap, createFastHashMap) = if (isFastHashMapEnabled) {
-      // Generates the fast hash map class and creates the fast hash map term.
-      val fastHashMapClassName = ctx.freshName("FastHashMap")
-      if (isVectorizedHashMapEnabled) {
-        val generatedMap = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
-        ctx.addInnerClass(generatedMap)
+    // Create a name for the iterator from the fast hash map, the code to create
+    // and add hook to close fast hash map.
+    val (iterTermForFastHashMap, createFastHashMap, addHookToCloseFastHashMap) =
+      if (isFastHashMapEnabled) {
+        // Generates the fast hash map class and creates the fast hash map term.
+        val fastHashMapClassName = ctx.freshName("FastHashMap")
+        val (iter, create) = if (isVectorizedHashMapEnabled) {
+          val generatedMap = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
+            fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
+          ctx.addInnerClass(generatedMap)
 
-        // Inline mutable state since not many aggregation operations in a task
-        fastHashMapTerm = ctx.addMutableState(
-          fastHashMapClassName, "vectorizedFastHashMap", forceInline = true)
-        val iter = ctx.addMutableState(
-          "java.util.Iterator<InternalRow>",
-          "vectorizedFastHashMapIter",
-          forceInline = true)
-        val create = s"$fastHashMapTerm = new $fastHashMapClassName();"
-        (iter, create)
-      } else {
-        val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
-        ctx.addInnerClass(generatedMap)
+          // Inline mutable state since not many aggregation operations in a task
+          fastHashMapTerm = ctx.addMutableState(
+            fastHashMapClassName, "vectorizedFastHashMap", forceInline = true)
+          val iter = ctx.addMutableState(
+            "java.util.Iterator<InternalRow>",
+            "vectorizedFastHashMapIter",
+            forceInline = true)
+          val create = s"$fastHashMapTerm = new $fastHashMapClassName();"
+          (iter, create)
+        } else {
+          val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
+            fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
+          ctx.addInnerClass(generatedMap)
 
-        // Inline mutable state since not many aggregation operations in a task
-        fastHashMapTerm = ctx.addMutableState(
-          fastHashMapClassName, "fastHashMap", forceInline = true)
-        val iter = ctx.addMutableState(
-          "org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>",
-          "fastHashMapIter", forceInline = true)
-        val create = s"$fastHashMapTerm = new $fastHashMapClassName(" +
-          s"$thisPlan.getTaskContext(), $thisPlan.getEmptyAggregationBuffer());"
-        (iter, create)
-      }
-    } else ("", "")
+          // Inline mutable state since not many aggregation operations in a task
+          fastHashMapTerm = ctx.addMutableState(
+            fastHashMapClassName, "fastHashMap", forceInline = true)
+          val iter = ctx.addMutableState(
+            "org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>",
+            "fastHashMapIter", forceInline = true)
+          val create = s"$fastHashMapTerm = new $fastHashMapClassName(" +
+            s"$thisPlan.getTaskContext().taskMemoryManager(), " +
+            s"$thisPlan.getEmptyAggregationBuffer());"
+          (iter, create)
+        }
+
+        // Generates the code to register a cleanup task with TaskContext to ensure that memory
+        // is guaranteed to be freed at the end of the task. This is necessary to avoid memory
+        // leaks in when the downstream operator does not fully consume the aggregation map's
+        // output (e.g. aggregate followed by limit).
+        val hookToCloseFastHashMap =
+          s"""
+             |$thisPlan.getTaskContext().addTaskCompletionListener(
+             |  new org.apache.spark.util.TaskCompletionListener() {
+             |    @Override
+             |    public void onTaskCompletion(org.apache.spark.TaskContext context) {
+             |      $fastHashMapTerm.close();
+             |    }
+             |});
+           """.stripMargin
+        (iter, create, hookToCloseFastHashMap)
+      } else ("", "", "")
 
     // Create a name for the iterator from the regular hash map.
     // Inline mutable state since not many aggregation operations in a task
@@ -877,6 +896,7 @@ case class HashAggregateExec(
        |if (!$initAgg) {
        |  $initAgg = true;
        |  $createFastHashMap
+       |  $addHookToCloseFastHashMap
        |  $hashMapTerm = $thisPlan.createHashMap();
        |  long $beforeAgg = System.nanoTime();
        |  $doAggFuncName();
