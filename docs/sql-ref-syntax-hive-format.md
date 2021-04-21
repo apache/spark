@@ -21,8 +21,10 @@ license: |
 
 ### Description
 
-Spark support Hive format in `CREATE TABLE` clause and `TRANSFORM` clause, Hive format support 
-`SERDE` and native `DELIMITED`.
+Spark supports Hive format in `CREATE TABLE` clause and `TRANSFORM` clause,
+to specify serde or text delimeter. In `row_format`, uses the `SERDE` clause to specify a custom SerDe
+for one table or processing inputs and outputs data. Otherwise, use the `DELIMITED` clause
+to use the native SerDe and specify the delimiter, escape character, null character and so on.
 
 ### Syntax
 
@@ -37,18 +39,10 @@ row_format:
 ```
 
 ### Parameters
+   
+* **SERDE serde_class**
 
-* **row_format**    
-
-    Use the `SERDE` clause to specify a custom SerDe for one table or processing inputs and outputs data. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
-    
-* **SERDE**
-
-    Specifies a custom SerDe for one table or processing inputs and outputs data.
-    
-* **serde_class**
-
-    Specifies a fully-qualified class name of a custom SerDe.
+    Specifies a fully-qualified class name of custom SerDe for one table or processing inputs and outputs data.
 
 * **SERDEPROPERTIES**
 
