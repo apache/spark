@@ -536,7 +536,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1")
     }
     assert(msg1.getMessage.contains(
-      "Correlated column is not allowed in predicate (l2.`a` < outer())"))
+      "Correlated column is not allowed in predicate (l2.`a` < outer(l1.`a`))"))
   }
 
   test("disjunctive correlated scalar subquery") {
