@@ -21,10 +21,12 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import scala.collection.mutable
 
+import org.apache.curator.shaded.com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.config
+import org.apache.spark.scheduler.MapStatus.locationFactory
 import org.apache.spark.shuffle.api.Location
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
@@ -54,17 +56,38 @@ private[spark] sealed trait MapStatus {
    */
   def mapId: Long
 
-  protected def loadLocation(in: ObjectInput): Location = {
-    val conf = SparkEnv.get.conf
-    conf.get(config.SHUFFLE_LOCATION_PLUGIN_CLASS).map { locClass =>
-      val loc = Utils.loadExtensions(
-        classOf[Location],
-        Seq(locClass),
-        conf
-      ).head
-      loc.readExternal(in)
-      loc
-    }.getOrElse(BlockManagerId(in))
+}
+
+private[spark] class MapStatusLocationFactory(conf: SparkConf) {
+  private val locationExtension = classOf[Location]
+  private val (locationConstructor, locationName) = {
+    conf.get(config.SHUFFLE_LOCATION_PLUGIN_CLASS).map { className =>
+      val clazz = Utils.classForName(className)
+      require(locationExtension.isAssignableFrom(clazz),
+        s"$className is not a subclass of ${locationExtension.getName}.")
+      (clazz.getConstructor(), className)
+    }.orNull
+  }
+
+  private lazy val locationCache: LoadingCache[Location, Location] = CacheBuilder.newBuilder()
+    .maximumSize(10000)
+    .build(
+      new CacheLoader[Location, Location]() {
+        override def load(loc: Location): Location = loc
+      }
+    )
+
+  def load(in: ObjectInput): Location = {
+    try {
+      Option(locationConstructor).map { ctr =>
+        val loc = ctr.newInstance().asInstanceOf[Location]
+        loc.readExternal(in)
+        locationCache.get(loc)
+      }.getOrElse(BlockManagerId(in))
+    } catch {
+      case _: NoSuchMethodException =>
+        throw new SparkException(s"$locationName did not have a zero-argument constructor.")
+    }
   }
 }
 
@@ -77,6 +100,8 @@ private[spark] object MapStatus {
   private lazy val minPartitionsToUseHighlyCompressMapStatus = Option(SparkEnv.get)
     .map(_.conf.get(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS))
     .getOrElse(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS.defaultValue.get)
+
+  val locationFactory = new MapStatusLocationFactory(SparkEnv.get.conf)
 
   def apply(
       loc: Location,
@@ -160,7 +185,7 @@ private[spark] class CompressedMapStatus(
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    loc = loadLocation(in)
+    loc = locationFactory.load(in)
     val len = in.readInt()
     compressedSizes = new Array[Byte](len)
     in.readFully(compressedSizes)
@@ -229,7 +254,7 @@ private[spark] class HighlyCompressedMapStatus private (
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    loc = loadLocation(in)
+    loc = locationFactory.load(in)
     numNonEmptyBlocks = -1 // SPARK-32436 Scala 2.13 doesn't initialize this during deserialization
     emptyBlocks = new RoaringBitmap()
     emptyBlocks.deserialize(in)
