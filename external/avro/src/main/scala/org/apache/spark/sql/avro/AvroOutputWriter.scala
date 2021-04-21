@@ -84,4 +84,6 @@ private[avro] class AvroOutputWriter(
   }
 
   override def close(): Unit = recordWriter.close(context)
+
+  override def path(): String = path
 }

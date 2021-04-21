@@ -303,6 +303,8 @@ private[orc] class OrcOutputWriter(
       recordWriter.close(Reporter.NULL)
     }
   }
+
+  override def path(): String = path
 }
 
 private[orc] object OrcFileFormat extends HiveInspectors with Logging {

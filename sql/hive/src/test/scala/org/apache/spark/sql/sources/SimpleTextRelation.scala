@@ -134,6 +134,10 @@ class SimpleTextOutputWriter(path: String, dataSchema: StructType, context: Task
   override def close(): Unit = {
     writer.close()
   }
+
+  override def path(): String = {
+    path
+  }
 }
 
 object SimpleTextRelation {

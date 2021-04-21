@@ -1239,7 +1239,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         // concurrent writers with fallback
         3
       ).foreach { maxWriters =>
-        withSQLConf(SQLConf.MAX_CONCURRENT_OUTPUT_WRITERS.key -> maxWriters.toString) {
+        withSQLConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key -> maxWriters.toString) {
           spark.sql(queryToInsertTable).collect()
           checkAnswer(spark.table("t2").orderBy("k1"),
             spark.table("t1").orderBy("k1"))

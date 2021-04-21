@@ -160,4 +160,6 @@ class HiveOutputWriter(
     // Seems the boolean value passed into close does not matter.
     hiveWriter.close(false)
   }
+
+  override def path(): String = path
 }

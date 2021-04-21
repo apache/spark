@@ -58,4 +58,6 @@ class JsonOutputWriter(
     gen.close()
     writer.close()
   }
+
+  override def path(): String = path
 }

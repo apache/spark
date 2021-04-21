@@ -140,11 +140,11 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   }
 
   override def closeFile(filePath: String): Unit = {
-    getFileStats(filePath)
+    updateFileStats(filePath)
     submittedFiles.remove(filePath)
   }
 
-  private def getFileStats(filePath: String): Unit = {
+  private def updateFileStats(filePath: String): Unit = {
     getFileSize(filePath).foreach { len =>
       numBytes += len
       numFiles += 1
@@ -156,7 +156,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   }
 
   override def getFinalStats(): WriteTaskStats = {
-    submittedFiles.foreach(getFileStats)
+    submittedFiles.foreach(updateFileStats)
     submittedFiles.clear()
 
     // Reports bytesWritten and recordsWritten to the Spark output metrics.

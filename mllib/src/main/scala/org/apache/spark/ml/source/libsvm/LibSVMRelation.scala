@@ -64,6 +64,8 @@ private[libsvm] class LibSVMOutputWriter(
   override def close(): Unit = {
     writer.close()
   }
+
+  override def path(): String = path
 }
 
 /** @see [[LibSVMDataSource]] for public documentation. */

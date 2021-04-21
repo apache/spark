@@ -3150,10 +3150,10 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val MAX_CONCURRENT_OUTPUT_WRITERS = buildConf("spark.sql.maxConcurrentOutputWriters")
+  val MAX_CONCURRENT_OUTPUT_FILE_WRITERS = buildConf("spark.sql.maxConcurrentOutputFileWriters")
     .internal()
-    .doc("Maximum number of output writers to use concurrently. If number of writers needed " +
-      "exceeds this limit, task will sort rest of output then writing them.")
+    .doc("Maximum number of output file writers to use concurrently. If number of writers " +
+      "needed exceeds this limit, task will sort rest of output then writing them.")
     .version("3.2.0")
     .intConf
     .createWithDefault(0)
@@ -3847,7 +3847,7 @@ class SQLConf extends Serializable with Logging {
 
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
-  def maxConcurrentOutputWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_WRITERS)
+  def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   /** ********************** SQLConf functionality methods ************ */
 

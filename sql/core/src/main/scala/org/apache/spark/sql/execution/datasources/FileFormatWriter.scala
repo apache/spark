@@ -195,7 +195,7 @@ object FileFormatWriter extends Logging {
           global = false,
           child = empty2NullPlan)
 
-        val maxWriters = sparkSession.sessionState.conf.maxConcurrentOutputWriters
+        val maxWriters = sparkSession.sessionState.conf.maxConcurrentOutputFileWriters
         val concurrentWritersEnabled = maxWriters > 0 && sortColumns.isEmpty
         if (concurrentWritersEnabled) {
           (empty2NullPlan.execute(),
@@ -302,7 +302,7 @@ object FileFormatWriter extends Logging {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
         dataWriter match {
-          case w: DynamicPartitionDataConcurrentWriter =>
+          case w: BaseDynamicPartitionDataWriter =>
             w.writeWithIterator(iterator)
           case _ =>
             while (iterator.hasNext) {

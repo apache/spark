@@ -48,21 +48,27 @@ abstract class FileFormatDataWriter(
   protected val MAX_FILE_COUNTER: Int = 1000 * 1000
   protected val updatedPartitions: mutable.Set[String] = mutable.Set[String]()
   protected var currentWriter: OutputWriter = _
-  protected var currentPath: String = _
 
   /** Trackers for computing various statistics on the data as it's being written out. */
   protected val statsTrackers: Seq[WriteTaskStatsTracker] =
     description.statsTrackers.map(_.newTaskInstance())
 
-  protected def releaseResources(): Unit = {
+  /** Release resources of `currentWriter`. */
+  protected def releaseCurrentWriter(): Unit = {
     if (currentWriter != null) {
       try {
         currentWriter.close()
-        statsTrackers.foreach(_.closeFile(currentPath))
+        statsTrackers.foreach(_.closeFile(currentWriter.path()))
       } finally {
         currentWriter = null
       }
     }
+  }
+
+  /** Release all resources. */
+  protected def releaseResources(): Unit = {
+    // Call `releaseCurrentWriter()` by default, as this is the only resource to be released.
+    releaseCurrentWriter()
   }
 
   /** Writes a record */
@@ -118,7 +124,7 @@ class SingleDirectoryDataWriter(
     releaseResources()
 
     val ext = description.outputWriterFactory.getFileExtension(taskAttemptContext)
-    currentPath = committer.newTaskTempFile(
+    val currentPath = committer.newTaskTempFile(
       taskAttemptContext,
       None,
       f"-c$fileCounter%03d" + ext)
@@ -230,7 +236,7 @@ abstract class BaseDynamicPartitionDataWriter(
 
     recordsInFile = 0
     if (closeCurrentWriter) {
-      super[FileFormatDataWriter].releaseResources()
+      releaseCurrentWriter()
     }
 
     val partDir = partitionValues.map(getPartitionPath(_))
@@ -245,7 +251,7 @@ abstract class BaseDynamicPartitionDataWriter(
     val customPath = partDir.flatMap { dir =>
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
-    currentPath = if (customPath.isDefined) {
+    val currentPath = if (customPath.isDefined) {
       committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
     } else {
       committer.newTaskTempFile(taskAttemptContext, partDir, ext)
@@ -291,6 +297,15 @@ abstract class BaseDynamicPartitionDataWriter(
     currentWriter.write(outputRow)
     statsTrackers.foreach(_.newRow(outputRow))
     recordsInFile += 1
+  }
+
+  /**
+   * Write an iterator of records.
+   */
+  def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
+    while (iterator.hasNext) {
+      write(iterator.next())
+    }
   }
 }
 
@@ -357,11 +372,10 @@ class DynamicPartitionDataConcurrentWriter(
     var bucketId: Option[Int])
 
   /** Wrapper class for status of a unique concurrent output writer. */
-  private case class WriterStatus(
+  private class WriterStatus(
     var outputWriter: OutputWriter,
     var recordsInFile: Long,
-    var fileCounter: Int,
-    var latestFilePath: String)
+    var fileCounter: Int)
 
   /**
    * State to indicate if we are falling back to sort-based writer.
@@ -415,7 +429,7 @@ class DynamicPartitionDataConcurrentWriter(
   /**
    * Write iterator of records with concurrent writers.
    */
-  def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
+  override def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
     while (iterator.hasNext && !sortBased) {
       write(iterator.next())
     }
@@ -442,7 +456,6 @@ class DynamicPartitionDataConcurrentWriter(
         status.outputWriter = currentWriter
         status.recordsInFile = recordsInFile
         status.fileCounter = fileCounter
-        status.latestFilePath = currentPath
       } else {
         // Remove writer status in concurrent writers map and release writer resource,
         // because the writer is not needed any more.
@@ -461,7 +474,6 @@ class DynamicPartitionDataConcurrentWriter(
       currentWriter = status.outputWriter
       recordsInFile = status.recordsInFile
       fileCounter = status.fileCounter
-      currentPath = status.latestFilePath
     } else {
       fileCounter = 0
       newOutputWriter(
@@ -470,7 +482,7 @@ class DynamicPartitionDataConcurrentWriter(
         closeCurrentWriter = false)
       concurrentWriters.put(
         WriterIndex(currentWriterId.partitionValues, currentWriterId.bucketId),
-        WriterStatus(currentWriter, recordsInFile, fileCounter, currentPath))
+        new WriterStatus(currentWriter, recordsInFile, fileCounter))
       if (concurrentWriters.size > concurrentOutputWriterSpec.maxWriters &&
         !sortBased) {
         // Fall back to sort-based sequential writer mode.
@@ -488,14 +500,12 @@ class DynamicPartitionDataConcurrentWriter(
       status.outputWriter = currentWriter
       status.recordsInFile = recordsInFile
       status.fileCounter = fileCounter
-      status.latestFilePath = currentPath
     }
     currentWriterId.partitionValues = None
     currentWriterId.bucketId = None
     currentWriter = null
     recordsInFile = 0
     fileCounter = 0
-    currentPath = null
   }
 }
 

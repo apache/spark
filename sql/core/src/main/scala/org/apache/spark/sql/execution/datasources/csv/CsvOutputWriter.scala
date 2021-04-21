@@ -46,4 +46,6 @@ class CsvOutputWriter(
   override def write(row: InternalRow): Unit = gen.write(row)
 
   override def close(): Unit = gen.close()
+
+  override def path(): String = path
 }
