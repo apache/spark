@@ -37,7 +37,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
-import org.apache.spark.shuffle.api.Location
+import org.apache.spark.shuffle.api.{ExecutorLocation, HostLocation, Location}
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
 
@@ -162,7 +162,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    */
   def removeOutputsOnHost(host: String): Unit = withWriteLock {
     logDebug(s"Removing outputs for host ${host}")
-    removeOutputsByFilter(x => x.asInstanceOf[BlockManagerId].host == host)
+    removeOutputsByFilter(x => x.asInstanceOf[HostLocation].host == host)
   }
 
   /**
@@ -172,7 +172,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    */
   def removeOutputsOnExecutor(execId: String): Unit = withWriteLock {
     logDebug(s"Removing outputs for execId ${execId}")
-    removeOutputsByFilter(x => x.asInstanceOf[BlockManagerId].executorId == execId)
+    removeOutputsByFilter(x => x.asInstanceOf[ExecutorLocation].executorId == execId)
   }
 
   /**
@@ -647,7 +647,9 @@ private[spark] class MapOutputTrackerMaster(
       val locations = getLocationsWithLargestOutputs(dep.shuffleId, partitionId,
         dep.partitioner.numPartitions, REDUCER_PREF_LOCS_FRACTION)
       if (locations.nonEmpty) {
-        locations.get.map(_.asInstanceOf[BlockManagerId].host)
+        locations.get
+          .filter(_.isInstanceOf[HostLocation])
+          .map(_.asInstanceOf[HostLocation].host)
       } else {
         Nil
       }
@@ -729,7 +731,9 @@ private[spark] class MapOutputTrackerMaster(
         if (startMapIndex < endMapIndex &&
           (startMapIndex >= 0 && endMapIndex <= statuses.length)) {
           val statusesPicked = statuses.slice(startMapIndex, endMapIndex).filter(_ != null)
-          statusesPicked.map(_.location.asInstanceOf[BlockManagerId].host).toSeq
+          statusesPicked
+            .filter(_.location.isInstanceOf[HostLocation])
+            .map(_.location.asInstanceOf[HostLocation].host).toSeq
         } else {
           Nil
         }
