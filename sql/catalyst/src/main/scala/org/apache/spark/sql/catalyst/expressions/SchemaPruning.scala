@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.types._
 
-object SchemaPruning {
+object SchemaPruning extends SQLConfHelper {
   /**
    * Filters the schema by the requested fields. For example, if the schema is struct<a:int, b:int>,
    * and given requested field are "a", the field "b" is pruned in the returned schema.
@@ -28,6 +29,7 @@ object SchemaPruning {
   def pruneDataSchema(
       dataSchema: StructType,
       requestedRootFields: Seq[RootField]): StructType = {
+    val resolver = conf.resolver
     // Merge the requested root fields into a single schema. Note the ordering of the fields
     // in the resulting schema may differ from their ordering in the logical relation's
     // original schema
@@ -36,7 +38,7 @@ object SchemaPruning {
       .reduceLeft(_ merge _)
     val dataSchemaFieldNames = dataSchema.fieldNames.toSet
     val mergedDataSchema =
-      StructType(mergedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
+      StructType(mergedSchema.filter(f => dataSchemaFieldNames.exists(resolver(_, f.name))))
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
     sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
@@ -61,12 +63,15 @@ object SchemaPruning {
           sortLeftFieldsByRight(leftValueType, rightValueType),
           containsNull)
       case (leftStruct: StructType, rightStruct: StructType) =>
-        val filteredRightFieldNames = rightStruct.fieldNames.filter(leftStruct.fieldNames.contains)
+        val resolver = conf.resolver
+        val filteredRightFieldNames = rightStruct.fieldNames
+          .filter(name => leftStruct.fieldNames.exists(resolver(_, name)))
         val sortedLeftFields = filteredRightFieldNames.map { fieldName =>
-          val leftFieldType = leftStruct(fieldName).dataType
+          val resolvedLeftStruct = leftStruct.find(p => resolver(p.name, fieldName)).get
+          val leftFieldType = resolvedLeftStruct.dataType
           val rightFieldType = rightStruct(fieldName).dataType
           val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
-          StructField(fieldName, sortedLeftFieldType, nullable = leftStruct(fieldName).nullable)
+          StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable)
         }
         StructType(sortedLeftFields)
       case _ => left
