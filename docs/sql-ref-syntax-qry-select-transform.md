@@ -42,7 +42,7 @@ SELECT TRANSFORM ( expression [ , ... ] )
     Specifies a combination of one or more values, operators and SQL functions that results in a value.
 
 * **row_format** 
-   
+
     All descriptions about syntax in `row_format` can refer to [HIVE FORMAT](sql-ref-syntax-hive-format.html)
 
 * **RECORDWRITER**
