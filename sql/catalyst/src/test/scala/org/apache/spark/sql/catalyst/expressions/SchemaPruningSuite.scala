@@ -18,9 +18,20 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.SchemaPruning.RootField
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.types._
 
-class SchemaPruningSuite extends SparkFunSuite {
+class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
+
+  def getRootFields(requestedFields: StructField*): Seq[RootField] = {
+    requestedFields.map { f =>
+      // `derivedFromAtt` doesn't affect the result of pruned schema.
+      SchemaPruning.RootField(field = f, derivedFromAtt = true)
+    }
+  }
+
   test("prune schema by the requested fields") {
     def testPrunedSchema(
         schema: StructType,
@@ -58,5 +69,35 @@ class SchemaPruningSuite extends SparkFunSuite {
     val selectFieldInMap = StructField("d", MapType(StructType.fromDDL("a int, b int"),
       StructType.fromDDL("e int, f string")))
     testPrunedSchema(complexStruct, StructField("c", IntegerType), selectFieldInMap)
+  }
+
+  test("SPARK-35096: test case insensitivity of pruned schema") {
+    Seq(true, false).foreach(isCaseSensitive => {
+      withSQLConf(CASE_SENSITIVE.key -> isCaseSensitive.toString) {
+        if (isCaseSensitive) {
+          // Schema is case-sensitive
+          val requestedFields = getRootFields(StructField("id", IntegerType))
+          val prunedSchema = SchemaPruning.pruneDataSchema(
+            StructType.fromDDL("ID int, name String"), requestedFields)
+          assert(prunedSchema == StructType(Seq.empty))
+          // Root fields are case-sensitive
+          val rootFieldsSchema = SchemaPruning.pruneDataSchema(
+            StructType.fromDDL("id int, name String"),
+            getRootFields(StructField("ID", IntegerType)))
+          assert(rootFieldsSchema == StructType(StructType(Seq.empty)))
+        } else {
+          // Schema is case-insensitive
+          val prunedSchema = SchemaPruning.pruneDataSchema(
+            StructType.fromDDL("ID int, name String"),
+            getRootFields(StructField("id", IntegerType)))
+          assert(prunedSchema == StructType(StructField("ID", IntegerType) :: Nil))
+          // Root fields are case-insensitive
+          val rootFieldsSchema = SchemaPruning.pruneDataSchema(
+            StructType.fromDDL("id int, name String"),
+            getRootFields(StructField("ID", IntegerType)))
+          assert(rootFieldsSchema == StructType(StructField("id", IntegerType) :: Nil))
+        }
+      }
+    })
   }
 }
