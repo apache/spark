@@ -1776,11 +1776,6 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-35111: Cast string to year-month interval") {
-    val regex = "INTERVAL '([-|+]?[0-9]+-[-|+]?[0-9]+)' YEAR TO MONTH".r
-    val m = regex.findFirstMatchIn("INTERVAL '0-0' YEAR TO MONTH")
-    println(m)
-    println(m.map(_.group(1)))
-
     checkEvaluation(cast(Literal.create("INTERVAL '0-0' YEAR TO MONTH"),
       YearMonthIntervalType), 0)
     checkEvaluation(cast(Literal.create("0-0"), YearMonthIntervalType), 0)
