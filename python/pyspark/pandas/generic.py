@@ -30,7 +30,6 @@ import numpy as np  # noqa: F401
 import pandas as pd
 from pandas.api.types import is_list_like
 
-import pyspark
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -41,10 +40,9 @@ from pyspark.sql.types import (
     NumericType,
 )
 
-from pyspark import pandas as pp  # For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Scalar, spark_type_to_pandas_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,
@@ -147,7 +145,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame([[2.0, 1.0], [3.0, None], [1.0, 0.0]], columns=list('AB'))
+        >>> df = ps.DataFrame([[2.0, 1.0], [3.0, None], [1.0, 0.0]], columns=list('AB'))
         >>> df
              A    B
         0  2.0  1.0
@@ -208,7 +206,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame([[2.0, 1.0], [3.0, None], [1.0, 0.0]], columns=list('AB'))
+        >>> df = ps.DataFrame([[2.0, 1.0], [3.0, None], [1.0, 0.0]], columns=list('AB'))
         >>> df
              A    B
         0  2.0  1.0
@@ -269,7 +267,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame([[2.0, 1.0], [3.0, None], [1.0, 0.0]], columns=list('AB'))
+        >>> df = ps.DataFrame([[2.0, 1.0], [3.0, None], [1.0, 0.0]], columns=list('AB'))
         >>> df
              A    B
         0  2.0  1.0
@@ -308,8 +306,8 @@ class Frame(object, metaclass=ABCMeta):
             single partition in single machine and could cause serious
             performance degradation. Avoid this method against very large dataset.
 
-        .. note:: unlike pandas', Koalas' emulates cumulative product by ``exp(sum(log(...)))``
-            trick. Therefore, it only works for positive numbers.
+        .. note:: unlike pandas', pandas-on-Spark's emulates cumulative product by
+            ``exp(sum(log(...)))`` trick. Therefore, it only works for positive numbers.
 
         Parameters
         ----------
@@ -337,7 +335,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame([[2.0, 1.0], [3.0, None], [4.0, 10.0]], columns=list('AB'))
+        >>> df = ps.DataFrame([[2.0, 1.0], [3.0, None], [4.0, 10.0]], columns=list('AB'))
         >>> df
              A     B
         0  2.0   1.0
@@ -383,7 +381,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
         >>> a = [['a', 1, 1], ['b', 2, 2], ['c', 3, 3]]
-        >>> df = pp.DataFrame(a, columns=['str', 'int1', 'int2'])
+        >>> df = ps.DataFrame(a, columns=['str', 'int1', 'int2'])
         >>> df
           str  int1  int2
         0   a     1     1
@@ -437,7 +435,7 @@ class Frame(object, metaclass=ABCMeta):
         Use ``.pipe`` when chaining together functions that expect
         Series, DataFrames or GroupBy objects. For example, given
 
-        >>> df = pp.DataFrame({'category': ['A', 'A', 'B'],
+        >>> df = ps.DataFrame({'category': ['A', 'A', 'B'],
         ...                    'col1': [1, 2, 3],
         ...                    'col2': [4, 5, 6]},
         ...                   columns=['category', 'col1', 'col2'])
@@ -488,7 +486,7 @@ class Frame(object, metaclass=ABCMeta):
 
         You can use lambda as wel
 
-        >>> pp.Series([1, 2, 3]).pipe(lambda x: (x + 1).rename("value"))
+        >>> ps.Series([1, 2, 3]).pipe(lambda x: (x + 1).rename("value"))
         0    2
         1    3
         2    4
@@ -517,26 +515,26 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> pp.DataFrame({"A": [1, 2], "B": [3, 4]}).to_numpy()
+        >>> ps.DataFrame({"A": [1, 2], "B": [3, 4]}).to_numpy()
         array([[1, 3],
                [2, 4]])
 
         With heterogeneous data, the lowest common type will have to be used.
 
-        >>> pp.DataFrame({"A": [1, 2], "B": [3.0, 4.5]}).to_numpy()
+        >>> ps.DataFrame({"A": [1, 2], "B": [3.0, 4.5]}).to_numpy()
         array([[1. , 3. ],
                [2. , 4.5]])
 
         For a mix of numeric and non-numeric types, the output array will have object dtype.
 
-        >>> df = pp.DataFrame({"A": [1, 2], "B": [3.0, 4.5], "C": pd.date_range('2000', periods=2)})
+        >>> df = ps.DataFrame({"A": [1, 2], "B": [3.0, 4.5], "C": pd.date_range('2000', periods=2)})
         >>> df.to_numpy()
         array([[1, 3.0, Timestamp('2000-01-01 00:00:00')],
                [2, 4.5, Timestamp('2000-01-02 00:00:00')]], dtype=object)
 
         For Series,
 
-        >>> pp.Series(['a', 'b', 'a']).to_numpy()
+        >>> ps.Series(['a', 'b', 'a']).to_numpy()
         array(['a', 'b', 'a'], dtype=object)
         """
         return self.to_pandas().values
@@ -560,7 +558,7 @@ class Frame(object, metaclass=ABCMeta):
         A DataFrame where all columns are the same type (e.g., int64) results in an array of
         the same type.
 
-        >>> df = pp.DataFrame({'age':    [ 3,  29],
+        >>> df = ps.DataFrame({'age':    [ 3,  29],
         ...                    'height': [94, 170],
         ...                    'weight': [31, 115]})
         >>> df
@@ -579,7 +577,7 @@ class Frame(object, metaclass=ABCMeta):
         A DataFrame with mixed type columns(e.g., str/object, int64, float32) results in an ndarray
         of the broadest type that accommodates these mixed types (e.g., object).
 
-        >>> df2 = pp.DataFrame([('parrot',   24.0, 'second'),
+        >>> df2 = ps.DataFrame([('parrot',   24.0, 'second'),
         ...                     ('lion',     80.5, 'first'),
         ...                     ('monkey', np.nan, None)],
         ...                   columns=('name', 'max_speed', 'rank'))
@@ -595,10 +593,10 @@ class Frame(object, metaclass=ABCMeta):
 
         For Series,
 
-        >>> pp.Series([1, 2, 3]).values
+        >>> ps.Series([1, 2, 3]).values
         array([1, 2, 3])
 
-        >>> pp.Series(list('aabc')).values
+        >>> ps.Series(list('aabc')).values
         array(['a', 'a', 'b', 'c'], dtype=object)
         """
         warnings.warn("We recommend using `{}.to_numpy()` instead.".format(type(self).__name__))
@@ -623,10 +621,10 @@ class Frame(object, metaclass=ABCMeta):
         r"""
         Write object to a comma-separated values (csv) file.
 
-        .. note:: Koalas `to_csv` writes files to a path or URI. Unlike pandas', Koalas
-            respects HDFS's property such as 'fs.default.name'.
+        .. note:: pandas-on-Spark `to_csv` writes files to a path or URI. Unlike pandas',
+            pandas-on-Spark respects HDFS's property such as 'fs.default.name'.
 
-        .. note:: Koalas writes CSV files into the directory, `path`, and writes
+        .. note:: pandas-on-Spark writes CSV files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
             This behaviour was inherited from Apache Spark. The number of files can
             be controlled by `num_files`.
@@ -665,8 +663,8 @@ class Frame(object, metaclass=ABCMeta):
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options: keyword arguments for additional options specific to PySpark.
             This kwargs are specific to PySpark's CSV options to pass. Check
             the options in PySpark's API documentation for spark.write.csv(...).
@@ -687,7 +685,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame(dict(
+        >>> df = ps.DataFrame(dict(
         ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
@@ -704,7 +702,7 @@ class Frame(object, metaclass=ABCMeta):
         2012-03-31 12:00:00,JP,3
 
         >>> df.cummax().to_csv(path=r'%s/to_csv/foo.csv' % path, num_files=1)
-        >>> pp.read_csv(
+        >>> ps.read_csv(
         ...    path=r'%s/to_csv/foo.csv' % path
         ... ).sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
                            date country  code
@@ -721,7 +719,7 @@ class Frame(object, metaclass=ABCMeta):
         2012-03-31 12:00:00
 
         >>> df.date.to_csv(path=r'%s/to_csv/foo.csv' % path, num_files=1)
-        >>> pp.read_csv(
+        >>> ps.read_csv(
         ...     path=r'%s/to_csv/foo.csv' % path
         ... ).sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
                            date
@@ -736,7 +734,7 @@ class Frame(object, metaclass=ABCMeta):
         ...     path=r'%s/to_csv/bar.csv' % path,
         ...     num_files=1,
         ...     index_col=["index1", "index2"])
-        >>> pp.read_csv(
+        >>> ps.read_csv(
         ...     path=r'%s/to_csv/bar.csv' % path, index_col=["index1", "index2"]
         ... ).sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
                                      date
@@ -752,7 +750,7 @@ class Frame(object, metaclass=ABCMeta):
             # If path is none, just collect and use pandas's to_csv.
             kdf_or_ser = self
             if (LooseVersion("0.24") > LooseVersion(pd.__version__)) and isinstance(
-                self, pp.Series
+                self, ps.Series
             ):
                 # 0.23 seems not having 'columns' parameter in Series' to_csv.
                 return kdf_or_ser.to_pandas().to_csv(  # type: ignore
@@ -777,7 +775,7 @@ class Frame(object, metaclass=ABCMeta):
                 )
 
         kdf = self
-        if isinstance(self, pp.Series):
+        if isinstance(self, ps.Series):
             kdf = self.to_frame()
 
         if columns is None:
@@ -854,10 +852,10 @@ class Frame(object, metaclass=ABCMeta):
         """
         Convert the object to a JSON string.
 
-        .. note:: Koalas `to_json` writes files to a path or URI. Unlike pandas', Koalas
-            respects HDFS's property such as 'fs.default.name'.
+        .. note:: pandas-on-Spark `to_json` writes files to a path or URI. Unlike pandas',
+            pandas-on-Spark respects HDFS's property such as 'fs.default.name'.
 
-        .. note:: Koalas writes JSON files into the directory, `path`, and writes
+        .. note:: pandas-on-Spark writes JSON files into the directory, `path`, and writes
             multiple `part-...` files in the directory when `path` is specified.
             This behaviour was inherited from Apache Spark. The number of files can
             be controlled by `num_files`.
@@ -897,8 +895,8 @@ class Frame(object, metaclass=ABCMeta):
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
         index_col: str or list of str, optional, default: None
-            Column names to be used in Spark to represent Koalas' index. The index name
-            in Koalas is ignored. By default, the index is always lost.
+            Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+            in pandas-on-Spark is ignored. By default, the index is always lost.
         options: keyword arguments for additional options specific to PySpark.
             It is specific to PySpark's JSON options to pass. Check
             the options in PySpark's API documentation for `spark.write.json(...)`.
@@ -911,7 +909,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame([['a', 'b'], ['c', 'd']],
+        >>> df = ps.DataFrame([['a', 'b'], ['c', 'd']],
         ...                   columns=['col 1', 'col 2'])
         >>> df.to_json()
         '[{"col 1":"a","col 2":"b"},{"col 1":"c","col 2":"d"}]'
@@ -920,7 +918,7 @@ class Frame(object, metaclass=ABCMeta):
         '[{"col 1":"a"},{"col 1":"c"}]'
 
         >>> df.to_json(path=r'%s/to_json/foo.json' % path, num_files=1)
-        >>> pp.read_json(
+        >>> ps.read_json(
         ...     path=r'%s/to_json/foo.json' % path
         ... ).sort_values(by="col 1")
           col 1 col 2
@@ -928,7 +926,7 @@ class Frame(object, metaclass=ABCMeta):
         1     c     d
 
         >>> df['col 1'].to_json(path=r'%s/to_json/foo.json' % path, num_files=1, index_col="index")
-        >>> pp.read_json(
+        >>> ps.read_json(
         ...     path=r'%s/to_json/foo.json' % path, index_col="index"
         ... ).sort_values(by="col 1")  # doctest: +NORMALIZE_WHITESPACE
               col 1
@@ -949,14 +947,14 @@ class Frame(object, metaclass=ABCMeta):
             # If path is none, just collect and use pandas's to_json.
             kdf_or_ser = self
             pdf = kdf_or_ser.to_pandas()  # type: ignore
-            if isinstance(self, pp.Series):
+            if isinstance(self, ps.Series):
                 pdf = pdf.to_frame()
             # To make the format consistent and readable by `read_json`, convert it to pandas' and
             # use 'records' orient for now.
             return pdf.to_json(orient="records")
 
         kdf = self
-        if isinstance(self, pp.Series):
+        if isinstance(self, ps.Series):
             kdf = self.to_frame()
         sdf = kdf.to_spark(index_col=index_col)  # type: ignore
 
@@ -1062,7 +1060,7 @@ class Frame(object, metaclass=ABCMeta):
         --------
         Create, write to and save a workbook:
 
-        >>> df1 = pp.DataFrame([['a', 'b'], ['c', 'd']],
+        >>> df1 = ps.DataFrame([['a', 'b'], ['c', 'd']],
         ...                    index=['row 1', 'row 2'],
         ...                    columns=['col 1', 'col 2'])
         >>> df1.to_excel("output.xlsx")  # doctest: +SKIP
@@ -1090,9 +1088,9 @@ class Frame(object, metaclass=ABCMeta):
         args = locals()
         kdf = self
 
-        if isinstance(self, pp.DataFrame):
+        if isinstance(self, ps.DataFrame):
             f = pd.DataFrame.to_excel
-        elif isinstance(self, pp.Series):
+        elif isinstance(self, ps.Series):
             f = pd.Series.to_excel
         else:
             raise TypeError(
@@ -1123,7 +1121,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
@@ -1189,7 +1187,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, np.nan, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, np.nan, 0.3, np.nan]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
@@ -1256,7 +1254,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return the product of the values.
 
-        .. note:: unlike pandas', Koalas' emulates product by ``exp(sum(log(...)))``
+        .. note:: unlike pandas', pandas-on-Spark's emulates product by ``exp(sum(log(...)))``
             trick. Therefore, it only works for positive numbers.
 
         Parameters
@@ -1276,7 +1274,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Non-numeric type column is not included to the result.
 
-        >>> kdf = pp.DataFrame({'A': [1, 2, 3, 4, 5],
+        >>> kdf = ps.DataFrame({'A': [1, 2, 3, 4, 5],
         ...                     'B': [10, 20, 30, 40, 50],
         ...                     'C': ['a', 'b', 'c', 'd', 'e']})
         >>> kdf
@@ -1294,22 +1292,22 @@ class Frame(object, metaclass=ABCMeta):
 
         If there is no numeric type columns, returns empty Series.
 
-        >>> pp.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()
+        >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()
         Series([], dtype: float64)
 
         On a Series:
 
-        >>> pp.Series([1, 2, 3, 4, 5]).prod()
+        >>> ps.Series([1, 2, 3, 4, 5]).prod()
         120
 
         By default, the product of an empty or all-NA Series is ``1``
 
-        >>> pp.Series([]).prod()
+        >>> ps.Series([]).prod()
         1.0
 
         This can be controlled with the ``min_count`` parameter
 
-        >>> pp.Series([]).prod(min_count=1)
+        >>> ps.Series([]).prod(min_count=1)
         nan
         """
         axis = validate_axis(axis)
@@ -1370,7 +1368,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
@@ -1427,7 +1425,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
@@ -1486,7 +1484,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
@@ -1541,7 +1539,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
@@ -1606,7 +1604,7 @@ class Frame(object, metaclass=ABCMeta):
         --------
         Constructing DataFrame from a dictionary:
 
-        >>> df = pp.DataFrame({"Person":
+        >>> df = ps.DataFrame({"Person":
         ...                    ["John", "Myla", "Lewis", "John", "Myla"],
         ...                    "Age": [24., np.nan, 21., 33, 26],
         ...                    "Single": [False, True, True, True, False]},
@@ -1672,7 +1670,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
@@ -1751,7 +1749,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
+        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
         ...                   columns=['a', 'b'])
 
         On a DataFrame:
@@ -1812,7 +1810,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         Return the median of the values for the requested axis.
 
-        .. note:: Unlike pandas', the median in Koalas is an approximated median based upon
+        .. note:: Unlike pandas', the median in pandas-on-Spark is an approximated median based upon
             approximate percentile computation because computing median across a large dataset
             is extremely expensive.
 
@@ -1833,7 +1831,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'a': [24., 21., 25., 33., 26.], 'b': [1, 2, 3, 4, 5]}, columns=['a', 'b'])
         >>> df
               a  b
@@ -1903,7 +1901,7 @@ class Frame(object, metaclass=ABCMeta):
 
         def median(spark_column, spark_type):
             if isinstance(spark_type, (BooleanType, NumericType)):
-                return SF.percentile_approx(spark_column.cast(DoubleType()), 0.5, accuracy)
+                return F.percentile_approx(spark_column.cast(DoubleType()), 0.5, accuracy)
             else:
                 raise TypeError(
                     "Could not convert {} ({}) to numeric".format(
@@ -1938,7 +1936,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        >>> kdf = ps.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
         >>> kdf
            a  b
         0  1  4
@@ -2016,15 +2014,15 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> s = pp.Series({'a': 1, 'b': 2, 'c': None})
+        >>> s = ps.Series({'a': 1, 'b': 2, 'c': None})
         >>> s.size
         3
 
-        >>> df = pp.DataFrame({'col1': [1, 2, None], 'col2': [3, 4, None]})
+        >>> df = ps.DataFrame({'col1': [1, 2, None], 'col2': [3, 4, None]})
         >>> df.size
         6
 
-        >>> df = pp.DataFrame(index=[1, 2, None])
+        >>> df = ps.DataFrame(index=[1, 2, None])
         >>> df.size
         0
         """
@@ -2047,7 +2045,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Absolute numeric values in a Series.
 
-        >>> s = pp.Series([-1.10, 2, -3.33, 4])
+        >>> s = ps.Series([-1.10, 2, -3.33, 4])
         >>> s.abs()
         0    1.10
         1    2.00
@@ -2057,7 +2055,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Absolute numeric values in a DataFrame.
 
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'a': [4, 5, 6, 7],
         ...     'b': [10, 20, 30, 40],
         ...     'c': [100, 50, -30, -50]
@@ -2129,7 +2127,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'Animal': ['Falcon', 'Falcon',
+        >>> df = ps.DataFrame({'Animal': ['Falcon', 'Falcon',
         ...                               'Parrot', 'Parrot'],
         ...                    'Max Speed': [380., 370., 24., 26.]},
         ...                   columns=['Animal', 'Max Speed'])
@@ -2156,7 +2154,7 @@ class Frame(object, metaclass=ABCMeta):
         the default setting is True:
 
         >>> l = [[1, 2, 3], [1, None, 4], [2, 1, 3], [1, 2, 2]]
-        >>> df = pp.DataFrame(l, columns=["a", "b", "c"])
+        >>> df = ps.DataFrame(l, columns=["a", "b", "c"])
         >>> df.groupby(by=["b"]).sum().sort_index()  # doctest: +NORMALIZE_WHITESPACE
              a  c
         b
@@ -2172,33 +2170,33 @@ class Frame(object, metaclass=ABCMeta):
         """
         from pyspark.pandas.groupby import DataFrameGroupBy, SeriesGroupBy
 
-        if isinstance(by, pp.DataFrame):
+        if isinstance(by, ps.DataFrame):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
-        elif isinstance(by, pp.Series):
+        elif isinstance(by, ps.Series):
             by = [by]
         elif is_name_like_tuple(by):
-            if isinstance(self, pp.Series):
+            if isinstance(self, ps.Series):
                 raise KeyError(by)
             by = [by]
         elif is_name_like_value(by):
-            if isinstance(self, pp.Series):
+            if isinstance(self, ps.Series):
                 raise KeyError(by)
             by = [(by,)]
         elif is_list_like(by):
-            new_by = []  # type: List[Union[Tuple, pp.Series]]
+            new_by = []  # type: List[Union[Tuple, ps.Series]]
             for key in by:
-                if isinstance(key, pp.DataFrame):
+                if isinstance(key, ps.DataFrame):
                     raise ValueError(
                         "Grouper for '{}' not 1-dimensional".format(type(key).__name__)
                     )
-                elif isinstance(key, pp.Series):
+                elif isinstance(key, ps.Series):
                     new_by.append(key)
                 elif is_name_like_tuple(key):
-                    if isinstance(self, pp.Series):
+                    if isinstance(self, ps.Series):
                         raise KeyError(key)
                     new_by.append(key)
                 elif is_name_like_value(key):
-                    if isinstance(self, pp.Series):
+                    if isinstance(self, ps.Series):
                         raise KeyError(key)
                     new_by.append((key,))
                 else:
@@ -2214,9 +2212,9 @@ class Frame(object, metaclass=ABCMeta):
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
 
-        if isinstance(self, pp.DataFrame):
+        if isinstance(self, ps.DataFrame):
             return DataFrameGroupBy._build(self, by, as_index=as_index, dropna=dropna)
-        elif isinstance(self, pp.Series):
+        elif isinstance(self, ps.Series):
             return SeriesGroupBy._build(self, by, as_index=as_index, dropna=dropna)
         else:
             raise TypeError(
@@ -2236,34 +2234,34 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> pp.DataFrame({'a': [True]}).bool()
+        >>> ps.DataFrame({'a': [True]}).bool()
         True
 
-        >>> pp.Series([False]).bool()
+        >>> ps.Series([False]).bool()
         False
 
         If there are non-boolean or multiple values exist, it raises an exception in all
         cases as below.
 
-        >>> pp.DataFrame({'a': ['a']}).bool()
+        >>> ps.DataFrame({'a': ['a']}).bool()
         Traceback (most recent call last):
           ...
         ValueError: bool cannot act on a non-boolean single element DataFrame
 
-        >>> pp.DataFrame({'a': [True], 'b': [False]}).bool()  # doctest: +NORMALIZE_WHITESPACE
+        >>> ps.DataFrame({'a': [True], 'b': [False]}).bool()  # doctest: +NORMALIZE_WHITESPACE
         Traceback (most recent call last):
           ...
         ValueError: The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(),
         a.item(), a.any() or a.all().
 
-        >>> pp.Series([1]).bool()
+        >>> ps.Series([1]).bool()
         Traceback (most recent call last):
           ...
         ValueError: bool cannot act on a non-boolean single element DataFrame
         """
-        if isinstance(self, pp.DataFrame):
+        if isinstance(self, ps.DataFrame):
             df = self
-        elif isinstance(self, pp.Series):
+        elif isinstance(self, ps.Series):
             df = self.to_dataframe()
         else:
             raise TypeError("bool() expects DataFrame or Series; however, " "got [%s]" % (self,))
@@ -2282,7 +2280,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Support for DataFrame
 
-        >>> kdf = pp.DataFrame({'a': [None, 2, 3, 2],
+        >>> kdf = ps.DataFrame({'a': [None, 2, 3, 2],
         ...                     'b': [None, 2.0, 3.0, 1.0],
         ...                     'c': [None, 200, 400, 200]},
         ...                     index=['Q', 'W', 'E', 'R'])
@@ -2312,7 +2310,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Support for Series.
 
-        >>> s = pp.Series([None, None, 3, 4, 5], index=[100, 200, 300, 400, 500])
+        >>> s = ps.Series([None, None, 3, 4, 5], index=[100, 200, 300, 400, 500])
         >>> s
         100    NaN
         200    NaN
@@ -2330,7 +2328,7 @@ class Frame(object, metaclass=ABCMeta):
         ...                       ['speed', 'weight', 'length']],
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [0, 1, 2, 0, 1, 2, 0, 1, 2]])
-        >>> s = pp.Series([None, None, None, None, 250, 1.5, 320, 1, 0.3], index=midx)
+        >>> s = ps.Series([None, None, None, None, 250, 1.5, 320, 1, 0.3], index=midx)
         >>> s
         lama    speed       NaN
                 weight      NaN
@@ -2389,7 +2387,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Support for DataFrame
 
-        >>> kdf = pp.DataFrame({'a': [1, 2, 3, None],
+        >>> kdf = ps.DataFrame({'a': [1, 2, 3, None],
         ...                     'b': [1.0, 2.0, 3.0, None],
         ...                     'c': [100, 200, 400, None]},
         ...                     index=['Q', 'W', 'E', 'R'])
@@ -2419,7 +2417,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Support for Series.
 
-        >>> s = pp.Series([1, 2, 3, None, None], index=[100, 200, 300, 400, 500])
+        >>> s = ps.Series([1, 2, 3, None, None], index=[100, 200, 300, 400, 500])
         >>> s
         100    1.0
         200    2.0
@@ -2437,7 +2435,7 @@ class Frame(object, metaclass=ABCMeta):
         ...                       ['speed', 'weight', 'length']],
         ...                      [[0, 0, 0, 1, 1, 1, 2, 2, 2],
         ...                       [0, 1, 2, 0, 1, 2, 0, 1, 2]])
-        >>> s = pp.Series([250, 1.5, 320, 1, 0.3, None, None, None, None], index=midx)
+        >>> s = ps.Series([250, 1.5, 320, 1, 0.3, None, None, None, None], index=midx)
         >>> s
         lama    speed     250.0
                 weight      1.5
@@ -2453,9 +2451,6 @@ class Frame(object, metaclass=ABCMeta):
         >>> s.last_valid_index()  # doctest: +SKIP
         ('cow', 'weight')
         """
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-            raise RuntimeError("last_valid_index can be used in PySpark >= 3.0")
-
         data_spark_columns = self._internal.data_spark_columns
 
         if len(data_spark_columns) == 0:
@@ -2485,7 +2480,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         Provide rolling transformations.
 
-        .. note:: 'min_periods' in Koalas works as a fixed window size unlike pandas.
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
             Unlike pandas, NA is also counted as the period. This might be changed
             in the near future.
 
@@ -2514,7 +2509,7 @@ class Frame(object, metaclass=ABCMeta):
         """
         Provide expanding transformations.
 
-        .. note:: 'min_periods' in Koalas works as a fixed window size unlike pandas.
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
             Unlike pandas, NA is also counted as the period. This might be changed
             in the near future.
 
@@ -2545,7 +2540,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'x':range(3), 'y':['a','b','b'], 'z':['a','b','b']},
+        >>> df = ps.DataFrame({'x':range(3), 'y':['a','b','b'], 'z':['a','b','b']},
         ...                   columns=['x', 'y', 'z'], index=[10, 20, 20])
         >>> df
             x  y  z
@@ -2614,7 +2609,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> primes = pp.Series([2, 3, 5, 7])
+        >>> primes = ps.Series([2, 3, 5, 7])
 
         Slicing might produce a Series with a single value:
 
@@ -2643,7 +2638,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Squeezing is even more effective when used with DataFrames.
 
-        >>> df = pp.DataFrame([[1, 2], [3, 4]], columns=['a', 'b'])
+        >>> df = ps.DataFrame([[1, 2], [3, 4]], columns=['a', 'b'])
         >>> df
            a  b
         0  1  2
@@ -2688,7 +2683,7 @@ class Frame(object, metaclass=ABCMeta):
             axis = "index" if axis == "rows" else axis
             axis = validate_axis(axis)
 
-        if isinstance(self, pp.DataFrame):
+        if isinstance(self, ps.DataFrame):
             from pyspark.pandas.series import first_series
 
             is_squeezable = len(self.columns[:2]) == 1
@@ -2700,7 +2695,7 @@ class Frame(object, metaclass=ABCMeta):
             # If DataFrame has only a single value, use pandas API directly.
             if has_single_value:
                 result = self._to_internal_pandas().squeeze(axis)
-                return pp.Series(result) if isinstance(result, pd.Series) else result
+                return ps.Series(result) if isinstance(result, pd.Series) else result
             elif axis == 0:
                 return self
             else:
@@ -2711,7 +2706,7 @@ class Frame(object, metaclass=ABCMeta):
             # Otherwise, there is no change.
             self_top_two = self.head(2)
             has_single_value = len(self_top_two) == 1
-            return cast(Union[Scalar, pp.Series], self_top_two[0] if has_single_value else self)
+            return cast(Union[Scalar, ps.Series], self_top_two[0] if has_single_value else self)
 
     def truncate(
         self, before=None, after=None, axis=None, copy=True
@@ -2748,7 +2743,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': ['a', 'b', 'c', 'd', 'e'],
+        >>> df = ps.DataFrame({'A': ['a', 'b', 'c', 'd', 'e'],
         ...                    'B': ['f', 'g', 'h', 'i', 'j'],
         ...                    'C': ['k', 'l', 'm', 'n', 'o']},
         ...                   index=[1, 2, 3, 4, 5])
@@ -2786,7 +2781,7 @@ class Frame(object, metaclass=ABCMeta):
 
         A Series has index that sorted integers.
 
-        >>> s = pp.Series([10, 20, 30, 40, 50, 60, 70],
+        >>> s = ps.Series([10, 20, 30, 40, 50, 60, 70],
         ...               index=[1, 2, 3, 4, 5, 6, 7])
         >>> s
         1    10
@@ -2807,7 +2802,7 @@ class Frame(object, metaclass=ABCMeta):
 
         A Series has index that sorted strings.
 
-        >>> s = pp.Series([10, 20, 30, 40, 50, 60, 70],
+        >>> s = ps.Series([10, 20, 30, 40, 50, 60, 70],
         ...               index=['a', 'b', 'c', 'd', 'e', 'f', 'g'])
         >>> s
         a    10
@@ -2834,16 +2829,16 @@ class Frame(object, metaclass=ABCMeta):
         if not indexes_increasing and not indexes.is_monotonic_decreasing:
             raise ValueError("truncate requires a sorted index")
         if (before is None) and (after is None):
-            return cast(Union[pp.DataFrame, pp.Series], self.copy() if copy else self)
+            return cast(Union[ps.DataFrame, ps.Series], self.copy() if copy else self)
         if (before is not None and after is not None) and before > after:
             raise ValueError("Truncate: %s must be after %s" % (after, before))
 
-        if isinstance(self, pp.Series):
+        if isinstance(self, ps.Series):
             if indexes_increasing:
                 result = first_series(self.to_frame().loc[before:after]).rename(self.name)
             else:
                 result = first_series(self.to_frame().loc[after:before]).rename(self.name)
-        elif isinstance(self, pp.DataFrame):
+        elif isinstance(self, ps.DataFrame):
             if axis == 0:
                 if indexes_increasing:
                     result = self.loc[before:after]
@@ -2852,7 +2847,7 @@ class Frame(object, metaclass=ABCMeta):
             elif axis == 1:
                 result = self.loc[:, before:after]
 
-        return cast(Union[pp.DataFrame, pp.Series], result.copy() if copy else result)
+        return cast(Union[ps.DataFrame, ps.Series], result.copy() if copy else result)
 
     def to_markdown(self, buf=None, mode=None) -> str:
         """
@@ -2877,9 +2872,13 @@ class Frame(object, metaclass=ABCMeta):
         str
             Series or DataFrame in Markdown-friendly format.
 
+        Notes
+        -----
+        Requires the `tabulate <https://pypi.org/project/tabulate>`_ package.
+
         Examples
         --------
-        >>> kser = pp.Series(["elk", "pig", "dog", "quetzal"], name="animal")
+        >>> kser = ps.Series(["elk", "pig", "dog", "quetzal"], name="animal")
         >>> print(kser.to_markdown())  # doctest: +SKIP
         |    | animal   |
         |---:|:---------|
@@ -2888,7 +2887,7 @@ class Frame(object, metaclass=ABCMeta):
         |  2 | dog      |
         |  3 | quetzal  |
 
-        >>> kdf = pp.DataFrame(
+        >>> kdf = ps.DataFrame(
         ...     data={"animal_1": ["elk", "pig"], "animal_2": ["dog", "quetzal"]}
         ... )
         >>> print(kdf.to_markdown())  # doctest: +SKIP
@@ -2900,7 +2899,7 @@ class Frame(object, metaclass=ABCMeta):
         # `to_markdown` is supported in pandas >= 1.0.0 since it's newly added in pandas 1.0.0.
         if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
             raise NotImplementedError(
-                "`to_markdown()` only supported in Koalas with pandas >= 1.0.0"
+                "`to_markdown()` only supported in pandas-on-Spark with pandas >= 1.0.0"
             )
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
@@ -2944,7 +2943,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({
+        >>> kdf = ps.DataFrame({
         ...     'A': [None, 3, None, None],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
@@ -2969,7 +2968,7 @@ class Frame(object, metaclass=ABCMeta):
 
         For Series
 
-        >>> kser = pp.Series([None, None, None, 1])
+        >>> kser = ps.Series([None, None, None, 1])
         >>> kser
         0    NaN
         1    NaN
@@ -3018,7 +3017,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({
+        >>> kdf = ps.DataFrame({
         ...     'A': [None, 3, None, None],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
@@ -3043,7 +3042,7 @@ class Frame(object, metaclass=ABCMeta):
 
         For Series
 
-        >>> kser = pp.Series([2, 4, None, 3])
+        >>> kser = ps.Series([2, 4, None, 3])
         >>> kser
         0    2.0
         1    4.0
@@ -3114,7 +3113,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.generic.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.generic tests")

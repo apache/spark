@@ -208,7 +208,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           .nonEmpty =>
         Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
 
-      case oldVersion @ ScriptTransformation(_, _, output, _, _)
+      case oldVersion @ ScriptTransformation(_, output, _, _)
           if AttributeSet(output).intersect(conflictingAttributes).nonEmpty =>
         Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 

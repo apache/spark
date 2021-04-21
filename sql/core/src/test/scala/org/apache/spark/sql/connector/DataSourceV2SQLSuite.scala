@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
@@ -843,6 +844,34 @@ class DataSourceV2SQLSuite
         assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
         checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "b", 1) :: Nil)
         checkAnswer(sql(s"SELECT * FROM $view"), Row(2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-34947: micro batch streaming write should invalidate cache") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    withTable(t) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+        sql(s"INSERT INTO $t VALUES (1L, 'a')")
+        sql(s"CACHE TABLE $t")
+
+        val inputData = MemoryStream[(Long, String)]
+        val df = inputData.toDF().toDF("id", "data")
+        val query = df
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .toTable(t)
+
+        val newData = Seq((2L, "b"))
+        inputData.addData(newData)
+        query.processAllAvailable()
+        query.stop()
+
+        assert(!spark.catalog.isCached("testcat.ns.t"))
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1L, "a") :: Row(2L, "b") :: Nil)
       }
     }
   }

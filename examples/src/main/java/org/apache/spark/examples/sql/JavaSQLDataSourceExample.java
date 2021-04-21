@@ -195,6 +195,14 @@ public class JavaSQLDataSourceExample {
       .option("orc.column.encoding.direct", "name")
       .save("users_with_options.orc");
     // $example off:manual_save_options_orc$
+    // $example on:manual_save_options_parquet$
+    usersDF.write().format("parquet")
+        .option("parquet.bloom.filter.enabled#favorite_color", "true")
+        .option("parquet.bloom.filter.expected.ndv#favorite_color", "1000000")
+        .option("parquet.enable.dictionary", "true")
+        .option("parquet.page.write-checksum.enabled", "false")
+        .save("users_with_options.parquet");
+    // $example off:manual_save_options_parquet$
     // $example on:direct_sql$
     Dataset<Row> sqlDF =
       spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`");

@@ -18,7 +18,6 @@
 """
 An internal immutable DataFrame with some metadata to manage indexes.
 """
-from distutils.version import LooseVersion
 import re
 from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 from itertools import accumulate
@@ -27,12 +26,11 @@ import py4j
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype, is_datetime64_dtype, is_datetime64tz_dtype
-import pyspark
 from pyspark import sql as spark
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import functions as F, Window
 from pyspark.sql.functions import PandasUDFType, pandas_udf
-from pyspark.sql.types import BooleanType, DataType, IntegralType, StructField, StructType, LongType
+from pyspark.sql.types import BooleanType, DataType, StructField, StructType, LongType
 
 try:
     from pyspark.sql.types import to_arrow_type
@@ -40,7 +38,7 @@ except ImportError:
     from pyspark.sql.pandas.types import to_arrow_type  # noqa: F401
 
 # For running doctests and reference resolution in PyCharm.
-from pyspark import pandas as pp  # noqa: F401
+from pyspark import pandas as ps  # noqa: F401
 
 if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
@@ -65,10 +63,10 @@ from pyspark.pandas.utils import (
 )
 
 
-# A function to turn given numbers to Spark columns that represent Koalas index.
+# A function to turn given numbers to Spark columns that represent pandas-on-Spark index.
 SPARK_INDEX_NAME_FORMAT = "__index_level_{}__".format
 SPARK_DEFAULT_INDEX_NAME = SPARK_INDEX_NAME_FORMAT(0)
-# A pattern to check if the name of a Spark column is a Koalas index name or not.
+# A pattern to check if the name of a Spark column is a pandas-on-Spark index name or not.
 SPARK_INDEX_NAME_PATTERN = re.compile(r"__index_level_[0-9]+__")
 
 NATURAL_ORDER_COLUMN_NAME = "__natural_order__"
@@ -88,10 +86,10 @@ class InternalFrame(object):
         should not directly access to it.
 
     The internal immutable DataFrame represents the index information for a DataFrame it belongs to.
-    For instance, if we have a Koalas DataFrame as below, pandas DataFrame does not store the index
-    as columns.
+    For instance, if we have a pandas-on-Spark DataFrame as below, pandas DataFrame does not
+    store the index as columns.
 
-    >>> kdf = pp.DataFrame({
+    >>> kdf = ps.DataFrame({
     ...     'A': [1, 2, 3, 4],
     ...     'B': [5, 6, 7, 8],
     ...     'C': [9, 10, 11, 12],
@@ -118,7 +116,7 @@ class InternalFrame(object):
     +-----------------+---+---+---+---+---+
 
     In order to fill this gap, the current metadata is used by mapping Spark's internal column
-    to Koalas' index. See the method below:
+    to pandas-on-Spark's index. See the method below:
 
     * `spark_frame` represents the internal Spark DataFrame
 
@@ -304,7 +302,7 @@ class InternalFrame(object):
 
     >>> columns = pd.MultiIndex.from_tuples([('X', 'A'), ('X', 'B'),
     ...                                      ('Y', 'C'), ('Y', 'D')])
-    >>> kdf3 = pp.DataFrame([
+    >>> kdf3 = ps.DataFrame([
     ...     [1, 2, 3, 4],
     ...     [5, 6, 7, 8],
     ...     [9, 10, 11, 12],
@@ -424,7 +422,7 @@ class InternalFrame(object):
         >>> row_index = pd.MultiIndex.from_tuples(
         ...     [('foo', 'bar'), ('foo', 'bar'), ('zoo', 'bar')],
         ...     names=["row_index_a", "row_index_b"])
-        >>> kdf = pp.DataFrame(
+        >>> kdf = ps.DataFrame(
         ...     [[1, 2, 3], [4, 5, 6], [7, 8, 9]], index=row_index, columns=column_labels)
         >>> kdf.set_index(('a', 'x'), append=True, inplace=True)
         >>> kdf  # doctest: +NORMALIZE_WHITESPACE
@@ -469,7 +467,7 @@ class InternalFrame(object):
         """
 
         assert isinstance(spark_frame, spark.DataFrame)
-        assert not spark_frame.isStreaming, "Koalas does not support Structured Streaming."
+        assert not spark_frame.isStreaming, "pandas-on-Spark does not support Structured Streaming."
 
         if not index_spark_columns:
             if data_spark_columns is not None:
@@ -635,7 +633,7 @@ class InternalFrame(object):
         notion so corresponding column should be generated.
         There are several types of default index can be configured by `compute.default_index_type`.
 
-        >>> spark_frame = pp.range(10).to_spark()
+        >>> spark_frame = ps.range(10).to_spark()
         >>> spark_frame
         DataFrame[id: bigint]
 
@@ -692,7 +690,7 @@ class InternalFrame(object):
         This method attaches a Spark column that has a sequence in a distributed manner.
         This is equivalent to the column assigned when default index type 'distributed-sequence'.
 
-        >>> sdf = pp.DataFrame(['a', 'b', 'c']).to_spark()
+        >>> sdf = ps.DataFrame(['a', 'b', 'c']).to_spark()
         >>> sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name="sequence")
         >>> sdf.show()  # doctest: +NORMALIZE_WHITESPACE
         +--------+---+
@@ -736,7 +734,7 @@ class InternalFrame(object):
     @staticmethod
     def _attach_distributed_sequence_column(sdf, column_name):
         """
-        >>> sdf = pp.DataFrame(['a', 'b', 'c']).to_spark()
+        >>> sdf = ps.DataFrame(['a', 'b', 'c']).to_spark()
         >>> sdf = InternalFrame._attach_distributed_sequence_column(sdf, column_name="sequence")
         >>> sdf.sort("sequence").show()  # doctest: +NORMALIZE_WHITESPACE
         +--------+---+
@@ -936,17 +934,6 @@ class InternalFrame(object):
             pdf = pdf.astype(
                 {field.name: spark_type_to_pandas_dtype(field.dataType) for field in sdf.schema}
             )
-        elif LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-            for field in sdf.schema:
-                if field.nullable and pdf[field.name].isnull().all():
-                    if isinstance(field.dataType, BooleanType):
-                        pdf[field.name] = pdf[field.name].astype(np.object)
-                    elif isinstance(field.dataType, IntegralType):
-                        pdf[field.name] = pdf[field.name].astype(np.float64)
-                    else:
-                        pdf[field.name] = pdf[field.name].astype(
-                            spark_type_to_pandas_dtype(field.dataType)
-                        )
 
         return InternalFrame.restore_index(pdf, **self.arguments_for_restore_index)
 
@@ -1448,7 +1435,7 @@ def _test():
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.internal.__dict__.copy()
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.internal tests")

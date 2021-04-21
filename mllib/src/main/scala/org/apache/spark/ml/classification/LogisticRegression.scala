@@ -980,7 +980,7 @@ class LogisticRegression @Since("1.2.0") (
     if (fitWithMean) {
       if (multinomial) {
         val adapt = Array.ofDim[Double](numClasses)
-        BLAS.f2jBLAS.dgemv("N", numClasses, numFeatures, 1.0,
+        BLAS.javaBLAS.dgemv("N", numClasses, numFeatures, 1.0,
           initialSolution, numClasses, scaledMean, 1, 0.0, adapt, 1)
         BLAS.getBLAS(numFeatures).daxpy(numClasses, 1.0, adapt, 0, 1,
           initialSolution, numClasses * numFeatures, 1)
@@ -1016,7 +1016,7 @@ class LogisticRegression @Since("1.2.0") (
     if (fitWithMean && solution != null) {
       if (multinomial) {
         val adapt = Array.ofDim[Double](numClasses)
-        BLAS.f2jBLAS.dgemv("N", numClasses, numFeatures, 1.0,
+        BLAS.javaBLAS.dgemv("N", numClasses, numFeatures, 1.0,
           solution, numClasses, scaledMean, 1, 0.0, adapt, 1)
         BLAS.getBLAS(numFeatures).daxpy(numClasses, -1.0, adapt, 0, 1,
           solution, numClasses * numFeatures, 1)

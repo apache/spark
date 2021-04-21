@@ -58,6 +58,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
+  private val shouldDeleteDriverService = conf.get(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION)
+
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
   private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
@@ -121,6 +123,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     Utils.tryLogNonFatalError {
       pollEvents.stop()
+    }
+
+    if (shouldDeleteDriverService) {
+      Utils.tryLogNonFatalError {
+        kubernetesClient
+          .services()
+          .withLabel(SPARK_APP_ID_LABEL, applicationId())
+          .delete()
+      }
     }
 
     if (shouldDeleteExecutors) {
