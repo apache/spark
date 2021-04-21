@@ -1776,16 +1776,17 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-35112: Cast string to day-time interval") {
+    checkEvaluation(cast(Literal.create("INTERVAL '0 0:0:0' DAY TO SECOND"),
+      DayTimeIntervalType), 0L)
+    checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType), 0L)
     checkEvaluation(cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
-      YearMonthIntervalType), 0)
-    checkEvaluation(cast(Literal.create("1 2:03:04"), YearMonthIntervalType), 0)
-    checkEvaluation(cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
-      YearMonthIntervalType), -12)
-    checkEvaluation(cast(Literal.create("1 2:03:04"), YearMonthIntervalType), -12)
-    checkEvaluation(cast(Literal.create("INTERVAL '10 2:03:04' DAY TO SECOND"),
-      YearMonthIntervalType), 121)
-    checkEvaluation(cast(Literal.create("10 2:03:04"), YearMonthIntervalType), 121)
-    checkEvaluation(cast(Literal.create("null"), YearMonthIntervalType), null)
+      DayTimeIntervalType), 7384000000L)
+    checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType), 7384000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '-10 2:03:04' DAY TO SECOND"),
+      DayTimeIntervalType), -7384000000L)
+
+    checkEvaluation(cast(Literal.create("-10 2:03:04"), DayTimeIntervalType), -7384000000L)
+    checkEvaluation(cast(Literal.create("null"), DayTimeIntervalType), null)
   }
 }
 

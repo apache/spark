@@ -128,7 +128,7 @@ object IntervalUtils {
       if (input == null || input.toString == null) {
         throw new IllegalArgumentException("Interval day-second string must be not null")
       } else {
-        val regex = "INTERVAL '([-|+]?[0-9]+-[-|+]?[0-9]+)' DAY TO SECOND".r
+        val regex = "INTERVAL '([-|+]?[0-9]+ [0-9:]+)' DAY TO SECOND".r
         // scalastyle:off caselocale .toLowerCase
         val intervalString = input.trimAll().toUpperCase.toString
         // scalastyle:on
