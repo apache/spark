@@ -22,10 +22,10 @@ import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.pandas.window import Expanding
-from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class ExpandingTest(ReusedSQLTestCase, TestUtils):
+class ExpandingTest(PandasOnSparkTestCase, TestUtils):
     def _test_expanding_func(self, f):
         pser = pd.Series([1, 2, 3], index=np.random.rand(3))
         kser = ps.from_pandas(pser)

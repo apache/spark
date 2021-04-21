@@ -59,7 +59,7 @@ except ImportError as e:
 have_plotly = plotly_requirement_message is None
 
 
-class ReusedSQLTestCase(unittest.TestCase, SQLTestUtils):
+class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
         cls.spark = default_session()

@@ -28,7 +28,7 @@ from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import (
     have_matplotlib,
     matplotlib_requirement_message,
-    ReusedSQLTestCase,
+    PandasOnSparkTestCase,
     TestUtils,
 )
 
@@ -40,7 +40,7 @@ if have_matplotlib:
 
 
 @unittest.skipIf(not have_matplotlib, matplotlib_requirement_message)
-class DataFramePlotMatplotlibTest(ReusedSQLTestCase, TestUtils):
+class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
     sample_ratio_default = None
 
     @classmethod

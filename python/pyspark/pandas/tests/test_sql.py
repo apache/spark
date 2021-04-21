@@ -17,11 +17,11 @@
 
 from pyspark import pandas as ps
 from pyspark.sql.utils import ParseException
-from pyspark.testing.pandasutils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import SQLTestUtils
 
 
-class SQLTest(ReusedSQLTestCase, SQLTestUtils):
+class SQLTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_error_variable_not_exist(self):
         msg = "The key variable_foo in the SQL statement was not found.*"
         with self.assertRaisesRegex(ValueError, msg):

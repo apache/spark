@@ -23,12 +23,12 @@ from pyspark.pandas.utils import (
     validate_bool_kwarg,
 )
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.pandasutils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 some_global_variable = 0
 
 
-class UtilsTest(ReusedSQLTestCase, SQLTestUtils):
+class UtilsTest(PandasOnSparkTestCase, SQLTestUtils):
 
     # a dummy to_html version with an extra parameter that pandas does not support
     # used in test_validate_arguments_and_invoke_function

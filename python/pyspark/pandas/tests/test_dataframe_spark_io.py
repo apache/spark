@@ -26,10 +26,10 @@ import pyarrow as pa
 import pyspark
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class DataFrameSparkIOTest(ReusedSQLTestCase, TestUtils):
+class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
     """Test cases for big data I/O using Spark."""
 
     @property

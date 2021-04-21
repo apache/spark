@@ -23,10 +23,10 @@ import pyspark
 
 from pyspark import pandas as ps
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class SparkFrameMethodsTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
+class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
     def test_frame_apply_negative(self):
         with self.assertRaisesRegex(
             ValueError, "The output of the function.* pyspark.sql.DataFrame.*int"

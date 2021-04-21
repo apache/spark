@@ -27,7 +27,7 @@ from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import (
     have_plotly,
     plotly_requirement_message,
-    ReusedSQLTestCase,
+    PandasOnSparkTestCase,
     TestUtils,
 )
 from pyspark.pandas.utils import name_like_string
@@ -42,7 +42,7 @@ if have_plotly:
     plotly_requirement_message + " Or pandas<1.0; pandas<1.0 does not support latest plotly "
     "and/or 'plotting.backend' option.",
 )
-class DataFramePlotPlotlyTest(ReusedSQLTestCase, TestUtils):
+class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

@@ -23,10 +23,10 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.pandasutils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class SeriesDateTimeTest(ReusedSQLTestCase, SQLTestUtils):
+class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
     @property
     def pdf1(self):
         date1 = pd.Series(pd.date_range("2012-1-1 12:45:31", periods=3, freq="M"))

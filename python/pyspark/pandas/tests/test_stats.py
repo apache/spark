@@ -27,11 +27,11 @@ except ImportError:
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import ReusedSQLTestCase, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.utils import SQLTestUtils
 
 
-class StatsTest(ReusedSQLTestCase, SQLTestUtils):
+class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
     def _test_stat_functions(self, pdf_or_pser, kdf_or_kser):
         functions = ["max", "min", "mean", "sum", "count"]
         for funcname in functions:

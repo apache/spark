@@ -22,10 +22,10 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.pandasutils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class SeriesConversionTest(ReusedSQLTestCase, SQLTestUtils):
+class SeriesConversionTest(PandasOnSparkTestCase, SQLTestUtils):
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")

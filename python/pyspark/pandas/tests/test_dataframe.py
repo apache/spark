@@ -43,7 +43,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 from pyspark.testing.pandasutils import (
     have_tabulate,
-    ReusedSQLTestCase,
+    PandasOnSparkTestCase,
     SQLTestUtils,
     SPARK_CONF_ARROW_ENABLED,
     tabulate_requirement_message,
@@ -51,7 +51,7 @@ from pyspark.testing.pandasutils import (
 from pyspark.pandas.utils import name_like_string
 
 
-class DataFrameTest(ReusedSQLTestCase, SQLTestUtils):
+class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
     @property
     def pdf(self):
         return pd.DataFrame(

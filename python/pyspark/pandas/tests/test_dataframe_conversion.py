@@ -27,10 +27,10 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.sqlutils import SQLTestUtils
 from distutils.version import LooseVersion
-from pyspark.testing.pandasutils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
+class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
     """Test cases for "small data" conversion and I/O."""
 
     def setUp(self):

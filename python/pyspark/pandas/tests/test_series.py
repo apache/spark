@@ -32,7 +32,7 @@ from pyspark import pandas as ps
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.pandasutils import (
     have_tabulate,
-    ReusedSQLTestCase,
+    PandasOnSparkTestCase,
     SPARK_CONF_ARROW_ENABLED,
     tabulate_requirement_message,
 )
@@ -46,7 +46,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
+class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
