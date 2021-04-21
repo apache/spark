@@ -71,8 +71,11 @@ install_mvn() {
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
   fi
   if [ $(version $MVN_DETECTED_VERSION) -lt $(version $MVN_VERSION) ]; then
-    local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua?action=download&filename='}
-        
+    local DEFAULT_APACHE_MIRROR=`curl --silent -X GET -I "https://www.apache.org/dyn/closer.lua?action=download" | grep "Location:" | cut -f2 -d' '| tr -d '\n' | tr -d '\r' | sed 's%^\(.*\)/$%\1%'`
+    echo "Default Apache mirror is ${DEFAULT_APACHE_MIRROR}"
+    local APACHE_MIRROR=${APACHE_MIRROR:-$DEFAULT_APACHE_MIRROR}
+    echo "Trying mirror ${APACHE_MIRROR}"
+
     if [ $(command -v curl) ]; then
       local TEST_MIRROR_URL="${APACHE_MIRROR}/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz"
       if ! curl -L --output /dev/null --silent --head --fail "$TEST_MIRROR_URL" ; then
