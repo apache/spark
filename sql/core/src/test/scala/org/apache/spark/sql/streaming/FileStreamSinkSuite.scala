@@ -577,21 +577,14 @@ abstract class FileStreamSinkSuite extends StreamTest {
     }
   }
 
-  test("formatCheck flag") {
+  test("formatCheck fail should not fail the query") {
     withSQLConf(
       "fs.file.impl" -> classOf[FailFormatCheckFileSystem].getName,
       "fs.file.impl.disable.cache" -> "true") {
       withTempDir { tempDir =>
         val path = new File(tempDir, "text").getCanonicalPath
         Seq("foo").toDF.write.format("text").save(path)
-        def assertFail(): Unit = {
-          val e = intercept[IOException] {
-            spark.read.format("text").load(path)
-          }
-          assert(e.getMessage == "cannot access metadata log")
-        }
-
-        assertFail()
+        spark.read.format("text").load(path)
       }
     }
   }

@@ -52,6 +52,7 @@ object FileStreamSink extends Logging {
             false
           }
         } catch {
+          case e: SparkException => throw e
           case NonFatal(e) =>
             logWarning(s"Assume no metadata directory. Error while looking for " +
               s"metadata directory in the path: $singlePath.", e)
