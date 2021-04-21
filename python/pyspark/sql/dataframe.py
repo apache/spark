@@ -2432,13 +2432,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         a column from some other :class:`DataFrame` will raise an error.
 
         .. versionadded:: 1.3.0
+        .. versionchanged:: 3.2.0
+           Added support for multiple columns adding
 
         Parameters
         ----------
-        colName : str
-            string, name of the new column.
-        col : :class:`Column`
-            a :class:`Column` expression for the new column.
+        colName : str, tuple or list
+            single column name, or a list of names for multiple columns.
+        col : :class:`Column`, tuple or list
+            single :class:`Column` expression for the new column, or a list of names for multiple
+            columns.
 
         Notes
         -----
@@ -2451,10 +2454,26 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name='Alice', age2=4), Row(age=5, name='Bob', age2=7)]
-
+        >>> df.withColumn(['age2', 'age3'], [df.age + 2, df.age + 3]).collect()
+        [Row(age=2, name='Alice', age2=4, age3=5), Row(age=5, name='Bob', age2=7, age3=8)]
         """
-        assert isinstance(col, Column), "col should be Column"
-        return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
+        if not isinstance(colName, (str, list, tuple)):
+            raise TypeError("colName must be string or list/tuple of column names.")
+        if not isinstance(col, (Column, list, tuple)):
+            raise TypeError("col must be a column or list/tuple of columns.")
+
+        # Covert the colName and col to list
+        col_names = [colName] if isinstance(colName, str) else colName
+        col = [col] if isinstance(col, Column) else col
+
+        # Covert tuple to list
+        col_names = list(col_names) if isinstance(col_names, tuple) else col_names
+        col = list(col) if isinstance(col, tuple) else col
+
+        return DataFrame(
+            self._jdf.withColumns(_to_seq(self._sc, col_names), self._jcols(col)),
+            self.sql_ctx
+        )
 
     def withColumnRenamed(self, existing, new):
         """Returns a new :class:`DataFrame` by renaming an existing column.
