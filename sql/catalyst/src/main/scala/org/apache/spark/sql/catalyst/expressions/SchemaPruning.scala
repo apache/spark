@@ -22,9 +22,12 @@ import org.apache.spark.sql.types._
 
 object SchemaPruning extends SQLConfHelper {
   /**
-   * Filters the schema by the requested fields. For example, if the schema is struct<a:int, b:int>,
-   * and given requested field are "a", the field "b" is pruned in the returned schema.
-   * Note that schema field ordering at original schema is still preserved in pruned schema.
+   * Prunes the nested schema by the requested fields. For example, if the schema is:
+   * `id int, s struct<a:int, b:int>`, and given requested field "s.a", the inner field "b"
+   * is pruned in the returned schema: `id int, s struct<a:int>`.
+   * Note that:
+   *   1. The schema field ordering at original schema is still preserved in pruned schema.
+   *   2. The top-level fields are not pruned here.
    */
   def pruneDataSchema(
       dataSchema: StructType,
@@ -34,11 +37,10 @@ object SchemaPruning extends SQLConfHelper {
     // in the resulting schema may differ from their ordering in the logical relation's
     // original schema
     val mergedSchema = requestedRootFields
-      .map { case root: RootField => StructType(Array(root.field)) }
+      .map { root: RootField => StructType(Array(root.field)) }
       .reduceLeft(_ merge _)
-    val dataSchemaFieldNames = dataSchema.fieldNames.toSet
     val mergedDataSchema =
-      StructType(mergedSchema.filter(f => dataSchemaFieldNames.exists(resolver(_, f.name))))
+      StructType(dataSchema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
     sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
