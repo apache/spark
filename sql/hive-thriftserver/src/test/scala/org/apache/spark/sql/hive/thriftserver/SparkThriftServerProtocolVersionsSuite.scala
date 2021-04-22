@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.{Date, Timestamp}
 import java.util.{List => JList, Properties}
 
-import org.apache.hadoop.hive.common.`type`.HiveIntervalDayTime
+import org.apache.hadoop.hive.common.`type`.{HiveIntervalDayTime, HiveIntervalYearMonth}
 import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet}
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.GetInfoType
@@ -462,12 +462,24 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
 
     test(s"SPARK-35017: $version get day-time interval type") {
       testExecuteStatementWithProtocolVersion(
-        version, "SELECT date'2021-01-01' - date'2020-12-31' AS dt") { rs =>
+        version, "SELECT INTERVAL '1 10:11:12' DAY TO SECOND AS dt") { rs =>
         assert(rs.next())
-        assert(rs.getObject(1) === new HiveIntervalDayTime(1, 0, 0, 0, 0))
+        assert(rs.getObject(1) === new HiveIntervalDayTime(1, 10, 11, 12, 0))
         val metaData = rs.getMetaData
         assert(metaData.getColumnName(1) === "dt")
         assert(metaData.getColumnTypeName(1) === "interval_day_time")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
+      }
+    }
+
+    test(s"SPARK-35018: $version get year-month interval type") {
+      testExecuteStatementWithProtocolVersion(
+        version, "SELECT INTERVAL '1-1' YEAR TO MONTH AS ym") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === new HiveIntervalYearMonth(1, 1))
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnName(1) === "ym")
+        assert(metaData.getColumnTypeName(1) === "interval_year_month")
         assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
       }
     }

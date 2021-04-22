@@ -61,6 +61,14 @@ object TypeUtils {
     }
   }
 
+  def checkForAnsiIntervalOrNumericType(
+      dt: DataType, funcName: String): TypeCheckResult = dt match {
+    case YearMonthIntervalType | DayTimeIntervalType | NullType => TypeCheckResult.TypeCheckSuccess
+    case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
+    case other => TypeCheckResult.TypeCheckFailure(
+      s"function $funcName requires numeric or interval types, not ${other.catalogString}")
+  }
+
   def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
     if (exactNumericRequired) {
       t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]

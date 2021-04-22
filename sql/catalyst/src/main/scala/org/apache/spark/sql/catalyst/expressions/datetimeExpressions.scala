@@ -2556,6 +2556,9 @@ case class SubtractTimestamps(
         s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
   }
 
+  override def toString: String = s"($left - $right)"
+  override def sql: String = s"(${left.sql} - ${right.sql})"
+
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): SubtractTimestamps =
     copy(left = newLeft, right = newRight)
@@ -2610,6 +2613,9 @@ case class SubtractDates(
         s"$dtu.subtractDates($leftDays, $rightDays)"
       })
   }
+
+  override def toString: String = s"($left - $right)"
+  override def sql: String = s"(${left.sql} - ${right.sql})"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): SubtractDates =

@@ -50,6 +50,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
+import org.apache.spark.scheduler.MiscellaneousProcessDetails
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
@@ -64,6 +65,11 @@ private[spark] class ApplicationMaster(
 
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
+
+  private def extractLogUrls: Map[String, String] = {
+    YarnContainerInfoHelper.getLogUrls(SparkHadoopUtil.
+      newConfiguration(sparkConf), None).getOrElse(Map())
+  }
 
   private val appAttemptId =
     if (System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name()) != null) {
@@ -776,6 +782,15 @@ private[spark] class ApplicationMaster(
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
+      // if deployment mode for yarn Application is client
+      // then send the AM Log Info to spark driver
+      if (!isClusterMode) {
+        val hostPort = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
+        val yarnAMID = "yarn-am"
+        val info = new MiscellaneousProcessDetails(hostPort,
+          sparkConf.get(AM_CORES), extractLogUrls)
+        driver.send(MiscellaneousProcessAdded(System.currentTimeMillis(), yarnAMID, info))
+      }
     }
 
     override def receive: PartialFunction[Any, Unit] = {
