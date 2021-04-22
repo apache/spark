@@ -309,7 +309,7 @@ case class Not(child: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
 
-  override val nodePatterns: Seq[TreePattern] = Seq(NOT)
+  final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
   // +---------+-----------+
   // | CHILD   | NOT CHILD |
@@ -436,7 +436,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override val nodePatterns: Seq[TreePattern] = Seq(IN)
+  final override val nodePatterns: Seq[TreePattern] = Seq(IN)
 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
@@ -549,7 +549,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   override def nullable: Boolean = child.nullable || hasNull
 
-  override val nodePatterns: Seq[TreePattern] = Seq(INSET)
+  final override val nodePatterns: Seq[TreePattern] = Seq(INSET)
 
   protected override def nullSafeEval(value: Any): Any = {
     if (set.contains(value)) {
@@ -667,7 +667,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override def sqlOperator: String = "AND"
 
-  override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
+  final override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
 
   // +---------+---------+---------+---------+
   // | AND     | TRUE    | FALSE   | UNKNOWN |
@@ -755,7 +755,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override def sqlOperator: String = "OR"
 
-  override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
+  final override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
 
   // +---------+---------+---------+---------+
   // | OR      | TRUE    | FALSE   | UNKNOWN |

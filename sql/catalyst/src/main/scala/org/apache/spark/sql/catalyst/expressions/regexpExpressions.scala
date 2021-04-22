@@ -130,7 +130,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
   override def toString: String = escapeChar match {
     case '\\' => s"$left LIKE $right"
@@ -201,7 +201,7 @@ sealed abstract class MultiLikeBase
 
   override def nullable: Boolean = true
 
-  override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
   protected lazy val hasNull: Boolean = patterns.contains(null)
 
