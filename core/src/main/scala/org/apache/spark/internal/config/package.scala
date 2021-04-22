@@ -1225,6 +1225,16 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val SHUFFLE_LOCATION_CACHE_SIZE =
+    ConfigBuilder("spark.shuffle.sort.location.cacheSize")
+      .doc("The cache size for the location instances. Bigger size means that Spark will have " +
+        "more chances to reuse the location instance for the same location but takes more memory.")
+      .version("3.2.0")
+      .intConf
+      // In the case of `BlockManagerId`, which takes 48B for each, the total memory cost should
+      // be below 1MB which is feasible.
+      .createWithDefault(10000)
+
   private[spark] val SHUFFLE_FILE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.file.buffer")
       .doc("Size of the in-memory buffer for each shuffle file output stream, in KiB unless " +

@@ -21,14 +21,12 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import scala.collection.mutable
 
-import org.apache.curator.shaded.com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler.MapStatus.locationFactory
 import org.apache.spark.shuffle.api.Location
-import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
 /**
@@ -56,39 +54,6 @@ private[spark] sealed trait MapStatus {
    */
   def mapId: Long
 
-}
-
-private[spark] class MapStatusLocationFactory(conf: SparkConf) {
-  private val locationExtension = classOf[Location]
-  private val (locationConstructor, locationName) = {
-    conf.get(config.SHUFFLE_LOCATION_PLUGIN_CLASS).map { className =>
-      val clazz = Utils.classForName(className)
-      require(locationExtension.isAssignableFrom(clazz),
-        s"$className is not a subclass of ${locationExtension.getName}.")
-      (clazz.getConstructor(), className)
-    }.orNull
-  }
-
-  private lazy val locationCache: LoadingCache[Location, Location] = CacheBuilder.newBuilder()
-    .maximumSize(10000)
-    .build(
-      new CacheLoader[Location, Location]() {
-        override def load(loc: Location): Location = loc
-      }
-    )
-
-  def load(in: ObjectInput): Location = {
-    try {
-      Option(locationConstructor).map { ctr =>
-        val loc = ctr.newInstance().asInstanceOf[Location]
-        loc.readExternal(in)
-        locationCache.get(loc)
-      }.getOrElse(BlockManagerId(in))
-    } catch {
-      case _: NoSuchMethodException =>
-        throw new SparkException(s"$locationName did not have a zero-argument constructor.")
-    }
-  }
 }
 
 private[spark] object MapStatus {

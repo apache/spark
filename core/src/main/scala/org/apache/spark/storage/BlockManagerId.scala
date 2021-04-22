@@ -20,9 +20,9 @@ package org.apache.spark.storage
 import java.io.{IOException, ObjectInput, ObjectOutput}
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.api.ExecutorLocation
 import org.apache.spark.util.Utils
 
@@ -130,21 +130,11 @@ private[spark] object BlockManagerId {
   def apply(in: ObjectInput): BlockManagerId = {
     val obj = new BlockManagerId()
     obj.readExternal(in)
-    getCachedBlockManagerId(obj)
+    obj
   }
 
-  /**
-   * The max cache size is hardcoded to 10000, since the size of a BlockManagerId
-   * object is about 48B, the total memory cost should be below 1MB which is feasible.
-   */
-  val blockManagerIdCache = CacheBuilder.newBuilder()
-    .maximumSize(10000)
-    .build(new CacheLoader[BlockManagerId, BlockManagerId]() {
-      override def load(id: BlockManagerId) = id
-    })
-
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
-    blockManagerIdCache.get(id)
+    MapStatus.locationFactory.locationCache.get(id).asInstanceOf[BlockManagerId]
   }
 
   private[spark] val SHUFFLE_MERGER_IDENTIFIER = "shuffle-push-merger"
