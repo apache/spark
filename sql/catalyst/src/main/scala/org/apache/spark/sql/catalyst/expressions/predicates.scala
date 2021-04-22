@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AND_OR, IN, NOT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AND_OR, IN, INSET, NOT, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -548,6 +548,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
 
   override def nullable: Boolean = child.nullable || hasNull
+
+  override val nodePatterns: Seq[TreePattern] = Seq(INSET)
 
   protected override def nullSafeEval(value: Any): Any = {
     if (set.contains(value)) {

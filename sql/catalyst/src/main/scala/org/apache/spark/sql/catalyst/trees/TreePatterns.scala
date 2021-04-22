@@ -32,6 +32,7 @@ object TreePattern extends Enumeration  {
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
   val IF: Value = Value
   val IN: Value = Value
+  val INSET: Value = Value
   val LIKE_FAMLIY: Value = Value
   val LITERAL: Value = Value
   val NOT: Value = Value
