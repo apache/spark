@@ -444,7 +444,7 @@ private[spark] object JsonProtocol {
             case bmId: BlockManagerId =>
               bmId
             case _ =>
-              // TODO: support custom locations
+              // TODO (SPARK-35188): support json serde for the custom location
               null
           }}.
           map(blockManagerIdToJson).getOrElse(JNothing)
