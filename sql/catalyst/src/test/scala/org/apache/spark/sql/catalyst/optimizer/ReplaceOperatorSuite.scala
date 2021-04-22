@@ -20,13 +20,14 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Coalesce, If, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Coalesce, If, Literal, Not}
 import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 class ReplaceOperatorSuite extends PlanTest {
 
@@ -43,37 +44,15 @@ class ReplaceOperatorSuite extends PlanTest {
   test("replace Intersect with Left-semi Join") {
     val table1 = LocalRelation('a.int, 'b.int)
     val table2 = LocalRelation('c.int, 'd.int)
-    withSQLConf(SQLConf.PUSHDOWN_DISTINCT_IN_SET_OPERATIONS.key -> "true") {
-      Seq(
-        Intersect(table1, table2, isAll = false),
-        Intersect(Distinct(table1), table2, isAll = false),
-        Intersect(table1, Distinct(table2), isAll = false),
-        Intersect(Distinct(table1), Distinct(table2), isAll = false)
-      ).foreach { query =>
-        val optimized = Optimize.execute(query.analyze)
 
-        val correctAnswer =
-          Join(
-            Aggregate(table1.output, table1.output, table1),
-            Aggregate(table2.output, table2.output, table2),
-            LeftSemi,
-            Option('a <=> 'c && 'b <=> 'd),
-            JoinHint.NONE).analyze
+    val query = Intersect(table1, table2, isAll = false)
+    val optimized = Optimize.execute(query.analyze)
 
-        comparePlans(optimized, correctAnswer)
-      }
-    }
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+        Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd), JoinHint.NONE)).analyze
 
-    withSQLConf(SQLConf.PUSHDOWN_DISTINCT_IN_SET_OPERATIONS.key -> "false") {
-      val query = Intersect(table1, table2, isAll = false)
-      val optimized = Optimize.execute(query.analyze)
-
-      val correctAnswer =
-        Aggregate(table1.output, table1.output,
-          Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd), JoinHint.NONE)).analyze
-
-      comparePlans(optimized, correctAnswer)
-    }
+    comparePlans(optimized, correctAnswer)
   }
 
   test("replace Except with Filter while both the nodes are of type Filter") {
@@ -178,37 +157,14 @@ class ReplaceOperatorSuite extends PlanTest {
     val table1 = LocalRelation('a.int, 'b.int)
     val table2 = LocalRelation('c.int, 'd.int)
 
-    withSQLConf(SQLConf.PUSHDOWN_DISTINCT_IN_SET_OPERATIONS.key -> "true") {
-      Seq(
-        Except(table1, table2, isAll = false),
-        Except(Distinct(table1), table2, isAll = false),
-        Except(table1, Distinct(table2), isAll = false),
-        Except(Distinct(table1), Distinct(table2), isAll = false)
-      ).foreach { query =>
-        val optimized = Optimize.execute(query.analyze)
+    val query = Except(table1, table2, isAll = false)
+    val optimized = Optimize.execute(query.analyze)
 
-        val correctAnswer =
-          Join(
-            Aggregate(table1.output, table1.output, table1),
-            Aggregate(table2.output, table2.output, table2),
-            LeftAnti,
-            Option('a <=> 'c && 'b <=> 'd),
-            JoinHint.NONE).analyze
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+        Join(table1, table2, LeftAnti, Option('a <=> 'c && 'b <=> 'd), JoinHint.NONE)).analyze
 
-        comparePlans(optimized, correctAnswer)
-      }
-    }
-
-    withSQLConf(SQLConf.PUSHDOWN_DISTINCT_IN_SET_OPERATIONS.key -> "false") {
-      val query = Except(table1, table2, isAll = false)
-      val optimized = Optimize.execute(query.analyze)
-
-      val correctAnswer =
-        Aggregate(table1.output, table1.output,
-          Join(table1, table2, LeftAnti, Option('a <=> 'c && 'b <=> 'd), JoinHint.NONE)).analyze
-
-      comparePlans(optimized, correctAnswer)
-    }
+    comparePlans(optimized, correctAnswer)
   }
 
   test("replace Except with Filter when only right filter can be applied to the left") {
@@ -220,11 +176,8 @@ class ReplaceOperatorSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
-      Join(Aggregate(left.output, left.output, left),
-        Aggregate(right.output, right.output, right),
-        LeftAnti,
-        Option($"left.a" <=> $"right.a"),
-        JoinHint.NONE).analyze
+      Aggregate(left.output, right.output,
+        Join(left, right, LeftAnti, Option($"left.a" <=> $"right.a"), JoinHint.NONE)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -296,12 +249,69 @@ class ReplaceOperatorSuite extends PlanTest {
     val result = Optimize.execute(except.analyze)
     val condition = basePlan.output.zip(otherPlan.output).map { case (a1, a2) =>
       a1 <=> a2 }.reduce( _ && _)
-    val correctAnswer =
-      Join(Aggregate(basePlan.output, basePlan.output, basePlan),
-        Aggregate(otherPlan.output, otherPlan.output, otherPlan),
-        LeftAnti,
-        Option(condition),
-        JoinHint.NONE).analyze
+    val correctAnswer = Aggregate(basePlan.output, otherPlan.output,
+      Join(basePlan, otherPlan, LeftAnti, Option(condition), JoinHint.NONE)).analyze
     comparePlans(result, correctAnswer)
+  }
+
+  test("SPARK-34061: Push down DISTINCT in Set operations") {
+    val attribute = AttributeReference("key", IntegerType)()
+    val plan1 = StatsTestPlan(
+      outputList = Seq(attribute),
+      attributeStats = AttributeMap(Seq(attribute ->
+        ColumnStat(distinctCount = Some(10), min = Some(1), max = Some(10),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))),
+      rowCount = 10000,
+      size = Some(10000 * (8 + 4))).as("x")
+
+    val plan2 = StatsTestPlan(
+      outputList = Seq(attribute),
+      attributeStats = AttributeMap(Seq(attribute ->
+        ColumnStat(distinctCount = Some(20), min = Some(1), max = Some(100),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))),
+      rowCount = 20000,
+      size = Some(20000 * (8 + 4))).as("y")
+
+    {
+      val query = Intersect(plan1, plan2, isAll = false)
+      Seq(true, false).foreach { cboEnabled =>
+        withSQLConf(SQLConf.CBO_ENABLED.key -> cboEnabled.toString) {
+          val optimized = Optimize.execute(query.analyze)
+          val correctAnswer = if (cboEnabled) {
+            Join(
+              Aggregate(plan1.output, plan1.output, plan1),
+              Aggregate(plan2.output, plan2.output, plan2),
+              LeftSemi,
+              Option($"x.key" <=> $"y.key"),
+              JoinHint.NONE).analyze
+          } else {
+            Aggregate(plan1.output, plan1.output,
+              Join(plan1, plan2, LeftSemi, Option($"x.key" <=> $"y.key"), JoinHint.NONE)).analyze
+          }
+          comparePlans(optimized, correctAnswer)
+        }
+      }
+    }
+
+    {
+      val query = Except(plan1, plan2, isAll = false)
+      Seq(true, false).foreach { cboEnabled =>
+        withSQLConf(SQLConf.CBO_ENABLED.key -> cboEnabled.toString) {
+          val optimized = Optimize.execute(query.analyze)
+          val correctAnswer = if (cboEnabled) {
+            Join(
+              Aggregate(plan1.output, plan1.output, plan1),
+              Aggregate(plan2.output, plan2.output, plan2),
+              LeftAnti,
+              Option($"x.key" <=> $"y.key"),
+              JoinHint.NONE).analyze
+          } else {
+            Aggregate(plan1.output, plan1.output,
+              Join(plan1, plan2, LeftAnti, Option($"x.key" <=> $"y.key"), JoinHint.NONE)).analyze
+          }
+          comparePlans(optimized, correctAnswer)
+        }
+      }
+    }
   }
 }

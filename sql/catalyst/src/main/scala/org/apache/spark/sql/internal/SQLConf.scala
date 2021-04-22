@@ -2181,14 +2181,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PUSHDOWN_DISTINCT_IN_SET_OPERATIONS =
-    buildConf("spark.sql.optimizer.pushdownDistinctInSetOperations")
-      .internal()
-      .doc("When set to true, will pudhdown the distinct through set operations(INTERSECT/EXCEPT).")
-      .version("3.2.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
     buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
       .internal()
@@ -3727,8 +3719,6 @@ class SQLConf extends Serializable with Logging {
   def arrowSafeTypeConversion: Boolean = getConf(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
-
-  def pushdownDistinctInSetOperations: Boolean = getConf(PUSHDOWN_DISTINCT_IN_SET_OPERATIONS)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 

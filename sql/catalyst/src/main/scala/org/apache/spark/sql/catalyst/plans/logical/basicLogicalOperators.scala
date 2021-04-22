@@ -849,6 +849,7 @@ case class Aggregate(
   private[sql] def isEquallyDistinct: Boolean = {
     groupingExpressions.size == aggregateExpressions.size &&
       groupingExpressions.zip(aggregateExpressions).forall(e => e._1.fastEquals(e._2))
+  }
 }
 
 object Aggregate {
