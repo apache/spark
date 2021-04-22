@@ -305,7 +305,7 @@ object QueryExecutionErrors {
     new IllegalStateException("table stats must be specified.")
   }
 
-  def unaryMinusCauseOverflowError(originValue: String): ArithmeticException = {
+  def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
     new ArithmeticException(s"- $originValue caused overflow.")
   }
 
