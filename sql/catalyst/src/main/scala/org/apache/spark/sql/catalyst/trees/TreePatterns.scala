@@ -26,6 +26,7 @@ object TreePattern extends Enumeration  {
   val AND_OR: Value = Value(0)
   val ATTRIBUTE_REFERENCE: Value = Value
   val BINARY_ARITHMETIC: Value = Value
+  val BINARY_COMPARISON: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
   val CONCAT: Value = Value

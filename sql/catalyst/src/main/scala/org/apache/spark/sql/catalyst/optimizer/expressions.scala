@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -50,8 +51,9 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
+    case q: LogicalPlan => q.transformExpressionsDownWithPruning(
+      AlwaysProcess.fn, ruleId) {
       // Skip redundant folding of literals. This rule is technically not necessary. Placing this
       // here avoids running the next rule for Literal values, which would create a new Literal
       // object and running eval unnecessarily.
@@ -464,7 +466,8 @@ object SimplifyBinaryComparison
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(BINARY_COMPARISON), ruleId) {
     case l: LogicalPlan =>
       lazy val notNullExpressions = ExpressionSet(l match {
         case Filter(fc, _) =>
@@ -474,7 +477,7 @@ object SimplifyBinaryComparison
         case _ => Seq.empty
       })
 
-      l transformExpressionsUp {
+      l.transformExpressionsUpWithPruning(_.containsPattern(BINARY_COMPARISON)) {
         // True with equality
         case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
         case a EqualTo b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
