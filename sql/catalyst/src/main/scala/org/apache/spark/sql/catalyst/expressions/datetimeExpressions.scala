@@ -2060,7 +2060,7 @@ case class TruncTimestamp(
   group = "datetime_funcs",
   since = "1.5.0")
 case class DateDiff(endDate: Expression, startDate: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
   override def left: Expression = endDate
   override def right: Expression = startDate
@@ -2582,7 +2582,7 @@ case class SubtractDates(
     left: Expression,
     right: Expression,
     legacyInterval: Boolean)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
   def this(left: Expression, right: Expression) =
     this(left, right, SQLConf.get.legacyIntervalEnabled)

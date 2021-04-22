@@ -204,9 +204,10 @@ cannot resolve '('1' - CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data 
 -- !query
 SELECT '1' - cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
-struct<(1 - CAST(2017-12-11 09:30:00 AS DATE)):day-time interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve '('1' - CAST('2017-12-11 09:30:00' AS DATE))' due to data type mismatch: argument 1 requires date type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query
