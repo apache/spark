@@ -1876,7 +1876,7 @@ private[spark] class DAGScheduler(
                 .exists(_.workerHost.isDefined)
             }
 
-            // Shuffle output of all executors on host `bmId.host` may be lost if:
+            // Shuffle output of all executors on host `bmAddress.host` may be lost if:
             // - External shuffle service is enabled, so we assume that all shuffle data on node is
             //   bad.
             // - Host is decommissioned, thus all executors on that host will die.
