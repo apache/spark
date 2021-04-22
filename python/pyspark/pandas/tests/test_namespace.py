@@ -22,7 +22,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.namespace import _get_index_map
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.utils import SQLTestUtils
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):

@@ -28,7 +28,7 @@ except ImportError:
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
-from pyspark.testing.utils import SQLTestUtils
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
