@@ -18,7 +18,6 @@
 package org.apache.spark.shuffle.api;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.api.java.Optional;
 
 /**
  * :: Private ::
