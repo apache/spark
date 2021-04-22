@@ -236,7 +236,9 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def sendRequest(req: FetchRequest): Unit = {
-    val address = req.address.asInstanceOf[BlockManagerId]
+    val location = req.location
+    assert(location.isInstanceOf[BlockManagerId], s"Required BlockManagerId, but got $location")
+    val address = location.asInstanceOf[BlockManagerId]
     logDebug("Sending request for %d blocks (%s) from %s".format(
       req.blocks.size, Utils.bytesToString(req.size), address.hostPort))
     bytesInFlight += req.size
@@ -732,7 +734,7 @@ final class ShuffleBlockFetcherIterator(
     // Process any regular fetch requests if possible.
     while (isRemoteBlockFetchable(fetchRequests)) {
       val request = fetchRequests.dequeue()
-      val remoteAddress = request.address
+      val remoteAddress = request.location
       if (isRemoteAddressMaxedOut(remoteAddress, request)) {
         logDebug(s"Deferring fetch request for $remoteAddress with ${request.blocks.size} blocks")
         val defReqQueue = deferredFetchRequests.getOrElse(remoteAddress, new Queue[FetchRequest]())
@@ -971,10 +973,10 @@ object ShuffleBlockFetcherIterator {
 
   /**
    * A request to fetch blocks from a remote BlockManager.
-   * @param address remote BlockManager to fetch from.
+   * @param location the location to fetch from.
    * @param blocks Sequence of the information for blocks to fetch from the same address.
    */
-  case class FetchRequest(address: Location, blocks: Seq[FetchBlockInfo]) {
+  case class FetchRequest(location: Location, blocks: Seq[FetchBlockInfo]) {
     val size = blocks.map(_.size).sum
   }
 
