@@ -1787,17 +1787,23 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast(Literal.create("10-1"), YearMonthIntervalType), 121)
     checkEvaluation(cast(Literal.create("abc10-1"), YearMonthIntervalType), 121)
     checkEvaluation(cast(Literal.create("abca10-1-da-"), YearMonthIntervalType), 121)
-    checkEvaluation(cast(Literal.create("null"), YearMonthIntervalType), null)
+    checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType), null)
 
     Seq("INTERVAL '0-0' YEAR TO MONTH" -> "INTERVAL '0-0' YEAR TO MONTH",
       "INTERVAL '10-1' YEAR TO MONTH" -> "INTERVAL '10-1' YEAR TO MONTH",
       "INTERVAL '-178956970-7' YEAR TO MONTH" -> "INTERVAL '-178956970-7' YEAR TO MONTH",
-      "INTERVAL '-178956970-8' YEAR TO MONTH" -> null,
-      "INTERVAL '178956970-7' YEAR TO MONTH" -> "INTERVAL '178956970-7' YEAR TO MONTH",
-      "INTERVAL '178956970-8' YEAR TO MONTH" -> null)
+      "INTERVAL '178956970-7' YEAR TO MONTH" -> "INTERVAL '178956970-7' YEAR TO MONTH")
       .foreach { case (interval, result) =>
         checkEvaluation(
           cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), result)
+      }
+
+    Seq("INTERVAL '-178956970-8' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
+      .foreach { interval =>
+        val e = intercept[Exception] {
+          cast(cast(Literal.create(interval), YearMonthIntervalType), StringType).eval()
+        }.getMessage
+        assert(e.contains("Error parsing interval year-month string: integer overflow"))
       }
 
     Seq(Period.ofMonths(Byte.MaxValue) -> Byte.MaxValue.toInt,
@@ -1808,6 +1814,11 @@ class CastSuite extends CastSuiteBase {
       val interval = cast(Literal.create(period, YearMonthIntervalType), StringType)
       checkEvaluation(cast(interval, YearMonthIntervalType), result)
     }
+
+    val e2 = intercept[IllegalArgumentException] {
+      val interval = cast(Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType), StringType)
+      cast(interval, YearMonthIntervalType).eval()
+    }.getMessage
   }
 }
 

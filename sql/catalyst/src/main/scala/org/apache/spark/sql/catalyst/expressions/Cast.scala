@@ -536,7 +536,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToYearMonthInterval(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => IntervalUtils.safeFromYearMonthString(s).orNull)
+      buildCast[UTF8String](_, s => IntervalUtils.fromYearMonthString(s).months)
   }
 
   // LongConverter
@@ -902,7 +902,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
-    case YearMonthIntervalType => castToYearMonthIntervalCode(from, ctx)
+    case YearMonthIntervalType => castToYearMonthIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
@@ -1361,21 +1361,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   }
 
-  private[this] def castToYearMonthIntervalCode(
-      from: DataType,
-      ctx: CodegenContext): CastFunction = from match {
+  private[this] def castToYearMonthIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      val intOpt = ctx.freshVariable("intOpt", classOf[Option[Int]])
       (c, evPrim, evNull) =>
-        code"""
-           scala.Option<Integer> $intOpt = $util.safeFromYearMonthString($c);
-           if ($intOpt.isDefined()) {
-              $evPrim = ((Integer) $intOpt.get()).intValue();
-            } else {
-              $evNull = true;
-            }
-         """.stripMargin
+        code"""$evPrim = (Integer)$util.fromYearMonthString($c).months;""".stripMargin
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
