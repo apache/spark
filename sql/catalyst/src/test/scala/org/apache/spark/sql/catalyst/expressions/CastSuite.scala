@@ -1792,33 +1792,26 @@ class CastSuite extends CastSuiteBase {
     Seq("INTERVAL '0-0' YEAR TO MONTH" -> "INTERVAL '0-0' YEAR TO MONTH",
       "INTERVAL '10-1' YEAR TO MONTH" -> "INTERVAL '10-1' YEAR TO MONTH",
       "INTERVAL '-178956970-7' YEAR TO MONTH" -> "INTERVAL '-178956970-7' YEAR TO MONTH",
-      "INTERVAL '178956970-7' YEAR TO MONTH" -> "INTERVAL '178956970-7' YEAR TO MONTH")
-      .foreach { case (interval, result) =>
-        checkEvaluation(
-          cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), result)
-      }
+      "INTERVAL '178956970-7' YEAR TO MONTH" -> "INTERVAL '178956970-7' YEAR TO MONTH",
+      "INTERVAL '-178956970-8' YEAR TO MONTH" -> "INTERVAL '-178956970-8' YEAR TO MONTH"
+    ).foreach { case (interval, result) =>
+      checkEvaluation(
+        cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), result)
+    }
 
-    Seq("INTERVAL '-178956970-8' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
+    Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
       .foreach { interval =>
-        val e = intercept[Exception] {
-          cast(cast(Literal.create(interval), YearMonthIntervalType), StringType).eval()
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), YearMonthIntervalType).eval()
         }.getMessage
         assert(e.contains("Error parsing interval year-month string: integer overflow"))
       }
 
-    Seq(Period.ofMonths(Byte.MaxValue) -> Byte.MaxValue.toInt,
-      Period.ofMonths(Short.MaxValue) -> Short.MaxValue.toInt,
-      Period.ofMonths(Int.MaxValue) -> Int.MaxValue,
-      Period.ofMonths(Int.MinValue + 1) -> -2147483647,
-      Period.ofMonths(Int.MinValue) -> null).foreach { case (period, result) =>
-      val interval = cast(Literal.create(period, YearMonthIntervalType), StringType)
-      checkEvaluation(cast(interval, YearMonthIntervalType), result)
-    }
-
-    val e2 = intercept[IllegalArgumentException] {
-      val interval = cast(Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType), StringType)
-      cast(interval, YearMonthIntervalType).eval()
-    }.getMessage
+    Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
+      .foreach { period =>
+        val interval = Literal.create(Period.ofMonths(period), YearMonthIntervalType)
+        checkEvaluation(cast(cast(interval, StringType), YearMonthIntervalType), period)
+      }
   }
 }
 
