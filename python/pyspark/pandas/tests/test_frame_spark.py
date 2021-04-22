@@ -15,11 +15,9 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
 import os
 
 import pandas as pd
-import pyspark
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
@@ -43,10 +41,7 @@ class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
         kdf1 = ps.from_pandas(pdf1)
         kdf2 = ps.from_pandas(pdf2)
 
-        if LooseVersion(pyspark.__version__) >= LooseVersion("3.0"):
-            hints = ["broadcast", "merge", "shuffle_hash", "shuffle_replicate_nl"]
-        else:
-            hints = ["broadcast"]
+        hints = ["broadcast", "merge", "shuffle_hash", "shuffle_replicate_nl"]
 
         for hint in hints:
             self.assert_eq(
