@@ -405,7 +405,7 @@ case class Join(
         left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
-      case LeftOuter =>
+      case LeftOuter | LateralJoin(LeftOuter) =>
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output

@@ -875,12 +875,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
-      if (!ctx.lateralView.isEmpty) {
+      if (!ctx.lateralView.isEmpty || !ctx.lateralClause.isEmpty) {
         throw QueryParsingErrors.lateralWithPivotInFromClauseNotAllowedError(ctx)
       }
       withPivot(ctx.pivotClause, from)
-    } else {
+    } else if (!ctx.lateralView.isEmpty) {
+      if (!ctx.lateralClause.isEmpty) {
+        throw QueryParsingErrors.lateralJoinWithLateralViewNotAllowedError(ctx)
+      }
       ctx.lateralView.asScala.foldLeft(from)(withGenerate)
+    } else {
+      ctx.lateralClause.asScala.foldLeft(from)(withLateralJoin)
     }
   }
 
@@ -1097,6 +1102,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Add a [[Join]] with join type LateralJoin(Inner) to the logical plan.
+   */
+  private def withLateralJoin(
+      left: LogicalPlan,
+      ctx: LateralClauseContext): LogicalPlan = withOrigin(ctx) {
+    val right = plan(ctx.relationPrimary)
+    Join(left, right, LateralJoin(Inner), None, JoinHint.NONE)
+  }
+
+  /**
    * Create a single relation referenced in a FROM clause. This method is used when a part of the
    * join condition is nested, for example:
    * {{{
@@ -1127,16 +1142,29 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         // Resolve the join type and join condition
         val (joinType, condition) = Option(join.joinCriteria) match {
           case Some(c) if c.USING != null =>
+            if (join.LATERAL != null) {
+              throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
+            }
             (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
           case Some(c) if c.booleanExpression != null =>
-            (baseJoinType, Option(expression(c.booleanExpression)))
+            val joinType: JoinType = if (join.LATERAL != null) {
+              LateralJoin(baseJoinType)
+            } else {
+              baseJoinType
+            }
+            (joinType, Option(expression(c.booleanExpression)))
           case Some(c) =>
             throw QueryParsingErrors.joinCriteriaUnimplementedError(c, ctx)
           case None if join.NATURAL != null =>
+            if (join.LATERAL != null) {
+              throw QueryParsingErrors.lateralJoinWithNaturalJoinUnsupportedError(ctx)
+            }
             if (baseJoinType == Cross) {
               throw QueryParsingErrors.naturalCrossJoinUnsupportedError(ctx)
             }
             (NaturalJoin(baseJoinType), None)
+          case None if join.LATERAL != null =>
+            (LateralJoin(baseJoinType), None)
           case None =>
             (baseJoinType, None)
         }

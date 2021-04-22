@@ -79,8 +79,12 @@ trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { s
         l.copy(exprId = ExprId(0))
       case a: AttributeReference =>
         AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+      case OuterReference(a: AttributeReference) =>
+        OuterReference(AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0)))
       case a: Alias =>
         Alias(a.child, a.name)(exprId = ExprId(0))
+      case OuterReference(a: Alias) =>
+        OuterReference(Alias(a.child, a.name)(exprId = ExprId(0)))
       case ae: AggregateExpression =>
         ae.copy(resultId = ExprId(0))
       case lv: NamedLambdaVariable =>

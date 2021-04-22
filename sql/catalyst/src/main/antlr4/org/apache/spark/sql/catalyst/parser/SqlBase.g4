@@ -588,7 +588,7 @@ hintStatement
     ;
 
 fromClause
-    : FROM relation (',' relation)* lateralView* pivotClause?
+    : FROM relation (',' lateralClause)* (',' relation)* lateralView* pivotClause?
     ;
 
 aggregationClause
@@ -637,6 +637,10 @@ lateralView
     : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=identifier (AS? colName+=identifier (',' colName+=identifier)*)?
     ;
 
+lateralClause
+    : LATERAL right=relationPrimary
+    ;
+
 setQuantifier
     : DISTINCT
     | ALL
@@ -647,8 +651,8 @@ relation
     ;
 
 joinRelation
-    : (joinType) JOIN right=relationPrimary joinCriteria?
-    | NATURAL joinType JOIN right=relationPrimary
+    : (joinType) JOIN LATERAL? right=relationPrimary joinCriteria?
+    | NATURAL joinType JOIN LATERAL? right=relationPrimary
     ;
 
 joinType
@@ -1122,7 +1126,6 @@ ansiNonReserved
     | ITEMS
     | KEYS
     | LAST
-    | LATERAL
     | LAZY
     | LIKE
     | LIMIT
@@ -1252,6 +1255,7 @@ strictNonReserved
     | INNER
     | INTERSECT
     | JOIN
+    | LATERAL
     | LEFT
     | NATURAL
     | ON
@@ -1373,7 +1377,6 @@ nonReserved
     | ITEMS
     | KEYS
     | LAST
-    | LATERAL
     | LAZY
     | LEADING
     | LIKE

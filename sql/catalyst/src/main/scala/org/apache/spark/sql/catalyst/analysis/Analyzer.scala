@@ -276,6 +276,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
+      ResolveLateralJoin ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -1393,13 +1394,14 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
-        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
+        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child, expandStar(p.child)))
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         if (a.groupingExpressions.exists(_.isInstanceOf[UnresolvedOrdinal])) {
           throw QueryCompilationErrors.starNotAllowedWhenGroupByOrdinalPositionUsedError()
         } else {
-          a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
+          a.copy(aggregateExpressions =
+            buildExpandedProjectList(a.aggregateExpressions, a.child, expandStar(a.child)))
         }
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
@@ -1571,31 +1573,51 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     /**
-     * Build a project list for Project/Aggregate and expand the star if possible
+     * Build a project list for Project/Aggregate and expand the star if possible using the
+     * provided expand function.
      */
-    private def buildExpandedProjectList(
-      exprs: Seq[NamedExpression],
-      child: LogicalPlan): Seq[NamedExpression] = {
+    def buildExpandedProjectList(
+        exprs: Seq[NamedExpression],
+        child: LogicalPlan,
+        expand: Star => Seq[NamedExpression]): Seq[NamedExpression] = {
       exprs.flatMap {
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
-        case s: Star => s.expand(child, resolver)
+        case s: Star => expand(s)
         // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
-        case UnresolvedAlias(s: Star, _) => s.expand(child, resolver)
-        case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
+        case UnresolvedAlias(s: Star, _) => expand(s)
+        case o if containsStar(o :: Nil) => expandStarExpression(o, child, expand) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
     }
 
     /**
-     * Returns true if `exprs` contains a [[Star]].
+     * Check if any of the expressions contains a [[Star]].
      */
-    def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+    def containsStar(exprs: Seq[Expression]): Boolean = {
+      exprs.exists(_.find(_.isInstanceOf[Star]).isDefined)
+    }
+
+    /**
+     * Check if any of the expressions contains an [[UnresolvedStar]].
+     */
+    def containsUnresolvedStar(exprs: Seq[Expression]): Boolean = {
+      exprs.exists(_.find(_.isInstanceOf[UnresolvedStar]).isDefined)
+    }
+
+    /**
+     * Return a function to expand a star expression using the given logical plan.
+     */
+    private def expandStar(plan: LogicalPlan): Star => Seq[NamedExpression] = {
+      s: Star => s.expand(plan, resolver)
+    }
 
     /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
-    def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
+    def expandStarExpression(
+        expr: Expression,
+        child: LogicalPlan,
+        expand: Star => Seq[NamedExpression]): Expression = {
       expr.transformUp {
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
@@ -1613,32 +1635,32 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
           }
           f1.copy(arguments = f1.arguments.flatMap {
-            case s: Star => s.expand(child, resolver)
+            case s: Star => expand(s)
             case o => o :: Nil
           })
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
-            case Seq(k, s : Star) => CreateStruct(s.expand(child, resolver)).children
+            case Seq(k, s : Star) => CreateStruct(expand(s)).children
             case kv => kv
           }
           c.copy(children = newChildren.toList )
         case c: CreateArray if containsStar(c.children) =>
           c.copy(children = c.children.flatMap {
-            case s: Star => s.expand(child, resolver)
+            case s: Star => expand(s)
             case o => o :: Nil
           })
         case p: Murmur3Hash if containsStar(p.children) =>
           p.copy(children = p.children.flatMap {
-            case s: Star => s.expand(child, resolver)
+            case s: Star => expand(s)
             case o => o :: Nil
           })
         case p: XxHash64 if containsStar(p.children) =>
           p.copy(children = p.children.flatMap {
-            case s: Star => s.expand(child, resolver)
+            case s: Star => expand(s)
             case o => o :: Nil
           })
         // count(*) has been replaced by count(1)
-        case o if containsStar(o.children) =>
+        case o if containsUnresolvedStar(o.children) =>
           throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'")
       }
     }
@@ -1666,6 +1688,27 @@ class Analyzer(override val catalogManager: CatalogManager)
       case (_, getFuncExpr, getAliasName) =>
         val funcExpr = getFuncExpr()
         Alias(funcExpr, getAliasName(funcExpr))()
+    }
+  }
+
+  /**
+   * Optionally resolve the name parts using the outer query plan and wrap resolved attributes
+   * with [[OuterReference]]s.
+   */
+  private def resolveOuterReference(
+      nameParts: Seq[String],
+      outer: LogicalPlan): Option[NamedExpression] = {
+    try {
+      outer.resolve(nameParts, resolver) match {
+        case Some(outerAttr) =>
+          val outer = outerAttr
+            .transform { case a: Attribute => OuterReference(a) }
+            .asInstanceOf[NamedExpression]
+          Some(outer)
+        case _ => None
+      }
+    } catch {
+      case _: AnalysisException => None
     }
   }
 
@@ -2284,14 +2327,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           q.transformExpressionsWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
             case u @ UnresolvedAttribute(nameParts) =>
               withPosition(u) {
-                try {
-                  outer.resolve(nameParts, resolver) match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
-                    case None => u
-                  }
-                } catch {
-                  case _: AnalysisException => u
-                }
+                resolveOuterReference(nameParts, outer).getOrElse(u)
               }
           }
       }
@@ -2400,6 +2436,74 @@ class Analyzer(override val catalogManager: CatalogManager)
           Alias(attr, aliasName)()
         }
         Project(aliases, child)
+    }
+  }
+
+  /**
+   * This rule resolves lateral joins.
+   */
+  object ResolveLateralJoin extends Rule[LogicalPlan] {
+    import ResolveReferences._
+
+    /**
+     * Build a project list for Project/Aggregate and expand the star if possible by first using
+     * the inner query plan. If failed, use the outer query plan to expand the star and wrap all
+     * expanded attributes in [[OuterReference]]s.
+     */
+    private def expandOuterReference(
+        expressions: Seq[NamedExpression],
+        inner: LogicalPlan,
+        outer: LogicalPlan): Seq[NamedExpression] = {
+
+      def expandInner(star: Star): Seq[NamedExpression] =
+        star.expand(inner, resolver)
+
+      // Leave the star unchanged if the outer plan is unable to resolve the star.
+      // Otherwise wrap the resolved attributes in outer references.
+      def expandOuter(star: Star): Seq[NamedExpression] = {
+        star.expand(outer, resolver).map {
+          case s: Star => s
+          case other => other
+            .transform { case a: Attribute => OuterReference(a) }
+            .asInstanceOf[NamedExpression]
+        }
+      }
+
+      buildExpandedProjectList(
+        buildExpandedProjectList(expressions, inner, expandInner),
+        outer,
+        expandOuter)
+    }
+
+    /**
+     * Resolve the right sub-tree by first using the right query plan itself, and then try
+     * resolving the unresolved attributes and star expressions using the left query plan.
+     */
+    private def resolveRightChild(right: LogicalPlan, left: LogicalPlan): LogicalPlan = {
+      right.resolveOperators {
+        case p: LogicalPlan if !p.childrenResolved => p
+        case p: Project if containsStar(p.projectList) =>
+          p.copy(projectList = expandOuterReference(p.projectList, p.child, left))
+        case a: Aggregate if containsStar(a.aggregateExpressions) =>
+          a.copy(aggregateExpressions =
+            expandOuterReference(a.aggregateExpressions, a.child, left))
+        case p: LogicalPlan if !p.resolved =>
+          p transformExpressions {
+            case u @ UnresolvedAttribute(nameParts) =>
+              withPosition(u) {
+                p.resolveChildren(nameParts, resolver)
+                  .orElse(resolveLiteralFunction(nameParts))
+                  .orElse(resolveOuterReference(nameParts, left))
+                  .getOrElse(u)
+              }
+          }
+      }
+    }
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case j @ Join(left, right, LateralJoin(_), _, _) if left.resolved && !right.resolved =>
+        val newRight = resolveRightChild(right, left)
+        j.copy(right = newRight)
     }
   }
 

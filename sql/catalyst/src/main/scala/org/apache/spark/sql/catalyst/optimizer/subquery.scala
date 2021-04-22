@@ -330,6 +330,17 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       rewriteSubQueries(q, q.children)
     case s: SupportsSubquery =>
       rewriteSubQueries(s, s.children)
+    case j @ Join(left, right, LateralJoin(_), joinCond, _) =>
+      val (newPlan, newCond) = DecorrelateInnerQuery(right, left)
+      if (newCond.nonEmpty) {
+        val newJoinCond = (joinCond ++ newCond).reduceOption(And)
+        val newJoin = j.copy(right = newPlan, condition = newJoinCond)
+        // Project the original output of the lateral join to remove preserved domain attributes
+        // from the right-hand side of the new join.
+        Project(j.output, newJoin)
+      } else {
+        j.copy(right = newPlan)
+      }
   }
 }
 

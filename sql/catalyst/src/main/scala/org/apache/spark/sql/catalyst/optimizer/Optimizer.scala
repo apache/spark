@@ -112,6 +112,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
         RewriteCorrelatedScalarSubquery,
+        RewriteLateralJoin,
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveRedundantAggregates,
