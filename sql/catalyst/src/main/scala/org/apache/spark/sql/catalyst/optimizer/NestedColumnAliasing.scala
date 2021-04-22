@@ -30,24 +30,26 @@ import org.apache.spark.sql.types._
  */
 object NestedColumnAliasing {
 
-  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+  def unapply(plan: LogicalPlan): Option[Map[Attribute, Seq[ExtractValue]]] = plan match {
     /**
      * This pattern is needed to support [[Filter]] plan cases like
      * [[Project]]->[[Filter]]->listed plan in `canProjectPushThrough` (e.g., [[Window]]).
      * The reason why we don't simply add [[Filter]] in `canProjectPushThrough` is that
      * the optimizer can hit an infinite loop during the [[PushDownPredicates]] rule.
      */
-    case Project(projectList, Filter(condition, child)) if canProjectPushThrough(child) =>
-      replacePlanWithAliases(
-        plan, projectList ++ Seq(condition) ++ child.expressions, child.producedAttributes.toSeq)
+    case Project(projectList, Filter(condition, child)) if
+        SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
+      getAttributeToExtractValues(
+        projectList ++ Seq(condition) ++ child.expressions, child.producedAttributes.toSeq)
 
-    case Project(projectList, child) if canProjectPushThrough(child) =>
-      replacePlanWithAliases(
-        plan, projectList ++ child.expressions, child.producedAttributes.toSeq)
+    case Project(projectList, child) if
+        SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
+      getAttributeToExtractValues(
+        projectList ++ child.expressions, child.producedAttributes.toSeq)
 
-    case p if canPruneOn(p) =>
-      replacePlanWithAliases(
-        plan, p.expressions, p.producedAttributes.toSeq)
+    case p if SQLConf.get.nestedSchemaPruningEnabled && canPruneOn(p) =>
+      getAttributeToExtractValues(
+        p.expressions, p.producedAttributes.toSeq)
 
     case _ => None
   }
@@ -57,39 +59,31 @@ object NestedColumnAliasing {
    */
   def replacePlanWithAliases(
         plan: LogicalPlan,
-        expressionsToAlias: Seq[Expression],
-        attributesWithoutNesting: Seq[Attribute]): Option[LogicalPlan] = {
-      val attributeToExtractValues = getAttributeToExtractValues(
-        expressionsToAlias, attributesWithoutNesting)
-
-      if (attributeToExtractValues.isEmpty) {
-        return None
-      }
-
+        attributeToExtractValues: Map[Attribute, Seq[ExtractValue]]): LogicalPlan = {
       // Each expression can contain multiple nested fields.
       // Note that we keep the original names to deliver to parquet in a case-sensitive way.
       // A new alias is created for each nested field.
-      val nestedFieldToAlias = attributeToExtractValues.flatMap { case (_, dedupNestedFields) =>
-        dedupNestedFields.map { f =>
+      val nestedFieldToAlias = attributeToExtractValues.flatMap { case (_, nestedFields) =>
+        nestedFields.map { f =>
           val exprId = NamedExpression.newExprId
           f -> Alias(f, s"_gen_alias_${exprId.id}")(exprId, Seq.empty, None)
         }
       }
 
       // A reference attribute can have multiple aliases for nested fields.
-      val attrToAliases = attributeToExtractValues.map { case (attr, dedupNestedFields) =>
-        attr.exprId -> dedupNestedFields.map(nestedFieldToAlias)
+      val attrToAliases = attributeToExtractValues.map { case (attr, nestedFields) =>
+        attr.exprId -> nestedFields.map(nestedFieldToAlias)
       }
 
       plan match {
         case Project(projectList, child) =>
-          Some(Project(
+          Project(
             getNewProjectList(projectList, nestedFieldToAlias),
-            replaceWithAliases(child, nestedFieldToAlias, attrToAliases)))
+            replaceWithAliases(child, nestedFieldToAlias, attrToAliases))
 
         // The operators reaching here are already guarded by [[canPruneOn]].
         case other =>
-          Some(replaceWithAliases(other, nestedFieldToAlias, attrToAliases))
+          replaceWithAliases(other, nestedFieldToAlias, attrToAliases)
       }
   }
 
@@ -122,7 +116,7 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Returns true for those operators that we can prune nested column on it.
+   * Returns true for operators on which we can prune nested columns.
    */
   private def canPruneOn(plan: LogicalPlan) = plan match {
     case _: Aggregate => true
@@ -131,7 +125,7 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Returns true for those operators that project can be pushed through.
+   * Returns true for operators through which project can be pushed.
    */
   private def canProjectPushThrough(plan: LogicalPlan) = plan match {
     case _: GlobalLimit => true
@@ -178,19 +172,20 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Creates a map from root [[Attribute]]s to associated [[ExtractValue]]s.
+   * Creates a map from root [[Attribute]]s to non-redundant nested [[ExtractValue]]s in the
+   * case that only a subset of the nested fields are used.
    * Nested field accessors of `exclusiveAttrs` are not considered in nested fields aliasing.
    */
   def getAttributeToExtractValues(
       exprList: Seq[Expression],
-      exclusiveAttrs: Seq[Attribute]): Map[Attribute, Seq[ExtractValue]] = {
+      exclusiveAttrs: Seq[Attribute]): Option[Map[Attribute, Seq[ExtractValue]]] = {
 
     val nestedFieldReferences = exprList.flatMap(collectExtractValue)
     val otherRootReferences = exprList.flatMap(collectAttributeReference)
     val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
 
     // Remove cosmetic variations when we group extractors by their references
-    nestedFieldReferences
+    val attributeToExtractValues = nestedFieldReferences
       .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head.canonicalized.asInstanceOf[Attribute])
       .flatMap { case (attr: Attribute, nestedFields: Seq[ExtractValue]) =>
@@ -218,6 +213,12 @@ object NestedColumnAliasing {
           None
         }
       }
+
+    if (attributeToExtractValues.isEmpty) {
+      None
+    } else {
+      Some(attributeToExtractValues)
+    }
   }
 
   /**
@@ -235,11 +236,11 @@ object NestedColumnAliasing {
 }
 
 /**
- * This prunes unnecessary nested columns from `Generate` and optional `Project` on top
+ * This prunes unnecessary nested columns from [[Generate]] and optional [[Project]] on top
  * of it.
  */
 object GeneratorNestedColumnAliasing {
-  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+  def unapply(plan: LogicalPlan): Option[Map[Attribute, Seq[ExtractValue]]] = plan match {
     // Either `nestedPruningOnExpressions` or `nestedSchemaPruningEnabled` is enabled, we
     // need to prune nested columns through Project and under Generate. The difference is
     // when `nestedSchemaPruningEnabled` is on, nested columns will be pruned further at
@@ -248,8 +249,8 @@ object GeneratorNestedColumnAliasing {
         SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
       // On top on `Generate`, a `Project` that might have nested column accessors.
       // We try to get alias maps for both project list and generator's children expressions.
-      NestedColumnAliasing.replacePlanWithAliases(
-        plan, projectList ++ g.generator.children, g.qualifiedGeneratorOutput)
+      NestedColumnAliasing.getAttributeToExtractValues(
+        projectList ++ g.generator.children, g.qualifiedGeneratorOutput)
 
     case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
         canPruneGenerator(g.generator) =>
@@ -257,15 +258,15 @@ object GeneratorNestedColumnAliasing {
       // only use part of nested column of it. A required child output means it is referred
       // as a whole or partially by higher projection, pruning it here will cause unresolved
       // query plan.
-      NestedColumnAliasing.replacePlanWithAliases(
-        plan, g.generator.children, g.requiredChildOutput)
+      NestedColumnAliasing.getAttributeToExtractValues(
+        g.generator.children, g.requiredChildOutput)
 
     case _ =>
       None
   }
 
   /**
-   * This is a while-list for pruning nested fields at `Generator`.
+   * Types of [[Generator]] on which we can prune nested fields.
    */
   def canPruneGenerator(g: Generator): Boolean = g match {
     case _: Explode => true
