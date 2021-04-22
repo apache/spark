@@ -26,13 +26,14 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, LinkedHashMap, Queue}
 import scala.util.{Failure, Success}
 
+import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NettyManagedBuffer}
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.util.TransportConf
+import org.apache.spark.network.util.{NettyOutOfMemoryError, NettyUtils, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
@@ -268,7 +269,10 @@ final class ShuffleBlockFetcherIterator(
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-        results.put(new FailureFetchResult(BlockId(blockId), infoMap(blockId)._2, address, e))
+        remainingBlocks -= blockId
+        val (size, mapIndex) = infoMap(blockId)
+        results.put(new FailureFetchResult(
+          BlockId(blockId), mapIndex, address, size, remainingBlocks.isEmpty, e))
       }
     }
 
@@ -435,7 +439,8 @@ final class ShuffleBlockFetcherIterator(
               logError("Error occurred while fetching local blocks, " + ce.getMessage)
             case ex: Exception => logError("Error occurred while fetching local blocks", ex)
           }
-          results.put(new FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
+          results.put(new FailureFetchResult(
+            blockId, mapIndex, blockManager.blockManagerId, 0L, false, e))
           return
       }
     }
@@ -456,7 +461,7 @@ final class ShuffleBlockFetcherIterator(
       case e: Exception =>
         // If we see an exception, stop immediately.
         logError(s"Error occurred while fetching local blocks", e)
-        results.put(FailureFetchResult(blockId, mapIndex, blockManagerId, e))
+        results.put(FailureFetchResult(blockId, mapIndex, blockManagerId, 0, false, e))
         false
     }
   }
@@ -504,8 +509,8 @@ final class ShuffleBlockFetcherIterator(
             logError("Error occurred while fetching host local blocks", throwable)
             val bmId = bmIds.head
             val blockInfoSeq = hostLocalBlocksWithMissingDirs(bmId)
-            val (blockId, _, mapIndex) = blockInfoSeq.head
-            results.put(FailureFetchResult(blockId, mapIndex, bmId, throwable))
+            val (blockId, size, mapIndex) = blockInfoSeq.head
+            results.put(FailureFetchResult(blockId, mapIndex, bmId, size, false, throwable))
         }
       }
     }
@@ -613,6 +618,12 @@ final class ShuffleBlockFetcherIterator(
           }
           if (isNetworkReqDone) {
             reqsInFlight -= 1
+            if (!buf.isInstanceOf[NettyManagedBuffer]) {
+              // Non-`NettyManagedBuffer` doesn't occupy Netty's memory so we can unset the flag
+              // directly once the request succeeds. But for the `NettyManagedBuffer`, we'll only
+              // unset the flag when the data is fully consumed (see `BufferReleasingInputStream`).
+              NettyUtils.isNettyOOMOnShuffle = false
+            }
             logDebug("Number of requests in flight " + reqsInFlight)
           }
 
@@ -683,7 +694,25 @@ final class ShuffleBlockFetcherIterator(
             }
           }
 
-        case FailureFetchResult(blockId, mapIndex, address, e) =>
+        case FailureFetchResult(blockId, mapIndex, address, size, isNetworkReqDone, e)
+            if e.isInstanceOf[OutOfDirectMemoryError] || e.isInstanceOf[NettyOutOfMemoryError] =>
+          assert(address != blockManager.blockManagerId &&
+            !hostLocalBlocks.contains(blockId -> mapIndex),
+            "Netty OOM error should only happen on remote fetch requests")
+          logWarning(s"Failed to fetch block $blockId due to Netty OOM, will retry", e)
+          NettyUtils.isNettyOOMOnShuffle = true
+          numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+          bytesInFlight -= size
+          if (isNetworkReqDone) {
+            reqsInFlight -= 1
+            logDebug("Number of requests in flight " + reqsInFlight)
+          }
+          val defReqQueue =
+            deferredFetchRequests.getOrElseUpdate(address, new Queue[FetchRequest]())
+          defReqQueue.enqueue(FetchRequest(address, Array(FetchBlockInfo(blockId, size, mapIndex))))
+          result = null
+
+        case FailureFetchResult(blockId, mapIndex, address, _, _, e) =>
           throwFetchFailedException(blockId, mapIndex, address, e)
       }
 
@@ -699,7 +728,8 @@ final class ShuffleBlockFetcherIterator(
         currentResult.blockId,
         currentResult.mapIndex,
         currentResult.address,
-        detectCorrupt && streamCompressedOrEncrypted))
+        detectCorrupt && streamCompressedOrEncrypted,
+        currentResult.isNetworkReqDone))
   }
 
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
@@ -708,6 +738,9 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private def fetchUpToMaxBytes(): Unit = {
+    // Return immediately if Netty is still OOMed and there're ongoing fetch requests
+    if (NettyUtils.isNettyOOMOnShuffle && reqsInFlight > 0) return
+
     // Send fetch requests up to maxBytesInFlight. If you cannot fetch from a remote host
     // immediately, defer the request until the next time it can be processed.
 
@@ -790,7 +823,8 @@ private class BufferReleasingInputStream(
     private val blockId: BlockId,
     private val mapIndex: Int,
     private val address: BlockManagerId,
-    private val detectCorruption: Boolean)
+    private val detectCorruption: Boolean,
+    private val isNetworkReqDone: Boolean)
   extends InputStream {
   private[this] var closed = false
 
@@ -801,6 +835,8 @@ private class BufferReleasingInputStream(
     if (!closed) {
       delegate.close()
       iterator.releaseCurrentResultBuffer()
+      // Unset the flag when a remote request finished.
+      if (isNetworkReqDone) NettyUtils.isNettyOOMOnShuffle = false
       closed = true
     }
   }
@@ -997,12 +1033,18 @@ object ShuffleBlockFetcherIterator {
    * @param blockId block id
    * @param mapIndex the mapIndex for this block, which indicate the index in the map stage
    * @param address BlockManager that the block was attempted to be fetched from
+   * @param size estimated size of the block. Note that this is NOT the exact bytes.
+   *             Size of remote block is used to calculate bytesInFlight. Thus, for a local block
+   *             in case of the fetch failure, the size is fine to be ignored.
+   * @param isNetworkReqDone Is this the last network request for this host in this fetch request.
    * @param e the failure exception
    */
   private[storage] case class FailureFetchResult(
       blockId: BlockId,
       mapIndex: Int,
       address: BlockManagerId,
+      size: Long,
+      isNetworkReqDone: Boolean,
       e: Throwable)
     extends FetchResult
 }

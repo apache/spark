@@ -38,6 +38,14 @@ import io.netty.util.internal.PlatformDependent;
 public class NettyUtils {
 
   /**
+   * A flag which indicates whether the Netty OOM error has raised during shuffle.
+   * If true, unless there's no in-flight fetch requests, all the pending shuffle
+   * fetch requests will be deferred until the flag is unset (whenever there's a
+   * complete fetch request).
+   */
+  public static volatile boolean isNettyOOMOnShuffle = false;
+
+  /**
    * Specifies an upper bound on the number of Netty threads that Spark requires by default.
    * In practice, only 2-4 cores should be required to transfer roughly 10 Gb/s, and each core
    * that we use will have an initial overhead of roughly 32 MB of off-heap memory, which comes
