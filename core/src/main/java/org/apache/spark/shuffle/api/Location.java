@@ -42,6 +42,13 @@ import java.io.ObjectOutput;
  * invoking {@link java.lang.Object#equals(Object)} or {@link java.lang.Object#hashCode()} on the
  * {@link Location} instances would distinguish the different locations.
  *
+ * Spark has its own default implementation of {@link Location} as
+ * {@link org.apache.spark.storage.BlockManagerId}, which is a subclass of {@link ExecutorLocation}
+ * since each {@link org.apache.spark.storage.BlockManager} must belong to a certain executor.
+ * And {@link ExecutorLocation} is a subclass of {@link HostLocation} since each executor must
+ * belong to a certain host. Users should choose the appropriate location interface according to their
+ * own use cases.
+ *
  * @since 3.2.0
  */
 @Private
