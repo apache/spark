@@ -79,7 +79,7 @@ class ParquetEncryptionSuite extends QueryTest with TestHiveSingleton {
     } finally {
       randomAccessFile.close()
     }
-    val stringRead = new String(byteArray)
+    val stringRead = new String(byteArray, StandardCharsets.UTF_8)
     assert(magicString == stringRead)
   }
 
