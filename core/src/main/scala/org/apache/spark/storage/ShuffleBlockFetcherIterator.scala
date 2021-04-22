@@ -694,6 +694,9 @@ final class ShuffleBlockFetcherIterator(
             }
           }
 
+        // Catching OOM and do something based on it is only a workaround for handling the
+        // Netty OOM issue, which is not the best way towards memory management. We can
+        // get rid of it when we find a way to manage Netty's memory precisely.
         case FailureFetchResult(blockId, mapIndex, address, size, isNetworkReqDone, e)
             if e.isInstanceOf[OutOfDirectMemoryError] || e.isInstanceOf[NettyOutOfMemoryError] =>
           assert(address != blockManager.blockManagerId &&
