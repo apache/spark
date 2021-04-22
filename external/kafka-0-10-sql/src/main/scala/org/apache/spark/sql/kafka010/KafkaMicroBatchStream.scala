@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
-import org.apache.spark.sql.connector.read.streaming.{CustomMetric, CustomSumMetric, MicroBatchStream, Offset, ReadAllAvailable, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadAllAvailable, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.UninterruptibleThread
@@ -217,9 +217,4 @@ private[kafka010] class KafkaMicroBatchStream(
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
   }
-
-  override def supportedCustomMetrics(): Array[CustomMetric] =
-    Array(
-      CustomSumMetric("offsetOutOfRange", "estimated number of fetched offsets out of range", 0L),
-      CustomSumMetric("dataLoss", "number of data loss error", 0L))
 }

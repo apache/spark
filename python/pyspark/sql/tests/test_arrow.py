@@ -25,7 +25,7 @@ from distutils.version import LooseVersion
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import rand, udf
 from pyspark.sql.types import StructType, StringType, IntegerType, LongType, \
     FloatType, DoubleType, DecimalType, DateType, TimestampType, BinaryType, StructField, \
     ArrayType, NullType
@@ -195,6 +195,37 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas()
         assert_frame_equal(pdf_arrow, pdf)
+
+    def test_pandas_self_destruct(self):
+        import pyarrow as pa
+        rows = 2 ** 10
+        cols = 4
+        expected_bytes = rows * cols * 8
+        df = self.spark.range(0, rows).select(*[rand() for _ in range(cols)])
+        # Test the self_destruct behavior by testing _collect_as_arrow directly
+        allocation_before = pa.total_allocated_bytes()
+        batches = df._collect_as_arrow(split_batches=True)
+        table = pa.Table.from_batches(batches)
+        del batches
+        pdf_split = table.to_pandas(self_destruct=True, split_blocks=True, use_threads=False)
+        allocation_after = pa.total_allocated_bytes()
+        difference = allocation_after - allocation_before
+        # Should be around 1x the data size (table should not hold on to any memory)
+        self.assertGreaterEqual(difference, 0.9 * expected_bytes)
+        self.assertLessEqual(difference, 1.1 * expected_bytes)
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": False}):
+            no_self_destruct_pdf = df.toPandas()
+            # Note while memory usage is 2x data size here (both table and pdf hold on to
+            # memory), in this case Arrow still only tracks 1x worth of memory (since the
+            # batches are not allocated by Arrow in this case), so we can't make any
+            # assertions here
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": True}):
+            self_destruct_pdf = df.toPandas()
+
+        assert_frame_equal(pdf_split, no_self_destruct_pdf)
+        assert_frame_equal(pdf_split, self_destruct_pdf)
 
     def test_filtered_frame(self):
         df = self.spark.range(3).toDF("i")

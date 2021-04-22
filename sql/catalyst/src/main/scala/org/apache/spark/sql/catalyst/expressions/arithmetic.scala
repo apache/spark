@@ -83,12 +83,19 @@ case class UnaryMinus(
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       val method = if (failOnError) "negateExact" else "negate"
       defineCodeGen(ctx, ev, c => s"$iu.$method($c)")
+    case DayTimeIntervalType | YearMonthIntervalType =>
+      nullSafeCodeGen(ctx, ev, eval => {
+        val mathClass = classOf[Math].getName
+        s"${ev.value} = $mathClass.negateExact($eval);"
+      })
   }
 
   protected override def nullSafeEval(input: Any): Any = dataType match {
     case CalendarIntervalType if failOnError =>
       IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
     case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType => Math.negateExact(input.asInstanceOf[Long])
+    case YearMonthIntervalType => Math.negateExact(input.asInstanceOf[Int])
     case _ => numeric.negate(input)
   }
 
@@ -98,6 +105,9 @@ case class UnaryMinus(
       case funcName => s"$funcName(${child.sql})"
     }
   }
+
+  override protected def withNewChildInternal(newChild: Expression): UnaryMinus =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -124,6 +134,9 @@ case class UnaryPositive(child: Expression)
   protected override def nullSafeEval(input: Any): Any = input
 
   override def sql: String = s"(+ ${child.sql})"
+
+  override protected def withNewChildInternal(newChild: Expression): UnaryPositive =
+    copy(child = newChild)
 }
 
 /**
@@ -138,23 +151,46 @@ case class UnaryPositive(child: Expression)
   """,
   since = "1.2.0",
   group = "math_funcs")
-case class Abs(child: Expression)
+case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+
+  def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   override def dataType: DataType = child.dataType
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
+
+    case ByteType | ShortType if failOnError =>
+      val javaBoxedType = CodeGenerator.boxedType(dataType)
+      val javaType = CodeGenerator.javaType(dataType)
+      nullSafeCodeGen(ctx, ev, eval =>
+        s"""
+          |if ($eval == $javaBoxedType.MIN_VALUE) {
+          |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($eval);
+          |} else if ($eval < 0) {
+          |  ${ev.value} = ($javaType)-$eval;
+          |} else {
+          |  ${ev.value} = $eval;
+          |}
+          |""".stripMargin)
+
+    case IntegerType | LongType if failOnError =>
+      defineCodeGen(ctx, ev, c => s"$c < 0 ? java.lang.Math.negateExact($c) : $c")
+
+
     case dt: NumericType =>
       defineCodeGen(ctx, ev, c => s"(${CodeGenerator.javaType(dt)})(java.lang.Math.abs($c))")
   }
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
+
+  override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
 }
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
@@ -185,6 +221,12 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
+    case DayTimeIntervalType | YearMonthIntervalType =>
+      assert(exactMathMethod.isDefined,
+        s"The expression '$nodeName' must override the exactMathMethod() method " +
+        "if it is supposed to operate over interval types.")
+      val mathClass = classOf[Math].getName
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathClass.${exactMathMethod.get}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
@@ -267,10 +309,17 @@ case class Add(
     case CalendarIntervalType =>
       IntervalUtils.add(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType =>
+      Math.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+    case YearMonthIntervalType =>
+      Math.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.plus(input1, input2)
   }
 
   override def exactMathMethod: Option[String] = Some("addExact")
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Add =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -306,10 +355,17 @@ case class Subtract(
     case CalendarIntervalType =>
       IntervalUtils.subtract(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType =>
+      Math.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+    case YearMonthIntervalType =>
+      Math.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.minus(input1, input2)
   }
 
   override def exactMathMethod: Option[String] = Some("subtractExact")
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Subtract = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -338,12 +394,18 @@ case class Multiply(
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
 trait DivModLike extends BinaryArithmetic {
 
   protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
+
+  // Whether we should check overflow or not in ANSI mode.
+  protected def checkDivideOverflow: Boolean = false
 
   override def nullable: Boolean = true
 
@@ -365,6 +427,9 @@ trait DivModLike extends BinaryArithmetic {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
           throw QueryExecutionErrors.divideByZeroError
+        }
+        if (checkDivideOverflow && input1 == Long.MinValue && input2 == -1) {
+          throw QueryExecutionErrors.overflowInIntegralDivideError()
         }
         evalOperation(input1, input2)
       }
@@ -391,6 +456,15 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
+    val checkIntegralDivideOverflow = if (checkDivideOverflow) {
+      s"""
+        |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
+        |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+        |""".stripMargin
+    } else {
+      ""
+    }
+
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
@@ -406,6 +480,7 @@ trait DivModLike extends BinaryArithmetic {
           $divByZero
         } else {
           ${eval1.code}
+          $checkIntegralDivideOverflow
           ${ev.value} = $operation;
         }""")
     } else {
@@ -427,6 +502,7 @@ trait DivModLike extends BinaryArithmetic {
             ${ev.isNull} = true;
           } else {
             $failOnErrorBranch
+            $checkIntegralDivideOverflow
             ${ev.value} = $operation;
           }
         }""")
@@ -464,6 +540,9 @@ case class Divide(
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Divide = copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -483,6 +562,11 @@ case class IntegralDivide(
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+
+  override def checkDivideOverflow: Boolean = left.dataType match {
+    case LongType if failOnError => true
+    case _ => false
+  }
 
   override def inputType: AbstractDataType = TypeCollection(LongType, DecimalType)
 
@@ -511,6 +595,10 @@ case class IntegralDivide(
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): IntegralDivide =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -565,6 +653,9 @@ case class Remainder(
   }
 
   override def evalOperation(left: Any, right: Any): Any = mod(left, right)
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Remainder = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -749,6 +840,9 @@ case class Pmod(
   }
 
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Pmod =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -824,6 +918,9 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
          |$codes
       """.stripMargin)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Least =
+    copy(children = newChildren)
 }
 
 /**
@@ -899,4 +996,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
          |$codes
       """.stripMargin)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
+    copy(children = newChildren)
 }

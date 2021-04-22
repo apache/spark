@@ -22,6 +22,8 @@ import java.util.Objects
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * The data type for User Defined Types (UDTs).
  *
@@ -34,11 +36,8 @@ import org.json4s.JsonDSL._
  *
  * The conversion via `serialize` occurs when instantiating a `DataFrame` from another RDD.
  * The conversion via `deserialize` occurs when reading from a `DataFrame`.
- *
- * Note: This was previously a developer API in Spark 1.x. We are making this private in Spark 2.0
- * because we will very likely create a new version of this that works better with Datasets.
  */
-private[spark]
+@DeveloperApi
 abstract class UserDefinedType[UserType >: Null] extends DataType with Serializable {
 
   /** Underlying storage type for this UDT */

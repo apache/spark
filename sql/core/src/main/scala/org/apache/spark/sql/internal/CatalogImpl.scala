@@ -23,11 +23,11 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedTable
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, RecoverPartitions, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -416,17 +416,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  private def uncacheView(viewDef: LogicalPlan): Unit = {
+  private def uncacheView(viewDef: View): Unit = {
     try {
       // If view text is defined, it means we are not storing analyzed logical plan for the view
       // and instead its behavior follows that of a permanent view (see SPARK-33142 for more
       // details). Therefore, when uncaching the view we should also do in a cascade fashion, the
       // same way as how a permanent view is handled. This also avoids a potential issue where a
       // dependent view becomes invalid because of the above while its data is still cached.
-      val viewText = viewDef match {
-        case v: View => v.desc.viewText
-        case _ => None
-      }
+      val viewText = viewDef.desc.viewText
       val plan = sparkSession.sessionState.executePlan(viewDef)
       sparkSession.sharedState.cacheManager.uncacheQuery(
         sparkSession, plan.analyzed, cascade = viewText.isDefined)
@@ -446,9 +443,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.1.1
    */
   override def recoverPartitions(tableName: String): Unit = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    val multiPartIdent = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     sparkSession.sessionState.executePlan(
-      AlterTableRecoverPartitionsCommand(tableIdent)).toRdd
+      RecoverPartitions(
+        UnresolvedTable(multiPartIdent, "recoverPartitions()", None))).toRdd
   }
 
   /**
@@ -490,8 +488,10 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def uncacheTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !sessionCatalog.isTempView(tableIdent)
-    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName), cascade)
+    sessionCatalog.lookupTempView(tableIdent).map(uncacheView).getOrElse {
+      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName),
+        cascade = true)
+    }
   }
 
   /**
@@ -515,14 +515,21 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Invalidates and refreshes all the cached data and metadata of the given table or view.
-   * For Hive metastore table, the metadata is refreshed. For data source tables, the schema will
-   * not be inferred and refreshed.
+   * The method fully refreshes a table or view with the given name including:
+   *   1. The relation cache in the session catalog. The method removes table entry from the cache.
+   *   2. The file indexes of all relations used by the given view.
+   *   3. Table/View schema in the Hive Metastore if the SQL config
+   *      `spark.sql.hive.caseSensitiveInferenceMode` is set to `INFER_AND_SAVE`.
+   *   4. Cached data of the given table or view, and all its dependents that refer to it.
+   *      Existing cached data will be cleared and the cache will be lazily filled when
+   *      the next time the table/view or the dependents are accessed.
    *
-   * If this table is cached as an InMemoryRelation, re-cache the table and its dependents lazily.
+   * The method does not do:
+   *   - schema inference for file source tables
+   *   - statistics update
    *
-   * In addition, refreshing a table also clear all caches that have reference to the table
-   * in a cascading manner. This is to prevent incorrect result from the otherwise staled caches.
+   * The method is supposed to be used in all cases when need to refresh table/view data
+   * and meta-data.
    *
    * @group cachemgmt
    * @since 2.0.0
@@ -542,7 +549,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // Re-caches the logical plan of the relation.
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,
-    // this will clear the relation cache and caches of all its dependants.
+    // this will clear the relation cache and caches of all its dependents.
     relation match {
       case SubqueryAlias(_, relationPlan) =>
         sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)

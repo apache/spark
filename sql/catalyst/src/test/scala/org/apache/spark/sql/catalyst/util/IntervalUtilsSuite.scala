@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
@@ -378,5 +380,143 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
     intercept[ArithmeticException](multiplyExact(maxMonth, 2))
     intercept[ArithmeticException](divideExact(maxDay, 0.5))
+  }
+
+  test("SPARK-34605: microseconds to duration") {
+    assert(microsToDuration(0).isZero)
+    assert(microsToDuration(-1).toNanos === -1000)
+    assert(microsToDuration(1).toNanos === 1000)
+    assert(microsToDuration(Long.MaxValue).toDays === 106751991)
+    assert(microsToDuration(Long.MinValue).toDays === -106751991)
+  }
+
+  test("SPARK-34605: duration to microseconds") {
+    assert(durationToMicros(Duration.ZERO) === 0)
+    assert(durationToMicros(Duration.ofSeconds(-1)) === -1000000)
+    assert(durationToMicros(Duration.ofNanos(123456)) === 123)
+    assert(durationToMicros(Duration.ofDays(106751991)) ===
+      (Long.MaxValue / MICROS_PER_DAY) * MICROS_PER_DAY)
+
+    val errMsg = intercept[ArithmeticException] {
+      durationToMicros(Duration.ofDays(106751991 + 1))
+    }.getMessage
+    assert(errMsg.contains("long overflow"))
+  }
+
+  test("SPARK-34615: period to months") {
+    assert(periodToMonths(Period.ZERO) === 0)
+    assert(periodToMonths(Period.of(0, -1, 0)) === -1)
+    assert(periodToMonths(Period.of(-1, 0, 10)) === -12) // ignore days
+    assert(periodToMonths(Period.of(178956970, 7, 0)) === Int.MaxValue)
+    assert(periodToMonths(Period.of(-178956970, -8, 123)) === Int.MinValue)
+    assert(periodToMonths(Period.of(0, Int.MaxValue, Int.MaxValue)) === Int.MaxValue)
+
+    val errMsg = intercept[ArithmeticException] {
+      periodToMonths(Period.of(Int.MaxValue, 0, 0))
+    }.getMessage
+    assert(errMsg.contains("integer overflow"))
+  }
+
+  test("SPARK-34615: months to period") {
+    assert(monthsToPeriod(0) === Period.ZERO)
+    assert(monthsToPeriod(-11) === Period.of(0, -11, 0))
+    assert(monthsToPeriod(11) === Period.of(0, 11, 0))
+    assert(monthsToPeriod(27) === Period.of(2, 3, 0))
+    assert(monthsToPeriod(-13) === Period.of(-1, -1, 0))
+    assert(monthsToPeriod(Int.MaxValue) === Period.ofYears(178956970).withMonths(7))
+    assert(monthsToPeriod(Int.MinValue) === Period.ofYears(-178956970).withMonths(-8))
+  }
+
+  test("SPARK-34695: round trip conversion of micros -> duration -> micros") {
+    Seq(
+      0,
+      MICROS_PER_SECOND - 1,
+      -MICROS_PER_SECOND + 1,
+      MICROS_PER_SECOND,
+      -MICROS_PER_SECOND,
+      Long.MaxValue - MICROS_PER_SECOND,
+      Long.MinValue + MICROS_PER_SECOND,
+      Long.MaxValue,
+      Long.MinValue).foreach { micros =>
+      val duration = microsToDuration(micros)
+      assert(durationToMicros(duration) === micros)
+    }
+  }
+
+  test("SPARK-34715: Add round trip tests for period <-> month and duration <-> micros") {
+    // Months -> Period -> Months
+    Seq(
+      0,
+      MONTHS_PER_YEAR - 1,
+      MONTHS_PER_YEAR + 1,
+      MONTHS_PER_YEAR,
+      -MONTHS_PER_YEAR,
+      Int.MaxValue - MONTHS_PER_YEAR,
+      Int.MinValue + MONTHS_PER_YEAR,
+      Int.MaxValue,
+      Int.MinValue).foreach { months =>
+      val period = monthsToPeriod(months)
+      assert(periodToMonths(period) === months)
+    }
+    // Period -> Months -> Period
+    Seq(
+      monthsToPeriod(0),
+      monthsToPeriod(MONTHS_PER_YEAR - 1),
+      monthsToPeriod(MONTHS_PER_YEAR + 1),
+      monthsToPeriod(MONTHS_PER_YEAR),
+      monthsToPeriod(-MONTHS_PER_YEAR),
+      monthsToPeriod(Int.MaxValue - MONTHS_PER_YEAR),
+      monthsToPeriod(Int.MinValue + MONTHS_PER_YEAR),
+      monthsToPeriod(Int.MaxValue),
+      monthsToPeriod(Int.MinValue)).foreach { period =>
+      val months = periodToMonths(period)
+      assert(monthsToPeriod(months) === period)
+    }
+    // Duration -> micros -> Duration
+    Seq(
+      microsToDuration(0),
+      microsToDuration(MICROS_PER_SECOND - 1),
+      microsToDuration(-MICROS_PER_SECOND + 1),
+      microsToDuration(MICROS_PER_SECOND),
+      microsToDuration(-MICROS_PER_SECOND),
+      microsToDuration(Long.MaxValue - MICROS_PER_SECOND),
+      microsToDuration(Long.MinValue + MICROS_PER_SECOND),
+      microsToDuration(Long.MaxValue),
+      microsToDuration(Long.MinValue)).foreach { duration =>
+      val micros = durationToMicros(duration)
+      assert(microsToDuration(micros) === duration)
+    }
+  }
+
+  test("SPARK-35016: format year-month intervals") {
+    Seq(
+      0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),
+      -11 -> ("-0-11", "INTERVAL '-0-11' YEAR TO MONTH"),
+      11 -> ("0-11", "INTERVAL '0-11' YEAR TO MONTH"),
+      -13 -> ("-1-1", "INTERVAL '-1-1' YEAR TO MONTH"),
+      13 -> ("1-1", "INTERVAL '1-1' YEAR TO MONTH"),
+      -24 -> ("-2-0", "INTERVAL '-2-0' YEAR TO MONTH"),
+      24 -> ("2-0", "INTERVAL '2-0' YEAR TO MONTH"),
+      Int.MinValue -> ("-178956970-8", "INTERVAL '-178956970-8' YEAR TO MONTH"),
+      Int.MaxValue -> ("178956970-7", "INTERVAL '178956970-7' YEAR TO MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE) === hiveIntervalStr)
+    }
+  }
+
+  test("SPARK-35016: format day-time intervals") {
+    Seq(
+      0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
+      -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
+      10 * MICROS_PER_MILLIS -> ("0 00:00:00.010000000", "INTERVAL '0 00:00:00.01' DAY TO SECOND"),
+      (-123 * MICROS_PER_DAY - 3 * MICROS_PER_SECOND) ->
+        ("-123 00:00:03.000000000", "INTERVAL '-123 00:00:03' DAY TO SECOND"),
+      Long.MinValue -> ("-106751991 04:00:54.775808000",
+        "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND")
+    ).foreach { case (micros, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toDayTimeIntervalString(micros, ANSI_STYLE) === ansiIntervalStr)
+      assert(toDayTimeIntervalString(micros, HIVE_STYLE) === hiveIntervalStr)
+    }
   }
 }

@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
-import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Physical plan node for scanning a micro-batch of data from a data source.
@@ -33,14 +32,6 @@ case class MicroBatchScanExec(
     @transient stream: MicroBatchStream,
     @transient start: Offset,
     @transient end: Offset) extends DataSourceV2ScanExecBase {
-
-  override lazy val metrics = {
-    val customMetrics = stream.supportedCustomMetrics().map { customMetric =>
-      customMetric.getName -> SQLMetrics.createMetric(sparkContext, customMetric.getDescription)
-    }
-    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
-      customMetrics
-  }
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
@@ -54,17 +45,7 @@ case class MicroBatchScanExec(
 
   override lazy val readerFactory: PartitionReaderFactory = stream.createReaderFactory()
 
-  /**
-   * The callback function which is called when the output iterator of input RDD is consumed
-   * completely.
-   */
-  private def onOutputCompletion(reader: PartitionReader[_]) = {
-    reader.getCustomMetrics.foreach { metric =>
-      longMetric(metric.getName) += metric.getValue
-    }
-  }
-
   override lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar, onOutputCompletion)
+    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar, customMetrics)
   }
 }

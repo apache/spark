@@ -284,7 +284,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
     <tr>
       <td>
-        <a href={"app?appId=" + app.id}>{app.id}</a>
+        <a href={"app/?appId=" + app.id}>{app.id}</a>
         {killLink}
       </td>
       <td>
@@ -309,7 +309,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
       <td>{app.state.toString}</td>
-      <td>{UIUtils.formatDuration(app.duration)}</td>
+      <td sorttable_customkey={app.duration.toString}>
+        {UIUtils.formatDuration(app.duration)}
+      </td>
     </tr>
   }
 

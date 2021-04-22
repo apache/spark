@@ -203,6 +203,18 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
         self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
 
+    def test_self_join(self):
+        # SPARK-34319: self-join with FlatMapCoGroupsInPandas
+        df = self.spark.createDataFrame([(1, 1)], ("column", "value"))
+
+        row = df.groupby("ColUmn").cogroup(
+            df.groupby("COLUMN")
+        ).applyInPandas(lambda r, l: r + l, "column long, value long")
+
+        row = row.join(row).first()
+
+        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
+
     @staticmethod
     def _test_with_key(left, right, isLeft):
 

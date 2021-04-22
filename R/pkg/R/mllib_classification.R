@@ -574,7 +574,7 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
 #' @rdname spark.naiveBayes
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
-#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/index.html}
+#' @seealso e1071: \url{https://cran.r-project.org/package=e1071}
 #' @examples
 #' \dontrun{
 #' data <- as.data.frame(UCBAdmissions)

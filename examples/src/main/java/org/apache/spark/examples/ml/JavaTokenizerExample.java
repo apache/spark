@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 // col("...") is preferable to df.col("...")
-import static org.apache.spark.sql.functions.callUDF;
+import static org.apache.spark.sql.functions.call_udf;
 import static org.apache.spark.sql.functions.col;
 // $example off$
 
@@ -73,12 +73,12 @@ public class JavaTokenizerExample {
 
     Dataset<Row> tokenized = tokenizer.transform(sentenceDataFrame);
     tokenized.select("sentence", "words")
-        .withColumn("tokens", callUDF("countTokens", col("words")))
+        .withColumn("tokens", call_udf("countTokens", col("words")))
         .show(false);
 
     Dataset<Row> regexTokenized = regexTokenizer.transform(sentenceDataFrame);
     regexTokenized.select("sentence", "words")
-        .withColumn("tokens", callUDF("countTokens", col("words")))
+        .withColumn("tokens", call_udf("countTokens", col("words")))
         .show(false);
     // $example off$
 

@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, LambdaFunction, Literal, MapFilter, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, In, InSet, LambdaFunction, Literal, MapFilter, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, Join, LogicalPlan, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertStarAction, Join, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction, UpdateStarAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.Utils
 
@@ -49,12 +50,19 @@ import org.apache.spark.util.Utils
  */
 object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL), ruleId) {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(replaceNullWithFalse(cond)))
     case d @ DeleteFromTable(_, Some(cond)) => d.copy(condition = Some(replaceNullWithFalse(cond)))
     case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
-    case p: LogicalPlan => p transformExpressions {
+    case m @ MergeIntoTable(_, _, mergeCond, matchedActions, notMatchedActions) =>
+      m.copy(
+        mergeCondition = replaceNullWithFalse(mergeCond),
+        matchedActions = replaceNullWithFalse(matchedActions),
+        notMatchedActions = replaceNullWithFalse(notMatchedActions))
+    case p: LogicalPlan => p.transformExpressionsWithPruning(
+      _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL), ruleId) {
       // For `EqualNullSafe` with a `TrueLiteral`, whether the other side is null or false has no
       // difference, as `null <=> true` and `false <=> true` both return false.
       case EqualNullSafe(left, TrueLiteral) =>
@@ -90,6 +98,17 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
   private def replaceNullWithFalse(e: Expression): Expression = e match {
     case Literal(null, BooleanType) =>
       FalseLiteral
+    // In SQL, the `Not(IN)` expression evaluates as follows:
+    // `NULL not in (1)` -> NULL
+    // `NULL not in (1, NULL)` -> NULL
+    // `1 not in (1, NULL)` -> false
+    // `1 not in (2, NULL)` -> NULL
+    // In predicate, NULL is equal to false, so we can simplify them to false directly.
+    case Not(In(value, list)) if (value +: list).exists(isNullLiteral) =>
+      FalseLiteral
+    case Not(InSet(value, list)) if isNullLiteral(value) || list.contains(null) =>
+      FalseLiteral
+
     case And(left, right) =>
       And(replaceNullWithFalse(left), replaceNullWithFalse(right))
     case Or(left, right) =>
@@ -113,5 +132,21 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
         logWarning(message)
         e
       }
+  }
+
+  private def replaceNullWithFalse(mergeActions: Seq[MergeAction]): Seq[MergeAction] = {
+    mergeActions.map {
+      case u @ UpdateAction(Some(cond), _) => u.copy(condition = Some(replaceNullWithFalse(cond)))
+      case u @ UpdateStarAction(Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
+      case d @ DeleteAction(Some(cond)) => d.copy(condition = Some(replaceNullWithFalse(cond)))
+      case i @ InsertAction(Some(cond), _) => i.copy(condition = Some(replaceNullWithFalse(cond)))
+      case i @ InsertStarAction(Some(cond)) => i.copy(condition = Some(replaceNullWithFalse(cond)))
+      case other => other
+    }
+  }
+
+  private def isNullLiteral(e: Expression): Boolean = e match {
+    case Literal(null, _) => true
+    case _ => false
   }
 }

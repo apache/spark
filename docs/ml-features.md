@@ -1497,8 +1497,8 @@ for more details on the API.
 
 ## Imputer
 
-The `Imputer` estimator completes missing values in a dataset, either using the mean or the 
-median of the columns in which the missing values are located. The input columns should be of
+The `Imputer` estimator completes missing values in a dataset, using the mean, median or mode
+of the columns in which the missing values are located. The input columns should be of
 numeric type. Currently `Imputer` does not support categorical features and possibly
 creates incorrect values for columns containing categorical features. Imputer can impute custom values 
 other than 'NaN' by `.setMissingValue(custom_value)`. For example, `.setMissingValue(0)` will impute 
@@ -1802,9 +1802,9 @@ User can set `featureType` and `labelType`, and Spark will pick the score functi
 ~~~
 featureType |  labelType |score function
 ------------|------------|--------------
-categorical |categorical | chi2
-continuous  |categorical | f_classif
-continuous  |continuous  | f_regression
+categorical |categorical | chi-squared (chi2)
+continuous  |categorical | ANOVATest (f_classif)
+continuous  |continuous  | F-value (f_regression)
 ~~~
 
 It supports five selection modes: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:

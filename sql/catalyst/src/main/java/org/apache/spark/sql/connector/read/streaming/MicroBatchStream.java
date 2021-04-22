@@ -56,13 +56,4 @@ public interface MicroBatchStream extends SparkDataStream {
    * Returns a factory to create a {@link PartitionReader} for each {@link InputPartition}.
    */
   PartitionReaderFactory createReaderFactory();
-
-  /**
-   * Returns an array of supported custom metrics with name and description.
-   * By default it returns empty array.
-   */
-  default CustomMetric[] supportedCustomMetrics() {
-    CustomMetric[] NO_METRICS = {};
-    return NO_METRICS;
-  }
 }

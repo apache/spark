@@ -39,6 +39,13 @@ function formatStatus(status, type, row) {
     return "Dead"
 }
 
+function formatProcessStatus(activeStatus) {
+    if (activeStatus) {
+        return "Active"
+    }
+    return "Dead"
+}
+
 function formatResourceCells(resources) {
     var result = ""
     var count = 0
@@ -548,7 +555,48 @@ $(document).ready(function () {
                 execDataTable.column('executorLogsCol:name').visible(logsExist(response));
                 execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
-    
+
+                 // This section should be visible once API gives the response.
+                 $('.active-process-container').hide()
+                 var endPoint = createRESTEndPointForMiscellaneousProcess(appId);
+                 $.getJSON(endPoint, function( response, status, jqXHR ) {
+                    if (response.length) {
+                        var processSummaryResponse = response;
+                        var processSummaryConf = {
+                            "data": processSummaryResponse,
+                            "columns": [{
+                                    data: "id"
+                                },
+                                {
+                                    data: "hostPort"
+                                },
+                                {
+                                    data: function(row) {
+                                        return formatProcessStatus(row.isActive);
+                                    }
+                                },
+                                {
+                                    data: "totalCores"
+                                },
+                                {
+                                    data: "processLogs",
+                                    render: formatLogsCells
+                                },
+                            ],
+                            "deferRender": true,
+                            "order": [
+                                [0, "asc"]
+                            ],
+                            "bAutoWidth": false,
+                            "oLanguage": {
+                                "sEmptyTable": "No data to show yet"
+                            }
+                        };
+                        $("#active-process-table").DataTable(processSummaryConf);
+                        $('.active-process-container').show()
+                    }
+                 });
+
                 var sumSelector = "#summary-execs-table";
                 var sumConf = {
                     "data": [activeSummary, deadSummary, totalSummary],

@@ -154,25 +154,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
   }
 
-  test("string regex_extract_all") {
-    val df = Seq(
-      ("100-200,300-400", "(\\d+)-(\\d+)"),
-      ("101-201,301-401", "(\\d+)-(\\d+)"),
-      ("102-202,302-402", "(\\d+)")).toDF("a", "b")
-
-    checkAnswer(
-      df.select(
-        regexp_extract_all($"a", "(\\d+)-(\\d+)", 1),
-        regexp_extract_all($"a", "(\\d+)-(\\d+)", 2)),
-      Row(Seq("100", "300"), Seq("200", "400")) ::
-        Row(Seq("101", "301"), Seq("201", "401")) ::
-        Row(Seq("102", "302"), Seq("202", "402")) :: Nil)
-  }
-
   test("non-matching optional group") {
     val df = Seq(Tuple1("aaaac")).toDF("s")
 
-    // regexp_extract
     checkAnswer(
       df.select(regexp_extract($"s", "(foo)", 1)),
       Row("")
@@ -180,16 +164,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(regexp_extract($"s", "(a+)(b)?(c)", 2)),
       Row("")
-    )
-
-    // regexp_extract_all
-    checkAnswer(
-      df.select(regexp_extract_all($"s", "(foo)", 1)),
-      Row(Seq())
-    )
-    checkAnswer(
-      df.select(regexp_extract_all($"s", "(a+)(b)?(c)", 2)),
-      Row(Seq(""))
     )
   }
 

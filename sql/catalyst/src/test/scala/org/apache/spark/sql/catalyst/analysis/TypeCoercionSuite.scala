@@ -61,13 +61,13 @@ class TypeCoercionSuite extends AnalysisTest {
 
   private def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
     // Check default value
-    val castDefault = TypeCoercion.ImplicitTypeCasts.implicitCast(default(from), to)
+    val castDefault = TypeCoercion.implicitCast(default(from), to)
     assert(DataType.equalsIgnoreCompatibleNullability(
       castDefault.map(_.dataType).getOrElse(null), expected),
       s"Failed to cast $from to $to")
 
     // Check null value
-    val castNull = TypeCoercion.ImplicitTypeCasts.implicitCast(createNull(from), to)
+    val castNull = TypeCoercion.implicitCast(createNull(from), to)
     assert(DataType.equalsIgnoreCaseAndNullability(
       castNull.map(_.dataType).getOrElse(null), expected),
       s"Failed to cast $from to $to")
@@ -75,11 +75,11 @@ class TypeCoercionSuite extends AnalysisTest {
 
   private def shouldNotCast(from: DataType, to: AbstractDataType): Unit = {
     // Check default value
-    val castDefault = TypeCoercion.ImplicitTypeCasts.implicitCast(default(from), to)
+    val castDefault = TypeCoercion.implicitCast(default(from), to)
     assert(castDefault.isEmpty, s"Should not be able to cast $from to $to, but got $castDefault")
 
     // Check null value
-    val castNull = TypeCoercion.ImplicitTypeCasts.implicitCast(createNull(from), to)
+    val castNull = TypeCoercion.implicitCast(createNull(from), to)
     assert(castNull.isEmpty, s"Should not be able to cast $from to $to, but got $castNull")
   }
 
@@ -274,7 +274,7 @@ class TypeCoercionSuite extends AnalysisTest {
         Literal.create(null, sourceType.valueType)))
     targetNotNullableTypes.foreach { targetType =>
       val castDefault =
-        TypeCoercion.ImplicitTypeCasts.implicitCast(sourceMapExprWithValueNull, targetType)
+        TypeCoercion.implicitCast(sourceMapExprWithValueNull, targetType)
       assert(castDefault.isEmpty,
         s"Should not be able to cast $sourceType to $targetType, but got $castDefault")
     }
@@ -1607,8 +1607,9 @@ object TypeCoercionSuite {
   val fractionalTypes: Seq[DataType] =
     Seq(DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2))
   val numericTypes: Seq[DataType] = integralTypes ++ fractionalTypes
+  val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType)
   val atomicTypes: Seq[DataType] =
-    numericTypes ++ Seq(BinaryType, BooleanType, StringType, DateType, TimestampType)
+    numericTypes ++ datetimeTypes ++ Seq(BinaryType, BooleanType, StringType)
   val complexTypes: Seq[DataType] =
     Seq(ArrayType(IntegerType),
       ArrayType(StringType),
@@ -1622,12 +1623,16 @@ object TypeCoercionSuite {
     extends UnaryExpression with ExpectsInputTypes with Unevaluable {
     override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
     override def dataType: DataType = NullType
+    override protected def withNewChildInternal(newChild: Expression): AnyTypeUnaryExpression =
+      copy(child = newChild)
   }
 
   case class NumericTypeUnaryExpression(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with Unevaluable {
     override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
     override def dataType: DataType = NullType
+    override protected def withNewChildInternal(newChild: Expression): NumericTypeUnaryExpression =
+      copy(child = newChild)
   }
 
   case class AnyTypeBinaryOperator(left: Expression, right: Expression)
@@ -1635,6 +1640,9 @@ object TypeCoercionSuite {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = AnyDataType
     override def symbol: String = "anytype"
+    override protected def withNewChildrenInternal(
+        newLeft: Expression, newRight: Expression): AnyTypeBinaryOperator =
+      copy(left = newLeft, right = newRight)
   }
 
   case class NumericTypeBinaryOperator(left: Expression, right: Expression)
@@ -1642,5 +1650,8 @@ object TypeCoercionSuite {
     override def dataType: DataType = NullType
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "numerictype"
+    override protected def withNewChildrenInternal(
+        newLeft: Expression, newRight: Expression): NumericTypeBinaryOperator =
+      copy(left = newLeft, right = newRight)
   }
 }

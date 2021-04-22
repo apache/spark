@@ -255,7 +255,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
         withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
           HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> conversion) {
           withTable("dummy_orc_partitioned") {
-            spark.sessionState.refreshTable("dummy_orc_partitioned")
             spark.sql(
               s"""
                  |CREATE TABLE dummy_orc_partitioned(key INT, value STRING)

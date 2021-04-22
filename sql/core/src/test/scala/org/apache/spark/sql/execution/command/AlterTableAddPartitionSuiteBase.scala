@@ -181,4 +181,12 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
     }
   }
+
+  test("SPARK-33474: Support typed literals as partition spec values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
+      sql(s"ALTER TABLE $t ADD PARTITION(part = date'2020-01-01')")
+      checkPartitions(t, Map("part" ->"2020-01-01"))
+    }
+  }
 }

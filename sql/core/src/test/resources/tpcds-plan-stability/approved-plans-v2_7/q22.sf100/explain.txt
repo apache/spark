@@ -4,7 +4,7 @@ TakeOrderedAndProject (28)
    +- Exchange (26)
       +- * HashAggregate (25)
          +- * Expand (24)
-            +- BroadcastNestedLoopJoin Inner BuildRight (23)
+            +- * BroadcastNestedLoopJoin Inner BuildRight (23)
                :- * Project (19)
                :  +- * SortMergeJoin Inner (18)
                :     :- * Sort (12)
@@ -105,12 +105,12 @@ Arguments: hashpartitioning(i_item_sk#9, 5), ENSURE_REQUIREMENTS, [id=#14]
 Input [5]: [i_item_sk#9, i_brand#10, i_class#11, i_category#12, i_product_name#13]
 Arguments: [i_item_sk#9 ASC NULLS FIRST], false, 0
 
-(18) SortMergeJoin [codegen id : 6]
+(18) SortMergeJoin [codegen id : 7]
 Left keys [1]: [inv_item_sk#1]
 Right keys [1]: [i_item_sk#9]
 Join condition: None
 
-(19) Project [codegen id : 6]
+(19) Project [codegen id : 7]
 Output [5]: [inv_quantity_on_hand#2, i_brand#10, i_class#11, i_category#12, i_product_name#13]
 Input [7]: [inv_item_sk#1, inv_quantity_on_hand#2, i_item_sk#9, i_brand#10, i_class#11, i_category#12, i_product_name#13]
 
@@ -120,21 +120,21 @@ Batched: true
 Location [not included in comparison]/{warehouse_dir}/warehouse]
 ReadSchema: struct<>
 
-(21) ColumnarToRow [codegen id : 7]
+(21) ColumnarToRow [codegen id : 6]
 Input: []
 
 (22) BroadcastExchange
 Input: []
 Arguments: IdentityBroadcastMode, [id=#15]
 
-(23) BroadcastNestedLoopJoin
+(23) BroadcastNestedLoopJoin [codegen id : 7]
 Join condition: None
 
-(24) Expand [codegen id : 8]
+(24) Expand [codegen id : 7]
 Input [5]: [inv_quantity_on_hand#2, i_brand#10, i_class#11, i_category#12, i_product_name#13]
 Arguments: [List(inv_quantity_on_hand#2, i_product_name#13, i_brand#10, i_class#11, i_category#12, 0), List(inv_quantity_on_hand#2, i_product_name#13, i_brand#10, i_class#11, null, 1), List(inv_quantity_on_hand#2, i_product_name#13, i_brand#10, null, null, 3), List(inv_quantity_on_hand#2, i_product_name#13, null, null, null, 7), List(inv_quantity_on_hand#2, null, null, null, null, 15)], [inv_quantity_on_hand#2, i_product_name#16, i_brand#17, i_class#18, i_category#19, spark_grouping_id#20]
 
-(25) HashAggregate [codegen id : 8]
+(25) HashAggregate [codegen id : 7]
 Input [6]: [inv_quantity_on_hand#2, i_product_name#16, i_brand#17, i_class#18, i_category#19, spark_grouping_id#20]
 Keys [5]: [i_product_name#16, i_brand#17, i_class#18, i_category#19, spark_grouping_id#20]
 Functions [1]: [partial_avg(inv_quantity_on_hand#2)]
@@ -145,7 +145,7 @@ Results [7]: [i_product_name#16, i_brand#17, i_class#18, i_category#19, spark_gr
 Input [7]: [i_product_name#16, i_brand#17, i_class#18, i_category#19, spark_grouping_id#20, sum#23, count#24]
 Arguments: hashpartitioning(i_product_name#16, i_brand#17, i_class#18, i_category#19, spark_grouping_id#20, 5), ENSURE_REQUIREMENTS, [id=#25]
 
-(27) HashAggregate [codegen id : 9]
+(27) HashAggregate [codegen id : 8]
 Input [7]: [i_product_name#16, i_brand#17, i_class#18, i_category#19, spark_grouping_id#20, sum#23, count#24]
 Keys [5]: [i_product_name#16, i_brand#17, i_class#18, i_category#19, spark_grouping_id#20]
 Functions [1]: [avg(inv_quantity_on_hand#2)]

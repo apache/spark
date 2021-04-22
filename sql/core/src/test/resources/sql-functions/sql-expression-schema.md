@@ -83,7 +83,6 @@
 | org.apache.spark.sql.catalyst.expressions.CreateNamedStruct | named_struct | SELECT named_struct("a", 1, "b", 2, "c", 3) | struct<named_struct(a, 1, b, 2, c, 3):struct<a:int,b:int,c:int>> |
 | org.apache.spark.sql.catalyst.expressions.CreateNamedStruct | struct | SELECT struct(1, 2, 3) | struct<struct(1, 2, 3):struct<col1:int,col2:int,col3:int>> |
 | org.apache.spark.sql.catalyst.expressions.CsvToStructs | from_csv | SELECT from_csv('1, 0.8', 'a INT, b DOUBLE') | struct<from_csv(1, 0.8):struct<a:int,b:double>> |
-| org.apache.spark.sql.catalyst.expressions.Cube | cube | SELECT name, age, count(*) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY cube(name, age) | struct<name:string,age:int,count(1):bigint> |
 | org.apache.spark.sql.catalyst.expressions.CumeDist | cume_dist | SELECT a, b, cume_dist() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,cume_dist() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double> |
 | org.apache.spark.sql.catalyst.expressions.CurrentCatalog | current_catalog | SELECT current_catalog() | struct<current_catalog():string> |
 | org.apache.spark.sql.catalyst.expressions.CurrentDatabase | current_database | SELECT current_database() | struct<current_database():string> |
@@ -213,6 +212,7 @@
 | org.apache.spark.sql.catalyst.expressions.Pow | pow | SELECT pow(2, 3) | struct<pow(2, 3):double> |
 | org.apache.spark.sql.catalyst.expressions.Pow | power | SELECT power(2, 3) | struct<POWER(2, 3):double> |
 | org.apache.spark.sql.catalyst.expressions.Quarter | quarter | SELECT quarter('2016-08-31') | struct<quarter(2016-08-31):int> |
+| org.apache.spark.sql.catalyst.expressions.RLike | regexp | SELECT regexp('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<REGEXP(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RLike | regexp_like | SELECT regexp_like('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<REGEXP_LIKE(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RLike | rlike | SELECT rlike('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*') | struct<RLIKE(%SystemDrive%UsersJohn, %SystemDrive%\Users.*):boolean> |
 | org.apache.spark.sql.catalyst.expressions.RaiseError | raise_error | SELECT raise_error('custom error message') | struct<raise_error(custom error message):null> |
@@ -228,7 +228,6 @@
 | org.apache.spark.sql.catalyst.expressions.Reverse | reverse | SELECT reverse('Spark SQL') | struct<reverse(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Right | right | SELECT right('Spark SQL', 3) | struct<right(Spark SQL, 3):string> |
 | org.apache.spark.sql.catalyst.expressions.Rint | rint | SELECT rint(12.3456) | struct<rint(12.3456):double> |
-| org.apache.spark.sql.catalyst.expressions.Rollup | rollup | SELECT name, age, count(*) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY rollup(name, age) | struct<name:string,age:int,count(1):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Round | round | SELECT round(2.5, 0) | struct<round(2.5, 0):decimal(2,0)> |
 | org.apache.spark.sql.catalyst.expressions.RowNumber | row_number | SELECT a, b, row_number() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,row_number() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int> |
 | org.apache.spark.sql.catalyst.expressions.SchemaOfCsv | schema_of_csv | SELECT schema_of_csv('1,abc') | struct<schema_of_csv(1,abc):string> |
@@ -269,6 +268,7 @@
 | org.apache.spark.sql.catalyst.expressions.StringToMap | str_to_map | SELECT str_to_map('a:1,b:2,c:3', ',', ':') | struct<str_to_map(a:1,b:2,c:3, ,, :):map<string,string>> |
 | org.apache.spark.sql.catalyst.expressions.StringTranslate | translate | SELECT translate('AaBbCc', 'abc', '123') | struct<translate(AaBbCc, abc, 123):string> |
 | org.apache.spark.sql.catalyst.expressions.StringTrim | trim | SELECT trim('    SparkSQL   ') | struct<trim(    SparkSQL   ):string> |
+| org.apache.spark.sql.catalyst.expressions.StringTrimBoth | btrim | SELECT btrim('    SparkSQL   ') | struct<btrim(    SparkSQL   ):string> |
 | org.apache.spark.sql.catalyst.expressions.StringTrimLeft | ltrim | SELECT ltrim('    SparkSQL   ') | struct<ltrim(    SparkSQL   ):string> |
 | org.apache.spark.sql.catalyst.expressions.StringTrimRight | rtrim | SELECT rtrim('    SparkSQL   ') | struct<rtrim(    SparkSQL   ):string> |
 | org.apache.spark.sql.catalyst.expressions.StructsToCsv | to_csv | SELECT to_csv(named_struct('a', 1, 'b', 2)) | struct<to_csv(named_struct(a, 1, b, 2)):string> |

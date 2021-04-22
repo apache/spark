@@ -300,27 +300,17 @@ class Dataset[T] private[sql](
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
-    def escapeMetaCharacters(str: String): String = {
-      str.replaceAll("\n", "\\\\n")
-        .replaceAll("\r", "\\\\r")
-        .replaceAll("\t", "\\\\t")
-        .replaceAll("\f", "\\\\f")
-        .replaceAll("\b", "\\\\b")
-        .replaceAll("\u000B", "\\\\v")
-        .replaceAll("\u0007", "\\\\a")
-    }
-
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
-    schema.fieldNames.map(escapeMetaCharacters).toSeq +: data.map { row =>
+    schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case _ =>
             // Escapes meta-characters not to break the `showString` format
-            escapeMetaCharacters(cell.toString)
+            SchemaUtils.escapeMetaCharacters(cell.toString)
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
@@ -2317,9 +2307,9 @@ class Dataset[T] private[sql](
    *   case class Book(title: String, words: String)
    *   val ds: Dataset[Book]
    *
-   *   val allWords = ds.select('title, explode(split('words, " ")).as("word"))
+   *   val allWords = ds.select($"title", explode(split($"words", " ")).as("word"))
    *
-   *   val bookCountPerWord = allWords.groupBy("word").agg(countDistinct("title"))
+   *   val bookCountPerWord = allWords.groupBy("word").agg(count_distinct("title"))
    * }}}
    *
    * Using `flatMap()` this can similarly be exploded as:
@@ -2356,7 +2346,7 @@ class Dataset[T] private[sql](
    * `functions.explode()`:
    *
    * {{{
-   *   ds.select(explode(split('words, " ")).as("word"))
+   *   ds.select(explode(split($"words", " ")).as("word"))
    * }}}
    *
    * or `flatMap()`:
@@ -2670,6 +2660,8 @@ class Dataset[T] private[sql](
    *   <li>min</li>
    *   <li>max</li>
    *   <li>arbitrary approximate percentiles specified as a percentage (e.g. 75%)</li>
+   *   <li>count_distinct</li>
+   *   <li>approx_count_distinct</li>
    * </ul>
    *
    * If no statistics are given, this function computes count, mean, stddev, min,
@@ -2710,6 +2702,20 @@ class Dataset[T] private[sql](
    *
    * {{{
    *   ds.select("age", "height").summary().show()
+   * }}}
+   *
+   * Specify statistics to output custom summaries:
+   *
+   * {{{
+   *   ds.summary("count", "count_distinct").show()
+   * }}}
+   *
+   * The distinct count isn't included by default.
+   *
+   * You can also run approximate distinct counts which are faster:
+   *
+   * {{{
+   *   ds.summary("count", "approx_count_distinct").show()
    * }}}
    *
    * See also [[describe]] for basic statistics.
@@ -3364,10 +3370,11 @@ class Dataset[T] private[sql](
       comment = None,
       properties = Map.empty,
       originalText = None,
-      child = logicalPlan,
+      plan = logicalPlan,
       allowExisting = false,
       replace = replace,
-      viewType = viewType)
+      viewType = viewType,
+      isAnalyzed = true)
   }
 
   /**

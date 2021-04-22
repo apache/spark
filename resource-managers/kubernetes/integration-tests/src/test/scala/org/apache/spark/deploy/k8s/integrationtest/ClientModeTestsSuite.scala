@@ -16,6 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import io.fabric8.kubernetes.api.model.{PodBuilder, ServiceBuilder}
 import org.scalatest.concurrent.Eventually
 import scala.collection.JavaConverters._
 
@@ -32,7 +33,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
       .getKubernetesClient
       .services()
       .inNamespace(kubernetesTestComponents.namespace)
-      .createNew()
+      .create(new ServiceBuilder()
         .withNewMetadata()
           .withName(s"$driverPodName-svc")
           .endMetadata()
@@ -50,13 +51,13 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
             .withNewTargetPort(blockManagerPort)
             .endPort()
           .endSpec()
-        .done()
+        .build())
     try {
       val driverPod = testBackend
         .getKubernetesClient
         .pods()
         .inNamespace(kubernetesTestComponents.namespace)
-        .createNew()
+        .create(new PodBuilder()
           .withNewMetadata()
           .withName(driverPodName)
           .withLabels(labels.asJava)
@@ -93,7 +94,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
             .addToArgs("10")
             .endContainer()
           .endSpec()
-        .done()
+        .build())
       Eventually.eventually(TIMEOUT, INTERVAL) {
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
