@@ -993,31 +993,44 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           .map(groupByExpr => {
             val groupingAnalytics = groupByExpr.groupingAnalytics
             if (groupingAnalytics != null) {
-              val groupingSets = groupingAnalytics.groupingSet.asScala
-                .map(_.expression.asScala.map(e => expression(e)).toSeq)
-              if (groupingAnalytics.CUBE != null) {
-                // CUBE(A, B, (A, B), ()) is not supported.
-                if (groupingSets.exists(_.isEmpty)) {
-                  throw new ParseException("Empty set in CUBE grouping sets is not supported.",
-                    groupingAnalytics)
-                }
-                Cube(groupingSets.toSeq)
-              } else if (groupingAnalytics.ROLLUP != null) {
-                // ROLLUP(A, B, (A, B), ()) is not supported.
-                if (groupingSets.exists(_.isEmpty)) {
-                  throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
-                    groupingAnalytics)
-                }
-                Rollup(groupingSets.toSeq)
-              } else {
-                assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-                GroupingSets(groupingSets.toSeq)
-              }
+              visitGroupingAnalytics(groupingAnalytics)
             } else {
               expression(groupByExpr.expression)
             }
           })
       Aggregate(groupByExpressions.toSeq, selectExpressions, query)
+    }
+  }
+
+  override def visitGroupingAnalytics(
+      groupingAnalytics: GroupingAnalyticsContext): BaseGroupingSets = {
+    val groupingSets = groupingAnalytics.groupingSet.asScala
+      .map(_.expression.asScala.map(e => expression(e)).toSeq)
+    if (groupingAnalytics.CUBE != null) {
+      // CUBE(A, B, (A, B), ()) is not supported.
+      if (groupingSets.exists(_.isEmpty)) {
+        throw new ParseException("Empty set in CUBE grouping sets is not supported.",
+          groupingAnalytics)
+      }
+      Cube(groupingSets.toSeq)
+    } else if (groupingAnalytics.ROLLUP != null) {
+      // ROLLUP(A, B, (A, B), ()) is not supported.
+      if (groupingSets.exists(_.isEmpty)) {
+        throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
+          groupingAnalytics)
+      }
+      Rollup(groupingSets.toSeq)
+    } else {
+      assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
+      val groupingSets = groupingAnalytics.groupingElement.asScala.flatMap { expr =>
+        val groupingAnalytics = expr.groupingAnalytics()
+        if (groupingAnalytics != null) {
+          visitGroupingAnalytics(groupingAnalytics).selectedGroupByExprs
+        } else {
+          Seq(expr.groupingSet().expression().asScala.map(e => expression(e)).toSeq)
+        }
+      }
+      GroupingSets(groupingSets.toSeq)
     }
   }
 
