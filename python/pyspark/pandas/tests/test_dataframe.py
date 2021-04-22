@@ -44,10 +44,10 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.testing.pandasutils import (
     have_tabulate,
     PandasOnSparkTestCase,
-    SQLTestUtils,
     SPARK_CONF_ARROW_ENABLED,
     tabulate_requirement_message,
 )
+from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.utils import name_like_string
 
 
