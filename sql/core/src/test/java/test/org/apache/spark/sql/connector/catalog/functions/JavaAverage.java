@@ -17,12 +17,13 @@
 
 package test.org.apache.spark.sql.connector.catalog.functions;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.catalog.functions.AggregateFunction;
 import org.apache.spark.sql.connector.catalog.functions.BoundFunction;
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.IntegerType;
+import org.apache.spark.sql.types.DoubleType;
 import org.apache.spark.sql.types.StructType;
 
 import java.io.Serializable;
@@ -30,7 +31,7 @@ import java.io.Serializable;
 public class JavaAverage implements UnboundFunction {
   @Override
   public String name() {
-    return "iavg";
+    return "avg";
   }
 
   @Override
@@ -38,8 +39,8 @@ public class JavaAverage implements UnboundFunction {
     if (inputType.fields().length != 1) {
       throw new UnsupportedOperationException("Expect exactly one argument");
     }
-    if (inputType.fields()[0].dataType() instanceof IntegerType) {
-      return new BoundJavaAverageNoImpl();
+    if (inputType.fields()[0].dataType() instanceof DoubleType) {
+      return new JavaDoubleAverage();
     }
     throw new UnsupportedOperationException("Unsupported non-integral type: " +
         inputType.fields()[0].dataType());
@@ -50,42 +51,50 @@ public class JavaAverage implements UnboundFunction {
     return null;
   }
 
-  public static class BoundJavaAverageNoImpl implements AggregateFunction<State, Integer> {
+  public static class JavaDoubleAverage implements AggregateFunction<State<Double>, Double> {
     @Override
-    public State newAggregationState() {
-      return new State(0, 0);
+    public State<Double> newAggregationState() {
+      return new State<>(0.0, 0.0);
     }
 
     @Override
-    public Integer produceResult(State state) {
+    public State<Double> update(State<Double> state, InternalRow input) {
+      if (input.isNullAt(0)) {
+        return state;
+      }
+      return new State<>(state.sum + input.getDouble(0), state.count + 1);
+    }
+
+    @Override
+    public Double produceResult(State<Double> state) {
       return state.sum / state.count;
     }
 
     @Override
-    public State merge(State leftState, State rightState) {
-      return new State(leftState.sum + rightState.sum, leftState.count + rightState.count);
+    public State<Double> merge(State<Double> leftState, State<Double> rightState) {
+      return new State<>(leftState.sum + rightState.sum, leftState.count + rightState.count);
     }
 
     @Override
     public DataType[] inputTypes() {
-      return new DataType[] { DataTypes.LongType };
+      return new DataType[] { DataTypes.DoubleType };
     }
 
     @Override
     public DataType resultType() {
-      return DataTypes.LongType;
+      return DataTypes.DoubleType;
     }
 
     @Override
     public String name() {
-      return "iavg";
+      return "davg";
     }
   }
 
-  public static class State implements Serializable {
-    int sum, count;
+  public static class State<T> implements Serializable {
+    T sum, count;
 
-    State(int sum, int count) {
+    State(T sum, T count) {
       this.sum = sum;
       this.count = count;
     }

@@ -2058,25 +2058,20 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     /**
-     * Check if the input `fn` implements the given `methodName`. If `inputType` is set, it also
-     * tries to match it against the declared parameter types.
+     * Check if the input `fn` implements the given `methodName` with parameter types specified
+     * via `inputType`.
      */
     private def findMethod(
         fn: BoundFunction,
         methodName: String,
-        inputTypeOpt: Option[Seq[DataType]] = None): Option[Method] = {
+        inputType: Seq[DataType]): Option[Method] = {
       val cls = fn.getClass
-      inputTypeOpt match {
-        case Some(inputType) =>
-          try {
-            val argClasses = inputType.map(ScalaReflection.dataTypeJavaClass)
-            Some(cls.getDeclaredMethod(methodName, argClasses: _*))
-          } catch {
-            case _: NoSuchMethodException =>
-              None
-          }
-        case None =>
-          cls.getDeclaredMethods.find(_.getName == methodName)
+      try {
+        val argClasses = inputType.map(ScalaReflection.dataTypeJavaClass)
+        Some(cls.getDeclaredMethod(methodName, argClasses: _*))
+      } catch {
+        case _: NoSuchMethodException =>
+          None
       }
     }
 
@@ -2199,7 +2194,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             //  also want to check if the parameter types from the magic method match the
             //  input type through `BoundFunction.inputTypes`.
             val argClasses = inputType.fields.map(_.dataType)
-            findMethod(scalarFunc, MAGIC_METHOD_NAME, Some(argClasses)) match {
+            findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
               case Some(_) =>
                 val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
                 Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
@@ -2211,7 +2206,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 //  `getDeclaredMethod`.
                 // since `inputType` is a `StructType`, it is mapped to a `InternalRow` which we
                 // can use to lookup the `produceResult` method.
-                findMethod(scalarFunc, "produceResult", Some(Seq(inputType))) match {
+                findMethod(scalarFunc, "produceResult", Seq(inputType)) match {
                   case Some(_) =>
                     ApplyFunctionExpression(scalarFunc, arguments)
                   case None =>
@@ -2225,17 +2220,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
               aggFunc.name(), "IGNORE NULLS")
           }
-          // due to type erasure we can't match by parameter types here, so this check
-          // will succeed even if the class doesn't override `update` but implements
-          // another method with the same name.
-          findMethod(aggFunc, "update") match {
-            case Some(_) =>
-              val aggregator = V2Aggregator(aggFunc, arguments)
-              AggregateExpression(aggregator, Complete, isDistinct, filter)
-            case None =>
-              failAnalysis(s"AggregateFunction '${bound.name()}' neither implement " +
-                s"magic method nor override 'update'")
-          }
+          val aggregator = V2Aggregator(aggFunc, arguments)
+          AggregateExpression(aggregator, Complete, isDistinct, filter)
         case _ =>
           failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction " +
             s"or AggregateFunction")

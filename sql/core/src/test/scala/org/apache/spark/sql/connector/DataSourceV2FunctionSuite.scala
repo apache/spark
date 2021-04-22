@@ -197,6 +197,17 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("aggregate function: lookup double average in Java") {
+    import testImplicits._
+    val t = "testcat.ns.t"
+    withTable(t) {
+      addFunction(Identifier.of(Array("ns"), "avg"), new JavaAverage)
+
+      Seq(1.toDouble, 2.toDouble, 3.toDouble).toDF("i").write.saveAsTable(t)
+      checkAnswer(sql(s"SELECT testcat.ns.avg(i) from $t"), Row(2.0) :: Nil)
+    }
+  }
+
   test("aggregate function: lookup int average w/ expression") {
     import testImplicits._
     val t = "testcat.ns.t"
@@ -217,30 +228,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       Seq(1.toShort, 2.toShort).toDF("i").write.saveAsTable(t)
       assert(intercept[AnalysisException](sql(s"SELECT testcat.ns.avg(i) from $t"))
         .getMessage.contains("Unsupported non-integral type: ShortType"))
-    }
-  }
-
-  test("aggregate function: doesn't implement update should throw runtime error") {
-    import testImplicits._
-    val t = "testcat.ns.t"
-    withTable(t) {
-      addFunction(Identifier.of(Array("ns"), "avg"), IntegralAverage)
-
-      Seq(1.toByte, 2.toByte).toDF("i").write.saveAsTable(t)
-      assert(intercept[SparkException](sql(s"SELECT testcat.ns.avg(i) from $t").collect())
-        .getMessage.contains("Cannot find a compatible AggregateFunction"))
-    }
-  }
-
-  test("aggregate function: doesn't implement update in Java should throw analysis error") {
-    import testImplicits._
-    val t = "testcat.ns.t"
-    withTable(t) {
-      addFunction(Identifier.of(Array("ns"), "avg"), new JavaAverage)
-
-      (1 to 100).toDF("i").write.saveAsTable(t)
-      assert(intercept[AnalysisException](sql(s"SELECT testcat.ns.avg(i) from $t").collect())
-        .getMessage.contains("neither implement magic method nor override 'update'"))
     }
   }
 
@@ -329,7 +316,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       }
 
       inputType.fields(0).dataType match {
-        case _: ByteType => ByteAverage
         case _: IntegerType => IntAverage
         case _: LongType => LongAverage
         case dataType =>
@@ -391,21 +377,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         }
       }
     }
-
-    override def merge(leftState: (Long, Long), rightState: (Long, Long)): (Long, Long) = {
-      (leftState._1 + rightState._1, leftState._2 + rightState._2)
-    }
-
-    override def produceResult(state: (Long, Long)): Long = state._1 / state._2
-  }
-
-  /** Bad implementation which doesn't override `produceResult` */
-  object ByteAverage extends AggregateFunction[(Long, Long), Long] {
-    override def name(): String = "iavg"
-    override def inputTypes(): Array[DataType] = Array(LongType)
-    override def resultType(): DataType = LongType
-
-    override def newAggregationState(): (Long, Long) = (0L, 0L)
 
     override def merge(leftState: (Long, Long), rightState: (Long, Long)): (Long, Long) = {
       (leftState._1 + rightState._1, leftState._2 + rightState._2)

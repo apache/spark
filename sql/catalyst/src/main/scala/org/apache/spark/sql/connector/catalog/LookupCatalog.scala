@@ -166,8 +166,7 @@ private[sql] trait LookupCatalog extends Logging {
           if CatalogV2Util.isSessionCatalog(currentCatalog) =>
           namesToFunctionIdentifier(names)
         case CatalogAndMultipartIdentifier(Some(catalog), names)
-          if CatalogV2Util.isSessionCatalog(catalog) &&
-            CatalogV2Util.isSessionCatalog(currentCatalog) =>
+          if CatalogV2Util.isSessionCatalog(catalog) =>
           namesToFunctionIdentifier(names)
         case _ => None
       }
