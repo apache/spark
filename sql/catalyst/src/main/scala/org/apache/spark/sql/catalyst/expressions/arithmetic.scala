@@ -294,9 +294,11 @@ object BinaryArithmetic {
 case class Add(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic with AsAnsi {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+
+  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -340,9 +342,11 @@ case class Add(
 case class Subtract(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic with AsAnsi {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+
+  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -386,9 +390,11 @@ case class Subtract(
 case class Multiply(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic with AsAnsi {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+
+  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def inputType: AbstractDataType = NumericType
 
@@ -532,9 +538,11 @@ trait DivModLike extends BinaryArithmetic {
 case class Divide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike with AsAnsi {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+
+  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
@@ -565,9 +573,11 @@ case class Divide(
 case class IntegralDivide(
     left: Expression,
     right: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike with AsAnsi {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+
+  override def asAnsi: Expression = this.copy(failOnError = true)
 
   override def checkDivideOverflow: Boolean = left.dataType match {
     case LongType if failOnError => true
@@ -1005,4 +1015,16 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
     copy(children = newChildren)
+}
+
+/*
+ * An [[Expression]] that can be convertible to a new expression as `SQLConf.get.ansiEnabled`
+ * is always true.
+ */
+private[catalyst] trait AsAnsi {
+  /*
+   * Return a copy of this expression as `SQLConf.get.ansiEnabled` is always true,
+   * which means it will throw an exception if error occurs.
+   */
+  def asAnsi: Expression
 }
