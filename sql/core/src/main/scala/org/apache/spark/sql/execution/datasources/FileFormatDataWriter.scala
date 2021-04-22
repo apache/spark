@@ -237,7 +237,7 @@ abstract class BaseDynamicPartitionDataWriter(
    * @param bucketId the bucket which all tuples being written by this OutputWriter belong to
    * @param closeCurrentWriter close and release resource for current writer
    */
-  protected def newOutputWriter(
+  protected def renewCurrentWriter(
       partitionValues: Option[InternalRow],
       bucketId: Option[Int],
       closeCurrentWriter: Boolean): Unit = {
@@ -289,7 +289,7 @@ abstract class BaseDynamicPartitionDataWriter(
     fileCounter += 1
     assert(fileCounter < MAX_FILE_COUNTER,
       s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
-    newOutputWriter(partitionValues, bucketId, closeCurrentWriter = true)
+    renewCurrentWriter(partitionValues, bucketId, closeCurrentWriter = true)
   }
 
   /**
@@ -334,7 +334,7 @@ class DynamicPartitionDataSingleWriter(
       }
 
       fileCounter = 0
-      newOutputWriter(currentPartitionValues, currentBucketId, true)
+      renewCurrentWriter(currentPartitionValues, currentBucketId, closeCurrentWriter = true)
     } else if (description.maxRecordsPerFile > 0 &&
       recordsInFile >= description.maxRecordsPerFile) {
       increaseFileCounter(currentPartitionValues, currentBucketId)
@@ -378,7 +378,7 @@ class DynamicPartitionDataConcurrentWriter(
    * State to indicate if we are falling back to sort-based writer.
    * Because we first try to use concurrent writers, its initial value is false.
    */
-  private var sortBased: Boolean = false
+  private var sorted: Boolean = false
   private val concurrentWriters = mutable.HashMap[WriterIndex, WriterStatus]()
   private val currentWriterId = WriterIndex(None, None)
 
@@ -407,7 +407,7 @@ class DynamicPartitionDataConcurrentWriter(
       currentWriterId.bucketId != nextBucketId) {
       // See a new partition or bucket - write to a new partition dir (or a new bucket file).
       if (currentWriter != null) {
-        if (!sortBased) {
+        if (!sorted) {
           // Update writer status in concurrent writers map, because the writer is probably needed
           // again later for writing other rows.
           updateCurrentWriterStatusInMap()
@@ -444,7 +444,7 @@ class DynamicPartitionDataConcurrentWriter(
    * Write iterator of records with concurrent writers.
    */
   override def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
-    while (iterator.hasNext && !sortBased) {
+    while (iterator.hasNext && !sorted) {
       write(iterator.next())
     }
 
@@ -479,17 +479,16 @@ class DynamicPartitionDataConcurrentWriter(
       fileCounter = status.fileCounter
     } else {
       fileCounter = 0
-      newOutputWriter(
+      renewCurrentWriter(
         currentWriterId.partitionValues,
         currentWriterId.bucketId,
         closeCurrentWriter = false)
       concurrentWriters.put(
         WriterIndex(currentWriterId.partitionValues, currentWriterId.bucketId),
         new WriterStatus(currentWriter, recordsInFile, fileCounter))
-      if (concurrentWriters.size > concurrentOutputWriterSpec.maxWriters &&
-        !sortBased) {
+      if (concurrentWriters.size > concurrentOutputWriterSpec.maxWriters && !sorted) {
         // Fall back to sort-based sequential writer mode.
-        sortBased = true
+        sorted = true
       }
     }
   }
@@ -499,10 +498,7 @@ class DynamicPartitionDataConcurrentWriter(
    */
   private def clearCurrentWriterStatus(): Unit = {
     if (currentWriterId.partitionValues.isDefined || currentWriterId.bucketId.isDefined) {
-      val status = concurrentWriters(currentWriterId)
-      status.outputWriter = currentWriter
-      status.recordsInFile = recordsInFile
-      status.fileCounter = fileCounter
+      updateCurrentWriterStatusInMap()
     }
     currentWriterId.partitionValues = None
     currentWriterId.bucketId = None

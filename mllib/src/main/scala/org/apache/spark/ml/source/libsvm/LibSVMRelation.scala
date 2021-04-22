@@ -40,7 +40,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 private[libsvm] class LibSVMOutputWriter(
-    path: String,
+    val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
@@ -64,8 +64,6 @@ private[libsvm] class LibSVMOutputWriter(
   override def close(): Unit = {
     writer.close()
   }
-
-  override def path(): String = path
 }
 
 /** @see [[LibSVMDataSource]] for public documentation. */

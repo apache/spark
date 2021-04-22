@@ -271,7 +271,7 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 }
 
 private[orc] class OrcOutputWriter(
-    path: String,
+    val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
@@ -303,8 +303,6 @@ private[orc] class OrcOutputWriter(
       recordWriter.close(Reporter.NULL)
     }
   }
-
-  override def path(): String = path
 }
 
 private[orc] object OrcFileFormat extends HiveInspectors with Logging {

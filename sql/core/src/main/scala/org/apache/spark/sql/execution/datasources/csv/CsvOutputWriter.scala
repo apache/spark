@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
 import org.apache.spark.sql.types.StructType
 
 class CsvOutputWriter(
-    path: String,
+    val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
@@ -46,6 +46,4 @@ class CsvOutputWriter(
   override def write(row: InternalRow): Unit = gen.write(row)
 
   override def close(): Unit = gen.close()
-
-  override def path(): String = path
 }

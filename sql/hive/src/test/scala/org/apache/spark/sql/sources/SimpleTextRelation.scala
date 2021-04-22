@@ -117,7 +117,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
   }
 }
 
-class SimpleTextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
+class SimpleTextOutputWriter(val path: String, dataSchema: StructType, context: TaskAttemptContext)
   extends OutputWriter {
 
   private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
@@ -133,10 +133,6 @@ class SimpleTextOutputWriter(path: String, dataSchema: StructType, context: Task
 
   override def close(): Unit = {
     writer.close()
-  }
-
-  override def path(): String = {
-    path
   }
 }
 

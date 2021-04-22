@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
-class ParquetOutputWriter(path: String, context: TaskAttemptContext)
+class ParquetOutputWriter(val path: String, context: TaskAttemptContext)
   extends OutputWriter {
 
   private val recordWriter: RecordWriter[Void, InternalRow] = {
@@ -39,6 +39,4 @@ class ParquetOutputWriter(path: String, context: TaskAttemptContext)
   override def write(row: InternalRow): Unit = recordWriter.write(null, row)
 
   override def close(): Unit = recordWriter.close(context)
-
-  override def path(): String = path
 }
