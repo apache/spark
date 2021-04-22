@@ -49,6 +49,11 @@ import java.io.ObjectOutput;
  * belong to a certain host. Users should choose the appropriate location interface according to their
  * own use cases.
  *
+ * :: Caution ::
+ * Spark would reuse the same location instance for locations which are equal due to the
+ * performance concern. Thus, users should also guarantee the implemented {@link Location}
+ * is IMMUTABLE.
+ *
  * @since 3.2.0
  */
 @Private
