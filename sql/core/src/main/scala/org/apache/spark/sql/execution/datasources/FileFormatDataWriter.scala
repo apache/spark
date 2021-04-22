@@ -483,10 +483,19 @@ class DynamicPartitionDataConcurrentWriter(
         currentWriterId.partitionValues,
         currentWriterId.bucketId,
         closeCurrentWriter = false)
+      if (!sorted) {
+        assert(concurrentWriters.size <= concurrentOutputWriterSpec.maxWriters,
+          s"Number of concurrent output file writers is ${concurrentWriters.size} " +
+            s" which is beyond max value ${concurrentOutputWriterSpec.maxWriters}")
+      } else {
+        assert(concurrentWriters.size <= concurrentOutputWriterSpec.maxWriters + 1,
+          s"Number of output file writers after sort is ${concurrentWriters.size} " +
+            s" which is beyond max value ${concurrentOutputWriterSpec.maxWriters + 1}")
+      }
       concurrentWriters.put(
         WriterIndex(currentWriterId.partitionValues, currentWriterId.bucketId),
         new WriterStatus(currentWriter, recordsInFile, fileCounter))
-      if (concurrentWriters.size > concurrentOutputWriterSpec.maxWriters && !sorted) {
+      if (concurrentWriters.size >= concurrentOutputWriterSpec.maxWriters && !sorted) {
         // Fall back to sort-based sequential writer mode.
         sorted = true
       }

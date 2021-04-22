@@ -3153,7 +3153,7 @@ object SQLConf {
   val MAX_CONCURRENT_OUTPUT_FILE_WRITERS = buildConf("spark.sql.maxConcurrentOutputFileWriters")
     .internal()
     .doc("Maximum number of output file writers to use concurrently. If number of writers " +
-      "needed exceeds this limit, task will sort rest of output then writing them.")
+      "needed reaches this limit, task will sort rest of output then writing them.")
     .version("3.2.0")
     .intConf
     .createWithDefault(0)
