@@ -284,7 +284,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables ::
-      ResolveHigherOrderFunctions(v1SessionCatalog) ::
+      ResolveHigherOrderFunctions(catalogManager) ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::
       ResolveRandomSeed ::
@@ -898,8 +898,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
-  // If we are resolving relations insides views, we may need to expand single or multi-part
-  // identifiers with the current catalog and namespace of when the view was created.
+  // If we are resolving database objects (relations, functions, etc.) insides views, we may need to
+  // expand single or multi-part identifiers with the current catalog and namespace of when the
+  // view was created.
   private def expandIdentifier(nameParts: Seq[String]): Seq[String] = {
     if (!isResolvingView || isReferredTempViewName(nameParts)) return nameParts
 
@@ -2029,8 +2030,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
 
           case u @ UnresolvedFunction(AsFunctionIdentifier(ident), arguments,
-          isDistinct, filter, ignoreNulls) =>
-            withPosition(u) {
+            isDistinct, filter, ignoreNulls) => withPosition(u) {
               processFunctionExpr(v1SessionCatalog.lookupFunction(ident, arguments),
                 arguments, isDistinct, filter, ignoreNulls)
             }
@@ -2178,9 +2178,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         unbound.bind(inputType)
       } catch {
         case unsupported: UnsupportedOperationException =>
-          failAnalysis(s"Function '${unbound.name}' cannot process input: " +
+          throw new AnalysisException(s"Function '${unbound.name}' cannot process input: " +
             s"(${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
-            unsupported.getMessage)
+            unsupported.getMessage, cause = Some(unsupported))
       }
 
       bound match {
@@ -2209,6 +2209,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                 //  subclass do not override the default method in parent interface
                 //  defined in Java, the method can still be found from
                 //  `getDeclaredMethod`.
+                // since `inputType` is a `StructType`, it is mapped to a `InternalRow` which we
+                // can use to lookup the `produceResult` method.
                 findMethod(scalarFunc, "produceResult", Some(Seq(inputType))) match {
                   case Some(_) =>
                     ApplyFunctionExpression(scalarFunc, arguments)

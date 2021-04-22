@@ -39,7 +39,7 @@ public class JavaAverage implements UnboundFunction {
       throw new UnsupportedOperationException("Expect exactly one argument");
     }
     if (inputType.fields()[0].dataType() instanceof IntegerType) {
-      return new JavaAverageNoImpl();
+      return new BoundJavaAverageNoImpl();
     }
     throw new UnsupportedOperationException("Unsupported non-integral type: " +
         inputType.fields()[0].dataType());
@@ -50,7 +50,7 @@ public class JavaAverage implements UnboundFunction {
     return null;
   }
 
-  public static class JavaAverageNoImpl implements AggregateFunction<State, Integer> {
+  public static class BoundJavaAverageNoImpl implements AggregateFunction<State, Integer> {
     @Override
     public State newAggregationState() {
       return new State(0, 0);

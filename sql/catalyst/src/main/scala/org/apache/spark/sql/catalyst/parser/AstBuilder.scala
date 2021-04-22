@@ -1831,18 +1831,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create a function database (optional) and name pair.
+   */
+  protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
+    visitFunctionName(ctx, ctx.identifier().asScala.map(_.getText).toSeq)
+  }
+
+  /**
    * Create a function database (optional) and name pair, for multipartIdentifier.
    * This is used in CREATE FUNCTION, DROP FUNCTION, SHOWFUNCTIONS.
    */
   protected def visitFunctionName(ctx: MultipartIdentifierContext): FunctionIdentifier = {
     visitFunctionName(ctx, ctx.parts.asScala.map(_.getText).toSeq)
-  }
-
-  /**
-   * Create a function database (optional) and name pair.
-   */
-  protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
-    visitFunctionName(ctx, ctx.identifier().asScala.map(_.getText).toSeq)
   }
 
   /**
