@@ -46,49 +46,56 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   }
 
   test("non-function catalog") {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[BasicInMemoryTableCatalog].getName)
-    assert(intercept[AnalysisException](
-      sql("SELECT testcat.strlen('abc')").collect()
-    ).getMessage.contains("is not a FunctionCatalog"))
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[BasicInMemoryTableCatalog].getName) {
+      assert(intercept[AnalysisException](
+        sql("SELECT testcat.strlen('abc')").collect()
+      ).getMessage.contains("is not a FunctionCatalog"))
+    }
   }
 
   test("built-in with default v2 function catalog") {
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-    checkAnswer(sql("SELECT length('abc')"), Row(3))
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+      checkAnswer(sql("SELECT length('abc')"), Row(3))
+    }
   }
 
   test("built-in override with default v2 function catalog") {
     // a built-in function with the same name should take higher priority
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-    addFunction(Identifier.of(Array.empty, "length"), new JavaStrLen(new JavaStrLenNoImpl))
-    checkAnswer(sql("SELECT length('abc')"), Row(3))
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+      addFunction(Identifier.of(Array.empty, "length"), new JavaStrLen(new JavaStrLenNoImpl))
+      checkAnswer(sql("SELECT length('abc')"), Row(3))
+    }
   }
 
   test("temp function override with default v2 function catalog") {
     val className = "test.org.apache.spark.sql.JavaStringLength"
     sql(s"CREATE FUNCTION length AS '$className'")
 
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-    addFunction(Identifier.of(Array.empty, "length"), new JavaStrLen(new JavaStrLenNoImpl))
-    checkAnswer(sql("SELECT length('abc')"), Row(3))
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+      addFunction(Identifier.of(Array.empty, "length"), new JavaStrLen(new JavaStrLenNoImpl))
+      checkAnswer(sql("SELECT length('abc')"), Row(3))
+    }
   }
 
   test("view should use captured catalog and namespace for function lookup") {
     val viewName = "my_view"
     withView(viewName) {
-      spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-      catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-      addFunction(Identifier.of(Array("ns"), "my_avg"), IntegralAverage)
-      sql("USE ns")
-      sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT my_avg(col1) FROM values (1), (2), (3)")
+      withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+        catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+        addFunction(Identifier.of(Array("ns"), "my_avg"), IntegralAverage)
+        sql("USE ns")
+        sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT my_avg(col1) FROM values (1), (2), (3)")
+      }
 
       // change default catalog and namespace and add a function with the same name but with no
       // implementation
-      spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat2")
-      catalog("testcat2").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns2"), emptyProps)
-      addFunction(Identifier.of(Array("ns2"), "my_avg"), NoImplAverage)
-      sql("USE ns2")
-      checkAnswer(sql(s"SELECT * FROM $viewName"), Row(2.0) :: Nil)
+      withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat2") {
+        catalog("testcat2").asInstanceOf[SupportsNamespaces]
+          .createNamespace(Array("ns2"), emptyProps)
+        addFunction(Identifier.of(Array("ns2"), "my_avg"), NoImplAverage)
+        sql("USE ns2")
+        checkAnswer(sql(s"SELECT * FROM $viewName"), Row(2.0) :: Nil)
+      }
     }
   }
 
