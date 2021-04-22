@@ -52,6 +52,8 @@ class AdaptiveQueryExecSuite
 
   import testImplicits._
 
+  override protected def sparkConf = super.sparkConf.set("spark.io.compression.codec", "lz4")
+
   setupTestData()
 
   private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
