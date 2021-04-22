@@ -23,9 +23,8 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
 from pyspark.pandas.utils import name_like_string
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class ReshapeTest(PandasOnSparkTestCase):
