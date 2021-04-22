@@ -1971,14 +1971,20 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
           }
           f
-        case f @ UnresolvedFunction(AsFunctionIdentifier(name), _, _, _, _)
-          if externalFunctionNameSet.contains(normalizeFuncName(name)) => f
-        case f @ UnresolvedFunction(AsFunctionIdentifier(name), _, _, _, _)
-          if v1SessionCatalog.isRegisteredFunction(name) => f
-        case f @ UnresolvedFunction(AsFunctionIdentifier(name), _, _, _, _)
-          if v1SessionCatalog.isPersistentFunction(name) =>
-          externalFunctionNameSet.add(normalizeFuncName(name))
+        case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _)
+          if externalFunctionNameSet.contains(normalizeFuncName(ident)) => f
+        case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _)
+          if v1SessionCatalog.isRegisteredFunction(ident) => f
+        case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _)
+          if v1SessionCatalog.isPersistentFunction(ident) =>
+          externalFunctionNameSet.add(normalizeFuncName(ident))
           f
+        case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _) =>
+          withPosition(f) {
+            throw new NoSuchFunctionException(
+              ident.database.getOrElse(v1SessionCatalog.getCurrentDatabase),
+              ident.funcName)
+          }
         case f: UnresolvedFunction =>
           withPosition(f) {
             throw new NoSuchFunctionException(f.nameParts.asIdentifier)
