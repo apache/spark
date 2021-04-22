@@ -623,7 +623,7 @@ object Decimal {
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
       if (calculatePrecision(bigDecimal) > DecimalType.MAX_PRECISION) {
-        throw QueryExecutionErrors.outRangeOfDecimalTypeError(str)
+        throw QueryExecutionErrors.outOfDecimalTypeRangeError(str)
       } else {
         Decimal(bigDecimal)
       }

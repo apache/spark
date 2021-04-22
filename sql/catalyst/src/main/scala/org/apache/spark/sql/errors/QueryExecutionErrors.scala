@@ -305,7 +305,7 @@ object QueryExecutionErrors {
     new IllegalStateException("table stats must be specified.")
   }
 
-  def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
+  def unaryMinusCauseOverflowError(originValue: String): ArithmeticException = {
     new ArithmeticException(s"- $originValue caused overflow.")
   }
 
@@ -783,7 +783,7 @@ object QueryExecutionErrors {
       s"Decimal precision $precision exceeds max precision $maxPrecision")
   }
 
-  def outRangeOfDecimalTypeError(str: UTF8String): Throwable = {
+  def outOfDecimalTypeRangeError(str: UTF8String): Throwable = {
     new ArithmeticException(s"out of decimal type range: $str")
   }
 
