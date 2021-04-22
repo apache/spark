@@ -21,8 +21,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 object SchemaPruning {
-
-  val sqlConf = SQLConf.get
   /**
    * Filters the schema by the requested fields. For example, if the schema is struct<a:int, b:int>,
    * and given requested field are "a", the field "b" is pruned in the returned schema.
@@ -31,7 +29,7 @@ object SchemaPruning {
   def pruneDataSchema(
       dataSchema: StructType,
       requestedRootFields: Seq[RootField]): StructType = {
-    val resolver = sqlConf.resolver
+    val resolver = SQLConf.get.resolver
     // Merge the requested root fields into a single schema. Note the ordering of the fields
     // in the resulting schema may differ from their ordering in the logical relation's
     // original schema
@@ -65,7 +63,7 @@ object SchemaPruning {
           sortLeftFieldsByRight(leftValueType, rightValueType),
           containsNull)
       case (leftStruct: StructType, rightStruct: StructType) =>
-        val resolver = sqlConf.resolver
+        val resolver = SQLConf.get.resolver
         val filteredRightFieldNames = rightStruct.fieldNames
           .filter(name => leftStruct.fieldNames.exists(resolver(_, name)))
         val sortedLeftFields = filteredRightFieldNames.map { fieldName =>
