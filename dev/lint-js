@@ -37,6 +37,8 @@ if ! type "npx" > /dev/null; then
   exit 1
 fi
 
+cd $SCRIPT_DIR
+
 if ! npm ls eslint > /dev/null; then
   npm install eslint
 fi
