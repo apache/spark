@@ -2235,7 +2235,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         kmidx = ps.from_pandas(pmidx)
 
         self.assert_eq(kidx.tolist(), pidx.tolist())
-        self.assert_eq(kidx.tolist(), pidx.tolist())
+        self.assert_eq(kmidx.tolist(), pmidx.tolist())
 
     def test_index_ops(self):
         pidx = pd.Index([1, 2, 3, 4, 5])
