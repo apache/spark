@@ -986,7 +986,7 @@ object CombineConcats extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
     case concat: Concat if hasNestedConcats(concat) =>
       flattenConcats(concat)
   }
