@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.DataType
 
-case class Try(child: Expression) extends UnaryExpression {
+private[catalyst] case class TryEval(child: Expression) extends UnaryExpression {
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     ev.copy(code = code"""

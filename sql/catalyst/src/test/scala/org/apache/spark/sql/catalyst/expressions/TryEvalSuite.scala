@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 
-class TrySuite extends SparkFunSuite with ExpressionEvalHelper {
+class TryEvalSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("try_add") {
     Seq(
       (1, 1, 2),
       (Int.MaxValue, 1, null),
       (Int.MinValue, -1, null)
     ).foreach { case (a, b, expected) =>
-      checkEvaluation(Try(Add(Literal(a), Literal(b)).asAnsi), expected)
+      checkEvaluation(TryEval(Add(Literal(a), Literal(b)).asAnsi), expected)
     }
   }
 
@@ -37,7 +37,7 @@ class TrySuite extends SparkFunSuite with ExpressionEvalHelper {
       (Int.MaxValue, -1, null),
       (Int.MinValue, 1, null)
     ).foreach { case (a, b, expected) =>
-      checkEvaluation(Try(Subtract(Literal(a), Literal(b)).asAnsi), expected)
+      checkEvaluation(TryEval(Subtract(Literal(a), Literal(b)).asAnsi), expected)
     }
   }
 
@@ -47,7 +47,7 @@ class TrySuite extends SparkFunSuite with ExpressionEvalHelper {
       (Int.MaxValue, 2, null),
       (Int.MinValue, 2, null)
     ).foreach { case (a, b, expected) =>
-      checkEvaluation(Try(Multiply(Literal(a), Literal(b)).asAnsi), expected)
+      checkEvaluation(TryEval(Multiply(Literal(a), Literal(b)).asAnsi), expected)
     }
   }
 
@@ -57,7 +57,7 @@ class TrySuite extends SparkFunSuite with ExpressionEvalHelper {
       (1.0, 0.0, null),
       (-1.0, 0.0, null)
     ).foreach { case (a, b, expected) =>
-      checkEvaluation(Try(Divide(Literal(a), Literal(b)).asAnsi), expected)
+      checkEvaluation(TryEval(Divide(Literal(a), Literal(b)).asAnsi), expected)
     }
   }
 
@@ -67,7 +67,7 @@ class TrySuite extends SparkFunSuite with ExpressionEvalHelper {
       (1L, 0L, null),
       (-1L, 0L, null)
     ).foreach { case (a, b, expected) =>
-      checkEvaluation(Try(IntegralDivide(Literal(a), Literal(b)).asAnsi), expected)
+      checkEvaluation(TryEval(IntegralDivide(Literal(a), Literal(b)).asAnsi), expected)
     }
   }
 }

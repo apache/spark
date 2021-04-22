@@ -713,7 +713,7 @@ object FunctionRegistry {
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
       expr match {
         case a: AsAnsi =>
-          Try(a.asAnsi)
+          TryEval(a.asAnsi)
 
         case _ =>
           throw new UnsupportedOperationException(
