@@ -162,7 +162,10 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    */
   def removeOutputsOnHost(host: String): Unit = withWriteLock {
     logDebug(s"Removing outputs for host ${host}")
-    removeOutputsByFilter(x => x.asInstanceOf[HostLocation].host == host)
+    removeOutputsByFilter { x =>
+      assert(x.isInstanceOf[HostLocation], s"Required HostLocation, but got $x")
+      x.asInstanceOf[HostLocation].host == host
+    }
   }
 
   /**
@@ -172,7 +175,10 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    */
   def removeOutputsOnExecutor(execId: String): Unit = withWriteLock {
     logDebug(s"Removing outputs for execId ${execId}")
-    removeOutputsByFilter(x => x.asInstanceOf[ExecutorLocation].executorId == execId)
+    removeOutputsByFilter { x =>
+      assert(x.isInstanceOf[ExecutorLocation], s"Required ExecutorLocation, but got $x")
+      x.asInstanceOf[ExecutorLocation].executorId == execId
+    }
   }
 
   /**
