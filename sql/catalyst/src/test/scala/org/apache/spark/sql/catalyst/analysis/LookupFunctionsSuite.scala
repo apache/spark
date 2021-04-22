@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, 
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
 class LookupFunctionsSuite extends PlanTest {
 
@@ -49,7 +50,7 @@ class LookupFunctionsSuite extends PlanTest {
 
     assert(externalCatalog.getFunctionExistsCalledTimes == 1)
     assert(analyzer.LookupFunctions.normalizeFuncName
-      (unresolvedPersistentFunc.name).database == Some("default"))
+      (unresolvedPersistentFunc.nameParts.asFunctionIdentifier).database == Some("default"))
   }
 
   test("SPARK-23486: the functionExists for the Registered function check") {
@@ -72,7 +73,7 @@ class LookupFunctionsSuite extends PlanTest {
 
     assert(customerFunctionReg.getIsRegisteredFunctionCalledTimes == 2)
     assert(analyzer.LookupFunctions.normalizeFuncName
-      (unresolvedRegisteredFunc.name).database == Some("default"))
+      (unresolvedRegisteredFunc.nameParts.asFunctionIdentifier).database == Some("default"))
   }
 }
 

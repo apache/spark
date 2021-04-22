@@ -1573,8 +1573,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           // results and confuse users if there is any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
           if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              f1.name.database.isEmpty &&
-              f1.name.funcName == "count" &&
+              f1.multipartIdentifier.length == 1 &&
+              f1.multipartIdentifier.head == "count" &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
               case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
@@ -1959,6 +1959,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
   object LookupFunctions extends Rule[LogicalPlan] {
+    import CatalogV2Implicits._
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
       plan.resolveExpressions {
@@ -1970,17 +1971,17 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
           }
           f
-        case f: UnresolvedFunction
-          if externalFunctionNameSet.contains(normalizeFuncName(f.name)) => f
-        case f: UnresolvedFunction if v1SessionCatalog.isRegisteredFunction(f.name) => f
-        case f: UnresolvedFunction if v1SessionCatalog.isPersistentFunction(f.name) =>
-          externalFunctionNameSet.add(normalizeFuncName(f.name))
+        case f @ UnresolvedFunction(AsFunctionIdentifier(name), _, _, _, _)
+          if externalFunctionNameSet.contains(normalizeFuncName(name)) => f
+        case f @ UnresolvedFunction(AsFunctionIdentifier(name), _, _, _, _)
+          if v1SessionCatalog.isRegisteredFunction(name) => f
+        case f @ UnresolvedFunction(AsFunctionIdentifier(name), _, _, _, _)
+          if v1SessionCatalog.isPersistentFunction(name) =>
+          externalFunctionNameSet.add(normalizeFuncName(name))
           f
         case f: UnresolvedFunction =>
           withPosition(f) {
-            throw new NoSuchFunctionException(
-              f.name.database.getOrElse(v1SessionCatalog.getCurrentDatabase),
-              f.name.funcName)
+            throw new NoSuchFunctionException(f.multipartIdentifier.asIdentifier)
           }
       }
     }

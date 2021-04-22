@@ -297,8 +297,6 @@ case class UnresolvedFunction(
       copy(arguments = newChildren)
     }
   }
-
-  def name: FunctionIdentifier = multipartIdentifier.asFunctionIdentifier
 }
 
 object UnresolvedFunction {
