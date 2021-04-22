@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AND_OR, BINARY_ARITHMETIC, CASE_WHEN, CAST, CONCAT, COUNT, FILTER, IF, IN, LIKE_FAMLIY, LITERAL, NOT, NULL_CHECK, NULL_LITERAL, UNARY_POSITIVE, UPPER_OR_LOWER}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
