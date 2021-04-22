@@ -620,7 +620,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertEqual(ps.Series(range(100)).nunique(approx=True), 103)
         self.assertEqual(ps.Series(range(100)).nunique(approx=True, rsd=0.01), 100)
 
-    def _test_value_counts(self):
+    def test_value_counts(self):
         # this is also containing test for Index & MultiIndex
         pser = pd.Series(
             [1, 2, 1, 3, 3, np.nan, 1, 4, 2, np.nan, 3, np.nan, 3, 1, 3],
@@ -847,9 +847,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
                 pser.index.value_counts(ascending=True, dropna=False),
                 almost=True,
             )
-
-    def test_value_counts(self):
-        self._test_value_counts()
 
     def test_nsmallest(self):
         sample_lst = [1, 2, 3, 4, np.nan, 6]
