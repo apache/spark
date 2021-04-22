@@ -20,6 +20,9 @@ package org.apache.hive.service.cli;
 
 import org.apache.hive.service.rpc.thrift.TOperationType;
 
+import java.util.Map;
+import java.util.HashMap;
+
 /**
  * OperationType.
  *
@@ -38,18 +41,20 @@ public enum OperationType {
 
   private TOperationType tOperationType;
 
+  private static final Map<TOperationType, OperationType> EXISTS_OPERATIONS = new HashMap<>();
+
+  static {
+    for (OperationType opType : values()) {
+      EXISTS_OPERATIONS.put(opType.tOperationType, opType);
+    }
+  }
+
   OperationType(TOperationType tOpType) {
     this.tOperationType = tOpType;
   }
 
   public static OperationType getOperationType(TOperationType tOperationType) {
-    // TODO: replace this with a Map?
-    for (OperationType opType : values()) {
-      if (tOperationType.equals(opType.tOperationType)) {
-        return opType;
-      }
-    }
-    return OperationType.UNKNOWN_OPERATION;
+    return EXISTS_OPERATIONS.getOrDefault(tOperationType, OperationType.UNKNOWN_OPERATION);
   }
 
   public TOperationType toTOperationType() {
