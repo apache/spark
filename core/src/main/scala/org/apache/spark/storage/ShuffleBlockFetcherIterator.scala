@@ -304,7 +304,7 @@ final class ShuffleBlockFetcherIterator(
       // for different locations in a consistent way as some location
       // implementations may not have executor ids.
       if (Seq(blockManager.blockManagerId.executorId, fallback)
-        .contains(address.asInstanceOf[BlockManagerId].executorId)) {
+          .contains(address.asInstanceOf[BlockManagerId].executorId)) {
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
