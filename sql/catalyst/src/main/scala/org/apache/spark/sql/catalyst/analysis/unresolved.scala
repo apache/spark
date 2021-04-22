@@ -269,7 +269,7 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
 }
 
 case class UnresolvedFunction(
-    multipartIdentifier: Seq[String],
+    nameParts: Seq[String],
     arguments: Seq[Expression],
     isDistinct: Boolean,
     filter: Option[Expression] = None,
@@ -283,10 +283,10 @@ case class UnresolvedFunction(
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 
-  override def prettyName: String = multipartIdentifier.quoted
+  override def prettyName: String = nameParts.quoted
   override def toString: String = {
     val distinct = if (isDistinct) "distinct " else ""
-    s"'${multipartIdentifier.quoted}($distinct${children.mkString(", ")})"
+    s"'${nameParts.quoted}($distinct${children.mkString(", ")})"
   }
 
   override protected def withNewChildrenInternal(

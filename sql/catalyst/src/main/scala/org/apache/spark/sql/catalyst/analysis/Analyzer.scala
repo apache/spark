@@ -1573,8 +1573,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           // results and confuse users if there is any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
           if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              f1.multipartIdentifier.length == 1 &&
-              f1.multipartIdentifier.head == "count" &&
+              f1.nameParts.length == 1 &&
+              f1.nameParts.head == "count" &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
               case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
@@ -1981,7 +1981,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           f
         case f: UnresolvedFunction =>
           withPosition(f) {
-            throw new NoSuchFunctionException(f.multipartIdentifier.asIdentifier)
+            throw new NoSuchFunctionException(f.nameParts.asIdentifier)
           }
       }
     }
