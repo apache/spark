@@ -621,7 +621,7 @@ $(document).ready(function () {
                     "paging": true,
                     "info": true,
                     "processing": true,
-                    "lengthMenu": [[20, 40, 60, 100, totalTasksToShow], [20, 40, 60, 100, "All"]],
+                    "lengthMenu": [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
                     "orderMulti": false,
                     "bAutoWidth": false,
                     "ajax": {
@@ -637,6 +637,9 @@ $(document).ready(function () {
                             data.numTasks = totalTasksToShow;
                             data.columnIndexToSort = columnIndexToSort;
                             data.columnNameToSort = columnNameToSort;
+                            if (data.length === -1) {
+                                data.length = totalTasksToShow;
+                            }
                         },
                         "dataSrc": function (jsons) {
                             var jsonStr = JSON.stringify(jsons);
