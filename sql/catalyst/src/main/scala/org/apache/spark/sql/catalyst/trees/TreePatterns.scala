@@ -28,6 +28,7 @@ object TreePattern extends Enumeration  {
   val BINARY_ARITHMETIC: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
+  val CONCAT: Value = Value
   val COUNT: Value = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
   val IF: Value = Value

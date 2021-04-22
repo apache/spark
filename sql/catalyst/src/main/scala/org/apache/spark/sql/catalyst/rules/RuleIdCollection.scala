@@ -46,6 +46,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowOrder" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
@@ -61,7 +62,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceNullWithFalseInPredicate" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions" ::
-      "org.apache.spark.sql.catalyst.optimizer.SimplifyCasts" :: Nil
+      "org.apache.spark.sql.catalyst.optimizer.SimplifyCasts" ::
+      "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionals" :: Nil
   }
 
   // Maps rule names to ids. Rule ids are continuous natural numbers starting from 0.

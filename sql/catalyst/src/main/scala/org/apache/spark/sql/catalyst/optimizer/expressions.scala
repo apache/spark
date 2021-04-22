@@ -28,9 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AND_OR, BINARY_ARITHMETIC, CASE_WHEN, CAST,
-  COUNT, FILTER, IF, IN, LIKE_FAMLIY, LITERAL, NOT, NULL_CHECK, NULL_LITERAL, UNARY_POSITIVE,
-  UPPER_OR_LOWER}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AND_OR, BINARY_ARITHMETIC, CASE_WHEN, CAST, CONCAT, COUNT, FILTER, IF, IN, LIKE_FAMLIY, LITERAL, NOT, NULL_CHECK, NULL_LITERAL, UNARY_POSITIVE, UPPER_OR_LOWER}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -502,7 +500,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(IF, CASE_WHEN), ruleId) {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
@@ -1001,7 +1000,8 @@ object CombineConcats extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(CONCAT), ruleId) {
     case concat: Concat if hasNestedConcats(concat) =>
       flattenConcats(concat)
   }
