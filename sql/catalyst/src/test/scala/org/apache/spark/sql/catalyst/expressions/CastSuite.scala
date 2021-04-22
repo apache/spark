@@ -1806,7 +1806,6 @@ class CastSuite extends CastSuiteBase {
       Period.ofMonths(Int.MinValue + 1) -> -2147483647,
       Period.ofMonths(Int.MinValue) -> null).foreach { case (period, result) =>
       val interval = cast(Literal.create(period, YearMonthIntervalType), StringType)
-      println(interval.eval())
       checkEvaluation(cast(interval, YearMonthIntervalType), result)
     }
   }
