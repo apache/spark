@@ -37,8 +37,18 @@ import org.apache.spark.sql.types._
  */
 private[sql] class JacksonGenerator(
     dataType: DataType,
-    writer: Writer,
+    generator: JsonGenerator,
     options: JSONOptions) {
+
+  def this(dataType: DataType,
+           writer: Writer,
+           options: JSONOptions) {
+    this(
+      dataType,
+      options.buildJsonFactory().createGenerator(writer).setRootValueSeparator(null),
+      options)
+  }
+
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
@@ -73,7 +83,6 @@ private[sql] class JacksonGenerator(
   }
 
   private val gen = {
-    val generator = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
     if (options.pretty) generator.setPrettyPrinter(new DefaultPrettyPrinter("")) else generator
   }
 

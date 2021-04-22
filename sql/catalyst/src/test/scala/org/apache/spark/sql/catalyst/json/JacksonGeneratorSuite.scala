@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.CharArrayWriter
+import java.io.{ByteArrayOutputStream, CharArrayWriter}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -137,4 +137,14 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     }
   }
 
+  test("using JsonGenerator writing to OutputStream") {
+    val dataType = StructType(StructField("a", IntegerType) :: Nil)
+    val input = InternalRow(1)
+    val writer = new ByteArrayOutputStream()
+    val gen = new JacksonGenerator(
+      dataType, option.buildJsonFactory().createGenerator(writer), option)
+    gen.write(input)
+    gen.flush()
+    assert(writer.toString === """{"a":1}""")
+  }
 }
