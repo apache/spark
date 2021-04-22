@@ -1786,6 +1786,27 @@ class CastSuite extends CastSuiteBase {
       YearMonthIntervalType), 121)
     checkEvaluation(cast(Literal.create("10-1"), YearMonthIntervalType), 121)
     checkEvaluation(cast(Literal.create("null"), YearMonthIntervalType), null)
+
+    Seq("INTERVAL '0-0' YEAR TO MONTH" -> "INTERVAL '0-0' YEAR TO MONTH",
+      "INTERVAL '10-1' YEAR TO MONTH" -> "INTERVAL '10-1' YEAR TO MONTH",
+      "INTERVAL '-178956970-7' YEAR TO MONTH" -> "INTERVAL '-178956970-7' YEAR TO MONTH",
+      "INTERVAL '-178956970-8' YEAR TO MONTH" -> null,
+      "INTERVAL '178956970-7' YEAR TO MONTH" -> "INTERVAL '178956970-7' YEAR TO MONTH",
+      "INTERVAL '178956970-8' YEAR TO MONTH" -> null)
+      .foreach { case (interval, result) =>
+        checkEvaluation(
+          cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), result)
+      }
+
+    Seq(Period.ofMonths(Byte.MaxValue) -> Byte.MaxValue.toInt,
+      Period.ofMonths(Short.MaxValue) -> Short.MaxValue.toInt,
+      Period.ofMonths(Int.MaxValue) -> Int.MaxValue,
+      Period.ofMonths(Int.MinValue + 1) -> -2147483647,
+      Period.ofMonths(Int.MinValue) -> null).foreach { case (period, result) =>
+      val interval = cast(Literal.create(period, YearMonthIntervalType), StringType)
+      println(interval.eval())
+      checkEvaluation(cast(interval, YearMonthIntervalType), result)
+    }
   }
 }
 
