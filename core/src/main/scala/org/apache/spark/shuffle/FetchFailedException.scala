@@ -18,7 +18,7 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark.{FetchFailed, TaskContext, TaskFailedReason}
-import org.apache.spark.shuffle.api.Location
+import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
 /**
@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  * (or risk triggering any other exceptions).  See SPARK-19276.
  */
 private[spark] class FetchFailedException(
-    bmAddress: Location,
+    bmAddress: BlockManagerId,
     shuffleId: Int,
     mapId: Long,
     mapIndex: Int,
@@ -43,7 +43,7 @@ private[spark] class FetchFailedException(
   extends Exception(message, cause) {
 
   def this(
-      bmAddress: Location,
+      bmAddress: BlockManagerId,
       shuffleId: Int,
       mapTaskId: Long,
       mapIndex: Int,

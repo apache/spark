@@ -772,11 +772,13 @@ final class ShuffleBlockFetcherIterator(
       mapIndex: Int,
       address: Location,
       e: Throwable) = {
+    assert(address.isInstanceOf[BlockManagerId], s"Require BlockManagerId, but got $address")
+    val bmId = address.asInstanceOf[BlockManagerId]
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
-        throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, e)
+        throw new FetchFailedException(bmId, shufId, mapId, mapIndex, reduceId, e)
       case ShuffleBlockBatchId(shuffleId, mapId, startReduceId, _) =>
-        throw new FetchFailedException(address, shuffleId, mapId, mapIndex, startReduceId, e)
+        throw new FetchFailedException(bmId, shuffleId, mapId, mapIndex, startReduceId, e)
       case _ =>
         throw new SparkException(
           "Failed to get block " + blockId + ", which is not a shuffle block", e)

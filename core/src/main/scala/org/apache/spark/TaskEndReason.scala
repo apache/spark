@@ -22,7 +22,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.shuffle.api.Location
+import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, Utils}
 
 // ==============================================================================================
@@ -81,7 +81,7 @@ case object Resubmitted extends TaskFailedReason {
  */
 @DeveloperApi
 case class FetchFailed(
-    bmAddress: Location,  // Note that bmAddress can be null
+    bmAddress: BlockManagerId,  // Note that bmAddress can be null
     shuffleId: Int,
     mapId: Long,
     mapIndex: Int,

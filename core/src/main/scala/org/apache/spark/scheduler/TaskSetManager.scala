@@ -32,7 +32,6 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
-import org.apache.spark.shuffle.api.ExecutorLocation
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
@@ -867,14 +866,8 @@ private[spark] class TaskSetManager(
         isZombie = true
 
         if (fetchFailed.bmAddress != null) {
-          fetchFailed.bmAddress match {
-            case el: ExecutorLocation =>
-              healthTracker.foreach(_.updateExcludedForFetchFailure(el.host(), el.executorId()))
-            case location if healthTracker.isDefined =>
-              logWarning(s"${EXCLUDE_ON_FAILURE_ENABLED.key} is enabled, but the shuffle" +
-                s"storage location $location is not executor-based. Thus, exclusion won't take " +
-                s"effect on shuffle fetch failure.")
-          }
+          healthTracker.foreach(_.updateExcludedForFetchFailure(
+            fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
         }
 
         None
