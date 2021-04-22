@@ -30,12 +30,12 @@ private[ui] class AccumulatorStagePage(parent: AccumulatorsTab, store: AppStatus
   extends WebUIPage(prefix = "stage") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val parameterAccumulatorName = UIUtils.stripXSS(request.getParameter("accumulator_name"))
+    val parameterAccumulatorName = request.getParameter("accumulator_name")
     require(parameterAccumulatorName != null && parameterAccumulatorName.nonEmpty,
       "Missing accumulator name parameter")
-    val parameterAttempt = UIUtils.stripXSS(request.getParameter("attempt"))
+    val parameterAttempt = request.getParameter("attempt")
     require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     val accumulatorName = parameterAccumulatorName
     val attemptId = parameterAttempt.toInt
     val stageId = parameterId.toInt
@@ -54,13 +54,11 @@ private[ui] class AccumulatorStagePage(parent: AccumulatorsTab, store: AppStatus
             <td>{acc._2.update}</td>
           </tr>
         }
-
         val singleAccTable = UIUtils.listingTable(
           accumulableHeaders,
           accumulableRow,
           tempMap
         )
-
         singleAccTable
       } else {
         Nil
@@ -74,11 +72,8 @@ private[ui] class AccumulatorStagePage(parent: AccumulatorsTab, store: AppStatus
 
     taskD.foreach(task => {
       task.accumulatorUpdates.filter(_.name == accumulatorName).map(ac => {
-          tempMap+=(task.taskId ->
-            AccumulatorTaskInfo(
-              task.taskId,
-              task.index,
-              ac.update.get))
+        tempMap+=(task.taskId ->
+          AccumulatorTaskInfo(task.taskId, task.index, ac.update.get))
       })
     })
 

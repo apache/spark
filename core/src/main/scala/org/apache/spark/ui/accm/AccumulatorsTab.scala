@@ -27,4 +27,3 @@ private[ui] class AccumulatorsTab(val parent: SparkUI, val store: AppStatusStore
   attachPage(new AccumulatorPage(this, store))
   attachPage(new AccumulatorStagePage(this, store))
 }
-

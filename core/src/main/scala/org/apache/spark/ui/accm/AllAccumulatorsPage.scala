@@ -24,19 +24,54 @@ import scala.collection.mutable.ListBuffer
 import scala.xml.Node
 
 import org.apache.spark.status._
+import org.apache.spark.status.api.v1.AccumulableInfo
 import org.apache.spark.ui._
 
 /** Page showing table with a list of all accumulators across all finished stages* */
 private[ui] class AllAccumulatorsPage(parent: AccumulatorsTab, store: AppStatusStore)
   extends WebUIPage("") {
 
+  private var tempMap = SortedMap[String, ListBuffer[AccumulatorInfo]]()
+  // SortedMap[accumulator.name ->
+  // ListBuffer[
+  // AccumulatorInfoDetails(
+  // stageId,
+  // accumulator.name,
+  // accumulator.value,
+  // stageLink,
+  // accumulatorNameLink)]]
+
+  private[ui] def displayMap(): SortedMap[String, ListBuffer[AccumulatorInfo]] = tempMap
+
+  private[ui] def addStageAcc(acc: AccumulableInfo,
+                              basePathUri: String,
+                              stageId: Int,
+                              attemptId: Int): Unit = {
+    val accNameLinkUri =
+      s"$basePathUri/accumulators/accumulator/?accumulator_name=" +
+        s"${acc.name}&attempt=${attemptId}"
+
+    val stageLinkUri =
+      s"$basePathUri/accumulators/stage/?accumulator_name=" +
+        s"${acc.name}&id=${stageId}&attempt=${attemptId}"
+
+    def addAccToMap(): ListBuffer[AccumulatorInfo] = {
+      tempMap += (acc.name -> new ListBuffer[AccumulatorInfo]())
+      tempMap(acc.name)
+    }
+    val newList = tempMap.getOrElse(acc.name, addAccToMap()):+
+      AccumulatorInfo(stageId, acc.name, acc.value, stageLinkUri, accNameLinkUri)
+    tempMap+=(acc.name -> newList)
+  }
+
   def render(request: HttpServletRequest): Seq[Node] = {
     val allStages = parent.store.stageList(null)
     val basePathUri = UIUtils.prependBaseUri(request, parent.basePath)
     val accumulatorHeader = s"Accumulators across all Stages"
+    if (tempMap.size > 0) tempMap = tempMap.empty
 
-    def generateAccumulatorsTable(
-      tempMap: SortedMap[String, ListBuffer[AccumulatorInfo]]): Seq[Node] = {
+    def generateAccumulatorsTable(tempMap: SortedMap[String, ListBuffer[AccumulatorInfo]]):
+    Seq[Node] = {
       if (tempMap.nonEmpty) {
         val accumulableHeaders: Seq[String] = Seq("Accumulable", "Stage", "Value")
         def accumulableRow(acc: (String, ListBuffer[AccumulatorInfo])): Seq[Node] = {
@@ -57,25 +92,14 @@ private[ui] class AllAccumulatorsPage(parent: AccumulatorsTab, store: AppStatusS
           accumulableRow,
           tempMap
         )
-
         accumulableTable.toSeq
       } else {
         Nil
       }
     }
 
-    var tempMap = SortedMap[String, ListBuffer[AccumulatorInfo]]()
-      // SortedMap[accumulator.name ->
-      // ListBuffer[
-      // AccumulatorInfoDetails(
-       // stage,
-       // accumulator.name,
-       // accumulator.value,
-       // stageLink,
-       // accumulatorNameLink)]]
-
-    allStages.map( stage => {
-      val stageData = parent.store
+    allStages.foreach(stage => {
+      parent.store
         .asOption(parent.store.stageAttempt(stage.stageId, stage.attemptId, details = false))
         .getOrElse {
           val content =
@@ -83,28 +107,12 @@ private[ui] class AllAccumulatorsPage(parent: AccumulatorsTab, store: AppStatusS
             </div>
           return UIUtils.headerSparkPage(request, "", content, parent)
         }
-      val sd = stageData.accumulatorUpdates.toSeq
+      val sd = stage.accumulatorUpdates.toSeq
 
-      sd.map(acc => {
-        val accNameLinkUri =
-          s"$basePathUri/accumulators/accumulator/?accumulator_name=" +
-            s"${acc.name}&attempt=${stage.attemptId}"
-
-        val stageLinkUri =
-          s"$basePathUri/accumulators/stage/?accumulator_name=" +
-            s"${acc.name}&id=${stageData.stageId}&attempt=${stageData.attemptId}"
-
-        def addAccToMap(): ListBuffer[AccumulatorInfo] = {
-          tempMap += (acc.name -> new ListBuffer[AccumulatorInfo]())
-          tempMap(acc.name)
-        }
-
-        val newList = tempMap.getOrElse(acc.name, addAccToMap()):+
-          AccumulatorInfo(stage.stageId, acc.name, acc.value, stageLinkUri, accNameLinkUri)
-        tempMap+=(acc.name -> newList)
+      sd.foreach(acc => {
+        addStageAcc(acc, basePathUri, stage.stageId, stage.attemptId)
       })
     })
-
     val accumulatorsTable = generateAccumulatorsTable(tempMap)
 
     val content =
@@ -112,14 +120,14 @@ private[ui] class AllAccumulatorsPage(parent: AccumulatorsTab, store: AppStatusS
         <h4>Accumulators</h4>
         {accumulatorsTable}
       </div>
-
     UIUtils.headerSparkPage(request, accumulatorHeader, content, parent, showVisualization = true)
   }
 
-  case class AccumulatorInfo(
-     stageId: Int,
-     name: String,
-     value: String,
-     stageLink: String,
-     accNameLink: String)
+
 }
+case class AccumulatorInfo(
+      stageId: Int,
+      name: String,
+      value: String,
+      stageLink: String,
+      accNameLink: String)

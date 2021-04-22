@@ -25,24 +25,21 @@ import scala.xml.Node
 import org.apache.spark.status._
 import org.apache.spark.ui._
 
-
 /** Page showing table with single accumulator across all stages and tasks* */
 private[ui] class AccumulatorPage (parent: AccumulatorsTab, store: AppStatusStore)
   extends WebUIPage(prefix = "accumulator") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val parameterAccumulatorName = UIUtils.stripXSS(request.getParameter("accumulator_name"))
+    val parameterAccumulatorName = request.getParameter("accumulator_name")
     require(parameterAccumulatorName != null && parameterAccumulatorName.nonEmpty,
       "Missing accumulator name parameter")
-    val parameterAttempt = UIUtils.stripXSS(request.getParameter("attempt"))
+    val parameterAttempt = request.getParameter("attempt")
     require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
     val accumulatorName = parameterAccumulatorName
     val attemptId = parameterAttempt.toInt
 
     val accumulatorHeader = s"Details for all Stages (Attempt ${attemptId})"
-
     val allStages = parent.store.stageList(null)
-    val basePathUri = UIUtils.prependBaseUri(request, parent.basePath)
 
     def createSingleAccumulatorTable(tempMap: SortedMap[Long, NamedAccumulatorInfo]):
     Seq[Node] = {
@@ -57,39 +54,40 @@ private[ui] class AccumulatorPage (parent: AccumulatorsTab, store: AppStatusStor
             <td>{acc._2.value}</td>
           </tr>
         }
-
         val singleAccTable = UIUtils.listingTable(
           accumulableHeaders,
           accumulableRow,
           tempMap
         )
-
         singleAccTable
       } else {
-         Nil
+        Nil
       }
     }
-
     def createStagesAccumulatorTable(tempStageMap: SortedMap[Int, String]): Seq[Node] = {
-      val accumulableStageHeaders: Seq[String] = Seq("Stage", "Value")
+      if (tempStageMap.nonEmpty) {
+        val accumulableStageHeaders: Seq[String] = Seq("Stage", "Value")
 
-      def accumulableStagesRow(acc: (Int, String)): Seq[Node] = {
+        def accumulableStagesRow(acc: (Int, String)): Seq[Node] = {
           <tr>
-            <td>{acc._1}</td>
-            <td>{acc._2}</td>
+            <td>
+              {acc._1}
+            </td>
+            <td>
+              {acc._2}
+            </td>
           </tr>
+        }
+        val singleAccTable = UIUtils.listingTable(
+          accumulableStageHeaders,
+          accumulableStagesRow,
+          tempStageMap
+        )
+        singleAccTable
+      } else {
+        Nil
       }
-
-      val singleAccTable = UIUtils.listingTable(
-        accumulableStageHeaders,
-        accumulableStagesRow,
-        tempStageMap
-      )
-
-      val maybeTable : Seq[Node] = if (tempStageMap.nonEmpty) singleAccTable else Nil
-      maybeTable
     }
-
     var tempStageMap = SortedMap[Int, String]()// SortedMap[StageId -> accumulator.update]
     var tempMapStagesAndTasks = SortedMap[Long, NamedAccumulatorInfo]()
     // SortedMap[TaskId ->
@@ -99,8 +97,6 @@ private[ui] class AccumulatorPage (parent: AccumulatorsTab, store: AppStatusStor
       val taskD = store.taskList(stage.stageId, stage.attemptId, Int.MaxValue)
       taskD.foreach(task => {
         task.accumulatorUpdates.filter(_.name == accumulatorName).foreach(ac => {
-          val stageLinkUri =
-            s"$basePathUri/accumulators/stage/?id=${stage.stageId}&attempt=${stage.attemptId}"
           tempMapStagesAndTasks+=(
             task.taskId ->
               NamedAccumulatorInfo(
@@ -110,9 +106,7 @@ private[ui] class AccumulatorPage (parent: AccumulatorsTab, store: AppStatusStor
                 ac.update.get))
         })
       })
-      val stageData = parent.store.asOption(
-        parent.store.stageAttempt(stage.stageId, stage.attemptId, details = false)).get
-      val targetAcc = stageData.accumulatorUpdates.filter(_.name == accumulatorName)
+      val targetAcc = stage.accumulatorUpdates.filter(_.name == accumulatorName)
       if (targetAcc.nonEmpty) tempStageMap+=(stage.stageId -> targetAcc.head.value)
     })
 
@@ -134,8 +128,8 @@ private[ui] class AccumulatorPage (parent: AccumulatorsTab, store: AppStatusStor
   }
 
   case class NamedAccumulatorInfo(
-        stage: Int,
-        taskId: Long,
-        taskIndex: Long,
-        value: String)
+      stage: Int,
+      taskId: Long,
+      taskIndex: Long,
+      value: String)
 }
