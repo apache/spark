@@ -17,7 +17,7 @@ export R_HOME=/home/username/R
 
 #### Build Spark
 
-Build Spark with [Maven](https://spark.apache.org/docs/latest/building-spark.html#buildmvn) or [SBT](http://spark.apache.org/docs/latest/building-spark.html#building-with-sbt), and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
+Build Spark with [Maven](https://spark.apache.org/docs/latest/building-spark.html#buildmvn) or [SBT](https://spark.apache.org/docs/latest/building-spark.html#building-with-sbt), and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
 
 ```bash
 # Maven
