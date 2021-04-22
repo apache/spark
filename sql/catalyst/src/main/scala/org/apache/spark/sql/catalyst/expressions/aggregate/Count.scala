@@ -89,6 +89,9 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
       )
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Count =
+    copy(children = newChildren)
 }
 
 object Count {

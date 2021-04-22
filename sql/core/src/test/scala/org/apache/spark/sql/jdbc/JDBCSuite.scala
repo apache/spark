@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
-import java.util.{Calendar, GregorianCalendar, Properties}
+import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
 
@@ -31,7 +31,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
@@ -431,6 +431,36 @@ class JDBCSuite extends QueryTest
     assert(ids(0) === 1)
     assert(ids(1) === 2)
     assert(ids(2) === 3)
+  }
+
+  test("SPARK-34843: columnPartition should generate the correct stride size" +
+    " and also realign the first partition for better distribution") {
+    val schema = StructType(Seq(
+      StructField("PartitionColumn", DateType)
+    ))
+
+    val numPartitions = 1000
+    val partitionConfig = Map(
+      "lowerBound" -> "1930-01-01",
+      "upperBound" -> "2020-12-31",
+      "numPartitions" -> numPartitions.toString,
+      "partitionColumn" -> "PartitionColumn"
+    )
+
+    val partitions = JDBCRelation.columnPartition(
+      schema,
+      analysis.caseInsensitiveResolution,
+      TimeZone.getDefault.toZoneId.toString,
+      new JDBCOptions(url, "table", partitionConfig)
+    )
+
+    val firstPredicate = partitions.head.asInstanceOf[JDBCPartition].whereClause
+    val lastPredicate = partitions(numPartitions - 1).asInstanceOf[JDBCPartition].whereClause
+
+    // 152 days (exclusive) to lower bound
+    assert(firstPredicate == """"PartitionColumn" < '1930-06-02' or "PartitionColumn" is null""")
+    // 152 days (inclusive) to upper bound
+    assert(lastPredicate == """"PartitionColumn" >= '2020-08-02'""")
   }
 
   test("overflow of partition bound difference does not give negative stride") {
@@ -1610,9 +1640,9 @@ class JDBCSuite extends QueryTest
       case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"D" < '2018-07-10' or "D" is null""",
-          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
-          """"D" >= '2018-07-14'"""))
+          """"D" < '2018-07-11' or "D" is null""",
+          """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
+          """"D" >= '2018-07-15'"""))
     }
     checkAnswer(df1, expectedResult)
 

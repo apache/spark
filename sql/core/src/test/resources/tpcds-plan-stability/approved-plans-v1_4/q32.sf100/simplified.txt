@@ -18,7 +18,7 @@ CollectLimit
                                   InputAdapter
                                     Scan parquet default.item [i_item_sk,i_manufact_id]
                       Filter [(1.3 * avg(cs_ext_discount_amt))]
-                        HashAggregate [cs_item_sk,sum,count] [avg(UnscaledValue(cs_ext_discount_amt)),(1.3 * avg(cs_ext_discount_amt)),cs_item_sk,sum,count]
+                        HashAggregate [cs_item_sk,sum,count] [avg(UnscaledValue(cs_ext_discount_amt)),(1.3 * avg(cs_ext_discount_amt)),sum,count]
                           InputAdapter
                             Exchange [cs_item_sk] #3
                               WholeStageCodegen (3)

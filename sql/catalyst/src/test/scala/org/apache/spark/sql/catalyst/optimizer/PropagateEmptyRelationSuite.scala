@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -148,6 +149,28 @@ class PropagateEmptyRelationSuite extends PlanTest {
       val query = testRelation1
         .where(left)
         .join(testRelation2.where(right), joinType = jt, condition = Some('a.attr === 'b.attr))
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer =
+        answer.getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-28220: Propagate empty relation through Join if condition is FalseLiteral") {
+    val testcases = Seq(
+      (Inner, Some(LocalRelation('a.int, 'b.int))),
+      (Cross, Some(LocalRelation('a.int, 'b.int))),
+      (LeftOuter,
+        Some(Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)),
+      (RightOuter,
+        Some(Project(Seq(Literal(null).cast(IntegerType).as('a), 'b), testRelation2).analyze)),
+      (FullOuter, None),
+      (LeftAnti, Some(testRelation1)),
+      (LeftSemi, Some(LocalRelation('a.int)))
+    )
+
+    testcases.foreach { case (jt, answer) =>
+      val query = testRelation1.join(testRelation2, joinType = jt, condition = Some(FalseLiteral))
       val optimized = Optimize.execute(query.analyze)
       val correctAnswer =
         answer.getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))

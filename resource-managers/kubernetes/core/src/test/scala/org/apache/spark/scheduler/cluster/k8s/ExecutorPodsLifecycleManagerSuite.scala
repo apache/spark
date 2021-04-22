@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.{DoneablePod, Pod}
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
@@ -37,7 +37,7 @@ import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
 class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
-  private var namedExecutorPods: mutable.Map[String, PodResource[Pod, DoneablePod]] = _
+  private var namedExecutorPods: mutable.Map[String, PodResource[Pod]] = _
 
   @Mock
   private var kubernetesClient: KubernetesClient = _
@@ -54,7 +54,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
   before {
     MockitoAnnotations.openMocks(this).close()
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
-    namedExecutorPods = mutable.Map.empty[String, PodResource[Pod, DoneablePod]]
+    namedExecutorPods = mutable.Map.empty[String, PodResource[Pod]]
     when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map.empty[String, Long])
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(any(classOf[String]))).thenAnswer(namedPodsAnswer())
@@ -139,10 +139,10 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
       """.stripMargin
   }
 
-  private def namedPodsAnswer(): Answer[PodResource[Pod, DoneablePod]] =
+  private def namedPodsAnswer(): Answer[PodResource[Pod]] =
     (invocation: InvocationOnMock) => {
       val podName: String = invocation.getArgument(0)
       namedExecutorPods.getOrElseUpdate(
-        podName, mock(classOf[PodResource[Pod, DoneablePod]]))
+        podName, mock(classOf[PodResource[Pod]]))
     }
 }

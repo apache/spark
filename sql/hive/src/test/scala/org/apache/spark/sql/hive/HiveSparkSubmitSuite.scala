@@ -341,6 +341,7 @@ class HiveSparkSubmitSuite
 
   test("SPARK-34772: RebaseDateTime loadRebaseRecords should use Spark classloader " +
     "instead of context") {
+    assume(!SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
     // We need to specify the metastore database location in case of conflict with other hive

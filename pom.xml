@@ -136,9 +136,9 @@
     <kafka.version>2.6.0</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
-    <parquet.version>1.11.1</parquet.version>
+    <parquet.version>1.12.0</parquet.version>
     <orc.version>1.6.7</orc.version>
-    <jetty.version>9.4.37.v20210219</jetty.version>
+    <jetty.version>9.4.39.v20210325</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.9.5</chill.version>
     <ivy.version>2.4.0</ivy.version>
@@ -148,7 +148,7 @@
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
     <codahale.metrics.version>4.1.1</codahale.metrics.version>
-    <avro.version>1.10.1</avro.version>
+    <avro.version>1.10.2</avro.version>
     <aws.kinesis.client.version>1.14.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.844</aws.java.sdk.version>
@@ -169,7 +169,7 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.11.4</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.12.2</fasterxml.jackson.version>
     <snappy.version>1.1.8.2</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.15</commons-codec.version>
@@ -744,7 +744,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.51.Final</version>
+        <version>4.1.63.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -1029,7 +1029,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.2.6</version>
+        <version>42.2.19</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2095,7 +2095,7 @@
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service-rpc</artifactId>
           </exclusion>
-          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.10.1 -->
+          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.12.0 -->
           <exclusion>
             <groupId>org.apache.parquet</groupId>
             <artifactId>parquet-hadoop-bundle</artifactId>

@@ -36,7 +36,7 @@ TakeOrderedAndProject (31)
 Output [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [Or(And(In(i_category, [Books,Electronics,Sports]),In(i_class, [computers,stereo,football])),And(In(i_category, [Men,Jewelry,Women]),In(i_class, [shirts,birdal,dresses]))), IsNotNull(i_item_sk)]
+PushedFilters: [Or(And(In(i_category, [Books                                             ,Electronics                                       ,Sports                                            ]),In(i_class, [computers                                         ,stereo                                            ,football                                          ])),And(In(i_category, [Men                                               ,Jewelry                                           ,Women                                             ]),In(i_class, [shirts                                            ,birdal                                            ,dresses                                           ]))), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string>
 
 (2) ColumnarToRow [codegen id : 4]
@@ -44,7 +44,7 @@ Input [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
 
 (3) Filter [codegen id : 4]
 Input [4]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4]
-Condition : (((i_category#4 IN (Books,Electronics,Sports) AND i_class#3 IN (computers,stereo,football)) OR (i_category#4 IN (Men,Jewelry,Women) AND i_class#3 IN (shirts,birdal,dresses))) AND isnotnull(i_item_sk#1))
+Condition : (((i_category#4 IN (Books                                             ,Electronics                                       ,Sports                                            ) AND i_class#3 IN (computers                                         ,stereo                                            ,football                                          )) OR (i_category#4 IN (Men                                               ,Jewelry                                           ,Women                                             ) AND i_class#3 IN (shirts                                            ,birdal                                            ,dresses                                           ))) AND isnotnull(i_item_sk#1))
 
 (4) Scan parquet default.store_sales
 Output [4]: [ss_item_sk#5, ss_store_sk#6, ss_sales_price#7, ss_sold_date_sk#8]
@@ -164,7 +164,7 @@ Arguments: [avg(_w0#24) windowspecdefinition(i_category#4, i_brand#2, s_store_na
 
 (29) Filter [codegen id : 7]
 Input [9]: [i_category#4, i_class#3, i_brand#2, s_store_name#16, s_company_name#17, d_moy#13, sum_sales#23, _w0#24, avg_monthly_sales#26]
-Condition : ((isnotnull(avg_monthly_sales#26) AND NOT (avg_monthly_sales#26 = 0.000000)) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#23 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#26 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#26 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000))
+Condition : (isnotnull(avg_monthly_sales#26) AND (NOT (avg_monthly_sales#26 = 0.000000) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#23 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#26 as decimal(22,6)))), DecimalType(22,6), true), false)) / promote_precision(cast(avg_monthly_sales#26 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000)))
 
 (30) Project [codegen id : 7]
 Output [8]: [i_category#4, i_class#3, i_brand#2, s_store_name#16, s_company_name#17, d_moy#13, sum_sales#23, avg_monthly_sales#26]

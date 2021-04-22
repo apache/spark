@@ -65,7 +65,7 @@ The system currently supports several cluster managers:
 * [Standalone](spark-standalone.html) -- a simple cluster manager included with Spark that makes it
   easy to set up a cluster.
 * [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
-  and service applications.
+  and service applications. (Deprecated)
 * [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
 * [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
   and management of containerized applications.

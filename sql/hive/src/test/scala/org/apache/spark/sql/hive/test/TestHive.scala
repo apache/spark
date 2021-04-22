@@ -130,11 +130,11 @@ class TestHiveContext(
    * when running in the JVM, i.e. it needs to be false when calling from Python.
    */
   def this(sc: SparkContext, loadTestTables: Boolean = true) = {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
+    this(new TestHiveSparkSession(TestHiveContext.withHiveExternalCatalog(sc), loadTestTables))
   }
 
   def this(sc: SparkContext, hiveClient: HiveClient) = {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc),
+    this(new TestHiveSparkSession(TestHiveContext.withHiveExternalCatalog(sc),
       hiveClient,
       loadTestTables = false))
   }
@@ -647,6 +647,10 @@ private[hive] object TestHiveContext {
     scratchDir
   }
 
+  private def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
+    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+    sc
+  }
 }
 
 private[sql] class TestHiveSessionStateBuilder(

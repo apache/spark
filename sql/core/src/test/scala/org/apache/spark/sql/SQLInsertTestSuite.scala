@@ -157,7 +157,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c2) values(1, 2, 3)"))
-      assert(e1.getMessage === "Found duplicate column(s) in the column list: `c2`")
+      assert(e1.getMessage.contains("Found duplicate column(s) in the column list: `c2`"))
     }
   }
 
@@ -166,7 +166,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)"))
-      assert(e1.getMessage === "Cannot resolve column name c4")
+      assert(e1.getMessage.contains("Cannot resolve column name c4"))
     }
   }
 

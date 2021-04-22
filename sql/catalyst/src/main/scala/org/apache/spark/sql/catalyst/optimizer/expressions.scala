@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreePattern.IN
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -249,8 +250,9 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(IN), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsDownWithPruning(_.containsPattern(IN), ruleId) {
       case In(v, list) if list.isEmpty =>
         // When v is not nullable, the following expression will be optimized
         // to FalseLiteral which is tested in OptimizeInSuite.scala
@@ -593,7 +595,8 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
     case _: BinaryArithmetic => true
     case _: BinaryMathExpression => true
-    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub => true
+    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd => true
     case _: FindInSet | _: RoundBase => true
     case _ => false
   }
@@ -691,7 +694,9 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private def simplifyMultiLike(
       child: Expression, patterns: Seq[UTF8String], multi: MultiLikeBase): Expression = {
     val (remainPatternMap, replacementMap) =
-      patterns.map { p => p -> simplifyLike(child, p.toString)}.partition(_._2.isEmpty)
+      patterns.map { p =>
+        p -> Option(p).flatMap(p => simplifyLike(child, p.toString))
+      }.partition(_._2.isEmpty)
     val remainPatterns = remainPatternMap.map(_._1)
     val replacements = replacementMap.map(_._2.get)
     if (replacements.isEmpty) {

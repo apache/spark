@@ -1519,9 +1519,8 @@ class DDLParserSuite extends AnalysisTest {
       SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
       EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
       Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
-        UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))), Seq())),
-      Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
-        Seq()))))
+        UpdateStarAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))))),
+      Seq(InsertStarAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert")))))))
   }
 
   test("merge into table: columns aliases are not allowed") {

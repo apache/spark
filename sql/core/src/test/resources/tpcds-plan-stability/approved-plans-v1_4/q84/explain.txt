@@ -177,7 +177,7 @@ Output [2]: [sr_cdemo_sk#20, sr_returned_date_sk#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_cdemo_sk)]
-ReadSchema: struct<sr_cdemo_sk:bigint>
+ReadSchema: struct<sr_cdemo_sk:int>
 
 (32) ColumnarToRow
 Input [2]: [sr_cdemo_sk#20, sr_returned_date_sk#21]
@@ -191,7 +191,7 @@ Output [1]: [sr_cdemo_sk#20]
 Input [2]: [sr_cdemo_sk#20, sr_returned_date_sk#21]
 
 (35) BroadcastHashJoin [codegen id : 6]
-Left keys [1]: [cast(cd_demo_sk#10 as bigint)]
+Left keys [1]: [cd_demo_sk#10]
 Right keys [1]: [sr_cdemo_sk#20]
 Join condition: None
 

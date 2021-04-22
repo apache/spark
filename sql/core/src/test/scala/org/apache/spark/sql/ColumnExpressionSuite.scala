@@ -30,6 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2528,7 +2529,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-34761: add/subtract a day-time interval to/from a timestamp") {
+  test("SPARK-34761, SPARK-34903: add/subtract a day-time interval to/from a timestamp") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       outstandingZoneIds.foreach { zid =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
@@ -2553,8 +2554,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             val result = expected.atZone(zid).toInstant
             val df = Seq((ts, duration, result)).toDF("ts", "interval", "result")
             checkAnswer(
-              df.select($"ts" + $"interval", $"interval" + $"ts", $"result" - $"interval"),
-              Row(result, result, ts))
+              df.select($"ts" + $"interval", $"interval" + $"ts", $"result" - $"interval",
+                $"result" - $"ts"),
+              Row(result, result, ts, duration))
           }
         }
       }
@@ -2566,6 +2568,253 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           Seq(
             (Instant.parse(instant), Duration.of(Long.MaxValue, ChronoUnit.MICROS)))
             .toDF("ts", "i")
+            .selectExpr(op)
+            .collect()
+        }.getCause
+        assert(e.isInstanceOf[ArithmeticException])
+        assert(e.getMessage.contains("long overflow"))
+      }
+    }
+  }
+
+  test("SPARK-34824: multiply year-month interval by numeric") {
+    checkAnswer(
+      Seq((Period.ofYears(0), 0)).toDF("i", "n").select($"i" * $"n"),
+      Row(Period.ofYears(0)))
+    checkAnswer(
+      Seq((Period.ofMonths(0), 10.toByte)).toDF("i", "n").select($"i" * $"n"),
+      Row(Period.ofMonths(0)))
+    checkAnswer(
+      Seq((Period.ofMonths(5), 3.toShort)).toDF("i", "n").select($"n" * $"i"),
+      Row(Period.ofYears(1).plusMonths(3)))
+    checkAnswer(
+      Seq((Period.ofYears(1000), "2")).toDF("i", "n").select($"i" * $"n"),
+      Row(Period.ofYears(2000)))
+    checkAnswer(
+      Seq((Period.ofMonths(1), 12L)).toDF("i", "n").select($"n" * $"i"),
+      Row(Period.ofYears(1)))
+    checkAnswer(
+      Seq((Period.ofYears(100).plusMonths(11), Short.MaxValue)).toDF("i", "n").select($"n" * $"i"),
+      Row(Period.ofYears(100).plusMonths(11).multipliedBy(Short.MaxValue).normalized()))
+    checkAnswer(
+      Seq((Period.ofMonths(-1), 0.499f)).toDF("i", "n").select($"i" * $"n"),
+      Row(Period.ofMonths(0)))
+    checkAnswer(
+      Seq((Period.ofMonths(10000000), 0.0000001d)).toDF("i", "n").select($"i" * $"n"),
+      Row(Period.ofMonths(1)))
+    checkAnswer(
+      Seq((Period.ofMonths(-10000000), BigDecimal(0.0000001d))).toDF("i", "n").select($"i" * $"n"),
+      Row(Period.ofMonths(-1)))
+    checkAnswer(
+      Seq((Period.ofMonths(-1), BigDecimal(0.5))).toDF("i", "n").select($"i" * $"n"),
+      Row(Period.ofMonths(-1)))
+
+    val e = intercept[SparkException] {
+      Seq((Period.ofYears(9999), Long.MinValue)).toDF("i", "n").select($"n" * $"i").collect()
+    }.getCause
+    assert(e.isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("overflow"))
+  }
+
+  test("SPARK-34850: multiply day-time interval by numeric") {
+    checkAnswer(
+      Seq((Duration.ofDays(0), 0)).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.ofDays(0)))
+    checkAnswer(
+      Seq((Duration.ofDays(0), 10.toByte)).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.ofDays(0)))
+    checkAnswer(
+      Seq((Duration.ofHours(12), 3.toShort)).toDF("i", "n").select($"n" * $"i"),
+      Row(Duration.ofDays(1).plusHours(12)))
+    checkAnswer(
+      Seq((Duration.ofMinutes(1000), "2")).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.ofMinutes(2000)))
+    checkAnswer(
+      Seq((Duration.ofSeconds(1), 60L)).toDF("i", "n").select($"n" * $"i"),
+      Row(Duration.ofMinutes(1)))
+    checkAnswer(
+      Seq((Duration.of(-1, ChronoUnit.MICROS), 0.499f)).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.of(0, ChronoUnit.MICROS)))
+    checkAnswer(
+      Seq((Duration.of(-1, ChronoUnit.MICROS), 0.51d)).toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.of(-1, ChronoUnit.MICROS)))
+    checkAnswer(
+      Seq((Duration.of(-10000000, ChronoUnit.MICROS), BigDecimal(0.0000001d)))
+        .toDF("i", "n").select($"i" * $"n"),
+      Row(Duration.of(-1, ChronoUnit.MICROS)))
+
+    val e = intercept[SparkException] {
+      Seq((Duration.ofDays(9999), Long.MinValue)).toDF("i", "n").select($"n" * $"i").collect()
+    }.getCause
+    assert(e.isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("overflow"))
+  }
+
+  test("SPARK-34868: divide year-month interval by numeric") {
+    checkAnswer(
+      Seq((Period.ofYears(0), 10.toByte)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofYears(0)))
+    checkAnswer(
+      Seq((Period.ofYears(10), 3.toShort)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofYears(3).plusMonths(4)))
+    checkAnswer(
+      Seq((Period.ofYears(1000), "2")).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofYears(500)))
+    checkAnswer(
+      Seq((Period.ofMonths(1).multipliedBy(Int.MaxValue), Int.MaxValue))
+        .toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(1)))
+    checkAnswer(
+      Seq((Period.ofYears(-1), 12L)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(-1)))
+    checkAnswer(
+      Seq((Period.ofMonths(-1), 0.499f)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(-2)))
+    checkAnswer(
+      Seq((Period.ofMonths(10000000), 10000000d)).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(1)))
+    checkAnswer(
+      Seq((Period.ofMonths(-1), BigDecimal(0.5))).toDF("i", "n").select($"i" / $"n"),
+      Row(Period.ofMonths(-2)))
+
+    val e = intercept[SparkException] {
+      Seq((Period.ofYears(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e.isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("/ by zero"))
+  }
+
+  test("SPARK-34875: divide day-time interval by numeric") {
+    checkAnswer(
+      Seq((Duration.ZERO, 10.toByte)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ZERO))
+    checkAnswer(
+      Seq((Duration.ofDays(10), 3.toShort)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofDays(10).dividedBy(3)))
+    checkAnswer(
+      Seq((Duration.ofHours(1000), "2")).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofHours(500)))
+    checkAnswer(
+      Seq((Duration.of(1, ChronoUnit.MICROS).multipliedBy(Long.MaxValue), Long.MaxValue))
+        .toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.of(1, ChronoUnit.MICROS)))
+    checkAnswer(
+      Seq((Duration.ofMinutes(-1), 60L)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofSeconds(-1)))
+    checkAnswer(
+      Seq((Duration.ofDays(-1), 0.5f)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofDays(-2)))
+    checkAnswer(
+      Seq((Duration.ofMillis(10000000), 10000000d)).toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.ofMillis(1)))
+    checkAnswer(
+      Seq((Duration.of(-1, ChronoUnit.MICROS), BigDecimal(10000.0001)))
+        .toDF("i", "n").select($"i" / $"n"),
+      Row(Duration.of(-1, ChronoUnit.MICROS).multipliedBy(10000).dividedBy(100000001)))
+
+    val e = intercept[SparkException] {
+      Seq((Duration.ofDays(9999), 0)).toDF("i", "n").select($"i" / $"n").collect()
+    }.getCause
+    assert(e.isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("/ by zero"))
+  }
+
+  test("SPARK-34896: return day-time interval from dates subtraction") {
+    withSQLConf(
+      SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+      SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
+      outstandingTimezonesIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid) {
+          Seq(
+            (LocalDate.of(1582, 10, 15), LocalDate.of(1582, 10, 4)),
+            (LocalDate.of(1900, 10, 1), LocalDate.of(1900, 10, 1)),
+            (LocalDate.of(1969, 12, 1), LocalDate.of(1970, 1, 1)),
+            (LocalDate.of(2021, 3, 1), LocalDate.of(2020, 2, 29)),
+            (LocalDate.of(2021, 3, 15), LocalDate.of(2021, 3, 14)),
+            (LocalDate.of(1, 1, 1), LocalDate.of(2021, 3, 29))
+          ).foreach { case (end, start) =>
+            val df = Seq((end, start)).toDF("end", "start")
+            val daysBetween = Duration.ofDays(ChronoUnit.DAYS.between(start, end))
+            checkAnswer(df.select($"end" - $"start"), Row(daysBetween))
+          }
+        }
+      }
+
+      val e = intercept[SparkException] {
+        Seq((LocalDate.ofEpochDay(0), LocalDate.of(500000, 1, 1)))
+          .toDF("start", "end")
+          .select($"end" - $"start")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+    }
+  }
+
+  test("SPARK-34903: Return day-time interval from timestamps subtraction") {
+    outstandingTimezonesIds.foreach { tz =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+        checkAnswer(
+          sql("select timestamp '2021-03-31 19:11:10' - timestamp '2021-03-01 19:11:10'"),
+          Row(Duration.ofDays(30)))
+        checkAnswer(
+          Seq((Instant.parse("2021-03-31T00:01:02Z"), Instant.parse("2021-04-01T00:00:00Z")))
+            .toDF("start", "end").select($"end" - $"start" < Duration.ofDays(1)),
+          Row(true))
+        checkAnswer(
+          Seq((Instant.parse("2021-03-31T00:01:02.777Z"), Duration.ofMillis(333)))
+            .toDF("ts", "i")
+            .select(($"ts" + $"i") - $"ts"),
+          Row(Duration.ofMillis(333)))
+        checkAnswer(
+          Seq((LocalDateTime.of(2021, 3, 31, 10, 0, 0)
+              .atZone(DateTimeUtils.getZoneId(tz)).toInstant, LocalDate.of(2020, 3, 31)))
+            .toDF("ts", "d")
+          .select($"ts" - $"d"),
+          Row(Duration.ofDays(365).plusHours(10)))
+      }
+    }
+  }
+
+  test("SPARK-35051: add/subtract a day-time interval to/from a date") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingZoneIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
+          Seq(
+            (LocalDate.of(1, 1, 1), Duration.ofDays(31)) -> LocalDateTime.of(1, 2, 1, 0, 0, 0),
+            (LocalDate.of(1582, 9, 15), Duration.ofDays(30).plus(1, ChronoUnit.MICROS)) ->
+              LocalDateTime.of(1582, 10, 15, 0, 0, 0, 1000),
+            (LocalDate.of(1900, 1, 1), Duration.ofDays(0).plusHours(1)) ->
+              LocalDateTime.of(1900, 1, 1, 1, 0, 0),
+            (LocalDate.of(1970, 1, 1), Duration.ofDays(-1).minusMinutes(1)) ->
+              LocalDateTime.of(1969, 12, 30, 23, 59, 0),
+            (LocalDate.of(2021, 3, 14), Duration.ofDays(1)) ->
+              LocalDateTime.of(2021, 3, 15, 0, 0, 0),
+            (LocalDate.of(2020, 12, 31), Duration.ofDays(4 * 30).plusMinutes(30)) ->
+              LocalDateTime.of(2021, 4, 30, 0, 30, 0),
+            (LocalDate.of(2020, 2, 29), Duration.ofDays(365).plusSeconds(59)) ->
+              LocalDateTime.of(2021, 2, 28, 0, 0, 59),
+            (LocalDate.of(10000, 1, 1), Duration.ofDays(-2)) ->
+              LocalDateTime.of(9999, 12, 30, 0, 0, 0)
+          ).foreach { case ((date, duration), expected) =>
+            val result = expected.atZone(zid).toInstant
+            val ts = date.atStartOfDay(zid).toInstant
+            val df = Seq((date, duration, result)).toDF("date", "interval", "result")
+            checkAnswer(
+              df.select($"date" + $"interval", $"interval" + $"date", $"result" - $"interval",
+                $"result" - $"date"),
+              Row(result, result, ts, duration))
+          }
+        }
+      }
+
+      Seq(
+        "2021-04-14" -> "date + i",
+        "1900-04-14" -> "date - i").foreach { case (date, op) =>
+        val e = intercept[SparkException] {
+          Seq(
+            (LocalDate.parse(date), Duration.of(Long.MaxValue, ChronoUnit.MICROS)))
+            .toDF("date", "i")
             .selectExpr(op)
             .collect()
         }.getCause
