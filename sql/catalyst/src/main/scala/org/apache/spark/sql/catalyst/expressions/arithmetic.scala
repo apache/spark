@@ -203,9 +203,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
   override def dataType: DataType = left.dataType
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC) ++ nodeTypesInternal
-
-  def nodeTypesInternal: Seq[TreePattern] = Seq()
+  final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
