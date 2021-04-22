@@ -1838,11 +1838,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a function database (optional) and name pair, for multipartIdentifier.
-   * This is used in CREATE FUNCTION, DROP FUNCTION, SHOWFUNCTIONS.
+   * Create a function database (optional) and name pair.
    */
-  protected def visitFunctionName(ctx: MultipartIdentifierContext): FunctionIdentifier = {
-    visitFunctionName(ctx, ctx.parts.asScala.map(_.getText).toSeq)
+  private def visitFunctionName(ctx: ParserRuleContext, texts: Seq[String]): FunctionIdentifier = {
+    texts match {
+      case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
+      case Seq(fn) => FunctionIdentifier(fn, None)
+      case other =>
+        throw QueryParsingErrors.functionNameUnsupportedError(texts.mkString("."), ctx)
+    }
   }
 
   /**
@@ -1865,18 +1869,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a function database (optional) and name pair.
-   */
-  private def visitFunctionName(ctx: ParserRuleContext, texts: Seq[String]): FunctionIdentifier = {
-    texts match {
-      case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
-      case Seq(fn) => FunctionIdentifier(fn, None)
-      case other =>
-        throw QueryParsingErrors.functionNameUnsupportedError(texts.mkString("."), ctx)
-    }
-  }
-
-    /**
    * Create an [[LambdaFunction]].
    */
   override def visitLambda(ctx: LambdaContext): Expression = withOrigin(ctx) {
