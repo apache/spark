@@ -538,14 +538,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val initialMapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
     //  val initialMapStatus1 = mapOutputTracker.mapStatuses.get(0).get
     assert(initialMapStatus1.count(_ != null) === 3)
-    assert(initialMapStatus1.map{_.location.executorId}.toSet ===
+    assert(initialMapStatus1.map{_.location.asInstanceOf[BlockManagerId].executorId}.toSet ===
       Set("hostA-exec1", "hostA-exec2", "hostB-exec"))
     assert(initialMapStatus1.map{_.mapId}.toSet === Set(5, 6, 7))
 
     val initialMapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
     //  val initialMapStatus1 = mapOutputTracker.mapStatuses.get(0).get
     assert(initialMapStatus2.count(_ != null) === 3)
-    assert(initialMapStatus2.map{_.location.executorId}.toSet ===
+    assert(initialMapStatus2.map{_.location.asInstanceOf[BlockManagerId].executorId}.toSet ===
       Set("hostA-exec1", "hostA-exec2", "hostB-exec"))
     assert(initialMapStatus2.map{_.mapId}.toSet === Set(8, 9, 10))
 
@@ -561,13 +561,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val mapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
     assert(mapStatus1.count(_ != null) === 1)
-    assert(mapStatus1(2).location.executorId === "hostB-exec")
-    assert(mapStatus1(2).location.host === "hostB")
+    assert(mapStatus1(2).location.asInstanceOf[BlockManagerId].executorId === "hostB-exec")
+    assert(mapStatus1(2).location.asInstanceOf[BlockManagerId].host === "hostB")
 
     val mapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
     assert(mapStatus2.count(_ != null) === 1)
-    assert(mapStatus2(2).location.executorId === "hostB-exec")
-    assert(mapStatus2(2).location.host === "hostB")
+    assert(mapStatus2(2).location.asInstanceOf[BlockManagerId].executorId === "hostB-exec")
+    assert(mapStatus2(2).location.asInstanceOf[BlockManagerId].host === "hostB")
   }
 
   test("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure") {
@@ -591,8 +591,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // The MapOutputTracker has all the shuffle files
     val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
     assert(mapStatuses.count(_ != null) === 3)
-    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 2)
-    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
+    assert(mapStatuses.count(s => s != null &&
+      s.location.asInstanceOf[BlockManagerId].executorId == "hostA-exec") === 2)
+    assert(mapStatuses.count(s => s != null &&
+      s.location.asInstanceOf[BlockManagerId].executorId == "hostB-exec") === 1)
 
     // Now a fetch failure from the lost executor occurs
     complete(taskSets(1), Seq(
@@ -605,8 +607,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     // Shuffle files for hostA-exec should be lost
     assert(mapStatuses.count(_ != null) === 1)
-    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 0)
-    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
+    assert(mapStatuses.count(s => s != null &&
+      s.location.asInstanceOf[BlockManagerId].executorId == "hostA-exec") === 0)
+    assert(mapStatuses.count(s => s != null &&
+      s.location.asInstanceOf[BlockManagerId].executorId == "hostB-exec") === 1)
 
     // Additional fetch failure from the executor does not result in further call to
     // mapOutputTracker.removeOutputsOnExecutor
@@ -843,7 +847,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // have the 2nd attempt pass
     complete(taskSets(2), Seq((Success, makeMapStatus("hostA", reduceRdd.partitions.length))))
     // we can see both result blocks now
-    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
+      .map(_._1.asInstanceOf[BlockManagerId].host).toSet ===
       HashSet("hostA", "hostB"))
     completeAndCheckAnswer(taskSets(3), Seq((Success, 43)), Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
@@ -1228,7 +1233,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     submit(reduceRdd, Array(0, 1))
     completeShuffleMapStageSuccessfully(0, 0, reduceRdd.partitions.length)
     // The MapOutputTracker should know about both map output locations.
-    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
+      .map(_._1.asInstanceOf[BlockManagerId].host).toSet ===
       HashSet("hostA", "hostB"))
 
     // The first result task fails, with a fetch failure for the output from the first mapper.
@@ -1349,9 +1355,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     completeShuffleMapStageSuccessfully(0, 0, 2)
     // The MapOutputTracker should know about both map output locations.
-    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
+      .map(_._1.asInstanceOf[BlockManagerId].host).toSet ===
       HashSet("hostA", "hostB"))
-    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 1).map(_._1.host).toSet ===
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 1)
+      .map(_._1.asInstanceOf[BlockManagerId].host).toSet ===
       HashSet("hostA", "hostB"))
 
     // The first result task fails, with a fetch failure for the output from the first mapper.

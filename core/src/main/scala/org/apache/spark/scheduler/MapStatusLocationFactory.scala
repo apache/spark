@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.ObjectInput
 
-import org.apache.curator.shaded.com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.config
