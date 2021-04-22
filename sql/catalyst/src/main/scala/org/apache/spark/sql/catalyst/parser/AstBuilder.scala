@@ -2396,17 +2396,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
       val value = Option(ctx.intervalValue.STRING).map(string).map { interval =>
-        val sign = interval.startsWith("-")
-        val minus = ctx.intervalValue().MINUS() != null
-        (sign, minus) match {
-          case (true, true) => interval.replaceFirst("-", "")
-          case (false, true) => s"-$interval"
-          case (_, false) => interval
+        if (ctx.intervalValue().MINUS() == null) {
+          interval
+        } else {
+          interval.startsWith("-") match {
+            case true => interval.replaceFirst("-", "")
+            case false => s"-$interval"
+          }
         }
       }.getOrElse {
         throw QueryParsingErrors.invalidFromToUnitValueError(ctx.intervalValue)
       }
-      println(value)
       try {
         val from = ctx.from.getText.toLowerCase(Locale.ROOT)
         val to = ctx.to.getText.toLowerCase(Locale.ROOT)
