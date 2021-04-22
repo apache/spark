@@ -28,11 +28,12 @@ from pandas.api.types import is_list_like
 from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
 from pyspark import pandas as ps
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
 from pyspark.pandas.utils import default_session, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.sqlutils import SQLTestUtils
+
 
 tabulate_requirement_message = None
 try:

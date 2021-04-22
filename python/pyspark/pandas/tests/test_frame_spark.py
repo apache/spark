@@ -22,8 +22,8 @@ import pandas as pd
 import pyspark
 
 from pyspark import pandas as ps
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
