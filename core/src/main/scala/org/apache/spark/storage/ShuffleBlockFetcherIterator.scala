@@ -300,8 +300,9 @@ final class ShuffleBlockFetcherIterator(
 
     val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
     for ((address, blockInfos) <- blocksByAddress) {
-      // TODO (wuyi): For HDFS-like filesytem, shuffle fetch should be always considered as
-      // local fetch. We could add a flag to `Location` to identify this.
+      // TODO (SPARK-35186): Define the local, host-local or remote fetch
+      // for different locations in a consistent way as some location
+      // implementations may not have executor ids.
       if (Seq(blockManager.blockManagerId.executorId, fallback)
         .contains(address.asInstanceOf[BlockManagerId].executorId)) {
         checkBlockSizes(blockInfos)
