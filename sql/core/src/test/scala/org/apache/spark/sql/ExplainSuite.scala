@@ -506,18 +506,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       checkKeywordsExistsInExplain(df2, keywords = "[key1=value1, KEY2=VALUE2]")
     }
   }
-
-  test("SPARK-35183: CombineConcats should call transformAllExpressions") {
-    val df_concat = sql(
-      """
-        |SELECT (col1 || col2 || col3 || col4) col
-        |  FROM (SELECT id col1, id col2, id col3, id col4 FROM range(10))
-        |  LIMIT 5
-      """.stripMargin)
-    checkKeywordsExistsInExplain(df_concat,
-      "Project [concat(cast(id#xL as string), cast(id#xL as string), cast(id#xL as string)" +
-        ", cast(id#xL as string)) AS col#x]")
-  }
 }
 
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {
