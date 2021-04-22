@@ -29,12 +29,13 @@ from pyspark.ml.linalg import SparseVector
 from pyspark.sql import functions as F
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import (
+from pyspark.testing.pandasutils import (
     have_tabulate,
-    ReusedSQLTestCase,
-    SQLTestUtils,
+    PandasOnSparkTestCase,
     SPARK_CONF_ARROW_ENABLED,
+    tabulate_requirement_message,
 )
+from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.typedef.typehints import (
@@ -45,7 +46,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
+class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
@@ -2209,7 +2210,7 @@ class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
 
         self.assert_eq(pser.shape, kser.shape)
 
-    @unittest.skipIf(not have_tabulate, "tabulate not installed")
+    @unittest.skipIf(not have_tabulate, tabulate_requirement_message)
     def test_to_markdown(self):
         pser = pd.Series(["elk", "pig", "dog", "quetzal"], name="animal")
         kser = ps.from_pandas(pser)

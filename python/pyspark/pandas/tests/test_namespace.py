@@ -20,11 +20,12 @@ import itertools
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.pandas.namespace import _get_index_map
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NamespaceTest(ReusedSQLTestCase, SQLTestUtils):
+class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_from_pandas(self):
         pdf = pd.DataFrame({"year": [2015, 2016], "month": [2, 3], "day": [4, 5]})
         kdf = ps.from_pandas(pdf)

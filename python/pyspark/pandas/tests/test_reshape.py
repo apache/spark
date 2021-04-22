@@ -24,11 +24,11 @@ import pandas as pd
 import pyspark
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SPARK_CONF_ARROW_ENABLED
 from pyspark.pandas.utils import name_like_string
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
 
 
-class ReshapeTest(ReusedSQLTestCase):
+class ReshapeTest(PandasOnSparkTestCase):
     def test_get_dummies(self):
         for pdf_or_ps in [
             pd.Series([1, 1, 1, 2, 2, 1, 3, 4]),

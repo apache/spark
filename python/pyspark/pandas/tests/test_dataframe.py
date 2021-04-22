@@ -41,16 +41,17 @@ from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
-from pyspark.pandas.testing.utils import (
+from pyspark.testing.pandasutils import (
     have_tabulate,
-    ReusedSQLTestCase,
-    SQLTestUtils,
+    PandasOnSparkTestCase,
     SPARK_CONF_ARROW_ENABLED,
+    tabulate_requirement_message,
 )
+from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.utils import name_like_string
 
 
-class DataFrameTest(ReusedSQLTestCase, SQLTestUtils):
+class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -4767,7 +4768,7 @@ class DataFrameTest(ReusedSQLTestCase, SQLTestUtils):
         kdf.columns = columns
         self.assertRaises(ValueError, lambda: kdf.eval("x.a + y.b"))
 
-    @unittest.skipIf(not have_tabulate, "tabulate not installed")
+    @unittest.skipIf(not have_tabulate, tabulate_requirement_message)
     def test_to_markdown(self):
         pdf = pd.DataFrame(data={"animal_1": ["elk", "pig"], "animal_2": ["dog", "quetzal"]})
         kdf = ps.from_pandas(pdf)
