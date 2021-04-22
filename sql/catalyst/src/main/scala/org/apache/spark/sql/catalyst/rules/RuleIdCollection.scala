@@ -60,7 +60,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReorderAssociativeOperator" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceNullWithFalseInPredicate" ::
-      "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions" :: Nil
+      "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions" ::
+      "org.apache.spark.sql.catalyst.optimizer.SimplifyCasts" :: Nil
   }
 
   // Maps rule names to ids. Rule ids are continuous natural numbers starting from 0.
