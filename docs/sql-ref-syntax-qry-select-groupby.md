@@ -104,7 +104,8 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
     `CUBE|ROLLUP` is just a syntax sugar for `GROUPING SETS`, please refer to the sections above for
     how to translate `CUBE|ROLLUP` to `GROUPING SETS`. `group_expression` can be treated as a single-group
     `GROUPING SETS` under this context. For multiple `GROUPING SETS` in the `GROUP BY` clause, we generate
-    a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s. For example,
+    a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s. For nested `GROUPING SETS` in the `GROUP BY` clause,
+    we generate a top-level `GROUING SETS` by expand selected grouping sets of nested group elements. For example,
     `GROUP BY warehouse, GROUPING SETS((product), ()), GROUPING SETS((location, size), (location), (size), ())`
     and `GROUP BY warehouse, ROLLUP(product), CUBE(location, size)` is equivalent to 
     `GROUP BY GROUPING SETS(
@@ -117,16 +118,8 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
         (warehouse, size),
         (warehouse))`.
     
-    `GROUP BY warehouse, GROUPING SETS((env), GROUPING SETS((product), ()), GROUPING SETS((location, size), (location), (size), ()))`
-    and `GROUP BY warehouse, GROUPING SETS((env), ROLLUP(product), CUBE(location, size))` is equivalent to 
-    `GROUP BY  GROUPING SETS(
-         (warehouse, env),
-         (warehouse, product),
-         (warehouse),
-         (warehouse, location, size),
-         (warehouse, location),
-         (warehouse, size),
-         (warehouse))`.
+    `GROUP BY GROUPING SETS(GROUPING SETS(warehouse, product), GROUPING SETS(location, size))` is equivalent to 
+    `GROUP BY  GROUPING SETS((warehouse, product), (location, size))`.
 
 * **aggregate_name**
 
