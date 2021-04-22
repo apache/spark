@@ -60,7 +60,7 @@ trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
    * Runs the plan and makes sure the plans contains all of the keywords.
    */
   protected def checkKeywordsExistsInExplain(
-      df: DataFrame, mode: ExplainMode, keywords: String*): Unit = {
+    df: DataFrame, mode: ExplainMode, keywords: String*): Unit = {
     withNormalizedExplain(df, mode) { normalizedOutput =>
       for (key <- keywords) {
         assert(normalizedOutput.contains(key))
@@ -76,7 +76,7 @@ trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
    * Runs the plan and makes sure the plans does not contain any of the keywords.
    */
   protected def checkKeywordsNotExistsInExplain(
-      df: DataFrame, mode: ExplainMode, keywords: String*): Unit = {
+    df: DataFrame, mode: ExplainMode, keywords: String*): Unit = {
     withNormalizedExplain(df, mode) { normalizedOutput =>
       for (key <- keywords) {
         assert(!normalizedOutput.contains(key))
@@ -86,7 +86,6 @@ trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
 }
 
 class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite {
-
   import testImplicits._
 
   test("SPARK-23034 show rdd names in RDD scan nodes (Dataset)") {
@@ -402,12 +401,10 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 
   test("Dataset.toExplainString has mode as string") {
     val df = spark.range(10).toDF
-
     def assertExplainOutput(mode: ExplainMode): Unit = {
       assert(df.queryExecution.explainString(mode).replaceAll("#\\d+", "#x").trim ===
         getNormalizedExplain(df, mode).trim)
     }
-
     assertExplainOutput(SimpleMode)
     assertExplainOutput(ExtendedMode)
     assertExplainOutput(CodegenMode)
@@ -451,7 +448,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     withTempDir { dir =>
       Seq("parquet", "orc", "csv", "json").foreach { fmt =>
         val basePath = dir.getCanonicalPath + "/" + fmt
-        val pushFilterMaps = Map(
+        val pushFilterMaps = Map (
           "parquet" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "orc" ->
