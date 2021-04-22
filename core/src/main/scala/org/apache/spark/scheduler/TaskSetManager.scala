@@ -870,7 +870,10 @@ private[spark] class TaskSetManager(
           fetchFailed.bmAddress match {
             case el: ExecutorLocation =>
               healthTracker.foreach(_.updateExcludedForFetchFailure(el.host(), el.executorId()))
-            case _ =>
+            case location if healthTracker.isDefined =>
+              logWarning(s"${EXCLUDE_ON_FAILURE_ENABLED.key} is enabled, but the shuffle" +
+                s"storage location $location is not executor-based. Thus, exclusion won't take " +
+                s"effect on shuffle fetch failure.")
           }
         }
 
