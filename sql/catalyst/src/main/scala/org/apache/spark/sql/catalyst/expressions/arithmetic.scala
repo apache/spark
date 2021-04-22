@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern}
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -198,6 +199,10 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
   protected val failOnError: Boolean
 
   override def dataType: DataType = left.dataType
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC) ++ nodeTypesInternal
+
+  def nodeTypesInternal: Seq[TreePattern] = Seq()
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 

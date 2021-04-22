@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{IN, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AND_OR, IN, NOT, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -308,6 +308,8 @@ case class Not(child: Expression)
   override def toString: String = s"NOT $child"
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(NOT)
 
   // +---------+-----------+
   // | CHILD   | NOT CHILD |
@@ -663,6 +665,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override def sqlOperator: String = "AND"
 
+  override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
+
   // +---------+---------+---------+---------+
   // | AND     | TRUE    | FALSE   | UNKNOWN |
   // +---------+---------+---------+---------+
@@ -748,6 +752,8 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
   override def symbol: String = "||"
 
   override def sqlOperator: String = "OR"
+
+  override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
 
   // +---------+---------+---------+---------+
   // | OR      | TRUE    | FALSE   | UNKNOWN |
