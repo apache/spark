@@ -46,9 +46,9 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
    * This may destroy the underlying collection.
    */
   def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
-    : WritablePartitionedIterator = {
+    : WritablePartitionedIterator[K, V] = {
     val it = partitionedDestructiveSortedIterator(keyComparator)
-    new DefaultWritablePartitionedIterator[K, V](it)
+    new WritablePartitionedIterator[K, V](it)
   }
 }
 
@@ -76,19 +76,7 @@ private[spark] object WritablePartitionedPairCollection {
  * Iterator that writes elements to a DiskBlockObjectWriter instead of returning them. Each element
  * has an associated partition.
  */
-private[spark] trait WritablePartitionedIterator {
-  def writeNext(writer: PairsWriter): Unit
-
-  def hasNext(): Boolean
-
-  def nextPartition(): Int
-}
-
-/**
- * Default implementation of `WritablePartitionedIterator`.
- */
-private[spark] class DefaultWritablePartitionedIterator[K, V](it: Iterator[((Int, K), V)])
-  extends WritablePartitionedIterator {
+private[spark] class WritablePartitionedIterator[K, V](it: Iterator[((Int, K), V)]) {
   private[this] var cur = if (it.hasNext) it.next() else null
 
   def writeNext(writer: PairsWriter): Unit = {
@@ -96,7 +84,7 @@ private[spark] class DefaultWritablePartitionedIterator[K, V](it: Iterator[((Int
     cur = if (it.hasNext) it.next() else null
   }
 
-  def hasNext(): Boolean = cur != null
+  def hasNext: Boolean = cur != null
 
   def nextPartition(): Int = cur._1._1
 }
