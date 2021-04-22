@@ -71,12 +71,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
           </ul>
         </div>
-        <div>
-          <span id="sql-dag-viz" class="expand-dag-viz" onclick={s"toggleDagViz();"}>
-            <span class="expand-dag-viz-arrow arrow-closed"></span>
-            <a>SQL DAG Visualization</a>
-          </span>
-        </div>
+        <span id="sql-dag-viz" class="expand-dag-viz" onclick={s"toggleDagViz();"}>
+          <span class="expand-dag-viz-arrow arrow-closed"></span>
+          <a>SQL DAG Visualization</a>
+         </span>
 
       val metrics = sqlStore.executionMetrics(executionId)
       val graph = sqlStore.planGraph(executionId)
