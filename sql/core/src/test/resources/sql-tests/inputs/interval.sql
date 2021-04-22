@@ -102,6 +102,10 @@ select interval 30 day day day;
 select interval (-30) days;
 select interval (a + 1) days;
 select interval 30 days days days;
+SELECT INTERVAL '178956970-7' YEAR TO MONTH;
+SELECT INTERVAL '178956970-8' YEAR TO MONTH;
+SELECT INTERVAL '-178956970-8' YEAR TO MONTH;
+SELECT INTERVAL -'178956970-8' YEAR TO MONTH;
 
 -- Interval year-month arithmetic
 
