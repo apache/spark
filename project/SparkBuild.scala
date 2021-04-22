@@ -901,10 +901,13 @@ object SparkR {
       val command = baseDirectory.value / ".." / "R" / "install-dev.sh"
       Process(command.toString).!!
     },
-    (Compile / compile) := {
-      buildRPackage.value
-      (Compile / compile).value
-    }
+    (Compile / compile) := (Def.taskDyn {
+      val c = (Compile / compile).value
+      Def.task {
+        (Compile / buildRPackage).value
+        c
+      }
+    }).value
   )
 }
 
