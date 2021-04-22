@@ -18,7 +18,7 @@
 from pyspark import pandas as ps
 from pyspark.sql.utils import ParseException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.utils import SQLTestUtils
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SQLTest(PandasOnSparkTestCase, SQLTestUtils):
