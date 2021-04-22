@@ -90,10 +90,7 @@ object ExtractValue {
   }
 }
 
-trait ExtractValue extends Expression {
-  // The name that is used to extract the value.
-  def name: Option[String]
-}
+trait ExtractValue extends Expression
 
 /**
  * Returns the value of fields in the Struct `child`.
@@ -141,6 +138,9 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
       }
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): GetStructField =
+    copy(child = newChild)
 }
 
 /**
@@ -159,7 +159,6 @@ case class GetArrayStructFields(
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def toString: String = s"$child.${field.name}"
   override def sql: String = s"${child.sql}.${quoteIdentifier(field.name)}"
-  override def name: Option[String] = Some(field.name)
 
   protected override def nullSafeEval(input: Any): Any = {
     val array = input.asInstanceOf[ArrayData]
@@ -216,6 +215,9 @@ case class GetArrayStructFields(
       """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): GetArrayStructFields =
+    copy(child = newChild)
 }
 
 /**
@@ -237,7 +239,6 @@ case class GetArrayItem(
 
   override def toString: String = s"$child[$ordinal]"
   override def sql: String = s"${child.sql}[${ordinal.sql}]"
-  override def name: Option[String] = None
 
   override def left: Expression = child
   override def right: Expression = ordinal
@@ -297,6 +298,10 @@ case class GetArrayItem(
       """
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetArrayItem =
+    copy(child = newLeft, ordinal = newRight)
 }
 
 /**
@@ -453,10 +458,6 @@ case class GetMapValue(
 
   override def toString: String = s"$child[$key]"
   override def sql: String = s"${child.sql}[${key.sql}]"
-  override def name: Option[String] = key match {
-    case NonNullLiteral(s, StringType) => Some(s.toString)
-    case _ => None
-  }
 
   override def left: Expression = child
   override def right: Expression = key
@@ -479,4 +480,8 @@ case class GetMapValue(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType], failOnError)
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetMapValue =
+    copy(child = newLeft, key = newRight)
 }

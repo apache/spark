@@ -771,7 +771,12 @@ Apart from these, the following properties are also available, and may be useful
     option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
-    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>
+    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
+    Only paths with <code>file://</code> scheme are supported. Paths without a scheme are assumed to have
+    a <code>file://</code> scheme.
+    <p/>
+    When running in YARN cluster mode, this file will also be localized to the remote driver for dependency
+    resolution within <code>SparkContext#addJar</code>
   </td>
   <td>2.2.0</td>
 </tr>
@@ -924,6 +929,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections between shuffle servers and clients to be marked
+    as idled and closed if there are still outstanding fetch requests but no traffic no the channel
+    for at least `connectionTimeout`.
+  </td>
+  <td>1.2.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
@@ -1006,6 +1021,16 @@ Apart from these, the following properties are also available, and may be useful
     When we fail to register to the external shuffle service, we will retry for maxAttempts times.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.files.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections for fetching files in Spark RPC environments to be marked
+    as idled and closed if there are still outstanding files being downloaded but no traffic no the channel
+    for at least `connectionTimeout`.
+  </td>
+  <td>1.6.0</td>
 </tr>
 </table>
 
@@ -1996,6 +2021,16 @@ Apart from these, the following properties are also available, and may be useful
     external shuffle service is at least 2.3.0.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.rpc.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    Timeout for the established connections between RPC peers to be marked as idled and closed
+    if there are outstanding RPC requests but no traffic on the channel for at least
+    `connectionTimeout`.
+  </td>
+  <td>1.2.0</td>
 </tr>
 </table>
 

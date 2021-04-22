@@ -23,7 +23,10 @@ license: |
 
 # Spark Security: Things You Need To Know
 
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Security features like authentication are not enabled by default. When deploying a cluster that is open to the internet
+or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
+from running on the cluster.
+
 Spark supports multiple deployments types and each one supports different levels of security. Not
 all deployment types will be secure in all environments and none are secure by default. Be
 sure to evaluate your environment, what Spark supports, and take the appropriate measure to secure
@@ -839,6 +842,9 @@ The following options provides finer-grained control for this feature:
   <td>3.0.0</td>
 </tr>
 </table>
+
+Users can exclude Kerberos delegation token renewal at resource scheduler. Currently it is only supported
+on YARN. The configuration is covered in the [Running Spark on YARN](running-on-yarn.html#yarn-specific-kerberos-configuration) page.
 
 ## Long-Running Applications
 

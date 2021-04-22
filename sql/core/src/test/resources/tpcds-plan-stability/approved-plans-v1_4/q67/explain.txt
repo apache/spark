@@ -168,7 +168,7 @@ Arguments: [rank(sumsales#37) windowspecdefinition(i_category#22, sumsales#37 DE
 
 (30) Filter [codegen id : 7]
 Input [10]: [i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#26, d_qoy#27, d_moy#28, s_store_id#29, sumsales#37, rk#39]
-Condition : (isnotnull(rk#39) AND (rk#39 <= 100))
+Condition : (rk#39 <= 100)
 
 (31) TakeOrderedAndProject
 Input [10]: [i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#26, d_qoy#27, d_moy#28, s_store_id#29, sumsales#37, rk#39]

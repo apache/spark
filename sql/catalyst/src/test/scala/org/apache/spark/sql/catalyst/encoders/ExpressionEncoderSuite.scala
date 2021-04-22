@@ -167,10 +167,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Array.empty[Int], "empty array of int")
   encodeDecodeTest(Array.empty[String], "empty array of string")
 
-  encodeDecodeTest(Array(Array(31, -123), null, Array(4, 67)), "array of array of int",
-    useFallback = true)
+  encodeDecodeTest(Array(Array(31, -123), null, Array(4, 67)), "array of array of int")
   encodeDecodeTest(Array(Array("abc", "xyz"), Array[String](null), null, Array("1", null, "2")),
-    "array of array of string", useFallback = true)
+    "array of array of string")
 
   encodeDecodeTest(Map(1 -> "a", 2 -> "b"), "map")
   encodeDecodeTest(Map(1 -> "a", 2 -> null), "map with null")
@@ -595,10 +594,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       val isCorrect = (input, convertedBack) match {
         case (b1: Array[Byte], b2: Array[Byte]) => Arrays.equals(b1, b2)
         case (b1: Array[Int], b2: Array[Int]) => Arrays.equals(b1, b2)
-        case (b1: Array[Array[_]], b2: Array[Array[_]]) =>
-          Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (b1: Array[_], b2: Array[_]) =>
-          Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
+          Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (left: Comparable[_], right: Comparable[_]) =>
           left.asInstanceOf[Comparable[Any]].compareTo(right) == 0
         case _ => input == convertedBack

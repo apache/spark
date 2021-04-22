@@ -38,3 +38,9 @@ log4j.logger.parquet=ERROR
 # SPARK-9183: Settings to avoid annoying messages when looking up nonexistent UDFs in SparkSQL with Hive support
 log4j.logger.org.apache.hadoop.hive.metastore.RetryingHMSHandler=FATAL
 log4j.logger.org.apache.hadoop.hive.ql.exec.FunctionRegistry=ERROR
+
+# For deploying Spark ThriftServer
+# SPARK-34128：Suppress undesirable TTransportException warnings involved in THRIFT-4805
+log4j.appender.console.filter.1=org.apache.log4j.varia.StringMatchFilter
+log4j.appender.console.filter.1.StringToMatch=Thrift error occurred during processing of message
+log4j.appender.console.filter.1.AcceptOnMatch=false

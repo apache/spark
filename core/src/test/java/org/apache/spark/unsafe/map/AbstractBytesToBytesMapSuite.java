@@ -24,6 +24,7 @@ import java.util.*;
 
 import scala.Tuple2$;
 
+import org.hamcrest.MatcherAssert;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -539,7 +540,7 @@ public abstract class AbstractBytesToBytesMapSuite {
           break;
         }
       }
-      Assert.assertThat(i, greaterThan(0));
+      MatcherAssert.assertThat(i, greaterThan(0));
       Assert.assertFalse(success);
     } finally {
       map.free();

@@ -37,7 +37,6 @@ import scala.Tuple5;
 
 import com.google.common.base.Objects;
 import org.junit.*;
-import org.junit.rules.ExpectedException;
 
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -911,9 +910,6 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  @Rule
-  public transient ExpectedException nullabilityCheck = ExpectedException.none();
-
   @Test
   public void testRuntimeNullabilityCheck() {
     OuterScopes.addOuterScope(this);
@@ -955,9 +951,6 @@ public class JavaDatasetSuite implements Serializable {
       Assert.assertEquals(Collections.singletonList(nestedSmallBean), ds.collectAsList());
     }
 
-    nullabilityCheck.expect(RuntimeException.class);
-    nullabilityCheck.expectMessage("Null value appeared in non-nullable field");
-
     {
       Row row = new GenericRow(new Object[] {
           new GenericRow(new Object[] {
@@ -968,7 +961,8 @@ public class JavaDatasetSuite implements Serializable {
       Dataset<Row> df = spark.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
-      ds.collect();
+      Assert.assertThrows("Null value appeared in non-nullable field", RuntimeException.class,
+        ds::collect);
     }
   }
 

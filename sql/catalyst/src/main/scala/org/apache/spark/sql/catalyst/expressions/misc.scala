@@ -51,6 +51,9 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
          | ${ev.value} = $c;
        """.stripMargin)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): PrintToStderr =
+    copy(child = newChild)
 }
 
 /**
@@ -100,6 +103,9 @@ case class RaiseError(child: Expression, dataType: DataType)
       value = JavaCode.defaultLiteral(dataType)
     )
   }
+
+  override protected def withNewChildInternal(newChild: Expression): RaiseError =
+    copy(child = newChild)
 }
 
 object RaiseError {
@@ -133,6 +139,9 @@ case class AssertTrue(left: Expression, right: Expression, child: Expression)
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): AssertTrue =
+    copy(child = newChild)
 }
 
 object AssertTrue {
@@ -268,4 +277,6 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): TypeOf = copy(child = newChild)
 }

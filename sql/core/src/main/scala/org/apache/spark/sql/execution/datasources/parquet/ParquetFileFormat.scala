@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.IOException
 import java.net.URI
 
 import scala.collection.JavaConverters._
@@ -37,7 +36,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -45,6 +44,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf
@@ -430,7 +430,7 @@ object ParquetFileFormat extends Logging {
 
     finalSchemas.reduceOption { (left, right) =>
       try left.merge(right) catch { case e: Throwable =>
-        throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(left, right, e)
       }
     }
   }
@@ -457,7 +457,7 @@ object ParquetFileFormat extends Logging {
           logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
           None
         } else {
-          throw new IOException(s"Could not read footer for file: $currentFile", e)
+          throw QueryExecutionErrors.cannotReadFooterForFileError(currentFile, e)
         }
       }
     }.flatten

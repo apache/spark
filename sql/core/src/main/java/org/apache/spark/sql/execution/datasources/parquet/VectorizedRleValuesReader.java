@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 
 import org.apache.parquet.Preconditions;
@@ -203,6 +204,41 @@ public final class VectorizedRleValuesReader extends ValuesReader
     }
   }
 
+  // A fork of `readIntegers`, reading the signed integers as unsigned in long type
+  public void readUnsignedIntegers(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      int level,
+      VectorizedValuesReader data) throws IOException {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readUnsignedIntegers(n, c, rowId);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putLong(rowId + i, Integer.toUnsignedLong(data.readInteger()));
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
   // A fork of `readIntegers`, which rebases the date int value (days) before filling
   // the Spark column vector.
   public void readIntegersWithRebase(
@@ -323,9 +359,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       switch (mode) {
         case RLE:
           if (currentValue == level) {
-            for (int i = 0; i < n; i++) {
-              c.putShort(rowId + i, (short)data.readInteger());
-            }
+            data.readShorts(n, c, rowId);
           } else {
             c.putNulls(rowId, n);
           }
@@ -333,7 +367,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         case PACKED:
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
-              c.putShort(rowId + i, (short)data.readInteger());
+              c.putShort(rowId + i, data.readShort());
             } else {
               c.putNull(rowId + i);
             }
@@ -388,6 +422,41 @@ public final class VectorizedRleValuesReader extends ValuesReader
               } else {
                 c.putNull(rowId + i);
               }
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  public void readUnsignedLongs(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      int level,
+      VectorizedValuesReader data) throws IOException {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readUnsignedLongs(n, c, rowId);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              byte[] bytes = new BigInteger(Long.toUnsignedString(data.readLong())).toByteArray();
+              c.putByteArray(rowId + i, bytes);
+            } else {
+              c.putNull(rowId + i);
             }
           }
           break;
@@ -603,6 +672,16 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
+  public void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
   public void readIntegersWithRebase(
       int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
     throw new UnsupportedOperationException("only readInts is valid.");
@@ -614,7 +693,17 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
+  public short readShort() {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
   public void readBytes(int total, WritableColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readShorts(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 

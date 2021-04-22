@@ -36,6 +36,8 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
+      Batch("Finish Analysis", Once,
+        EnforceGroupingReferencesInAggregates) ::
       Batch("collapse projections", FixedPoint(10),
         CollapseProject) ::
       Batch("Constant Folding", FixedPoint(10),
@@ -57,7 +59,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   private def checkRule(originalQuery: LogicalPlan, correctAnswer: LogicalPlan) = {
     val optimized = Optimizer.execute(originalQuery.analyze)
     assert(optimized.resolved, "optimized plans must be still resolvable")
-    comparePlans(optimized, correctAnswer.analyze)
+    comparePlans(optimized, EnforceGroupingReferencesInAggregates(correctAnswer.analyze))
   }
 
   test("explicit get from namedStruct") {
@@ -405,14 +407,6 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val arrayAggRel = relation.groupBy(
       CreateArray(Seq('nullable_id)))(GetArrayItem(CreateArray(Seq('nullable_id)), 0))
     checkRule(arrayAggRel, arrayAggRel)
-
-    // This could be done if we had a more complex rule that checks that
-    // the CreateMap does not come from key.
-    val originalQuery = relation
-      .groupBy('id)(
-        GetMapValue(CreateMap(Seq('id, 'id + 1L)), 0L) as "a"
-      )
-    checkRule(originalQuery, originalQuery)
   }
 
   test("SPARK-23500: namedStruct and getField in the same Project #1") {

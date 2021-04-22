@@ -37,7 +37,7 @@ TakeOrderedAndProject (32)
 Output [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manager_id#5]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [Or(And(And(In(i_category, [Books,Children,Electronics]),In(i_class, [personal,portable,refernece,self-help])),In(i_brand, [scholaramalgamalg #6,scholaramalgamalg #7,exportiunivamalg #8,scholaramalgamalg #8])),And(And(In(i_category, [Women,Music,Men]),In(i_class, [accessories,classical,fragrances,pants])),In(i_brand, [amalgimporto #9,edu packscholar #9,exportiimporto #9,importoamalg #9]))), IsNotNull(i_item_sk)]
+PushedFilters: [Or(And(And(In(i_category, [Books                                             ,Children                                          ,Electronics                                       ]),In(i_class, [personal                                          ,portable                                          ,refernece                                         ,self-help                                         ])),In(i_brand, [scholaramalgamalg #6                             ,scholaramalgamalg #7                              ,exportiunivamalg #8                               ,scholaramalgamalg #8                              ])),And(And(In(i_category, [Women                                             ,Music                                             ,Men                                               ]),In(i_class, [accessories                                       ,classical                                         ,fragrances                                        ,pants                                             ])),In(i_brand, [amalgimporto #9                                   ,edu packscholar #9                                ,exportiimporto #9                                 ,importoamalg #9                                   ]))), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string,i_manager_id:int>
 
 (2) ColumnarToRow [codegen id : 4]
@@ -45,7 +45,7 @@ Input [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manager_id#5]
 
 (3) Filter [codegen id : 4]
 Input [5]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, i_manager_id#5]
-Condition : ((((i_category#4 IN (Books,Children,Electronics) AND i_class#3 IN (personal,portable,refernece,self-help)) AND i_brand#2 IN (scholaramalgamalg #6,scholaramalgamalg #7,exportiunivamalg #8,scholaramalgamalg #8)) OR ((i_category#4 IN (Women,Music,Men) AND i_class#3 IN (accessories,classical,fragrances,pants)) AND i_brand#2 IN (amalgimporto #9,edu packscholar #9,exportiimporto #9,importoamalg #9))) AND isnotnull(i_item_sk#1))
+Condition : ((((i_category#4 IN (Books                                             ,Children                                          ,Electronics                                       ) AND i_class#3 IN (personal                                          ,portable                                          ,refernece                                         ,self-help                                         )) AND i_brand#2 IN (scholaramalgamalg #6                             ,scholaramalgamalg #7                              ,exportiunivamalg #8                               ,scholaramalgamalg #8                              )) OR ((i_category#4 IN (Women                                             ,Music                                             ,Men                                               ) AND i_class#3 IN (accessories                                       ,classical                                         ,fragrances                                        ,pants                                             )) AND i_brand#2 IN (amalgimporto #9                                   ,edu packscholar #9                                ,exportiimporto #9                                 ,importoamalg #9                                   ))) AND isnotnull(i_item_sk#1))
 
 (4) Project [codegen id : 4]
 Output [2]: [i_item_sk#1, i_manager_id#5]
@@ -169,7 +169,7 @@ Arguments: [avg(_w0#27) windowspecdefinition(i_manager_id#5, specifiedwindowfram
 
 (30) Filter [codegen id : 7]
 Input [4]: [i_manager_id#5, sum_sales#26, _w0#27, avg_monthly_sales#29]
-Condition : ((isnotnull(avg_monthly_sales#29) AND (avg_monthly_sales#29 > 0.000000)) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#26 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#29 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#29 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000))
+Condition : (isnotnull(avg_monthly_sales#29) AND ((avg_monthly_sales#29 > 0.000000) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#26 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#29 as decimal(22,6)))), DecimalType(22,6), true), false)) / promote_precision(cast(avg_monthly_sales#29 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000)))
 
 (31) Project [codegen id : 7]
 Output [3]: [i_manager_id#5, sum_sales#26, avg_monthly_sales#29]

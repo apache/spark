@@ -560,10 +560,9 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 }
 
-case class HugeCodeIntExpression(value: Int) extends Expression {
+case class HugeCodeIntExpression(value: Int) extends LeafExpression {
   override def nullable: Boolean = true
   override def dataType: DataType = IntegerType
-  override def children: Seq[Expression] = Nil
   override def eval(input: InternalRow): Any = value
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Assuming HugeMethodLimit to be 8000

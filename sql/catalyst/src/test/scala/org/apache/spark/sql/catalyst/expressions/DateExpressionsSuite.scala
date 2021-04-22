@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.{ParseException, SimpleDateFormat}
-import java.time.{DateTimeException, Instant, LocalDate, Period, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, Period, ZoneId}
 import java.time.format.DateTimeParseException
+import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -1173,42 +1174,112 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("timestamps difference") {
+  test("SPARK-34903: timestamps difference") {
     val end = Instant.parse("2019-10-04T11:04:01.123456Z")
-    checkEvaluation(SubtractTimestamps(Literal(end), Literal(end)),
-      new CalendarInterval(0, 0, 0))
-    checkEvaluation(SubtractTimestamps(Literal(end), Literal(Instant.EPOCH)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
-        "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds")))
-    checkEvaluation(SubtractTimestamps(Literal(Instant.EPOCH), Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
-        "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds")))
-    checkEvaluation(
-      SubtractTimestamps(
-        Literal(Instant.parse("9999-12-31T23:59:59.999999Z")),
-        Literal(Instant.parse("0001-01-01T00:00:00Z"))),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
-        "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
+    outstandingTimezonesIds.foreach { tz =>
+      def sub(left: Instant, right: Instant): Expression = {
+        SubtractTimestamps(
+          Literal(left),
+          Literal(right),
+          legacyInterval = true,
+          timeZoneId = Some(tz))
+      }
+      checkEvaluation(sub(end, end), new CalendarInterval(0, 0, 0))
+      checkEvaluation(sub(end, Instant.EPOCH),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds")))
+      checkEvaluation(sub(Instant.EPOCH, end),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds")))
+      checkEvaluation(
+        sub(
+          Instant.parse("9999-12-31T23:59:59.999999Z"),
+          Instant.parse("0001-01-01T00:00:00Z")),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
+    }
+
+    outstandingTimezonesIds.foreach { tz =>
+      def check(left: Instant, right: Instant): Unit = {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(left),
+            Literal(right),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.between(
+            right.atZone(getZoneId(tz)).toLocalDateTime,
+            left.atZone(getZoneId(tz)).toLocalDateTime))
+      }
+
+      check(end, end)
+      check(end, Instant.EPOCH)
+      check(Instant.EPOCH, end)
+      check(Instant.parse("9999-12-31T23:59:59.999999Z"), Instant.parse("0001-01-01T00:00:00Z"))
+
+      val errMsg = intercept[ArithmeticException] {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(Instant.MIN),
+            Literal(Instant.MAX),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.ZERO)
+      }.getMessage
+      assert(errMsg.contains("overflow"))
+
+      Seq(false, true).foreach { legacy =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (end: Expression, start: Expression) => SubtractTimestamps(end, start, legacy, Some(tz)),
+          TimestampType, TimestampType)
+      }
+    }
   }
 
-  test("subtract dates") {
+  test("SPARK-34896: subtract dates") {
     val end = LocalDate.of(2019, 10, 5)
-    checkEvaluation(SubtractDates(Literal(end), Literal(end)),
-      new CalendarInterval(0, 0, 0))
-    checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 days")))
-    checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval -1 days")))
     val epochDate = Literal(LocalDate.ofEpochDay(0))
-    checkEvaluation(SubtractDates(Literal(end), epochDate),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval 49 years 9 months 4 days")))
-    checkEvaluation(SubtractDates(epochDate, Literal(end)),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval -49 years -9 months -4 days")))
-    checkEvaluation(
-      SubtractDates(
-        Literal(LocalDate.of(10000, 1, 1)),
-        Literal(LocalDate.of(1, 1, 1))),
-      IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      checkEvaluation(SubtractDates(Literal(end), Literal(end)),
+        new CalendarInterval(0, 0, 0))
+      checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 1 days")))
+      checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval -1 days")))
+      checkEvaluation(SubtractDates(Literal(end), epochDate),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 49 years 9 months 4 days")))
+      checkEvaluation(SubtractDates(epochDate, Literal(end)),
+        IntervalUtils.stringToInterval(
+          UTF8String.fromString("interval -49 years -9 months -4 days")))
+      checkEvaluation(
+        SubtractDates(
+          Literal(LocalDate.of(10000, 1, 1)),
+          Literal(LocalDate.of(1, 1, 1))),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval 9999 years")))
+    }
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "false") {
+      checkEvaluation(SubtractDates(Literal(end), Literal(end)), Duration.ZERO)
+      checkEvaluation(SubtractDates(Literal(end.plusDays(1)), Literal(end)), Duration.ofDays(1))
+      checkEvaluation(SubtractDates(Literal(end.minusDays(1)), Literal(end)), Duration.ofDays(-1))
+      checkEvaluation(SubtractDates(Literal(end), epochDate), Duration.ofDays(end.toEpochDay))
+      checkEvaluation(SubtractDates(epochDate, Literal(end)),
+        Duration.ofDays(end.toEpochDay).negated())
+      checkEvaluation(
+        SubtractDates(
+          Literal(LocalDate.of(10000, 1, 1)),
+          Literal(LocalDate.of(1, 1, 1))),
+        Duration.ofDays(ChronoUnit.DAYS.between( LocalDate.of(1, 1, 1), LocalDate.of(10000, 1, 1))))
+      checkExceptionInExpression[ArithmeticException](
+        SubtractDates(Literal(LocalDate.MAX), Literal(LocalDate.MIN)),
+        "overflow")
+    }
+    Seq(false, true).foreach { ansiIntervals =>
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (end: Expression, start: Expression) => SubtractDates(end, start, ansiIntervals),
+        DateType, DateType)
+    }
   }
 
   test("to_timestamp exception mode") {
@@ -1406,6 +1477,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       SecondsToTimestamp(Literal(123.456789123)),
       Instant.ofEpochSecond(123, 456789000))
+    checkEvaluation(SecondsToTimestamp(Literal(16777215.0f)), Instant.ofEpochSecond(16777215))
   }
 
   test("TIMESTAMP_MILLIS") {
@@ -1499,4 +1571,97 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
- }
+
+  test("SPARK-34739: add a year-month interval to a timestamp") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    for (zid <- outstandingZoneIds) {
+      val timeZoneId = Option(zid.getId)
+      sdf.setTimeZone(TimeZone.getTimeZone(zid))
+
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:11:12.123").getTime)),
+          Literal(Period.ofMonths(2)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2016-03-29 10:11:12.123").getTime)))
+
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal.create(null, TimestampType),
+          Literal(Period.ofMonths(1)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
+          Literal.create(null, YearMonthIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimestampAddYMInterval(
+          Literal.create(null, TimestampType),
+          Literal.create(null, YearMonthIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, interval: Expression) => TimestampAddYMInterval(ts, interval, timeZoneId),
+        TimestampType, YearMonthIntervalType)
+    }
+  }
+
+  test("SPARK-34761: add a day-time interval to a timestamp") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    for (zid <- outstandingZoneIds) {
+      val timeZoneId = Option(zid.getId)
+      sdf.setTimeZone(TimeZone.getTimeZone(zid))
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+          Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2021-01-11 00:10:00.444").getTime)))
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:10:00.123").getTime)),
+          Literal(Duration.ofDays(-10).minusMinutes(9).minusMillis(120)),
+          timeZoneId),
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse("2020-12-22 00:01:00.003").getTime)))
+
+      val e = intercept[Exception] {
+        checkEvaluation(
+          TimeAdd(
+            Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+            Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+            timeZoneId),
+          null)
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("long overflow"))
+
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal(Duration.ofDays(1)),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
+          Literal.create(null, DayTimeIntervalType),
+          timeZoneId),
+        null)
+      checkEvaluation(
+        TimeAdd(
+          Literal.create(null, TimestampType),
+          Literal.create(null, DayTimeIntervalType),
+          timeZoneId),
+        null)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, interval: Expression) => TimeAdd(ts, interval, timeZoneId),
+        TimestampType, DayTimeIntervalType)
+    }
+  }
+}

@@ -41,14 +41,19 @@ import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths}
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableBitSet
 
 object Literal {
   val TrueLiteral: Literal = Literal(true, BooleanType)
@@ -295,6 +300,18 @@ object DecimalLiteral {
   def smallerThanSmallestLong(v: Decimal): Boolean = v < Decimal(Long.MinValue)
 }
 
+object LiteralTreeBits {
+  // Singleton tree pattern BitSet for all Literals that are not true, false, or null.
+  val literalBits: BitSet = new ImmutableBitSet(TreePattern.maxId, LITERAL.id)
+
+  // Singleton tree pattern BitSet for all Literals that are true or false.
+  val booleanLiteralBits: BitSet = new ImmutableBitSet(
+      TreePattern.maxId, LITERAL.id, TRUE_OR_FALSE_LITERAL.id)
+
+  // Singleton tree pattern BitSet for all Literals that are nulls.
+  val nullLiteralBits: BitSet = new ImmutableBitSet(TreePattern.maxId, LITERAL.id, NULL_LITERAL.id)
+}
+
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
@@ -307,6 +324,14 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
 
+  override lazy val treePatternBits: BitSet = {
+    value match {
+      case null => LiteralTreeBits.nullLiteralBits
+      case true | false => LiteralTreeBits.booleanLiteralBits
+      case _ => LiteralTreeBits.literalBits
+    }
+  }
+
   override def toString: String = value match {
     case null => "null"
     case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
@@ -317,6 +342,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           DateFormatter(timeZoneId).format(value.asInstanceOf[Int])
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
+        case DayTimeIntervalType => toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE)
+        case YearMonthIntervalType => toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE)
         case _ =>
           other.toString
       }
@@ -437,6 +464,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
+    case (i: Long, DayTimeIntervalType) => toDayTimeIntervalString(i, ANSI_STYLE)
+    case (i: Int, YearMonthIntervalType) => toYearMonthIntervalString(i, ANSI_STYLE)
     case _ => value.toString
   }
 }

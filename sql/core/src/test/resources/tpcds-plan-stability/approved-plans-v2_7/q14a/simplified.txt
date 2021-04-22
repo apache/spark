@@ -1,28 +1,28 @@
 TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
-  WholeStageCodegen (466)
+  WholeStageCodegen (406)
     HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
       InputAdapter
         Exchange [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales] #1
-          WholeStageCodegen (465)
+          WholeStageCodegen (405)
             HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum_sales,number_sales]
               InputAdapter
                 Union
-                  WholeStageCodegen (92)
+                  WholeStageCodegen (80)
                     HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum,isEmpty,sum] [sum(sales),sum(number_salesL),sum_sales,number_sales,sum,isEmpty,sum]
                       InputAdapter
                         Exchange [channel,i_brand_id,i_class_id,i_category_id] #2
-                          WholeStageCodegen (91)
+                          WholeStageCodegen (79)
                             HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                               InputAdapter
                                 Union
-                                  WholeStageCodegen (30)
+                                  WholeStageCodegen (26)
                                     Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                       Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                         Subquery #3
                                           WholeStageCodegen (8)
                                             HashAggregate [sum,count] [avg(CheckOverflow((promote_precision(cast(cast(quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(list_price as decimal(12,2)))), DecimalType(18,2), true)),average_sales,sum,count]
                                               InputAdapter
-                                                Exchange #17
+                                                Exchange #15
                                                   WholeStageCodegen (7)
                                                     HashAggregate [quantity,list_price] [sum,count,sum,count]
                                                       InputAdapter
@@ -34,9 +34,9 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                   InputAdapter
                                                                     Scan parquet default.store_sales [ss_quantity,ss_list_price,ss_sold_date_sk]
                                                                       SubqueryBroadcast [d_date_sk] #4
-                                                                        ReusedExchange [d_date_sk] #18
+                                                                        ReusedExchange [d_date_sk] #16
                                                                 InputAdapter
-                                                                  BroadcastExchange #18
+                                                                  BroadcastExchange #16
                                                                     WholeStageCodegen (1)
                                                                       Project [d_date_sk]
                                                                         Filter [d_year,d_date_sk]
@@ -50,9 +50,9 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                   InputAdapter
                                                                     Scan parquet default.catalog_sales [cs_quantity,cs_list_price,cs_sold_date_sk]
                                                                       SubqueryBroadcast [d_date_sk] #5
-                                                                        ReusedExchange [d_date_sk] #19
+                                                                        ReusedExchange [d_date_sk] #17
                                                                 InputAdapter
-                                                                  BroadcastExchange #19
+                                                                  BroadcastExchange #17
                                                                     WholeStageCodegen (3)
                                                                       Project [d_date_sk]
                                                                         Filter [d_year,d_date_sk]
@@ -67,11 +67,11 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                     Scan parquet default.web_sales [ws_quantity,ws_list_price,ws_sold_date_sk]
                                                                       ReusedSubquery [d_date_sk] #5
                                                                 InputAdapter
-                                                                  ReusedExchange [d_date_sk] #19
+                                                                  ReusedExchange [d_date_sk] #17
                                         HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                           InputAdapter
                                             Exchange [i_brand_id,i_class_id,i_category_id] #3
-                                              WholeStageCodegen (29)
+                                              WholeStageCodegen (25)
                                                 HashAggregate [i_brand_id,i_class_id,i_category_id,ss_quantity,ss_list_price] [sum,isEmpty,count,sum,isEmpty,count]
                                                   Project [ss_quantity,ss_list_price,i_brand_id,i_class_id,i_category_id]
                                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
@@ -86,7 +86,7 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                       ReusedExchange [d_date_sk] #4
                                                             InputAdapter
                                                               BroadcastExchange #5
-                                                                WholeStageCodegen (13)
+                                                                WholeStageCodegen (11)
                                                                   Project [i_item_sk]
                                                                     BroadcastHashJoin [i_brand_id,i_class_id,i_category_id,brand_id,class_id,category_id]
                                                                       Filter [i_brand_id,i_class_id,i_category_id]
@@ -95,114 +95,104 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                             Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                                                       InputAdapter
                                                                         BroadcastExchange #6
-                                                                          WholeStageCodegen (12)
-                                                                            BroadcastHashJoin [brand_id,class_id,category_id,i_brand_id,i_class_id,i_category_id]
+                                                                          WholeStageCodegen (10)
+                                                                            HashAggregate [brand_id,class_id,category_id]
                                                                               HashAggregate [brand_id,class_id,category_id]
-                                                                                HashAggregate [brand_id,class_id,category_id]
-                                                                                  BroadcastHashJoin [brand_id,class_id,category_id,i_brand_id,i_class_id,i_category_id]
-                                                                                    HashAggregate [brand_id,class_id,category_id]
-                                                                                      InputAdapter
-                                                                                        Exchange [brand_id,class_id,category_id] #7
-                                                                                          WholeStageCodegen (3)
-                                                                                            HashAggregate [brand_id,class_id,category_id]
-                                                                                              Project [i_brand_id,i_class_id,i_category_id]
-                                                                                                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                                                                  Project [ss_sold_date_sk,i_brand_id,i_class_id,i_category_id]
-                                                                                                    BroadcastHashJoin [ss_item_sk,i_item_sk]
-                                                                                                      Filter [ss_item_sk]
-                                                                                                        ColumnarToRow
-                                                                                                          InputAdapter
-                                                                                                            Scan parquet default.store_sales [ss_item_sk,ss_sold_date_sk]
-                                                                                                              SubqueryBroadcast [d_date_sk] #2
-                                                                                                                ReusedExchange [d_date_sk] #8
-                                                                                                      InputAdapter
-                                                                                                        BroadcastExchange #9
-                                                                                                          WholeStageCodegen (1)
+                                                                                BroadcastHashJoin [brand_id,class_id,category_id,i_brand_id,i_class_id,i_category_id]
+                                                                                  HashAggregate [brand_id,class_id,category_id]
+                                                                                    InputAdapter
+                                                                                      Exchange [brand_id,class_id,category_id] #7
+                                                                                        WholeStageCodegen (6)
+                                                                                          HashAggregate [brand_id,class_id,category_id]
+                                                                                            Project [i_brand_id,i_class_id,i_category_id]
+                                                                                              BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                                                Project [ss_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                                                                                                  BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                                                                                    Filter [ss_item_sk]
+                                                                                                      ColumnarToRow
+                                                                                                        InputAdapter
+                                                                                                          Scan parquet default.store_sales [ss_item_sk,ss_sold_date_sk]
+                                                                                                            SubqueryBroadcast [d_date_sk] #2
+                                                                                                              ReusedExchange [d_date_sk] #8
+                                                                                                    InputAdapter
+                                                                                                      BroadcastExchange #9
+                                                                                                        WholeStageCodegen (4)
+                                                                                                          BroadcastHashJoin [i_brand_id,i_class_id,i_category_id,i_brand_id,i_class_id,i_category_id]
                                                                                                             Filter [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                                                                                               ColumnarToRow
                                                                                                                 InputAdapter
                                                                                                                   Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
-                                                                                                  InputAdapter
-                                                                                                    BroadcastExchange #8
-                                                                                                      WholeStageCodegen (2)
-                                                                                                        Project [d_date_sk]
-                                                                                                          Filter [d_year,d_date_sk]
-                                                                                                            ColumnarToRow
-                                                                                                              InputAdapter
-                                                                                                                Scan parquet default.date_dim [d_date_sk,d_year]
-                                                                                    InputAdapter
-                                                                                      BroadcastExchange #10
-                                                                                        WholeStageCodegen (7)
-                                                                                          HashAggregate [i_brand_id,i_class_id,i_category_id]
-                                                                                            InputAdapter
-                                                                                              Exchange [i_brand_id,i_class_id,i_category_id] #11
-                                                                                                WholeStageCodegen (6)
-                                                                                                  HashAggregate [i_brand_id,i_class_id,i_category_id]
-                                                                                                    Project [i_brand_id,i_class_id,i_category_id]
-                                                                                                      BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                                                                                        Project [cs_sold_date_sk,i_brand_id,i_class_id,i_category_id]
-                                                                                                          BroadcastHashJoin [cs_item_sk,i_item_sk]
-                                                                                                            Filter [cs_item_sk]
-                                                                                                              ColumnarToRow
-                                                                                                                InputAdapter
-                                                                                                                  Scan parquet default.catalog_sales [cs_item_sk,cs_sold_date_sk]
-                                                                                                                    ReusedSubquery [d_date_sk] #2
                                                                                                             InputAdapter
-                                                                                                              BroadcastExchange #12
-                                                                                                                WholeStageCodegen (4)
-                                                                                                                  Filter [i_item_sk]
-                                                                                                                    ColumnarToRow
+                                                                                                              BroadcastExchange #10
+                                                                                                                WholeStageCodegen (3)
+                                                                                                                  Project [i_brand_id,i_class_id,i_category_id]
+                                                                                                                    BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                                                                                                      Project [cs_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                                                                                                                        BroadcastHashJoin [cs_item_sk,i_item_sk]
+                                                                                                                          Filter [cs_item_sk]
+                                                                                                                            ColumnarToRow
+                                                                                                                              InputAdapter
+                                                                                                                                Scan parquet default.catalog_sales [cs_item_sk,cs_sold_date_sk]
+                                                                                                                                  ReusedSubquery [d_date_sk] #2
+                                                                                                                          InputAdapter
+                                                                                                                            BroadcastExchange #11
+                                                                                                                              WholeStageCodegen (1)
+                                                                                                                                Filter [i_item_sk]
+                                                                                                                                  ColumnarToRow
+                                                                                                                                    InputAdapter
+                                                                                                                                      Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                                                                                                       InputAdapter
-                                                                                                                        Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
-                                                                                                        InputAdapter
-                                                                                                          ReusedExchange [d_date_sk] #8
-                                                                              InputAdapter
-                                                                                BroadcastExchange #13
-                                                                                  WholeStageCodegen (11)
-                                                                                    HashAggregate [i_brand_id,i_class_id,i_category_id]
-                                                                                      InputAdapter
-                                                                                        Exchange [i_brand_id,i_class_id,i_category_id] #14
-                                                                                          WholeStageCodegen (10)
-                                                                                            HashAggregate [i_brand_id,i_class_id,i_category_id]
-                                                                                              Project [i_brand_id,i_class_id,i_category_id]
-                                                                                                BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                                                                  Project [ws_sold_date_sk,i_brand_id,i_class_id,i_category_id]
-                                                                                                    BroadcastHashJoin [ws_item_sk,i_item_sk]
-                                                                                                      Filter [ws_item_sk]
-                                                                                                        ColumnarToRow
-                                                                                                          InputAdapter
-                                                                                                            Scan parquet default.web_sales [ws_item_sk,ws_sold_date_sk]
-                                                                                                              ReusedSubquery [d_date_sk] #2
-                                                                                                      InputAdapter
-                                                                                                        ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #12
-                                                                                                  InputAdapter
-                                                                                                    ReusedExchange [d_date_sk] #8
+                                                                                                                        BroadcastExchange #8
+                                                                                                                          WholeStageCodegen (2)
+                                                                                                                            Project [d_date_sk]
+                                                                                                                              Filter [d_year,d_date_sk]
+                                                                                                                                ColumnarToRow
+                                                                                                                                  InputAdapter
+                                                                                                                                    Scan parquet default.date_dim [d_date_sk,d_year]
+                                                                                                InputAdapter
+                                                                                                  ReusedExchange [d_date_sk] #8
+                                                                                  InputAdapter
+                                                                                    BroadcastExchange #12
+                                                                                      WholeStageCodegen (9)
+                                                                                        Project [i_brand_id,i_class_id,i_category_id]
+                                                                                          BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                                                                            Project [ws_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                                                                                              BroadcastHashJoin [ws_item_sk,i_item_sk]
+                                                                                                Filter [ws_item_sk]
+                                                                                                  ColumnarToRow
+                                                                                                    InputAdapter
+                                                                                                      Scan parquet default.web_sales [ws_item_sk,ws_sold_date_sk]
+                                                                                                        ReusedSubquery [d_date_sk] #2
+                                                                                                InputAdapter
+                                                                                                  ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #11
+                                                                                            InputAdapter
+                                                                                              ReusedExchange [d_date_sk] #8
                                                           InputAdapter
-                                                            BroadcastExchange #15
-                                                              WholeStageCodegen (27)
+                                                            BroadcastExchange #13
+                                                              WholeStageCodegen (23)
                                                                 BroadcastHashJoin [i_item_sk,ss_item_sk]
                                                                   Filter [i_item_sk]
                                                                     ColumnarToRow
                                                                       InputAdapter
                                                                         Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                                                   InputAdapter
-                                                                    ReusedExchange [ss_item_sk] #16
+                                                                    ReusedExchange [ss_item_sk] #14
                                                       InputAdapter
                                                         BroadcastExchange #4
-                                                          WholeStageCodegen (28)
+                                                          WholeStageCodegen (24)
                                                             Project [d_date_sk]
                                                               Filter [d_year,d_moy,d_date_sk]
                                                                 ColumnarToRow
                                                                   InputAdapter
                                                                     Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
-                                  WholeStageCodegen (60)
+                                  WholeStageCodegen (52)
                                     Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                       Filter [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                         ReusedSubquery [average_sales] #3
                                         HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                           InputAdapter
-                                            Exchange [i_brand_id,i_class_id,i_category_id] #20
-                                              WholeStageCodegen (59)
+                                            Exchange [i_brand_id,i_class_id,i_category_id] #18
+                                              WholeStageCodegen (51)
                                                 HashAggregate [i_brand_id,i_class_id,i_category_id,cs_quantity,cs_list_price] [sum,isEmpty,count,sum,isEmpty,count]
                                                   Project [cs_quantity,cs_list_price,i_brand_id,i_class_id,i_category_id]
                                                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
@@ -215,19 +205,19 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                   Scan parquet default.catalog_sales [cs_item_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
                                                                     ReusedSubquery [d_date_sk] #1
                                                             InputAdapter
-                                                              ReusedExchange [ss_item_sk] #16
+                                                              ReusedExchange [ss_item_sk] #14
                                                           InputAdapter
-                                                            ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #15
+                                                            ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #13
                                                       InputAdapter
                                                         ReusedExchange [d_date_sk] #4
-                                  WholeStageCodegen (90)
+                                  WholeStageCodegen (78)
                                     Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                       Filter [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                         ReusedSubquery [average_sales] #3
                                         HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                           InputAdapter
-                                            Exchange [i_brand_id,i_class_id,i_category_id] #21
-                                              WholeStageCodegen (89)
+                                            Exchange [i_brand_id,i_class_id,i_category_id] #19
+                                              WholeStageCodegen (77)
                                                 HashAggregate [i_brand_id,i_class_id,i_category_id,ws_quantity,ws_list_price] [sum,isEmpty,count,sum,isEmpty,count]
                                                   Project [ws_quantity,ws_list_price,i_brand_id,i_class_id,i_category_id]
                                                     BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
@@ -240,144 +230,144 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                   Scan parquet default.web_sales [ws_item_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
                                                                     ReusedSubquery [d_date_sk] #1
                                                             InputAdapter
-                                                              ReusedExchange [ss_item_sk] #16
+                                                              ReusedExchange [ss_item_sk] #14
                                                           InputAdapter
-                                                            ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #15
+                                                            ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #13
                                                       InputAdapter
                                                         ReusedExchange [d_date_sk] #4
-                  WholeStageCodegen (185)
+                  WholeStageCodegen (161)
                     HashAggregate [channel,i_brand_id,i_class_id,sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
                       InputAdapter
-                        Exchange [channel,i_brand_id,i_class_id] #22
-                          WholeStageCodegen (184)
+                        Exchange [channel,i_brand_id,i_class_id] #20
+                          WholeStageCodegen (160)
                             HashAggregate [channel,i_brand_id,i_class_id,sum_sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                               HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum,isEmpty,sum] [sum(sales),sum(number_salesL),sum_sales,number_sales,sum,isEmpty,sum]
                                 InputAdapter
-                                  Exchange [channel,i_brand_id,i_class_id,i_category_id] #23
-                                    WholeStageCodegen (183)
+                                  Exchange [channel,i_brand_id,i_class_id,i_category_id] #21
+                                    WholeStageCodegen (159)
                                       HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                                         InputAdapter
                                           Union
-                                            WholeStageCodegen (122)
+                                            WholeStageCodegen (106)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #24
-                                            WholeStageCodegen (152)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #22
+                                            WholeStageCodegen (132)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #25
-                                            WholeStageCodegen (182)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #23
+                                            WholeStageCodegen (158)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #26
-                  WholeStageCodegen (278)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #24
+                  WholeStageCodegen (242)
                     HashAggregate [channel,i_brand_id,sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),i_class_id,i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
                       InputAdapter
-                        Exchange [channel,i_brand_id] #27
-                          WholeStageCodegen (277)
+                        Exchange [channel,i_brand_id] #25
+                          WholeStageCodegen (241)
                             HashAggregate [channel,i_brand_id,sum_sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                               HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum,isEmpty,sum] [sum(sales),sum(number_salesL),sum_sales,number_sales,sum,isEmpty,sum]
                                 InputAdapter
-                                  Exchange [channel,i_brand_id,i_class_id,i_category_id] #28
-                                    WholeStageCodegen (276)
+                                  Exchange [channel,i_brand_id,i_class_id,i_category_id] #26
+                                    WholeStageCodegen (240)
                                       HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                                         InputAdapter
                                           Union
-                                            WholeStageCodegen (215)
+                                            WholeStageCodegen (187)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #24
-                                            WholeStageCodegen (245)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #22
+                                            WholeStageCodegen (213)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #25
-                                            WholeStageCodegen (275)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #23
+                                            WholeStageCodegen (239)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #26
-                  WholeStageCodegen (371)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #24
+                  WholeStageCodegen (323)
                     HashAggregate [channel,sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),i_brand_id,i_class_id,i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
                       InputAdapter
-                        Exchange [channel] #29
-                          WholeStageCodegen (370)
+                        Exchange [channel] #27
+                          WholeStageCodegen (322)
                             HashAggregate [channel,sum_sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                               HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum,isEmpty,sum] [sum(sales),sum(number_salesL),sum_sales,number_sales,sum,isEmpty,sum]
                                 InputAdapter
-                                  Exchange [channel,i_brand_id,i_class_id,i_category_id] #30
-                                    WholeStageCodegen (369)
+                                  Exchange [channel,i_brand_id,i_class_id,i_category_id] #28
+                                    WholeStageCodegen (321)
                                       HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                                         InputAdapter
                                           Union
-                                            WholeStageCodegen (308)
+                                            WholeStageCodegen (268)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #24
-                                            WholeStageCodegen (338)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #22
+                                            WholeStageCodegen (294)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #25
-                                            WholeStageCodegen (368)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #23
+                                            WholeStageCodegen (320)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #26
-                  WholeStageCodegen (464)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #24
+                  WholeStageCodegen (404)
                     HashAggregate [sum,isEmpty,sum] [sum(sum_sales),sum(number_salesL),channel,i_brand_id,i_class_id,i_category_id,sum(sum_sales),sum(number_sales),sum,isEmpty,sum]
                       InputAdapter
-                        Exchange #31
-                          WholeStageCodegen (463)
+                        Exchange #29
+                          WholeStageCodegen (403)
                             HashAggregate [sum_sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                               HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sum,isEmpty,sum] [sum(sales),sum(number_salesL),sum_sales,number_sales,sum,isEmpty,sum]
                                 InputAdapter
-                                  Exchange [channel,i_brand_id,i_class_id,i_category_id] #32
-                                    WholeStageCodegen (462)
+                                  Exchange [channel,i_brand_id,i_class_id,i_category_id] #30
+                                    WholeStageCodegen (402)
                                       HashAggregate [channel,i_brand_id,i_class_id,i_category_id,sales,number_sales] [sum,isEmpty,sum,sum,isEmpty,sum]
                                         InputAdapter
                                           Union
-                                            WholeStageCodegen (401)
+                                            WholeStageCodegen (349)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #24
-                                            WholeStageCodegen (431)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #22
+                                            WholeStageCodegen (375)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(cs_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #25
-                                            WholeStageCodegen (461)
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #23
+                                            WholeStageCodegen (401)
                                               Project [i_brand_id,i_class_id,i_category_id,sales,number_sales]
                                                 Filter [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true))]
                                                   ReusedSubquery [average_sales] #3
                                                   HashAggregate [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),count(1),sales,number_sales,sum(CheckOverflow((promote_precision(cast(cast(ws_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price as decimal(12,2)))), DecimalType(18,2), true)),sum,isEmpty,count]
                                                     InputAdapter
-                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #26
+                                                      ReusedExchange [i_brand_id,i_class_id,i_category_id,sum,isEmpty,count] #24

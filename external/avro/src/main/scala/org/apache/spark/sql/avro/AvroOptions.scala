@@ -69,14 +69,14 @@ private[sql] class AvroOptions(
 
   /**
    * Top level record name in write result, which is required in Avro spec.
-   * See https://avro.apache.org/docs/1.10.1/spec.html#schema_record .
+   * See https://avro.apache.org/docs/1.10.2/spec.html#schema_record .
    * Default value is "topLevelRecord"
    */
   val recordName: String = parameters.getOrElse("recordName", "topLevelRecord")
 
   /**
    * Record namespace in write result. Default value is "".
-   * See Avro spec for details: https://avro.apache.org/docs/1.10.1/spec.html#schema_record .
+   * See Avro spec for details: https://avro.apache.org/docs/1.10.2/spec.html#schema_record .
    */
   val recordNamespace: String = parameters.getOrElse("recordNamespace", "")
 
@@ -101,9 +101,9 @@ private[sql] class AvroOptions(
 
   /**
    * The `compression` option allows to specify a compression codec used in write.
-   * Currently supported codecs are `uncompressed`, `snappy`, `deflate`, `bzip2` and `xz`.
-   * If the option is not set, the `spark.sql.avro.compression.codec` config is taken into
-   * account. If the former one is not set too, the `snappy` codec is used by default.
+   * Currently supported codecs are `uncompressed`, `snappy`, `deflate`, `bzip2`, `xz` and
+   * `zstandard`. If the option is not set, the `spark.sql.avro.compression.codec` config is
+   * taken into account. If the former one is not set too, the `snappy` codec is used by default.
    */
   val compression: String = {
     parameters.get("compression").getOrElse(SQLConf.get.avroCompressionCodec)

@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table}
 case class ShowTablePropertiesExec(
     output: Seq[Attribute],
     catalogTable: Table,
-    propertyKey: Option[String]) extends V2CommandExec {
+    propertyKey: Option[String]) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     import scala.collection.JavaConverters._

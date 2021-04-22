@@ -56,7 +56,7 @@ export COVERAGE_PROCESS_START="$FWDIR/.coveragerc"
 unset COVERAGE_PROCESS_START
 
 # Coverage could generate empty coverage data files. Remove it to get rid of warnings when combining.
-find $COVERAGE_DIR/coverage_data -size 0 -print0 | xargs -0 rm
+find $COVERAGE_DIR/coverage_data -size 0 -print0 | xargs -0 rm -fr
 echo "Combining collected coverage data under $COVERAGE_DIR/coverage_data"
 $COV_EXEC combine
 echo "Reporting the coverage data at $COVERAGE_DIR/coverage_data/coverage"

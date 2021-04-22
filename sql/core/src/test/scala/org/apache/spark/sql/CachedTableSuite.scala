@@ -1509,4 +1509,49 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).isEmpty)
     }
   }
+
+  test("SPARK-34699: CREATE TEMP VIEW USING should uncache correctly") {
+    withTempView("tv") {
+      testCreateTemporaryViewUsingWithCache(TableIdentifier("tv"))
+    }
+  }
+
+  test("SPARK-34699: CREATE GLOBAL TEMP VIEW USING should uncache correctly") {
+    withGlobalTempView("global_tv") {
+      val db = spark.sharedState.globalTempViewManager.database
+      testCreateTemporaryViewUsingWithCache(TableIdentifier("global_tv", Some(db)))
+    }
+  }
+
+  private def testCreateTemporaryViewUsingWithCache(ident: TableIdentifier): Unit = {
+    withTempDir { dir =>
+      val path1 = new File(dir, "t1").getCanonicalPath
+      val path2 = new File(dir, "t2").getCanonicalPath
+      Seq(1).toDF.write.parquet(path1)
+      Seq(1).toDF.write.parquet(path2)
+
+      val (tempViewStr, viewName) = if (ident.database.nonEmpty) {
+        ("GLOBAL TEMPORARY VIEW", s"${ident.database.get}.${ident.table}")
+      } else {
+        ("TEMPORARY VIEW", ident.table)
+      }
+
+      sql(s"CREATE $tempViewStr ${ident.table} USING parquet OPTIONS (path '$path1')")
+
+      sql(s"CACHE TABLE $viewName")
+      assert(spark.catalog.isCached(viewName))
+
+      // Replacing with the same relation. The cache shouldn't be uncached.
+      sql(s"CREATE OR REPLACE $tempViewStr ${ident.table} USING parquet OPTIONS (path '$path1')")
+      assert(spark.catalog.isCached(viewName))
+
+      // Replacing with a different relation. The cache should be cleared.
+      sql(s"CREATE OR REPLACE $tempViewStr ${ident.table} USING parquet OPTIONS (path '$path2')")
+      assert(!spark.catalog.isCached(viewName))
+
+      // Validate that the cache is cleared by creating a temp view with the same relation.
+      sql(s"CREATE OR REPLACE $tempViewStr ${ident.table} USING parquet OPTIONS (path '$path1')")
+      assert(!spark.catalog.isCached(viewName))
+    }
+  }
 }

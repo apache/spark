@@ -1673,7 +1673,7 @@ object CodeGenerator extends Logging {
       case CalendarIntervalType => s"$vector.putInterval($rowId, $value);"
       case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
-        throw QueryExecutionErrors.cannotGenerateCodeForUnsupportedTypeError(dataType)
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
   }
 

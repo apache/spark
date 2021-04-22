@@ -55,7 +55,7 @@ case class CreateFunctionCommand(
     isTemp: Boolean,
     ignoreIfExists: Boolean,
     replace: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   if (ignoreIfExists && replace) {
     throw new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE" +
@@ -112,7 +112,7 @@ case class CreateFunctionCommand(
  */
 case class DescribeFunctionCommand(
     functionName: FunctionIdentifier,
-    isExtended: Boolean) extends RunnableCommand {
+    isExtended: Boolean) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = {
     val schema = StructType(StructField("function_desc", StringType, nullable = false) :: Nil)
@@ -177,7 +177,7 @@ case class DropFunctionCommand(
     functionName: String,
     ifExists: Boolean,
     isTemp: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -216,7 +216,7 @@ case class ShowFunctionsCommand(
     pattern: Option[String],
     showUserFunctions: Boolean,
     showSystemFunctions: Boolean,
-    override val output: Seq[Attribute]) extends RunnableCommand {
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbName = db.getOrElse(sparkSession.sessionState.catalog.getCurrentDatabase)
@@ -229,8 +229,10 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
-    // "<>", "!=", "between", and "case" is SystemFunctions, only show when showSystemFunctions=true
+    // Hard code "<>", "!=", "between", "case", and "||"
+    // for now as there is no corresponding functions.
+    // "<>", "!=", "between", "case", and "||" is SystemFunctions,
+    // only show when showSystemFunctions=true
     if (showSystemFunctions) {
       (functionNames ++
         StringUtils.filterPattern(FunctionsCommand.virtualOperators, pattern.getOrElse("*")))
@@ -253,7 +255,7 @@ case class ShowFunctionsCommand(
 case class RefreshFunctionCommand(
     databaseName: Option[String],
     functionName: String)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
