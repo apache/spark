@@ -100,11 +100,15 @@ object IntervalUtils {
    */
   def fromYearMonthString(input: String): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
-    def toInterval(yearStr: String, monthStr: String): CalendarInterval = {
+    def toInterval(yearStr: String, monthStr: String, negative: Boolean): CalendarInterval = {
       try {
         val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE).toInt
         val months = toLongWithRange(MONTH, monthStr, 0, 11).toInt
-        val totalMonths = Math.addExact(Math.multiplyExact(years, 12), months)
+        val totalMonths = if (negative) {
+          Math.addExact(-Math.multiplyExact(years, 12), -months)
+        } else {
+          Math.addExact(Math.multiplyExact(years, 12), months)
+        }
         new CalendarInterval(totalMonths, 0, 0)
       } catch {
         case NonFatal(e) =>
@@ -114,9 +118,9 @@ object IntervalUtils {
     }
     input.trim match {
       case yearMonthPattern("-", yearStr, monthStr) =>
-        negateExact(toInterval(yearStr, monthStr))
+        toInterval(yearStr, monthStr, true)
       case yearMonthPattern(_, yearStr, monthStr) =>
-        toInterval(yearStr, monthStr)
+        toInterval(yearStr, monthStr, false)
       case _ =>
         throw new IllegalArgumentException(
           s"Interval string does not match year-month format of 'y-m': $input")
