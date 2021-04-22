@@ -93,18 +93,22 @@ object IntervalUtils {
 
   private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
 
+  private val yearMonthFuzzyPattern = "[^-|+]*?([+|-]?[\\d]+-[\\d]+).*".r
+
   def safeFromYearMonthString(input: UTF8String): Option[Int] = {
     try {
       if (input == null || input.toString == null) {
         throw new IllegalArgumentException("Interval year-month string must be not null")
       } else {
-        val regex = "INTERVAL '([-|+]?[0-9]+-[-|+]?[0-9]+)' YEAR TO MONTH".r
         // scalastyle:off caselocale .toLowerCase
         val intervalString = input.trimAll().toUpperCase.toString
-        // scalastyle:on
-        val interval = regex.findFirstMatchIn(intervalString)
-          .map(_.group(1)).getOrElse(intervalString)
-        Some(fromYearMonthString(interval).months)
+        intervalString match {
+          case yearMonthFuzzyPattern(payLoad) =>
+            Some(fromYearMonthString(payLoad).months)
+          case _ =>
+            throw new IllegalArgumentException(
+              s"Interval string does not match year-month format of 'y-m': $input")
+        }
       }
     } catch {
       case _: IllegalArgumentException => None
