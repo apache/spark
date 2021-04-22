@@ -22,8 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.types.StructType
@@ -37,9 +36,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   protected val tables: util.Map[Identifier, Table] =
     new ConcurrentHashMap[Identifier, Table]()
-
-  protected val functions: util.Map[Identifier, UnboundFunction] =
-    new ConcurrentHashMap[Identifier, UnboundFunction]()
 
   private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
 
@@ -89,7 +85,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new TableAlreadyExistsException(ident)
     }
 
-    V2InMemoryCatalog.maybeSimulateFailedTableCreation(properties)
+    InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
     val table = new InMemoryTable(tableName, schema, partitions, properties, distribution,
@@ -141,27 +137,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 }
 
-class BasicInMemoryCatalog extends BasicInMemoryTableCatalog with FunctionCatalog {
-  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
-    functions.keySet().asScala.filter(_.namespace().sameElements(namespace)).toArray
-  }
-
-  override def loadFunction(ident: Identifier): UnboundFunction = {
-    Option(functions.get(ident)) match {
-      case Some(func) =>
-        func
-      case _ =>
-        throw new NoSuchFunctionException(ident)
-    }
-  }
-
-  def createFunction(ident: Identifier, fn: UnboundFunction): UnboundFunction = {
-    functions.put(ident, fn)
-  }
-}
-
-class V2InMemoryCatalog extends BasicInMemoryCatalog with SupportsNamespaces {
-  private def allNamespaces: Seq[Seq[String]] = {
+class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
+  protected def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
   }
 
@@ -233,17 +210,9 @@ class V2InMemoryCatalog extends BasicInMemoryCatalog with SupportsNamespaces {
       throw new NoSuchNamespaceException(namespace)
     }
   }
-
-  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
-    if (namespace.isEmpty || namespaceExists(namespace)) {
-      super.listFunctions(namespace)
-    } else {
-      throw new NoSuchNamespaceException(namespace)
-    }
-  }
 }
 
-object V2InMemoryCatalog {
+object InMemoryTableCatalog {
   val SIMULATE_FAILED_CREATE_PROPERTY = "spark.sql.test.simulateFailedCreate"
   val SIMULATE_DROP_BEFORE_REPLACE_PROPERTY = "spark.sql.test.simulateDropBeforeReplace"
 

@@ -26,7 +26,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, V2InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -36,7 +36,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   private val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
 
   private def addFunction(ident: Identifier, fn: UnboundFunction): Unit = {
-    catalog("testcat").asInstanceOf[V2InMemoryCatalog].createFunction(ident, fn)
+    catalog("testcat").asInstanceOf[InMemoryCatalog].createFunction(ident, fn)
   }
 
   test("undefined function") {

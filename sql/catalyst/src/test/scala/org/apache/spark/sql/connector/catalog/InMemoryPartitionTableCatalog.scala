@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
-class V2InMemoryPartitionCatalog extends V2InMemoryCatalog {
+class InMemoryPartitionTableCatalog extends InMemoryTableCatalog {
   import CatalogV2Implicits._
 
   override def createTable(
@@ -35,7 +35,7 @@ class V2InMemoryPartitionCatalog extends V2InMemoryCatalog {
       throw new TableAlreadyExistsException(ident)
     }
 
-    V2InMemoryCatalog.maybeSimulateFailedTableCreation(properties)
+    InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val table = new InMemoryAtomicPartitionTable(
       s"$name.${ident.quoted}", schema, partitions, properties)

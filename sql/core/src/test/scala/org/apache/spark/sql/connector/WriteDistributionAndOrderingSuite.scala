@@ -44,7 +44,7 @@ class WriteDistributionAndOrderingSuite
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[V2InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
   }
 
   after {
@@ -756,9 +756,9 @@ class WriteDistributionAndOrderingSuite
     UnresolvedAttribute(name)
   }
 
-  private def catalog: V2InMemoryCatalog = {
+  private def catalog: InMemoryTableCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog("testcat")
-    catalog.asTableCatalog.asInstanceOf[V2InMemoryCatalog]
+    catalog.asTableCatalog.asInstanceOf[InMemoryTableCatalog]
   }
 
   // executes a write operation and keeps the executed physical plan

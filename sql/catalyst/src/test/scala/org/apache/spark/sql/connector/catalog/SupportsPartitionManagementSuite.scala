@@ -34,8 +34,8 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
 
   def ref(name: String): NamedReference = LogicalExpressions.parseReference(name)
 
-  private val catalog: V2InMemoryCatalog = {
-    val newCatalog = new V2InMemoryCatalog
+  private val catalog: InMemoryTableCatalog = {
+    val newCatalog = new InMemoryTableCatalog
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog.createTable(
       ident,
@@ -156,7 +156,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   }
 
   private def createMultiPartTable(): InMemoryPartitionTable = {
-    val partCatalog = new V2InMemoryPartitionCatalog
+    val partCatalog = new InMemoryPartitionTableCatalog
     partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     val table = partCatalog.createTable(
       ident,

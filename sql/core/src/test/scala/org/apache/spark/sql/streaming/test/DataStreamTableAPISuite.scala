@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, Table, TableCapability, V2InMemoryCatalog, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder}
@@ -46,8 +46,8 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[V2InMemoryCatalog].getName)
-    spark.conf.set("spark.sql.catalog.teststream", classOf[V2InMemoryStreamCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set("spark.sql.catalog.teststream", classOf[InMemoryStreamTableCatalog].getName)
   }
 
   after {
@@ -157,7 +157,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   test("read: fallback to V1 relation") {
     val tblName = DataStreamTableAPISuite.V1FallbackTestTableName
     spark.conf.set(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key,
-      classOf[V2InMemoryStreamCatalog].getName)
+      classOf[InMemoryStreamTableCatalog].getName)
     val v2Source = classOf[FakeV2Provider].getName
     withTempDir { tempDir =>
       withTable(tblName) {
@@ -439,7 +439,7 @@ class NonStreamV2Table(override val name: String)
 }
 
 
-class V2InMemoryStreamCatalog extends V2InMemoryCatalog {
+class InMemoryStreamTableCatalog extends InMemoryTableCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def createTable(

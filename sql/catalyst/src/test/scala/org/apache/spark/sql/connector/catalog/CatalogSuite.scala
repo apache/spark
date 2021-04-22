@@ -40,8 +40,8 @@ class CatalogSuite extends SparkFunSuite {
       .add("id", IntegerType)
       .add("data", StringType)
 
-  private def newCatalog(): V2InMemoryCatalog = {
-    val newCatalog = new V2InMemoryCatalog
+  private def newCatalog(): InMemoryCatalog = {
+    val newCatalog = new InMemoryCatalog
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
@@ -903,7 +903,7 @@ class CatalogSuite extends SparkFunSuite {
   }
 
   test("truncate partitioned table") {
-    val partCatalog = new V2InMemoryPartitionCatalog
+    val partCatalog = new InMemoryPartitionTableCatalog
     partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
 
     val table = partCatalog.createTable(
@@ -947,9 +947,9 @@ class CatalogSuite extends SparkFunSuite {
 
     catalog.createNamespace(Array("ns1", "ns2"), emptyProps)
     catalog.createNamespace(Array("ns1", "ns3"), emptyProps)
-    catalog.asInstanceOf[V2InMemoryCatalog].createFunction(ident1, function)
-    catalog.asInstanceOf[V2InMemoryCatalog].createFunction(ident2, function)
-    catalog.asInstanceOf[V2InMemoryCatalog].createFunction(ident3, function)
+    catalog.createFunction(ident1, function)
+    catalog.createFunction(ident2, function)
+    catalog.createFunction(ident3, function)
 
     assert(catalog.listFunctions(Array("ns1", "ns2")).toSet === Set(ident1, ident2))
     assert(catalog.listFunctions(Array("ns1", "ns3")).toSet === Set(ident3))
@@ -961,7 +961,7 @@ class CatalogSuite extends SparkFunSuite {
     val catalog = newCatalog()
     val ident = Identifier.of(Array("ns"), "func")
     catalog.createNamespace(Array("ns"), emptyProps)
-    catalog.asInstanceOf[V2InMemoryCatalog].createFunction(ident, function)
+    catalog.createFunction(ident, function)
 
     assert(catalog.loadFunction(ident) == function)
     intercept[NoSuchFunctionException](catalog.loadFunction(Identifier.of(Array("ns"), "func1")))

@@ -101,7 +101,7 @@ class V1ReadFallbackWithCatalogSuite extends V1ReadFallbackSuite {
   }
 }
 
-class V1ReadFallbackCatalog extends BasicInMemoryCatalog {
+class V1ReadFallbackCatalog extends BasicInMemoryTableCatalog {
   override def createTable(
       ident: Identifier,
       schema: StructType,

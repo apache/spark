@@ -34,8 +34,8 @@ class DataSourceV2DataFrameSuite
   import testImplicits._
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[V2InMemoryCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testcat2", classOf[V2InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
   }
 
   after {

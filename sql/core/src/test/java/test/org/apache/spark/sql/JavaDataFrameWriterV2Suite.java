@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
-import org.apache.spark.sql.connector.catalog.V2InMemoryCatalog;
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.junit.After;
@@ -43,7 +43,7 @@ public class JavaDataFrameWriterV2Suite {
   @Before
   public void createTestTable() {
     this.spark = new TestSparkSession();
-    spark.conf().set("spark.sql.catalog.testcat", V2InMemoryCatalog.class.getName());
+    spark.conf().set("spark.sql.catalog.testcat", InMemoryTableCatalog.class.getName());
     spark.sql("CREATE TABLE testcat.t (s string) USING foo");
   }
 
