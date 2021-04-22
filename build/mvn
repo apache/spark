@@ -31,7 +31,7 @@ _COMPILE_JVM_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g"
 ## Arg2 - Tarball Name
 ## Arg3 - Checkable Binary
 install_app() {
-  local remote_tarball="$1/$2"
+  local remote_tarball="$1"
   local local_tarball="${_DIR}/$2"
   local binary="${_DIR}/$3"
 
@@ -71,19 +71,20 @@ install_mvn() {
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
   fi
   if [ $(version $MVN_DETECTED_VERSION) -lt $(version $MVN_VERSION) ]; then
-    local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua?action=download&filename='}
-        
+    local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz"
+    local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
+    local MIRROR_URL="${APACHE_MIRROR}/${FILE_PATH}?action=download"
+
     if [ $(command -v curl) ]; then
-      local TEST_MIRROR_URL="${APACHE_MIRROR}/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz"
-      if ! curl -L --output /dev/null --silent --head --fail "$TEST_MIRROR_URL" ; then
+      if ! curl -L --output /dev/null --silent --head --fail "${MIRROR_URL}" ; then
         # Fall back to archive.apache.org for older Maven
         echo "Falling back to archive.apache.org to download Maven"
-        APACHE_MIRROR="https://archive.apache.org/dist"
+        MIRROR_URL="https://archive.apache.org/dist/${FILE_PATH}"
       fi
     fi
 
     install_app \
-      "${APACHE_MIRROR}/maven/maven-3/${MVN_VERSION}/binaries" \
+      "${MIRROR_URL}" \
       "apache-maven-${MVN_VERSION}-bin.tar.gz" \
       "apache-maven-${MVN_VERSION}/bin/mvn"
 
@@ -102,7 +103,7 @@ install_scala() {
   local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.lightbend.com}
 
   install_app \
-    "${TYPESAFE_MIRROR}/scala/${scala_version}" \
+    "${TYPESAFE_MIRROR}/scala/${scala_version}/scala-${scala_version}.tgz" \
     "scala-${scala_version}.tgz" \
     "scala-${scala_version}/bin/scala"
 

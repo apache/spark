@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, LambdaFunction, Literal, MapFilter, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, In, InSet, LambdaFunction, Literal, MapFilter, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertStarAction, Join, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction, UpdateStarAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{INSET, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.Utils
 
@@ -51,7 +51,7 @@ import org.apache.spark.util.Utils
 object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL), ruleId) {
+    _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL, INSET), ruleId) {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(replaceNullWithFalse(cond)))
     case d @ DeleteFromTable(_, Some(cond)) => d.copy(condition = Some(replaceNullWithFalse(cond)))
@@ -98,6 +98,17 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
   private def replaceNullWithFalse(e: Expression): Expression = e match {
     case Literal(null, BooleanType) =>
       FalseLiteral
+    // In SQL, the `Not(IN)` expression evaluates as follows:
+    // `NULL not in (1)` -> NULL
+    // `NULL not in (1, NULL)` -> NULL
+    // `1 not in (1, NULL)` -> false
+    // `1 not in (2, NULL)` -> NULL
+    // In predicate, NULL is equal to false, so we can simplify them to false directly.
+    case Not(In(value, list)) if (value +: list).exists(isNullLiteral) =>
+      FalseLiteral
+    case Not(InSet(value, list)) if isNullLiteral(value) || list.contains(null) =>
+      FalseLiteral
+
     case And(left, right) =>
       And(replaceNullWithFalse(left), replaceNullWithFalse(right))
     case Or(left, right) =>
@@ -132,5 +143,10 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       case i @ InsertStarAction(Some(cond)) => i.copy(condition = Some(replaceNullWithFalse(cond)))
       case other => other
     }
+  }
+
+  private def isNullLiteral(e: Expression): Boolean = e match {
+    case Literal(null, _) => true
+    case _ => false
   }
 }
