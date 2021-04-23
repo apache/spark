@@ -122,9 +122,10 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     spark.sessionState.conf.clear()
     try {
       sql(s"SET ${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key}=true")
+      sql(s"SET ${SQLConf.COALESCE_PARTITIONS_ENABLED.key}=true")
       sql(s"SET ${SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key}=1")
       sql(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=2")
-      checkAnswer(sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}"),
+      checkAnswer(sql(s"SET ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}"),
         Row(SQLConf.SHUFFLE_PARTITIONS.key, "2"))
     } finally {
       spark.sessionState.conf.clear()
