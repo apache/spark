@@ -83,7 +83,7 @@ license: |
 
   - In Spark 3.2, the unit-to-unit interval literals like `INTERVAL '1-1' YEAR TO MONTH` are converted to ANSI interval types: `YearMonthIntervalType` or `DayTimeIntervalType`. In Spark 3.1 and earlier, such interval literals are converted to `CalendarIntervalType`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.interval.enabled` to `true`.
 
-  - In Spark 3.2, `String_Column - Date_Column` will cause an analysis exception instead of implicitly converting the first column as Date Type. This is to make it consistent with the behavior of `String_Column - Timestamp_Column`. 
+  - In Spark 3.2, the subtraction of string and date columns is disallowed. In Spark 3.1 and earlier, the string column was implicitly casted to date type, which is inconsistent with the subtraction of string and timestamp columns.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 
