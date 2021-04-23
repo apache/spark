@@ -752,9 +752,11 @@ object NullPropagation extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT, CAST), ruleId) {
+    t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+      || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
-      _.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT, CAST), ruleId) {
+      t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+        || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
         Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case e @ AggregateExpression(Count(exprs), _, _, _, _) if exprs.forall(isNullLiteral) =>
