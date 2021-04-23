@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 
@@ -56,7 +56,10 @@ case class LocalTableScanExec(
     }
   }
 
-  override def outputPartitioning: Partitioning = UnknownPartitioning(rdd.partitions.length)
+  override def outputPartitioning: Partitioning = rdd.partitions.length match {
+    case 1 => SinglePartition
+    case other => UnknownPartitioning(other)
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
