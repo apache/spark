@@ -271,8 +271,7 @@ final class ShuffleBlockFetcherIterator(
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
         remainingBlocks -= blockId
         val (size, mapIndex) = infoMap(blockId)
-        results.put(new FailureFetchResult(
-          BlockId(blockId), mapIndex, address, size, remainingBlocks.isEmpty, e))
+        results.put(new FailureFetchResult(BlockId(blockId), mapIndex, address, e))
       }
     }
 
@@ -439,8 +438,7 @@ final class ShuffleBlockFetcherIterator(
               logError("Error occurred while fetching local blocks, " + ce.getMessage)
             case ex: Exception => logError("Error occurred while fetching local blocks", ex)
           }
-          results.put(new FailureFetchResult(
-            blockId, mapIndex, blockManager.blockManagerId, 0L, false, e))
+          results.put(new FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
           return
       }
     }
@@ -461,7 +459,7 @@ final class ShuffleBlockFetcherIterator(
       case e: Exception =>
         // If we see an exception, stop immediately.
         logError(s"Error occurred while fetching local blocks", e)
-        results.put(FailureFetchResult(blockId, mapIndex, blockManagerId, 0, false, e))
+        results.put(FailureFetchResult(blockId, mapIndex, blockManagerId, e))
         false
     }
   }
@@ -509,8 +507,8 @@ final class ShuffleBlockFetcherIterator(
             logError("Error occurred while fetching host local blocks", throwable)
             val bmId = bmIds.head
             val blockInfoSeq = hostLocalBlocksWithMissingDirs(bmId)
-            val (blockId, size, mapIndex) = blockInfoSeq.head
-            results.put(FailureFetchResult(blockId, mapIndex, bmId, size, false, throwable))
+            val (blockId, _, mapIndex) = blockInfoSeq.head
+            results.put(FailureFetchResult(blockId, mapIndex, bmId, throwable))
         }
       }
     }
@@ -715,7 +713,7 @@ final class ShuffleBlockFetcherIterator(
           defReqQueue.enqueue(FetchRequest(address, Array(FetchBlockInfo(blockId, size, mapIndex))))
           result = null
 
-        case FailureFetchResult(blockId, mapIndex, address, _, _, e) =>
+        case FailureFetchResult(blockId, mapIndex, address, e) =>
           throwFetchFailedException(blockId, mapIndex, address, e)
       }
 
@@ -1039,18 +1037,12 @@ object ShuffleBlockFetcherIterator {
    * @param blockId block id
    * @param mapIndex the mapIndex for this block, which indicate the index in the map stage
    * @param address BlockManager that the block was attempted to be fetched from
-   * @param size estimated size of the block. Note that this is NOT the exact bytes.
-   *             Size of remote block is used to calculate bytesInFlight. Thus, for a local block
-   *             in case of the fetch failure, the size is fine to be ignored.
-   * @param isNetworkReqDone Is this the last network request for this host in this fetch request.
    * @param e the failure exception
    */
   private[storage] case class FailureFetchResult(
       blockId: BlockId,
       mapIndex: Int,
       address: BlockManagerId,
-      size: Long,
-      isNetworkReqDone: Boolean,
       e: Throwable)
     extends FetchResult
 }
