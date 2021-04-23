@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -44,8 +44,10 @@ case class ExpandExec(
 
   // The GroupExpressions can output data with arbitrary partitioning, so set it
   // as UNKNOWN partitioning
-  override def outputPartitioning: Partitioning =
-    UnknownPartitioning(child.outputPartitioning.numPartitions)
+  override def outputPartitioning: Partitioning = child.outputPartitioning match {
+    case SinglePartition => SinglePartition
+    case other => UnknownPartitioning(other.numPartitions)
+  }
 
   @transient
   override lazy val references: AttributeSet =
