@@ -507,11 +507,19 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     override def supportedCustomMetrics(): Array[CustomMetric] = {
-      Array(
-        new CustomSumMetric("offsetOutOfRange", "estimated number of fetched offsets out of range"),
-        new CustomSumMetric("dataLoss", "number of data loss error"))
+      Array(new OffsetOutOfRangeMetric, new DataLossMetric)
     }
   }
+}
+
+private[spark] class OffsetOutOfRangeMetric extends CustomSumMetric {
+  override def name(): String = "offsetOutOfRange"
+  override def description(): String = "estimated number of fetched offsets out of range"
+}
+
+private[spark] class DataLossMetric extends CustomSumMetric {
+  override def name(): String = "dataLoss"
+  override def description(): String = "number of data loss error"
 }
 
 private[kafka010] object KafkaSourceProvider extends Logging {

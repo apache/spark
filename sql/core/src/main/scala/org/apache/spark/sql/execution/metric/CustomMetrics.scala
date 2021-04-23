@@ -47,12 +47,13 @@ object CustomMetrics {
 }
 
 /**
- * Built-in `CustomMetric` that sums up metric values.
+ * Built-in `CustomMetric` that sums up metric values. Note that please extend this class
+ * and override `name` and `description` to create your custom metric for real usage.
  */
-class CustomSumMetric(metricName: String, metricDescption: String) extends CustomMetric {
-  override def name(): String = metricName
+class CustomSumMetric extends CustomMetric {
+  override def name(): String = "CustomSumMetric"
 
-  override def description(): String = metricDescption
+  override def description(): String = "Sum up CustomMetric"
 
   override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
     taskMetrics.sum.toString
@@ -60,12 +61,13 @@ class CustomSumMetric(metricName: String, metricDescption: String) extends Custo
 }
 
 /**
- * Built-in `CustomMetric` that computes average of metric values.
+ * Built-in `CustomMetric` that computes average of metric values. Note that please extend this
+ * class and override `name` and `description` to create your custom metric for real usage.
  */
-class CustomAvgMetric(metricName: String, metricDescption: String) extends CustomMetric {
-  override def name(): String = metricName
+class CustomAvgMetric extends CustomMetric {
+  override def name(): String = "CustomAvgMetric"
 
-  override def description(): String = metricDescption
+  override def description(): String = "Average CustomMetric"
 
   override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
     val average = if (taskMetrics.isEmpty) {

@@ -22,8 +22,7 @@ import org.apache.spark.SparkFunSuite
 class CustomMetricsSuite extends SparkFunSuite {
 
   test("Build/parse custom metric metric type") {
-    Seq(new CustomSumMetric("custom sum", "Sum up CustomMetric"),
-      new CustomAvgMetric("custom average", "Average CustomMetric")).foreach { customMetric =>
+    Seq(new CustomSumMetric, new CustomAvgMetric).foreach { customMetric =>
       val metricType = CustomMetrics.buildV2CustomMetricTypeName(customMetric)
 
       assert(metricType == CustomMetrics.V2_CUSTOM + "_" + customMetric.getClass.getCanonicalName)
@@ -34,7 +33,7 @@ class CustomMetricsSuite extends SparkFunSuite {
   }
 
   test("Built-in CustomSumMetric") {
-    val metric = new CustomSumMetric("custom sum", "Sum up CustomMetric")
+    val metric = new CustomSumMetric
 
     val metricValues1 = Array(0L, 1L, 5L, 5L, 7L, 10L)
     assert(metric.aggregateTaskMetrics(metricValues1) == metricValues1.sum.toString)
@@ -44,7 +43,7 @@ class CustomMetricsSuite extends SparkFunSuite {
   }
 
   test("Built-in CustomAvgMetric") {
-    val metric = new CustomAvgMetric("custom average", "Average CustomMetric")
+    val metric = new CustomAvgMetric
 
     val metricValues1 = Array(0L, 1L, 5L, 5L, 7L, 10L)
     assert(metric.aggregateTaskMetrics(metricValues1) == "4.667")
