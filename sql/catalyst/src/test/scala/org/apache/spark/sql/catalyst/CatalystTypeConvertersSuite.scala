@@ -324,7 +324,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
           val i = Instant.ofEpochSecond(seconds)
           val result1 = converter(i)
 
-          val t = new java.sql.Timestamp(seconds * 1000)
+          val t = new java.sql.Timestamp(seconds * DateTimeConstants.MILLIS_PER_SECOND)
           val result2 = converter(t)
 
           val expected = seconds * DateTimeConstants.MICROS_PER_SECOND

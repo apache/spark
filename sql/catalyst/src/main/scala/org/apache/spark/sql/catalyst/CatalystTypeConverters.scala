@@ -310,7 +310,7 @@ object CatalystTypeConverters {
       case l: LocalDate => DateTimeUtils.localDateToDays(l)
       case other => throw new IllegalArgumentException(
         s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the date type")
+          + s"cannot be converted to the ${DateType.sql} type")
     }
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateTimeUtils.toJavaDate(catalystValue.asInstanceOf[Int])
@@ -335,7 +335,7 @@ object CatalystTypeConverters {
       case i: Instant => DateTimeUtils.instantToMicros(i)
       case other => throw new IllegalArgumentException(
         s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the timestamp type")
+          + s"cannot be converted to the ${TimestampType.sql} type")
     }
     override def toScala(catalystValue: Any): Timestamp =
       if (catalystValue == null) null
