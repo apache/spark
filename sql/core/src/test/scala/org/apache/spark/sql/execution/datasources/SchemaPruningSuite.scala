@@ -853,4 +853,21 @@ abstract class SchemaPruningSuite
           Row("John", "Y.") :: Nil)
     }
   }
+
+  test("SPARK-34638: queries should not fail on unsupported cases") {
+    withTable("nested_array") {
+      sql("select * from values array(array(named_struct('a', 1, 'b', 3), " +
+        "named_struct('a', 2, 'b', 4))) T(items)").write.saveAsTable("nested_array")
+      val query = sql("select d.a from (select explode(c) d from " +
+        "(select explode(items) c from nested_array))")
+      checkAnswer(query, Row(1) :: Row(2) :: Nil)
+    }
+
+    withTable("map") {
+      sql("select * from values map(1, named_struct('a', 1, 'b', 3), " +
+        "2, named_struct('a', 2, 'b', 4)) T(items)").write.saveAsTable("map")
+      val query = sql("select d.a from (select explode(items) (c, d) from map)")
+      checkAnswer(query, Row(1) :: Row(2) :: Nil)
+    }
+  }
 }

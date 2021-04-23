@@ -276,6 +276,16 @@ object GeneratorNestedColumnAliasing {
           val pushedThrough = Project(NestedColumnAliasing
             .getNewProjectList(projectList, nestedFieldsNotOnGenerator), newChild)
 
+          // If the generator output is `ArrayType`, we cannot push through the extractor.
+          // It is because we don't allow field extractor on two-level array,
+          // i.e., attr.field when attr is a ArrayType(ArrayType(...)).
+          // Similarily, we also cannot push through if the child of generator is `MapType`.
+          g.generator.children.head.dataType match {
+            case _: MapType => return Some(pushedThrough)
+            case ArrayType(_: ArrayType, _) => return Some(pushedThrough)
+            case _ =>
+          }
+
           // Pruning on `Generator`'s output. We only process single field case.
           // For multiple field case, we cannot directly move field extractor into
           // the generator expression. A workaround is to re-construct array of struct
