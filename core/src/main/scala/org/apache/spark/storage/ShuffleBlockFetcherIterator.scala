@@ -271,7 +271,21 @@ final class ShuffleBlockFetcherIterator(
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
         remainingBlocks -= blockId
         val (size, mapIndex) = infoMap(blockId)
-        results.put(new FailureFetchResult(BlockId(blockId), mapIndex, address, e))
+        val fetchResult = e match {
+          // Catching OOM and do something based on it is only a workaround for handling the
+          // Netty OOM issue, which is not the best way towards memory management. We can
+          // get rid of it when we find a way to manage Netty's memory precisely.
+          case _: OutOfDirectMemoryError | _: NettyOutOfMemoryError =>
+            if (NettyUtils.isNettyOOMOnShuffle.compareAndSet(false, true)) {
+              // The fetcher can fail remaining blocks in batch for the same error. So we only
+              // log the warning once to avoid flooding the logs.
+              logWarning(s"Netty OOM happens, will retry the failed blocks")
+            }
+            DeferFetchResult(BlockId(blockId), mapIndex, address, size, remainingBlocks.isEmpty)
+          case _ =>
+            FailureFetchResult(BlockId(blockId), mapIndex, address, e)
+        }
+        results.put(fetchResult)
       }
     }
 
@@ -692,16 +706,13 @@ final class ShuffleBlockFetcherIterator(
             }
           }
 
-        // Catching OOM and do something based on it is only a workaround for handling the
-        // Netty OOM issue, which is not the best way towards memory management. We can
-        // get rid of it when we find a way to manage Netty's memory precisely.
-        case FailureFetchResult(blockId, mapIndex, address, size, isNetworkReqDone, e)
-            if e.isInstanceOf[OutOfDirectMemoryError] || e.isInstanceOf[NettyOutOfMemoryError] =>
+        case FailureFetchResult(blockId, mapIndex, address, e) =>
+          throwFetchFailedException(blockId, mapIndex, address, e)
+
+        case DeferFetchResult(blockId, mapIndex, address, size, isNetworkReqDone) =>
           assert(address != blockManager.blockManagerId &&
             !hostLocalBlocks.contains(blockId -> mapIndex),
-            "Netty OOM error should only happen on remote fetch requests")
-          logWarning(s"Failed to fetch block $blockId due to Netty OOM, will retry", e)
-          NettyUtils.isNettyOOMOnShuffle.compareAndSet(false, true)
+            "Netty OOM error should only happen on the remote fetch request")
           numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
           bytesInFlight -= size
           if (isNetworkReqDone) {
@@ -712,9 +723,6 @@ final class ShuffleBlockFetcherIterator(
             deferredFetchRequests.getOrElseUpdate(address, new Queue[FetchRequest]())
           defReqQueue.enqueue(FetchRequest(address, Array(FetchBlockInfo(blockId, size, mapIndex))))
           result = null
-
-        case FailureFetchResult(blockId, mapIndex, address, e) =>
-          throwFetchFailedException(blockId, mapIndex, address, e)
       }
 
       // Send fetch requests up to maxBytesInFlight
@@ -1044,5 +1052,23 @@ object ShuffleBlockFetcherIterator {
       mapIndex: Int,
       address: BlockManagerId,
       e: Throwable)
+    extends FetchResult
+
+
+  /**
+   * Result of a block fetch that should be deferred for some reasons, e.g., Netty OOM
+   * @param blockId block id
+   * @param mapIndex the mapIndex for this block, which indicate the index in the map stage.
+   * @param address BlockManager that the block was trying fetched from.
+   * @param size estimated size of the block. Note that this is NOT the exact bytes.
+   *             Size of remote block is used to calculate bytesInFlight.
+   * @param isNetworkReqDone Is this the last network request for this host in this fetch request.
+   */
+  private[storage] case class DeferFetchResult(
+       blockId: BlockId,
+       mapIndex: Int,
+       address: BlockManagerId,
+       size: Long,
+       isNetworkReqDone: Boolean)
     extends FetchResult
 }
