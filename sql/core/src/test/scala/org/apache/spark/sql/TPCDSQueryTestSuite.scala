@@ -79,7 +79,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
 
   protected val baseResourcePath = {
     // use the same way as `SQLQueryTestSuite` to get the resource path
-    java.nio.file.Paths.get("src", "test", "resources", "tpcds-query-results")
+    getProjectFilePath("src", "test", "resources", "tpcds-query-results")
       .toFile.getAbsolutePath
   }
 

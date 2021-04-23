@@ -19,6 +19,7 @@ package org.apache.spark
 
 // scalastyle:off
 import java.io.File
+import java.nio.file.{Path, Paths}
 import java.util.{Locale, TimeZone}
 
 import org.apache.log4j.spi.LoggingEvent
@@ -31,6 +32,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{AccumulatorContext, Utils}
+import org.scalatest.Assertions.fail
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -117,6 +119,27 @@ abstract class SparkFunSuite
     file.deleteOnExit()
     FileUtils.copyURLToFile(url, file)
     file
+  }
+
+  /**
+   * Get a Path relative to the project containing the test.
+   * It is assumed that tests are executed from the project's root directory,
+   * so the returned path is simply a relative path composed of the given elements.
+   */
+  protected final def getProjectFilePath(first: String, more: String*): Path = {
+    java.nio.file.Paths.get(first, more: _*)
+  }
+
+  /**
+   * Get a Path relative to the root project containing the test.
+   * It is assumed that a spark home is set.
+   */
+  protected final def getWorkspaceFilePath(first: String, more: String*): Path = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+    java.nio.file.Paths.get(sparkHome, first +: more: _*)
   }
 
   /**
