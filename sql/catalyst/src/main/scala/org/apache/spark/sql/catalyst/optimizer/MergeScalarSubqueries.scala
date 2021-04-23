@@ -160,17 +160,14 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   private def removeReferences(
       plan: LogicalPlan,
       mergedSubqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
-    plan.transformUp {
-      case other => other.transformExpressionsUp {
-        case gsf @ GetStructField(mss @ MultiScalarSubquery(sr: SubqueryReference, _), _, _) =>
-          val dereferencedPlan = removeReferences(mergedSubqueries(sr.index), mergedSubqueries)
-          if (dereferencedPlan.outputSet.size > 1) {
-            gsf.copy(child = mss.copy(plan = dereferencedPlan))
-          } else {
-            ScalarSubquery(dereferencedPlan, exprId = mss.exprId)
-          }
-        case s: SubqueryExpression => s.withNewPlan(removeReferences(s.plan, mergedSubqueries))
-      }
+    plan.transformAllExpressions {
+      case gsf @ GetStructField(mss @ MultiScalarSubquery(sr: SubqueryReference, _), _, _) =>
+        val dereferencedPlan = removeReferences(mergedSubqueries(sr.index), mergedSubqueries)
+        if (dereferencedPlan.outputSet.size > 1) {
+          gsf.copy(child = mss.copy(plan = dereferencedPlan))
+        } else {
+          ScalarSubquery(dereferencedPlan, exprId = mss.exprId)
+        }
     }
   }
 }
