@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.collection.mutable.Map
 
 case class BufferManagerOptions(individualBufferSize: Int, individualBufferMax: Int,
-                                bufferSpillThreshold: Int)
+                                bufferSpillThreshold: Int, supportAggregate: Boolean)
 
 case class WriterBufferManagerValue(serializeStream: SerializationStream, output: Output)
 

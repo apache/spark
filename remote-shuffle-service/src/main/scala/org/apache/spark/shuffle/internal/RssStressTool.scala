@@ -335,7 +335,10 @@ class RssStressTool extends Logging {
       writeClient = writeClient,
       mapInfo = new AppTaskAttemptId(appMapId, taskAttemptId),
       serializer = new KryoSerializer(sparkConf),
-      bufferOptions = BufferManagerOptions(writerBufferSize, 256 * 1024 * 1024, writerBufferSpill),
+      bufferOptions = BufferManagerOptions(writerBufferSize,
+        256 * 1024 * 1024,
+        writerBufferSpill,
+        false),
       shuffleDependency = shuffleDependency,
       shuffleWriteMetrics = new ShuffleWriteMetrics()
     )

@@ -26,7 +26,7 @@ import org.apache.spark.remoteshuffle.common.{AppTaskAttemptId, ServerList}
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidStateException
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.internal.{BufferManagerOptions, RecordSerializationBuffer, RssUtils, WriteBufferManager}
+import org.apache.spark.shuffle.internal.{BufferManagerOptions, RecordCombinedSerializationBuffer, RecordPlainSerializationBuffer, RecordSerializationBuffer, RssUtils, WriteBufferManager}
 
 class RssShuffleWriter[K, V, C](
                                  rssServers: ServerList,
@@ -55,12 +55,30 @@ class RssShuffleWriter[K, V, C](
     None
   }
 
-  private val bufferManager: RecordSerializationBuffer[K, V] = new WriteBufferManager[K, V](
-    serializer = serializer,
-    bufferSize = bufferOptions.individualBufferSize,
-    maxBufferSize = bufferOptions.individualBufferMax,
-    spillSize = bufferOptions.bufferSpillThreshold,
-    createCombiner = createCombiner)
+  private val bufferManager: RecordSerializationBuffer[K, V] = {
+    if (!bufferOptions.supportAggregate) {
+      new WriteBufferManager[K, V](
+        serializer = serializer,
+        bufferSize = bufferOptions.individualBufferSize,
+        maxBufferSize = bufferOptions.individualBufferMax,
+        spillSize = bufferOptions.bufferSpillThreshold,
+        createCombiner = createCombiner)
+    } else {
+      if (shuffleDependency.aggregator.isEmpty) {
+        new RecordPlainSerializationBuffer[K, V](
+          serializer = serializer,
+          spillSize = bufferOptions.bufferSpillThreshold
+        )
+      } else {
+        new RecordCombinedSerializationBuffer[K, V, C](
+          createCombiner = shuffleDependency.aggregator.get.createCombiner,
+          mergeValue = shuffleDependency.aggregator.get.mergeValue,
+          serializer = serializer,
+          spillSize = bufferOptions.bufferSpillThreshold
+        )
+      }
+    }
+  }
 
   private val compressor = LZ4Factory.fastestInstance.fastCompressor
 

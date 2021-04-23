@@ -69,6 +69,12 @@ object RssOpts {
         "and send to shuffle server.")
       .intConf
       .createWithDefault(32 * 1024 * 1024)
+  val writerSupportAggregate: ConfigEntry[Boolean] =
+    ConfigBuilder("spark.shuffle.rss.writer.supportAggregate")
+      .doc("Whether using the new writer buffer implementation which supports map side " +
+        "aggregation")
+      .booleanConf
+      .createWithDefault(false)
   val networkTimeout: ConfigEntry[Long] =
     ConfigBuilder("spark.shuffle.rss.networkTimeout")
       .doc("network timeout (milliseconds) for shuffle client.")

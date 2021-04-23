@@ -21,7 +21,6 @@ import org.apache.spark.serializer.KryoSerializer
 
 class RecordCombinedSerializationBufferTest {
   val serializer = new KryoSerializer(getConf)
-  val maxBufferSize = 10000000
 
   @Test
   def singlePartition(): Unit = {
