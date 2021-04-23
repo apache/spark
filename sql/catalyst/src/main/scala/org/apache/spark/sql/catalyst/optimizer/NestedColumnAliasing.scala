@@ -23,18 +23,64 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * This aims to handle a nested column aliasing pattern inside the `ColumnPruning` optimizer rule.
+ * This aims to handle a nested column aliasing pattern inside the [[ColumnPruning]] optimizer rule.
  * If a project or its child references to nested fields, and not all the fields
  * in a nested attribute are used, we can substitute them by alias attributes; then a project
  * of the nested fields as aliases on the children of the child will be created.
+ *
+ * Example 1: Project
+ * ------------------
+ * Before:
+ * +- Project [concat_ws(s#0.a, s#0.b) AS concat_ws(s.a, s.b)#1]
+ *   +- GlobalLimit 5
+ *     +- LocalLimit 5
+ *       +- LocalRelation <empty>, [s#0]
+ * After:
+ * +- Project [concat_ws(_gen_alias_2#2, _gen_alias_3#3) AS concat_ws(s.a, s.b)#1]
+ *   +- GlobalLimit 5
+ *     +- LocalLimit 5
+ *       +- Project [s#0.a AS _gen_alias_2#2, s#0.b AS _gen_alias_3#3]
+ *         +- LocalRelation <empty>, [s#0]
+ *
+ * Example 2: Project above Filter
+ * -------------------------------
+ * Before:
+ * +- Project [s#0.a AS s.a#1]
+ *   +- Filter (length(s#0.b) > 2)
+ *     +- GlobalLimit 5
+ *       +- LocalLimit 5
+ *         +- LocalRelation <empty>, [s#0]
+ * After:
+ * +- Project [_gen_alias_2#2 AS s.a#1]
+ *   +- Filter (length(_gen_alias_3#3) > 2)
+ *     +- GlobalLimit 5
+ *       +- LocalLimit 5
+ *         +- Project [s#0.a AS _gen_alias_2#2, s#0.b AS _gen_alias_3#3]
+ *           +- LocalRelation <empty>, [s#0]
+ *
+ * Example 3: Nested columns in nested columns
+ * -------------------------------------------
+ * Before:
+ * +- Project [s#0.a AS s.a#1, s#0.a.a1 AS s.a.a1#2]
+ *   +- GlobalLimit 5
+ *     +- LocalLimit 5
+ *       +- LocalRelation <empty>, [s#0]
+ * After:
+ * +- Project [_gen_alias_3#3 AS s.a#1, _gen_alias_3#3.name AS s.a.a1#2]
+ *   +- GlobalLimit 5
+ *     +- LocalLimit 5
+ *       +- Project [s#0.a AS _gen_alias_3#3]
+ *         +- LocalRelation <empty>, [s#0]
+ *
+ * The schema of the datasource relation will be pruned in the [[SchemaPruning]] optimizer rule.
  */
 object NestedColumnAliasing {
 
   def unapply(plan: LogicalPlan): Option[Map[Attribute, Seq[ExtractValue]]] = plan match {
     /**
      * This pattern is needed to support [[Filter]] plan cases like
-     * [[Project]]->[[Filter]]->listed plan in `canProjectPushThrough` (e.g., [[Window]]).
-     * The reason why we don't simply add [[Filter]] in `canProjectPushThrough` is that
+     * [[Project]]->[[Filter]]->listed plan in [[canProjectPushThrough]] (e.g., [[Window]]).
+     * The reason why we don't simply add [[Filter]] in [[canProjectPushThrough]] is that
      * the optimizer can hit an infinite loop during the [[PushDownPredicates]] rule.
      */
     case Project(projectList, Filter(condition, child)) if
@@ -58,8 +104,8 @@ object NestedColumnAliasing {
    * Replace nested columns to prune unused nested columns later.
    */
   def replacePlanWithAliases(
-        plan: LogicalPlan,
-        attributeToExtractValues: Map[Attribute, Seq[ExtractValue]]): LogicalPlan = {
+      plan: LogicalPlan,
+      attributeToExtractValues: Map[Attribute, Seq[ExtractValue]]): LogicalPlan = {
       // Each expression can contain multiple nested fields.
       // Note that we keep the original names to deliver to parquet in a case-sensitive way.
       // A new alias is created for each nested field.
@@ -88,11 +134,11 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Return a replaced project list.
+   * Replace the [[ExtractValue]]s in a project list with aliased attributes.
    */
   def getNewProjectList(
-      projectList: Seq[NamedExpression],
-      nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
+    projectList: Seq[NamedExpression],
+    nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
     projectList.map(_.transform {
       case f: ExtractValue if nestedFieldToAlias.contains(f) =>
         nestedFieldToAlias(f).toAttribute
@@ -100,8 +146,8 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Return a plan with new children replaced with aliases, and expressions replaced with
-   * aliased attributes.
+   * Replace the grandchildren of a plan with [[Project]]s of the nested fields as aliases,
+   * and replace the [[ExtractValue]] expressions with aliased attributes.
    */
   def replaceWithAliases(
       plan: LogicalPlan,
@@ -194,9 +240,8 @@ object NestedColumnAliasing {
         val dedupNestedFields = nestedFields.filter {
           // See [[collectExtractValue]]: we only need to deal with [[GetArrayStructFields]] and
           // [[GetStructField]]
-          case GetStructField(child, _, _) =>
-            nestedFields.forall(f => child.find(_.semanticEquals(f)).isEmpty)
-          case GetArrayStructFields(child, _, _, _, _) =>
+          case e @ (_: GetStructField | _: GetArrayStructFields) =>
+            val child = e.children.head
             nestedFields.forall(f => child.find(_.semanticEquals(f)).isEmpty)
           case _ => true
         }.distinct
