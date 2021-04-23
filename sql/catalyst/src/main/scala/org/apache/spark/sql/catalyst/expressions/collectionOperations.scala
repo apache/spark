@@ -16,12 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.ZoneId
+import java.time.{Duration, Period, ZoneId}
 import java.util.Comparator
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
@@ -2504,6 +2503,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
        [5,4,3,2,1]
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval 1 month);
        [2018-01-01,2018-02-01,2018-03-01]
+      > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval '0-1' year to month);
+       [2018-01-01,2018-02-01,2018-03-01]
   """,
   group = "array_funcs",
   since = "2.4.0"
@@ -2550,8 +2551,12 @@ case class Sequence(
     val typesCorrect =
       startType.sameType(stop.dataType) &&
         (startType match {
-          case TimestampType | DateType =>
-            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType)
+          case TimestampType =>
+            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
+              YearMonthIntervalType.acceptsType(stepType) || DayTimeIntervalType.acceptsType(stepType)
+          case DateType =>
+            stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
+              YearMonthIntervalType.acceptsType(stepType)
           case _: IntegralType =>
             stepOpt.isEmpty || stepType.sameType(startType)
           case _ => false
@@ -2565,25 +2570,40 @@ case class Sequence(
     }
   }
 
-  def coercibleChildren: Seq[Expression] = children.filter(_.dataType != CalendarIntervalType)
+  private def isNotIntervalType(expr: Expression) = expr.dataType match {
+    case CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType => false
+    case _ => true
+  }
+
+  def coercibleChildren: Seq[Expression] = children.filter(isNotIntervalType)
 
   def castChildrenTo(widerType: DataType): Expression = Sequence(
     Cast(start, widerType),
     Cast(stop, widerType),
-    stepOpt.map(step => if (step.dataType != CalendarIntervalType) Cast(step, widerType) else step),
+    stepOpt.map(step => if (isNotIntervalType(step)) Cast(step, widerType) else step),
     timeZoneId)
 
-  @transient private lazy val impl: SequenceImpl = dataType.elementType match {
+  @transient private lazy val impl: InternalSequence = dataType.elementType match {
     case iType: IntegralType =>
       type T = iType.InternalType
       val ct = ClassTag[T](iType.tag.mirror.runtimeClass(iType.tag.tpe))
       new IntegralSequenceImpl(iType)(ct, iType.integral)
 
     case TimestampType =>
-      new TemporalSequenceImpl[Long](LongType, 1, identity, zoneId)
+      if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
+        new TemporalSequenceImpl[Long](LongType, 1, identity, zoneId)
+      } else if (YearMonthIntervalType.acceptsType(stepOpt.get.dataType)) {
+        new PeriodSequenceImpl[Long](LongType, 1, identity, zoneId)
+      } else {
+        new DurationSequenceImpl[Long](LongType, 1, identity, zoneId)
+      }
 
     case DateType =>
-      new TemporalSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, zoneId)
+      if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
+        new TemporalSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, zoneId)
+      } else {
+        new PeriodSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, zoneId)
+      }
   }
 
   override def eval(input: InternalRow): Any = {
@@ -2666,7 +2686,7 @@ object Sequence {
     }
   }
 
-  private trait SequenceImpl {
+  private trait InternalSequence {
     def eval(start: Any, stop: Any, step: Any): Any
 
     def genCode(
@@ -2681,7 +2701,7 @@ object Sequence {
   }
 
   private class IntegralSequenceImpl[T: ClassTag]
-    (elemType: IntegralType)(implicit num: Integral[T]) extends SequenceImpl {
+    (elemType: IntegralType)(implicit num: Integral[T]) extends InternalSequence {
 
     override val defaultStep: DefaultStep = new DefaultStep(
       (elemType.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
@@ -2723,14 +2743,78 @@ object Sequence {
     }
   }
 
+  private class PeriodSequenceImpl[T: ClassTag]
+      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T]) extends InternalSequenceBase(dt, scale, fromLong, zoneId) {
+
+    override val defaultStep: DefaultStep = new DefaultStep(
+      (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      YearMonthIntervalType,
+      Period.of(0, 1, 0))
+
+    def splitStep(input: Any): (Int, Int, Long) = {
+      (input.asInstanceOf[Int], 0, 0)
+    }
+
+    def stepSplitCode(stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
+      s"""
+         |final int $stepMonths = $step;
+         |final int $stepDays = 0;
+         |final long $stepMicros = 0L;
+       """.stripMargin
+    }
+  }
+
+  private class DurationSequenceImpl[T: ClassTag]
+      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T]) extends InternalSequenceBase(dt, scale, fromLong, zoneId) {
+
+    override val defaultStep: DefaultStep = new DefaultStep(
+      (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      DayTimeIntervalType,
+      Duration.ofDays(1))
+
+    def splitStep(input: Any): (Int, Int, Long) = {
+      (0, 0, input.asInstanceOf[Long])
+    }
+
+    def stepSplitCode(stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
+      s"""
+         |final int $stepMonths = 0;
+         |final int $stepDays = 0;
+         |final long $stepMicros = $step;
+       """.stripMargin
+    }
+  }
+
   private class TemporalSequenceImpl[T: ClassTag]
       (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
-      (implicit num: Integral[T]) extends SequenceImpl {
+      (implicit num: Integral[T]) extends InternalSequenceBase(dt, scale, fromLong, zoneId) {
 
     override val defaultStep: DefaultStep = new DefaultStep(
       (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
       CalendarIntervalType,
       new CalendarInterval(0, 1, 0))
+
+    def splitStep(input: Any): (Int, Int, Long) = {
+      val step = input.asInstanceOf[CalendarInterval]
+      (step.months, step.days, step.microseconds)
+    }
+
+    def stepSplitCode(stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
+      s"""
+         |final int $stepMonths = $step.months;
+         |final int $stepDays = $step.days;
+         |final long $stepMicros = $step.microseconds;
+       """.stripMargin
+    }
+  }
+
+  private abstract class InternalSequenceBase[T: ClassTag]
+      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T]) extends InternalSequence {
+
+    val defaultStep: DefaultStep
 
     private val backedSequenceImpl = new IntegralSequenceImpl[T](dt)
     private val microsPerDay = HOURS_PER_DAY * MICROS_PER_HOUR
@@ -2738,13 +2822,12 @@ object Sequence {
     // in order to make sure the estimated array length is long enough
     private val microsPerMonth = 28 * microsPerDay
 
+    protected def splitStep(input: Any): (Int, Int, Long)
+
     override def eval(input1: Any, input2: Any, input3: Any): Array[T] = {
       val start = input1.asInstanceOf[T]
       val stop = input2.asInstanceOf[T]
-      val step = input3.asInstanceOf[CalendarInterval]
-      val stepMonths = step.months
-      val stepDays = step.days
-      val stepMicros = step.microseconds
+      val (stepMonths, stepDays, stepMicros) = splitStep(input3)
 
       if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
         throw new IllegalArgumentException(
@@ -2787,6 +2870,8 @@ object Sequence {
       }
     }
 
+    protected def stepSplitCode(stepMonths: String, stepDays: String, stepMicros: String, step: String): String
+
     override def genCode(
         ctx: CodegenContext,
         start: String,
@@ -2826,10 +2911,10 @@ object Sequence {
           ""
         }
 
+      val stepSplits = stepSplitCode(stepMonths, stepDays, stepMicros, step)
+
       s"""
-         |final int $stepMonths = $step.months;
-         |final int $stepDays = $step.days;
-         |final long $stepMicros = $step.microseconds;
+         |$stepSplits
          |
          |$check
          |
