@@ -24,9 +24,12 @@ import org.apache.spark.sql.types._
 
 /**
  * This aims to handle a nested column aliasing pattern inside the [[ColumnPruning]] optimizer rule.
- * If a project or its child references to nested fields, and not all the fields
- * in a nested attribute are used, we can substitute them by alias attributes; then a project
- * of the nested fields as aliases on the children of the child will be created.
+ * If:
+ * - A [[Project]] or its child references nested fields
+ * - Not all of the fields in a nested attribute are used
+ * Then:
+ * - Substitute the nested field references with alias attributes
+ * - Add grandchild [[Project]]s transforming the nested fields to aliases
  *
  * Example 1: Project
  * ------------------
@@ -76,7 +79,7 @@ import org.apache.spark.sql.types._
  */
 object NestedColumnAliasing {
 
-  def unapply(plan: LogicalPlan): Option[Map[Attribute, Seq[ExtractValue]]] = plan match {
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
     /**
      * This pattern is needed to support [[Filter]] plan cases like
      * [[Project]]->[[Filter]]->listed plan in [[canProjectPushThrough]] (e.g., [[Window]]).
@@ -85,25 +88,40 @@ object NestedColumnAliasing {
      */
     case Project(projectList, Filter(condition, child)) if
         SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
-      getAttributeToExtractValues(
-        projectList ++ Seq(condition) ++ child.expressions, child.producedAttributes.toSeq)
+      rewritePlanIfSubsetFieldsUsed(
+        plan, projectList ++ Seq(condition) ++ child.expressions, child.producedAttributes.toSeq)
 
     case Project(projectList, child) if
         SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
-      getAttributeToExtractValues(
-        projectList ++ child.expressions, child.producedAttributes.toSeq)
+      rewritePlanIfSubsetFieldsUsed(
+        plan, projectList ++ child.expressions, child.producedAttributes.toSeq)
 
     case p if SQLConf.get.nestedSchemaPruningEnabled && canPruneOn(p) =>
-      getAttributeToExtractValues(
-        p.expressions, p.producedAttributes.toSeq)
+      rewritePlanIfSubsetFieldsUsed(
+        plan, p.expressions, p.producedAttributes.toSeq)
 
     case _ => None
   }
 
   /**
+   * Rewrites a plan with aliases if only a subset of the nested fields are used.
+   */
+  def rewritePlanIfSubsetFieldsUsed(
+    plan: LogicalPlan,
+    exprList: Seq[Expression],
+    exclusiveAttrs: Seq[Attribute]): Option[LogicalPlan] = {
+    val attrToExtractValues = getAttributeToExtractValues(exprList, exclusiveAttrs)
+    if (attrToExtractValues.isEmpty) {
+      None
+    } else {
+      Some(rewritePlanWithAliases(plan, attrToExtractValues))
+    }
+  }
+
+  /**
    * Replace nested columns to prune unused nested columns later.
    */
-  def replacePlanWithAliases(
+  def rewritePlanWithAliases(
       plan: LogicalPlan,
       attributeToExtractValues: Map[Attribute, Seq[ExtractValue]]): LogicalPlan = {
       // Each expression can contain multiple nested fields.
@@ -218,20 +236,19 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Creates a map from root [[Attribute]]s to non-redundant nested [[ExtractValue]]s in the
-   * case that only a subset of the nested fields are used.
+   * Creates a map from root [[Attribute]]s to non-redundant nested [[ExtractValue]]s.
    * Nested field accessors of `exclusiveAttrs` are not considered in nested fields aliasing.
    */
   def getAttributeToExtractValues(
       exprList: Seq[Expression],
-      exclusiveAttrs: Seq[Attribute]): Option[Map[Attribute, Seq[ExtractValue]]] = {
+      exclusiveAttrs: Seq[Attribute]): Map[Attribute, Seq[ExtractValue]] = {
 
     val nestedFieldReferences = exprList.flatMap(collectExtractValue)
     val otherRootReferences = exprList.flatMap(collectAttributeReference)
     val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
 
     // Remove cosmetic variations when we group extractors by their references
-    val attributeToExtractValues = nestedFieldReferences
+    nestedFieldReferences
       .filter(!_.references.subsetOf(exclusiveAttrSet))
       .groupBy(_.references.head.canonicalized.asInstanceOf[Attribute])
       .flatMap { case (attr: Attribute, nestedFields: Seq[ExtractValue]) =>
@@ -258,12 +275,6 @@ object NestedColumnAliasing {
           None
         }
       }
-
-    if (attributeToExtractValues.isEmpty) {
-      None
-    } else {
-      Some(attributeToExtractValues)
-    }
   }
 
   /**
@@ -281,11 +292,10 @@ object NestedColumnAliasing {
 }
 
 /**
- * This prunes unnecessary nested columns from [[Generate]] and optional [[Project]] on top
- * of it.
+ * This prunes unnecessary nested columns from [[Generate]], or [[Project]] -> [[Generate]]
  */
 object GeneratorNestedColumnAliasing {
-  def unapply(plan: LogicalPlan): Option[Map[Attribute, Seq[ExtractValue]]] = plan match {
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
     // Either `nestedPruningOnExpressions` or `nestedSchemaPruningEnabled` is enabled, we
     // need to prune nested columns through Project and under Generate. The difference is
     // when `nestedSchemaPruningEnabled` is on, nested columns will be pruned further at
@@ -294,8 +304,8 @@ object GeneratorNestedColumnAliasing {
         SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
       // On top on `Generate`, a `Project` that might have nested column accessors.
       // We try to get alias maps for both project list and generator's children expressions.
-      NestedColumnAliasing.getAttributeToExtractValues(
-        projectList ++ g.generator.children, g.qualifiedGeneratorOutput)
+      NestedColumnAliasing.rewritePlanIfSubsetFieldsUsed(
+        plan, projectList ++ g.generator.children, g.qualifiedGeneratorOutput)
 
     case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
         canPruneGenerator(g.generator) =>
@@ -303,8 +313,8 @@ object GeneratorNestedColumnAliasing {
       // only use part of nested column of it. A required child output means it is referred
       // as a whole or partially by higher projection, pruning it here will cause unresolved
       // query plan.
-      NestedColumnAliasing.getAttributeToExtractValues(
-        g.generator.children, g.requiredChildOutput)
+      NestedColumnAliasing.rewritePlanIfSubsetFieldsUsed(
+        plan, g.generator.children, g.requiredChildOutput)
 
     case _ =>
       None
