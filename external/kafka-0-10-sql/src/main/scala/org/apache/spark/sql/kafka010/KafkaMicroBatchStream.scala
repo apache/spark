@@ -246,9 +246,7 @@ object KafkaMicroBatchStream extends Logging {
     if (offset.nonEmpty) {
       val consumedPartitionOffsets = offset.map(KafkaSourceOffset(_)).get.partitionToOffsets
       val offsetsBehindLatest = latestAvailablePartitionOffsets
-        .filter(partitionOffset => consumedPartitionOffsets.contains(partitionOffset._1))
-        .map(partitionOffset =>
-          partitionOffset._2 - consumedPartitionOffsets.get(partitionOffset._1).get)
+        .map(partitionOffset => partitionOffset._2 - consumedPartitionOffsets(partitionOffset._1))
       if (offsetsBehindLatest.nonEmpty) {
         val avgOffsetBehindLatest = offsetsBehindLatest.sum.toDouble / offsetsBehindLatest.size
         return Map[String, String](
