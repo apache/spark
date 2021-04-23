@@ -67,7 +67,10 @@ case class ExternalRDDScanExec[T](
 
   override val nodeName: String = s"Scan$rddName"
 
-  override def outputPartitioning: Partitioning = UnknownPartitioning(rdd.partitions.length)
+  override def outputPartitioning: Partitioning = rdd.partitions.length match {
+    case 1 => SinglePartition
+    case other => UnknownPartitioning(other)
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
