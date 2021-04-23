@@ -1390,10 +1390,6 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     // test empty offset.
     assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(null), latestOffset).isEmpty)
 
-    // test empty offsetsBehindLatest && topics are missing in the latestConsumedOffset.
-    val emptyOffset = KafkaSourceOffset(Map[TopicPartition, Long]())
-    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(emptyOffset), latestOffset).isEmpty)
-
     // test valid offsetsBehindLatest
     val offset = KafkaSourceOffset(
       Map[TopicPartition, Long]((topicPartition1, 1L), (topicPartition2, 2L)))
@@ -1406,19 +1402,6 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
 
     // test null latestAvailablePartitionOffsets
     assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), null).isEmpty)
-
-    // test a topic is missing in both the latestConsumedOffset and latestAvailableOffset.
-    val topicPartition3 = new TopicPartition(newTopic(), 0)
-    val offset2 =
-      KafkaSourceOffset(Map[TopicPartition, Long]((topicPartition1, 1L), (topicPartition3, 2L)))
-    val latestAvailableOffsets = Map[TopicPartition, Long](
-      (topicPartition2, 3L), (topicPartition3, 6L))
-    assert(
-      KafkaMicroBatchStream.metrics(Optional.ofNullable(offset2), latestAvailableOffsets) ===
-        Map[String, String](
-          "minOffsetsBehindLatest" -> "4",
-          "maxOffsetsBehindLatest" -> "4",
-          "avgOffsetsBehindLatest" -> "4.0").asJava)
   }
 }
 
