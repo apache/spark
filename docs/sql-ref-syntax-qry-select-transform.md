@@ -43,7 +43,7 @@ SELECT TRANSFORM ( expression [ , ... ] )
 
 * **row_format** 
 
-    All descriptions about syntax in `row_format` can refer to [HIVE FORMAT](sql-ref-syntax-hive-format.html)
+    Specifies the row format for input and output. See [HIVE FORMAT](sql-ref-syntax-hive-format.html) for more syntax details.
 
 * **RECORDWRITER**
 

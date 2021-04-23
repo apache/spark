@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Data Retrieval
-displayTitle: Data Retrieval
+title: Hive Row Format
+displayTitle: Hive Row Format
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,10 +21,10 @@ license: |
 
 ### Description
 
-Spark supports Hive format in `CREATE TABLE` clause and `TRANSFORM` clause,
-to specify serde or text delimeter. In `row_format` There are two ways to specify the `row_format`:
-  1. Use the `SERDE` clause to specify a custom SerDe class
-  2. Use the `DELIMITED` clause to specify the delimiter, escape character, null character and so on for the native text Serde.
+Spark supports a Hive row format in `CREATE TABLE` and `TRANSFORM` clause, to specify serde or text delimiter.
+There are two ways to define a row format in `row_format` of `CREATE TABLE` and `TRANSFORM` clauses.
+  1. `SERDE` clause to specify a custom SerDe class.
+  2. `DELIMITED` clause to specify a delimiter, an escape character, a null character, and so on for the native SerDe.
 
 ### Syntax
 
