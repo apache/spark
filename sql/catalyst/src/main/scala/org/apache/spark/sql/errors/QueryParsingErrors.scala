@@ -367,4 +367,7 @@ object QueryParsingErrors {
     new ParseException("LOCAL is supported only with file: scheme", ctx)
   }
 
+  def invalidGroupingSetError(element: String, ctx: GroupingAnalyticsContext): Throwable = {
+    new ParseException(s"Empty set in $element grouping sets is not supported.", ctx)
+  }
 }
