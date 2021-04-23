@@ -18,6 +18,7 @@
 package org.apache.spark.network.util;
 
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -43,7 +44,7 @@ public class NettyUtils {
    * fetch requests will be deferred until the flag is unset (whenever there's a
    * complete fetch request).
    */
-  public static volatile boolean isNettyOOMOnShuffle = false;
+  public static AtomicBoolean isNettyOOMOnShuffle = new AtomicBoolean(false);
 
   /**
    * Specifies an upper bound on the number of Netty threads that Spark requires by default.

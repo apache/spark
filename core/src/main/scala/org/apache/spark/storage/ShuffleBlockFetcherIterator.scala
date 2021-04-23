@@ -622,7 +622,7 @@ final class ShuffleBlockFetcherIterator(
               // Non-`NettyManagedBuffer` doesn't occupy Netty's memory so we can unset the flag
               // directly once the request succeeds. But for the `NettyManagedBuffer`, we'll only
               // unset the flag when the data is fully consumed (see `BufferReleasingInputStream`).
-              NettyUtils.isNettyOOMOnShuffle = false
+              NettyUtils.isNettyOOMOnShuffle.compareAndSet(true, false)
             }
             logDebug("Number of requests in flight " + reqsInFlight)
           }
@@ -703,7 +703,7 @@ final class ShuffleBlockFetcherIterator(
             !hostLocalBlocks.contains(blockId -> mapIndex),
             "Netty OOM error should only happen on remote fetch requests")
           logWarning(s"Failed to fetch block $blockId due to Netty OOM, will retry", e)
-          NettyUtils.isNettyOOMOnShuffle = true
+          NettyUtils.isNettyOOMOnShuffle.compareAndSet(false, true)
           numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
           bytesInFlight -= size
           if (isNetworkReqDone) {
@@ -742,7 +742,7 @@ final class ShuffleBlockFetcherIterator(
 
   private def fetchUpToMaxBytes(): Unit = {
     // Return immediately if Netty is still OOMed and there're ongoing fetch requests
-    if (NettyUtils.isNettyOOMOnShuffle && reqsInFlight > 0) return
+    if (NettyUtils.isNettyOOMOnShuffle.get() && reqsInFlight > 0) return
 
     // Send fetch requests up to maxBytesInFlight. If you cannot fetch from a remote host
     // immediately, defer the request until the next time it can be processed.
@@ -839,7 +839,7 @@ private class BufferReleasingInputStream(
       delegate.close()
       iterator.releaseCurrentResultBuffer()
       // Unset the flag when a remote request finished.
-      if (isNetworkReqDone) NettyUtils.isNettyOOMOnShuffle = false
+      if (isNetworkReqDone) NettyUtils.isNettyOOMOnShuffle.compareAndSet(true, false)
       closed = true
     }
   }
