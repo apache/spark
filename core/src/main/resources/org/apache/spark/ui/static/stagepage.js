@@ -592,9 +592,13 @@ $(document).ready(function () {
                         {"type": "size", "targets": 11},
                         // Shuffle Write Size / Records
                         {"type": "size", "targets": 12},
+                        // Peak JVM Memory OnHeap / OffHeap
                         {"visible": false, "targets": 15},
+                        // Peak Execution Memory OnHeap / OffHeap
                         {"visible": false, "targets": 16},
+                        // Peak Storage Memory OnHeap / OffHeap
                         {"visible": false, "targets": 17},
+                        // Peak Pool Memory Direct / Mapped
                         {"visible": false, "targets": 18}
                     ],
                     "deferRender": true,
