@@ -836,11 +836,14 @@ private class BufferReleasingInputStream(
 
   override def close(): Unit = {
     if (!closed) {
-      delegate.close()
-      iterator.releaseCurrentResultBuffer()
-      // Unset the flag when a remote request finished.
-      if (isNetworkReqDone) NettyUtils.isNettyOOMOnShuffle.compareAndSet(true, false)
-      closed = true
+      try {
+        delegate.close()
+        iterator.releaseCurrentResultBuffer()
+      } finally {
+        // Unset the flag when a remote request finished.
+        if (isNetworkReqDone) NettyUtils.isNettyOOMOnShuffle.compareAndSet(true, false)
+        closed = true
+      }
     }
   }
 
