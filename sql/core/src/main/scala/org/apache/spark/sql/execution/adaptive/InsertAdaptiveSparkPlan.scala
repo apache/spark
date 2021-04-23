@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.{ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY,
+  MULTI_SCALAR_SUBQUERY, SCALAR_SUBQUERY}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
@@ -114,7 +115,8 @@ case class InsertAdaptiveSparkPlan(
    */
   private def buildSubqueryMap(plan: SparkPlan): Map[Long, BaseSubqueryExec] = {
     val subqueryMap = mutable.HashMap.empty[Long, BaseSubqueryExec]
-    if (!plan.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
+    if (!plan.containsAnyPattern(SCALAR_SUBQUERY, MULTI_SCALAR_SUBQUERY, IN_SUBQUERY,
+      DYNAMIC_PRUNING_SUBQUERY)) {
       return subqueryMap.toMap
     }
     plan.foreach(_.expressions.foreach(_.foreach {

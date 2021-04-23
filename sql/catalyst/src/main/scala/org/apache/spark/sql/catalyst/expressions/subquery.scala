@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, LIST_SUBQUERY,
-  PLAN_EXPRESSION, SCALAR_SUBQUERY, TreePattern}
+  MULTI_SCALAR_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY, TreePattern}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 
@@ -288,6 +288,8 @@ case class MultiScalarSubquery(
       plan.canonicalized,
       ExprId(0))
   }
+
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(MULTI_SCALAR_SUBQUERY)
 }
 
 /**

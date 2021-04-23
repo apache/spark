@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{MULTI_SCALAR_SUBQUERY, SCALAR_SUBQUERY}
 
 /**
  * This rule tries to merge non-correlated [[ScalarSubquery]]s into [[MultiScalarSubquery]]s.
@@ -70,7 +71,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   private def mergeAndInsertReferences(
       plan: LogicalPlan,
       mergedSubqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
-    plan.transformAllExpressions {
+    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY), ruleId) {
       case s: ScalarSubquery if s.children.isEmpty =>
         val (mergedPlan, ordinal) = mergeAndGetReference(s.plan, mergedSubqueries)
         GetStructField(MultiScalarSubquery(mergedPlan, s.exprId), ordinal)
@@ -160,7 +161,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   private def removeReferences(
       plan: LogicalPlan,
       mergedSubqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
-    plan.transformAllExpressions {
+    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(MULTI_SCALAR_SUBQUERY), ruleId) {
       case gsf @ GetStructField(mss @ MultiScalarSubquery(sr: SubqueryReference, _), _, _) =>
         val dereferencedPlan = removeReferences(mergedSubqueries(sr.index), mergedSubqueries)
         if (dereferencedPlan.outputSet.size > 1) {
