@@ -243,7 +243,7 @@ object KafkaMicroBatchStream extends Logging {
       latestAvailablePartitionOffsets: PartitionOffsetMap): ju.Map[String, String] = {
     val offset = Option(latestConsumedOffset.orElse(null))
 
-    if (offset.nonEmpty) {
+    if (offset.nonEmpty && latestAvailablePartitionOffsets != null) {
       val consumedPartitionOffsets = offset.map(KafkaSourceOffset(_)).get.partitionToOffsets
       val offsetsBehindLatest = latestAvailablePartitionOffsets
         .map(partitionOffset => partitionOffset._2 - consumedPartitionOffsets(partitionOffset._1))

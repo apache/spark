@@ -1404,6 +1404,9 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "maxOffsetsBehindLatest" -> "4",
           "avgOffsetsBehindLatest" -> "3.0").asJava)
 
+    // test null latestAvailablePartitionOffsets
+    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), null).isEmpty)
+
     // test a topic is missing in both the latestConsumedOffset and latestAvailableOffset.
     val topicPartition3 = new TopicPartition(newTopic(), 0)
     val offset2 =
