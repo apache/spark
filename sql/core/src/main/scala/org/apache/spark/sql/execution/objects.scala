@@ -633,8 +633,10 @@ case class CoGroupExec(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     leftGroup.map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
 
-  override def outputPartitioning: Partitioning =
-    UnknownPartitioning(left.outputPartitioning.numPartitions)
+  override def outputPartitioning: Partitioning = left.outputPartitioning match {
+    case SinglePartition => SinglePartition
+    case other => UnknownPartitioning(other.numPartitions)
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
