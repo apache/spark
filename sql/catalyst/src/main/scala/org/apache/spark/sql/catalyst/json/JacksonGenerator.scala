@@ -45,7 +45,7 @@ private[sql] class JacksonGenerator(
            options: JSONOptions) {
     this(
       dataType,
-      options.buildJsonFactory().createGenerator(writer).setRootValueSeparator(null),
+      new JsonFactory().createGenerator(writer).setRootValueSeparator(null),
       options)
   }
 
