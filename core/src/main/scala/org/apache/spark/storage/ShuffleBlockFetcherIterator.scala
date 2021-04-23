@@ -26,14 +26,14 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, LinkedHashMap, Queue}
 import scala.util.{Failure, Success}
 
-import io.netty.util.internal.OutOfDirectMemoryError
-import org.apache.commons.io.IOUtils
+import io.netty.util.internal.{OutOfDirectMemoryError, PlatformDependent}
 
+import org.apache.commons.io.IOUtils
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NettyManagedBuffer}
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.util.{TestNettyOutOfMemoryError, NettyUtils, TransportConf}
+import org.apache.spark.network.util.{NettyUtils, TestNettyOutOfMemoryError, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
@@ -275,7 +275,11 @@ final class ShuffleBlockFetcherIterator(
           // Catching OOM and do something based on it is only a workaround for handling the
           // Netty OOM issue, which is not the best way towards memory management. We can
           // get rid of it when we find a way to manage Netty's memory precisely.
-          case _: OutOfDirectMemoryError | _: TestNettyOutOfMemoryError =>
+          case _: OutOfDirectMemoryError | _: TestNettyOutOfMemoryError
+              // Ensure the Netty memory is at least enough for serving only one block to avoid
+              // the endless retry. And since the Netty memory is shared among shuffle, rpc, etc,
+              // modules, we use "1.5" for the overhead concern.
+              if PlatformDependent.maxDirectMemory() > ( 1.5 * size) =>
             if (NettyUtils.isNettyOOMOnShuffle.compareAndSet(false, true)) {
               // The fetcher can fail remaining blocks in batch for the same error. So we only
               // log the warning once to avoid flooding the logs.
