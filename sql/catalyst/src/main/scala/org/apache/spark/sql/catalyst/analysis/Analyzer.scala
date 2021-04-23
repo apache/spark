@@ -1963,13 +1963,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
       plan.resolveExpressions {
-        case f @ UnresolvedFunction(NonSessionCatalogAndIdentifier(catalog, name), _, _, _, _) =>
-          if (!catalog.isFunctionCatalog) {
-            withPosition(f) {
-              throw new AnalysisException(s"Trying to lookup function '$name' in catalog" +
-                s" '${catalog.name()}', but '${catalog.name()}' is not a FunctionCatalog.")
-            }
-          }
+        case f @ UnresolvedFunction(NonSessionCatalogAndIdentifier(_, _), _, _, _, _) =>
           f
         case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _)
           if externalFunctionNameSet.contains(normalizeFuncName(ident)) => f
@@ -2055,8 +2049,13 @@ class Analyzer(override val catalogManager: CatalogManager)
 
               resultExpression.getOrElse(
                 expandIdentifier(parts) match {
-                  case NonSessionCatalogAndIdentifier(catalog: FunctionCatalog, ident) =>
-                    lookupV2Function(catalog, ident, arguments, isDistinct, filter, ignoreNulls)
+                  case NonSessionCatalogAndIdentifier(catalog, ident) =>
+                    if (!catalog.isFunctionCatalog) {
+                      throw new AnalysisException(s"Trying to lookup function '$ident' in catalog" +
+                        s" '${catalog.name()}', but it is not a FunctionCatalog.")
+                    }
+                    lookupV2Function(catalog.asFunctionCatalog, ident, arguments, isDistinct,
+                      filter, ignoreNulls)
                   case _ => u
                 }
               )

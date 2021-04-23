@@ -53,6 +53,13 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("built-in with non-function catalog should still work") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat",
+      "spark.sql.catalog.testcat" -> classOf[BasicInMemoryTableCatalog].getName) {
+      checkAnswer(sql("SELECT length('abc')"), Row(3))
+    }
+  }
+
   test("built-in with default v2 function catalog") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
       checkAnswer(sql("SELECT length('abc')"), Row(3))
