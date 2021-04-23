@@ -22,5 +22,5 @@ package org.apache.spark.network.util;
  * {@link io.netty.util.internal.OutOfDirectMemoryError} can be accessed nor be mocked
  * due to the type is declared as final.
  */
-public class NettyOutOfMemoryError extends OutOfMemoryError {
+public class TestNettyOutOfMemoryError extends OutOfMemoryError {
 }

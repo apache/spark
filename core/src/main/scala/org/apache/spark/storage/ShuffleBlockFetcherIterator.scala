@@ -33,7 +33,7 @@ import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NettyManagedBuffer}
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.util.{NettyOutOfMemoryError, NettyUtils, TransportConf}
+import org.apache.spark.network.util.{TestNettyOutOfMemoryError, NettyUtils, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
@@ -275,7 +275,7 @@ final class ShuffleBlockFetcherIterator(
           // Catching OOM and do something based on it is only a workaround for handling the
           // Netty OOM issue, which is not the best way towards memory management. We can
           // get rid of it when we find a way to manage Netty's memory precisely.
-          case _: OutOfDirectMemoryError | _: NettyOutOfMemoryError =>
+          case _: OutOfDirectMemoryError | _: TestNettyOutOfMemoryError =>
             if (NettyUtils.isNettyOOMOnShuffle.compareAndSet(false, true)) {
               // The fetcher can fail remaining blocks in batch for the same error. So we only
               // log the warning once to avoid flooding the logs.
