@@ -23,6 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, LIST_SUBQUERY,
+  PLAN_EXPRESSION, SCALAR_SUBQUERY, TreePattern}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 
@@ -38,6 +40,11 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
     bits.union(plan.treePatternBits)
     bits
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_EXPRESSION) ++ nodePatternsInternal
+
+  // Subclasses can override this function to provide more TreePatterns.
+  def nodePatternsInternal(): Seq[TreePattern] = Seq()
 
   /**  The id of the subquery expression. */
   def exprId: ExprId
@@ -248,6 +255,8 @@ case class ScalarSubquery(
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): ScalarSubquery = copy(children = newChildren)
+
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(SCALAR_SUBQUERY)
 }
 
 object ScalarSubquery {
@@ -318,6 +327,8 @@ case class ListQuery(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ListQuery =
     copy(children = newChildren)
+
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(LIST_SUBQUERY)
 }
 
 /**
@@ -363,4 +374,6 @@ case class Exists(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Exists =
     copy(children = newChildren)
+
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(EXISTS_SUBQUERY)
 }

@@ -17,17 +17,18 @@
 
 import pandas as pd
 
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.pandas.utils import (
     lazy_property,
     validate_arguments_and_invoke_function,
     validate_bool_kwarg,
 )
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 
 some_global_variable = 0
 
 
-class UtilsTest(ReusedSQLTestCase, SQLTestUtils):
+class UtilsTest(PandasOnSparkTestCase, SQLTestUtils):
 
     # a dummy to_html version with an extra parameter that pandas does not support
     # used in test_validate_arguments_and_invoke_function

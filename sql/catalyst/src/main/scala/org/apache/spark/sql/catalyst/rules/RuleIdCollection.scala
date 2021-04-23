@@ -42,12 +42,15 @@ object RuleIdCollection {
       // Catalyst Analyzer rules
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNaturalAndUsingJoin" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRandomSeed" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubquery" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowFrame" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowOrder" ::
+      "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeIn" ::
+      "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushLeftSemiLeftAntiThroughJoin" ::

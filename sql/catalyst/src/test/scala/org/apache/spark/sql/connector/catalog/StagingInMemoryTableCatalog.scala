@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark.sql.connector.catalog
 
 import java.util
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}

@@ -339,6 +339,9 @@ private[spark] class ExecutorPodsAllocator(
         resources
           .filter(_.getKind == "PersistentVolumeClaim")
           .foreach { resource =>
+            if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
+              addOwnerReference(driverPod.get, Seq(resource))
+            }
             val pvc = resource.asInstanceOf[PersistentVolumeClaim]
             logInfo(s"Trying to create PersistentVolumeClaim ${pvc.getMetadata.getName} with " +
               s"StorageClass ${pvc.getSpec.getStorageClassName}")
