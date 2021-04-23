@@ -633,10 +633,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * subqueries.
    */
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
-    case a @ Aggregate(grouping, _, child) =>
+    case a @ Aggregate(grouping, expressions, child) =>
       val subqueries = ArrayBuffer.empty[ScalarSubquery]
-      val rewriteExprs = a.aggregateExpressionsWithoutGroupingRefs
-        .map(extractCorrelatedScalarSubqueries(_, subqueries))
+      val rewriteExprs = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
       if (subqueries.nonEmpty) {
         // We currently only allow correlated subqueries in an aggregate if they are part of the
         // grouping expressions. As a result we need to replace all the scalar subqueries in the

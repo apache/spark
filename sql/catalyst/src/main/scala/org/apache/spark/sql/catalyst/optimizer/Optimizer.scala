@@ -119,8 +119,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
-        CombineConcats,
-        UpdateGroupingExprRefNullability) ++
+        CombineConcats) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
@@ -149,7 +148,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
-      EnforceGroupingReferencesInAggregates,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -269,9 +267,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
-      ReplaceUpdateFieldsExpression.ruleName ::
-      EnforceGroupingReferencesInAggregates.ruleName ::
-      UpdateGroupingExprRefNullability.ruleName :: Nil
+      ReplaceUpdateFieldsExpression.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -512,7 +508,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
       val aliasMap = getAliasMap(lower)
 
-      val newAggregate = Aggregate.withGroupingRefs(
+      val newAggregate = upper.copy(
         child = lower.child,
         groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
         aggregateExpressions = upper.aggregateExpressions.map(
@@ -528,18 +524,22 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   }
 
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoAggregateExpressions =
-      !upper.aggregateExpressions.exists(AggregateExpression.containsAggregate)
+    val upperHasNoAggregateExpressions = !upper.aggregateExpressions.exists(isAggregate)
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower
         .aggregateExpressions
         .filter(_.deterministic)
-        .filterNot(AggregateExpression.containsAggregate)
+        .filter(!isAggregate(_))
         .map(_.toAttribute)
     ))
 
     upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
+  }
+
+  private def isAggregate(expr: Expression): Boolean = {
+    expr.find(e => e.isInstanceOf[AggregateExpression] ||
+      PythonUDF.isGroupedAggPandasUDF(e)).isDefined
   }
 }
 
@@ -1978,18 +1978,7 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
     case a @ Aggregate(grouping, _, _) if grouping.nonEmpty =>
       val newGrouping = grouping.filter(!_.foldable)
       if (newGrouping.nonEmpty) {
-        val droppedGroupsBefore =
-          grouping.scanLeft(0)((n, e) => n + (if (e.foldable) 1 else 0)).toArray
-
-        val newAggregateExpressions =
-          a.aggregateExpressions.map(_.transform {
-            case g: GroupingExprRef if droppedGroupsBefore(g.ordinal) > 0 =>
-              g.copy(ordinal = g.ordinal - droppedGroupsBefore(g.ordinal))
-          }.asInstanceOf[NamedExpression])
-
-        a.copy(
-          groupingExpressions = newGrouping,
-          aggregateExpressions = newAggregateExpressions)
+        a.copy(groupingExpressions = newGrouping)
       } else {
         // All grouping expressions are literals. We should not drop them all, because this can
         // change the return semantics when the input of the Aggregate is empty (SPARK-17114). We
@@ -2010,25 +1999,7 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       if (newGrouping.size == grouping.size) {
         a
       } else {
-        var i = 0
-        val droppedGroupsBefore = grouping.scanLeft(0)((n, e) =>
-          n + (if (i >= newGrouping.size || e.eq(newGrouping(i))) {
-            i += 1
-            0
-          } else {
-            1
-          })
-        ).toArray
-
-        val newAggregateExpressions =
-          a.aggregateExpressions.map(_.transform {
-            case g: GroupingExprRef if droppedGroupsBefore(g.ordinal) > 0 =>
-              g.copy(ordinal = g.ordinal - droppedGroupsBefore(g.ordinal))
-          }.asInstanceOf[NamedExpression])
-
-        a.copy(
-          groupingExpressions = newGrouping,
-          aggregateExpressions = newAggregateExpressions)
+        a.copy(groupingExpressions = newGrouping)
       }
   }
 }
