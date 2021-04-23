@@ -1009,15 +1009,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (groupingAnalytics.CUBE != null) {
       // CUBE(A, B, (A, B), ()) is not supported.
       if (groupingSets.exists(_.isEmpty)) {
-        throw new ParseException("Empty set in CUBE grouping sets is not supported.",
-          groupingAnalytics)
+        throw QueryParsingErrors.invalidGroupingSetError("CUBE", groupingAnalytics)
       }
       Cube(groupingSets.toSeq)
     } else if (groupingAnalytics.ROLLUP != null) {
       // ROLLUP(A, B, (A, B), ()) is not supported.
       if (groupingSets.exists(_.isEmpty)) {
-        throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
-          groupingAnalytics)
+        throw QueryParsingErrors.invalidGroupingSetError("ROLLUP", groupingAnalytics)
       }
       Rollup(groupingSets.toSeq)
     } else {
