@@ -23,7 +23,6 @@ import os
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-import pyspark
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
@@ -96,10 +95,6 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 expected_idx.sort_values(by="f").to_spark().toPandas(),
             )
 
-    @unittest.skipIf(
-        LooseVersion(pyspark.__version__) < LooseVersion("3.0.0"),
-        "The test only works with Spark>=3.0",
-    )
     def test_parquet_read_with_pandas_metadata(self):
         with self.temp_dir() as tmp:
             expected1 = self.test_pdf
@@ -263,35 +258,32 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 pd.read_excel(open(path1, "rb"), index_col=0, squeeze=True),
             )
 
-            if LooseVersion(pyspark.__version__) >= LooseVersion("3.0.0"):
-                self.assert_eq(ps.read_excel(path1), pd.read_excel(path1))
-                self.assert_eq(ps.read_excel(path1, index_col=0), pd.read_excel(path1, index_col=0))
-                self.assert_eq(
-                    ps.read_excel(path1, index_col=0, squeeze=True),
-                    pd.read_excel(path1, index_col=0, squeeze=True),
-                )
+            self.assert_eq(ps.read_excel(path1), pd.read_excel(path1))
+            self.assert_eq(ps.read_excel(path1, index_col=0), pd.read_excel(path1, index_col=0))
+            self.assert_eq(
+                ps.read_excel(path1, index_col=0, squeeze=True),
+                pd.read_excel(path1, index_col=0, squeeze=True),
+            )
 
-                self.assert_eq(ps.read_excel(tmp), pd.read_excel(path1))
+            self.assert_eq(ps.read_excel(tmp), pd.read_excel(path1))
 
-                path2 = "{}/file2.xlsx".format(tmp)
-                self.test_pdf[["i32"]].to_excel(path2)
-                self.assert_eq(
-                    ps.read_excel(tmp, index_col=0).sort_index(),
-                    pd.concat(
-                        [pd.read_excel(path1, index_col=0), pd.read_excel(path2, index_col=0)]
-                    ).sort_index(),
-                )
-                self.assert_eq(
-                    ps.read_excel(tmp, index_col=0, squeeze=True).sort_index(),
-                    pd.concat(
-                        [
-                            pd.read_excel(path1, index_col=0, squeeze=True),
-                            pd.read_excel(path2, index_col=0, squeeze=True),
-                        ]
-                    ).sort_index(),
-                )
-            else:
-                self.assertRaises(ValueError, lambda: ps.read_excel(tmp))
+            path2 = "{}/file2.xlsx".format(tmp)
+            self.test_pdf[["i32"]].to_excel(path2)
+            self.assert_eq(
+                ps.read_excel(tmp, index_col=0).sort_index(),
+                pd.concat(
+                    [pd.read_excel(path1, index_col=0), pd.read_excel(path2, index_col=0)]
+                ).sort_index(),
+            )
+            self.assert_eq(
+                ps.read_excel(tmp, index_col=0, squeeze=True).sort_index(),
+                pd.concat(
+                    [
+                        pd.read_excel(path1, index_col=0, squeeze=True),
+                        pd.read_excel(path2, index_col=0, squeeze=True),
+                    ]
+                ).sort_index(),
+            )
 
         with self.temp_dir() as tmp:
             path1 = "{}/file1.xlsx".format(tmp)
@@ -317,68 +309,65 @@ class DataFrameSparkIOTest(PandasOnSparkTestCase, TestUtils):
                 self.assert_eq(kdfs["Sheet_name_1"], pdfs1_squeezed["Sheet_name_1"])
                 self.assert_eq(kdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
 
-            if LooseVersion(pyspark.__version__) >= LooseVersion("3.0.0"):
+            self.assert_eq(
+                ps.read_excel(tmp, index_col=0, sheet_name="Sheet_name_2"),
+                pdfs1["Sheet_name_2"],
+            )
+
+            for sheet_name in sheet_names:
+                kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
+                self.assert_eq(kdfs["Sheet_name_1"], pdfs1["Sheet_name_1"])
+                self.assert_eq(kdfs["Sheet_name_2"], pdfs1["Sheet_name_2"])
+
+                kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
+                self.assert_eq(kdfs["Sheet_name_1"], pdfs1_squeezed["Sheet_name_1"])
+                self.assert_eq(kdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
+
+            path2 = "{}/file2.xlsx".format(tmp)
+            with pd.ExcelWriter(path2) as writer:
+                self.test_pdf.to_excel(writer, sheet_name="Sheet_name_1")
+                self.test_pdf[["i32"]].to_excel(writer, sheet_name="Sheet_name_2")
+
+            pdfs2 = pd.read_excel(path2, sheet_name=None, index_col=0)
+            pdfs2_squeezed = pd.read_excel(path2, sheet_name=None, index_col=0, squeeze=True)
+
+            self.assert_eq(
+                ps.read_excel(tmp, sheet_name="Sheet_name_2", index_col=0).sort_index(),
+                pd.concat([pdfs1["Sheet_name_2"], pdfs2["Sheet_name_2"]]).sort_index(),
+            )
+            self.assert_eq(
+                ps.read_excel(
+                    tmp, sheet_name="Sheet_name_2", index_col=0, squeeze=True
+                ).sort_index(),
+                pd.concat(
+                    [pdfs1_squeezed["Sheet_name_2"], pdfs2_squeezed["Sheet_name_2"]]
+                ).sort_index(),
+            )
+
+            for sheet_name in sheet_names:
+                kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
                 self.assert_eq(
-                    ps.read_excel(tmp, index_col=0, sheet_name="Sheet_name_2"),
-                    pdfs1["Sheet_name_2"],
+                    kdfs["Sheet_name_1"].sort_index(),
+                    pd.concat([pdfs1["Sheet_name_1"], pdfs2["Sheet_name_1"]]).sort_index(),
                 )
-
-                for sheet_name in sheet_names:
-                    kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
-                    self.assert_eq(kdfs["Sheet_name_1"], pdfs1["Sheet_name_1"])
-                    self.assert_eq(kdfs["Sheet_name_2"], pdfs1["Sheet_name_2"])
-
-                    kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
-                    self.assert_eq(kdfs["Sheet_name_1"], pdfs1_squeezed["Sheet_name_1"])
-                    self.assert_eq(kdfs["Sheet_name_2"], pdfs1_squeezed["Sheet_name_2"])
-
-                path2 = "{}/file2.xlsx".format(tmp)
-                with pd.ExcelWriter(path2) as writer:
-                    self.test_pdf.to_excel(writer, sheet_name="Sheet_name_1")
-                    self.test_pdf[["i32"]].to_excel(writer, sheet_name="Sheet_name_2")
-
-                pdfs2 = pd.read_excel(path2, sheet_name=None, index_col=0)
-                pdfs2_squeezed = pd.read_excel(path2, sheet_name=None, index_col=0, squeeze=True)
-
                 self.assert_eq(
-                    ps.read_excel(tmp, sheet_name="Sheet_name_2", index_col=0).sort_index(),
+                    kdfs["Sheet_name_2"].sort_index(),
                     pd.concat([pdfs1["Sheet_name_2"], pdfs2["Sheet_name_2"]]).sort_index(),
                 )
+
+                kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
                 self.assert_eq(
-                    ps.read_excel(
-                        tmp, sheet_name="Sheet_name_2", index_col=0, squeeze=True
+                    kdfs["Sheet_name_1"].sort_index(),
+                    pd.concat(
+                        [pdfs1_squeezed["Sheet_name_1"], pdfs2_squeezed["Sheet_name_1"]]
                     ).sort_index(),
+                )
+                self.assert_eq(
+                    kdfs["Sheet_name_2"].sort_index(),
                     pd.concat(
                         [pdfs1_squeezed["Sheet_name_2"], pdfs2_squeezed["Sheet_name_2"]]
                     ).sort_index(),
                 )
-
-                for sheet_name in sheet_names:
-                    kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0)
-                    self.assert_eq(
-                        kdfs["Sheet_name_1"].sort_index(),
-                        pd.concat([pdfs1["Sheet_name_1"], pdfs2["Sheet_name_1"]]).sort_index(),
-                    )
-                    self.assert_eq(
-                        kdfs["Sheet_name_2"].sort_index(),
-                        pd.concat([pdfs1["Sheet_name_2"], pdfs2["Sheet_name_2"]]).sort_index(),
-                    )
-
-                    kdfs = ps.read_excel(tmp, sheet_name=sheet_name, index_col=0, squeeze=True)
-                    self.assert_eq(
-                        kdfs["Sheet_name_1"].sort_index(),
-                        pd.concat(
-                            [pdfs1_squeezed["Sheet_name_1"], pdfs2_squeezed["Sheet_name_1"]]
-                        ).sort_index(),
-                    )
-                    self.assert_eq(
-                        kdfs["Sheet_name_2"].sort_index(),
-                        pd.concat(
-                            [pdfs1_squeezed["Sheet_name_2"], pdfs2_squeezed["Sheet_name_2"]]
-                        ).sort_index(),
-                    )
-            else:
-                self.assertRaises(ValueError, lambda: ps.read_excel(tmp))
 
     def test_read_orc(self):
         with self.temp_dir() as tmp:
