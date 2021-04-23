@@ -291,7 +291,7 @@ class WriteDistributionAndOrderingSuite
       )
     )
 
-    val writePartitioning = UnknownPartitioning(0)
+    val writePartitioning = UnknownPartitioning(sparkContext.defaultParallelism)
 
     checkWriteRequirements(
       tableDistribution,
@@ -339,7 +339,7 @@ class WriteDistributionAndOrderingSuite
     val tableDistribution = Distributions.unspecified()
 
     val writeOrdering = Seq.empty[catalyst.expressions.SortOrder]
-    val writePartitioning = UnknownPartitioning(0)
+    val writePartitioning = UnknownPartitioning(sparkContext.defaultParallelism)
 
     checkWriteRequirements(
       tableDistribution,

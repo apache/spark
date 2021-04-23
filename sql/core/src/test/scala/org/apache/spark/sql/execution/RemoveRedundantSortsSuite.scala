@@ -158,7 +158,7 @@ abstract class RemoveRedundantSortsSuiteBase
         val leftPartitioning = join.left.outputPartitioning
         assert(leftPartitioning.isInstanceOf[RangePartitioning])
         assert(leftPartitioning.numPartitions == 2)
-        assert(join.right.outputPartitioning == UnknownPartitioning(0))
+        assert(join.right.outputPartitioning == UnknownPartitioning(2))
         checkSorts(query, count, count)
       }
     }
