@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -68,7 +68,10 @@ case class CustomShuffleReaderExec private(
           throw new IllegalStateException("operating on canonicalization plan")
       }
     } else {
-      UnknownPartitioning(partitionSpecs.length)
+      partitionSpecs.length match {
+        case 1 => SinglePartition
+        case other => UnknownPartitioning(other)
+      }
     }
   }
 
