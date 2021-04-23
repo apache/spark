@@ -19,12 +19,13 @@ package org.apache.spark
 
 // scalastyle:off
 import java.io.File
-import java.nio.file.{Path, Paths}
+import java.nio.file.Path
 import java.util.{Locale, TimeZone}
 
 import org.apache.log4j.spi.LoggingEvent
 
 import scala.annotation.tailrec
+
 import org.apache.commons.io.FileUtils
 import org.apache.log4j.{Appender, AppenderSkeleton, Level, Logger}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
@@ -32,7 +33,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{AccumulatorContext, Utils}
-import org.scalatest.Assertions.fail
 
 import scala.collection.mutable.ArrayBuffer
 
