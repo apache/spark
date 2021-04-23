@@ -328,6 +328,16 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       expectedStatsCboOff = Statistics(sizeInBytes = expectedSize))
   }
 
+  test("SPARK-35203: Improve Repartition statistics estimation") {
+    Seq(RepartitionByExpression(plan.output, plan, 10), plan.repartition(2)).foreach { rep =>
+      val expectedStats = Statistics(plan.size.get, Some(plan.rowCount), plan.attributeStats)
+      checkStats(
+        rep,
+        expectedStatsCboOn = expectedStats,
+        expectedStatsCboOff = expectedStats)
+    }
+  }
+
   /** Check estimated stats when cbo is turned on/off. */
   private def checkStats(
       plan: LogicalPlan,
