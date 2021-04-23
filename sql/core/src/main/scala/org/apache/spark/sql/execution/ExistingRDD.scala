@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -94,8 +94,14 @@ case class LogicalRDD(
     override val isStreaming: Boolean = false)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
-  def outputPartitioning: Partitioning =
-    partitioning.getOrElse(UnknownPartitioning(rdd.partitions.length))
+  def outputPartitioning: Partitioning = {
+    partitioning.getOrElse {
+      rdd.partitions.length match {
+        case 1 => SinglePartition
+        case other => UnknownPartitioning(other)
+      }
+    }
+  }
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
@@ -148,8 +154,14 @@ case class RDDScanExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override val outputPartitioning: Partitioning =
-    partitioning.getOrElse(UnknownPartitioning(rdd.partitions.length))
+  override val outputPartitioning: Partitioning = {
+    partitioning.getOrElse {
+      rdd.partitions.length match {
+        case 1 => SinglePartition
+        case other => UnknownPartitioning(other)
+      }
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
