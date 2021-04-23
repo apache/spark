@@ -21,6 +21,7 @@ import java.util.Comparator
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
@@ -2553,7 +2554,8 @@ case class Sequence(
         (startType match {
           case TimestampType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
-              YearMonthIntervalType.acceptsType(stepType) || DayTimeIntervalType.acceptsType(stepType)
+              YearMonthIntervalType.acceptsType(stepType) ||
+              DayTimeIntervalType.acceptsType(stepType)
           case DateType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
               YearMonthIntervalType.acceptsType(stepType)
@@ -2756,7 +2758,8 @@ object Sequence {
       (input.asInstanceOf[Int], 0, 0)
     }
 
-    def stepSplitCode(stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
+    def stepSplitCode(
+        stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
       s"""
          |final int $stepMonths = $step;
          |final int $stepDays = 0;
@@ -2778,7 +2781,8 @@ object Sequence {
       (0, 0, input.asInstanceOf[Long])
     }
 
-    def stepSplitCode(stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
+    def stepSplitCode(
+        stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
       s"""
          |final int $stepMonths = 0;
          |final int $stepDays = 0;
@@ -2801,7 +2805,8 @@ object Sequence {
       (step.months, step.days, step.microseconds)
     }
 
-    def stepSplitCode(stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
+    def stepSplitCode(
+        stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
       s"""
          |final int $stepMonths = $step.months;
          |final int $stepDays = $step.days;
@@ -2870,7 +2875,8 @@ object Sequence {
       }
     }
 
-    protected def stepSplitCode(stepMonths: String, stepDays: String, stepMicros: String, step: String): String
+    protected def stepSplitCode(
+         stepMonths: String, stepDays: String, stepMicros: String, step: String): String
 
     override def genCode(
         ctx: CodegenContext,
