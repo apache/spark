@@ -344,6 +344,7 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
     values.head
   }
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(IN_SUBQUERY)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {

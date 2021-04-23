@@ -24,12 +24,13 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from pyspark import pandas as pp
 from distutils.version import LooseVersion
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils, TestUtils
+from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
+class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
     """Test cases for "small data" conversion and I/O."""
 
     def setUp(self):
@@ -44,7 +45,7 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
 
     @property
     def kdf(self):
-        return pp.from_pandas(self.pdf)
+        return ps.from_pandas(self.pdf)
 
     @staticmethod
     def strip_all_whitespace(str):
@@ -113,7 +114,7 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
 
             pdf = pd.DataFrame({"a": [1, None, 3], "b": ["one", "two", None]}, index=[0, 1, 3])
 
-            kdf = pp.from_pandas(pdf)
+            kdf = ps.from_pandas(pdf)
 
             kdf.to_excel(koalas_location, na_rep="null")
             pdf.to_excel(pandas_location, na_rep="null")
@@ -122,7 +123,7 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
 
             pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]}, index=[0, 1, 3])
 
-            kdf = pp.from_pandas(pdf)
+            kdf = ps.from_pandas(pdf)
 
             kdf.to_excel(koalas_location, float_format="%.1f")
             pdf.to_excel(pandas_location, float_format="%.1f")
@@ -141,12 +142,12 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
 
     def test_to_json(self):
         pdf = self.pdf
-        kdf = pp.from_pandas(pdf)
+        kdf = ps.from_pandas(pdf)
 
         self.assert_eq(kdf.to_json(orient="records"), pdf.to_json(orient="records"))
 
     def test_to_json_negative(self):
-        kdf = pp.from_pandas(self.pdf)
+        kdf = ps.from_pandas(self.pdf)
 
         with self.assertRaises(NotImplementedError):
             kdf.to_json(orient="table")
@@ -156,11 +157,11 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
 
     def test_read_json_negative(self):
         with self.assertRaises(NotImplementedError):
-            pp.read_json("invalid", lines=False)
+            ps.read_json("invalid", lines=False)
 
     def test_to_json_with_path(self):
         pdf = pd.DataFrame({"a": [1], "b": ["a"]})
-        kdf = pp.DataFrame(pdf)
+        kdf = ps.DataFrame(pdf)
 
         kdf.to_json(self.tmp_dir, num_files=1)
         expected = pdf.to_json(orient="records")
@@ -172,7 +173,7 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
 
     def test_to_json_with_partition_cols(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
-        kdf = pp.DataFrame(pdf)
+        kdf = ps.DataFrame(pdf)
 
         kdf.to_json(self.tmp_dir, partition_cols="b", num_files=1)
 
@@ -224,7 +225,7 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
         if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
             pdf = pd.DataFrame({"A": [1, 2], "B": [0.5, 0.75]}, index=["a", "b"])
 
-            kdf = pp.from_pandas(pdf)
+            kdf = ps.from_pandas(pdf)
 
             self.assert_eq(kdf.to_records(), pdf.to_records())
             self.assert_eq(kdf.to_records(index=False), pdf.to_records(index=False))
@@ -233,32 +234,32 @@ class DataFrameConversionTest(ReusedSQLTestCase, SQLTestUtils, TestUtils):
     def test_from_records(self):
         # Assert using a dict as input
         self.assert_eq(
-            pp.DataFrame.from_records({"A": [1, 2, 3]}), pd.DataFrame.from_records({"A": [1, 2, 3]})
+            ps.DataFrame.from_records({"A": [1, 2, 3]}), pd.DataFrame.from_records({"A": [1, 2, 3]})
         )
         # Assert using a list of tuples as input
         self.assert_eq(
-            pp.DataFrame.from_records([(1, 2), (3, 4)]), pd.DataFrame.from_records([(1, 2), (3, 4)])
+            ps.DataFrame.from_records([(1, 2), (3, 4)]), pd.DataFrame.from_records([(1, 2), (3, 4)])
         )
         # Assert using a NumPy array as input
-        self.assert_eq(pp.DataFrame.from_records(np.eye(3)), pd.DataFrame.from_records(np.eye(3)))
+        self.assert_eq(ps.DataFrame.from_records(np.eye(3)), pd.DataFrame.from_records(np.eye(3)))
         # Asserting using a custom index
         self.assert_eq(
-            pp.DataFrame.from_records([(1, 2), (3, 4)], index=[2, 3]),
+            ps.DataFrame.from_records([(1, 2), (3, 4)], index=[2, 3]),
             pd.DataFrame.from_records([(1, 2), (3, 4)], index=[2, 3]),
         )
         # Assert excluding excluding column(s)
         self.assert_eq(
-            pp.DataFrame.from_records({"A": [1, 2, 3], "B": [1, 2, 3]}, exclude=["B"]),
+            ps.DataFrame.from_records({"A": [1, 2, 3], "B": [1, 2, 3]}, exclude=["B"]),
             pd.DataFrame.from_records({"A": [1, 2, 3], "B": [1, 2, 3]}, exclude=["B"]),
         )
         # Assert limiting to certain column(s)
         self.assert_eq(
-            pp.DataFrame.from_records({"A": [1, 2, 3], "B": [1, 2, 3]}, columns=["A"]),
+            ps.DataFrame.from_records({"A": [1, 2, 3], "B": [1, 2, 3]}, columns=["A"]),
             pd.DataFrame.from_records({"A": [1, 2, 3], "B": [1, 2, 3]}, columns=["A"]),
         )
         # Assert limiting to a number of rows
         self.assert_eq(
-            pp.DataFrame.from_records([(1, 2), (3, 4)], nrows=1),
+            ps.DataFrame.from_records([(1, 2), (3, 4)], nrows=1),
             pd.DataFrame.from_records([(1, 2), (3, 4)], nrows=1),
         )
 

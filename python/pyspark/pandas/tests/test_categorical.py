@@ -22,10 +22,10 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class CategoricalTest(ReusedSQLTestCase, TestUtils):
+class CategoricalTest(PandasOnSparkTestCase, TestUtils):
     @property
     def pdf(self):
         return pd.DataFrame(
