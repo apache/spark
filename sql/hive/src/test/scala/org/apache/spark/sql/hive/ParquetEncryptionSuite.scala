@@ -64,23 +64,28 @@ class ParquetEncryptionSuite extends QueryTest with TestHiveSingleton {
     }
   }
 
-  private def verifyParquetEncrypted(parquetDir: String) = {
+  /**
+   * Verify that the directory contains an encrypted parquet in
+   * encrypted footer mode by means of checking for all the parquet part files
+   * in the parquet directory that their magic string is PARE, as defined in the spec:
+   * https://github.com/apache/parquet-format/blob/master/Encryption.md#54-encrypted-footer-mode
+   */
+  private def verifyParquetEncrypted(parquetDir: String): Unit = {
     val parquetPartitionFiles = getListOfParquetFiles(new File(parquetDir))
     assert(parquetPartitionFiles.size >= 1)
-    val parquetFile = parquetPartitionFiles.maxBy(_.lastModified)
-
-    val magicString = "PARE"
-    val magicStringLength = magicString.length()
-    val byteArray = new Array[Byte](magicStringLength)
-    val randomAccessFile = new RandomAccessFile(parquetFile, "r")
-    try {
-      randomAccessFile.seek(randomAccessFile.length() - magicStringLength);
-      randomAccessFile.read(byteArray, 0, magicStringLength)
-    } finally {
-      randomAccessFile.close()
+    parquetPartitionFiles.foreach { parquetFile =>
+      val magicString = "PARE"
+      val magicStringLength = magicString.length()
+      val byteArray = new Array[Byte](magicStringLength)
+      val randomAccessFile = new RandomAccessFile(parquetFile, "r")
+      try {
+        randomAccessFile.read(byteArray, 0, magicStringLength)
+      } finally {
+        randomAccessFile.close()
+      }
+      val stringRead = new String(byteArray, StandardCharsets.UTF_8)
+      assert(magicString == stringRead)
     }
-    val stringRead = new String(byteArray, StandardCharsets.UTF_8)
-    assert(magicString == stringRead)
   }
 
   private def getListOfParquetFiles(dir: File): List[File] = {
