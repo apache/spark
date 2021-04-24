@@ -23,15 +23,36 @@ object TreePattern extends Enumeration  {
 
   // Enum Ids start from 0.
   // Expression patterns (alphabetically ordered)
-  val ATTRIBUTE_REFERENCE = Value(0)
-  val EXPRESSION_WITH_RANDOM_SEED = Value
+  val AND_OR: Value = Value(0)
+  val ATTRIBUTE_REFERENCE: Value = Value
+  val BINARY_ARITHMETIC: Value = Value
+  val BINARY_COMPARISON: Value = Value
+  val CASE_WHEN: Value = Value
+  val CAST: Value = Value
+  val CONCAT: Value = Value
+  val COUNT: Value = Value
+  val DYNAMIC_PRUNING_SUBQUERY: Value = Value
+  val EXISTS_SUBQUERY = Value
+  val EXPRESSION_WITH_RANDOM_SEED: Value = Value
+  val IF: Value = Value
   val IN: Value = Value
+  val IN_SUBQUERY: Value = Value
+  val INSET: Value = Value
+  val LIKE_FAMLIY: Value = Value
+  val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value
+  val NOT: Value = Value
+  val NULL_CHECK: Value = Value
   val NULL_LITERAL: Value = Value
+  val PLAN_EXPRESSION: Value = Value
+  val SCALAR_SUBQUERY: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
   val WINDOW_EXPRESSION: Value = Value
+  val UNARY_POSITIVE: Value = Value
+  val UPPER_OR_LOWER: Value = Value
 
   // Logical plan patterns (alphabetically ordered)
+  val FILTER: Value = Value
   val INNER_LIKE_JOIN: Value = Value
   val JOIN: Value = Value
   val LEFT_SEMI_OR_ANTI_JOIN: Value = Value

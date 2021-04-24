@@ -22,7 +22,7 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor, BoxPlotBase
-from pyspark.pandas.testing.utils import have_plotly
+from pyspark.testing.pandasutils import have_plotly, plotly_requirement_message
 
 
 class SeriesPlotTest(unittest.TestCase):
@@ -36,7 +36,7 @@ class SeriesPlotTest(unittest.TestCase):
     def kdf1(self):
         return ps.from_pandas(self.pdf1)
 
-    @unittest.skipIf(not have_plotly, "plotly is not installed")
+    @unittest.skipIf(not have_plotly, plotly_requirement_message)
     def test_plot_backends(self):
         plot_backend = "plotly"
 

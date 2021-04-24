@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import assert_produces_warning, ReusedSQLTestCase
+from pyspark.testing.pandasutils import assert_produces_warning, PandasOnSparkTestCase
 from pyspark.pandas.extensions import (
     register_dataframe_accessor,
     register_series_accessor,
@@ -66,7 +66,7 @@ class CustomAccessor:
                 raise ValueError(str(e))
 
 
-class ExtensionTest(ReusedSQLTestCase):
+class ExtensionTest(PandasOnSparkTestCase):
     @property
     def pdf(self):
         return pd.DataFrame(

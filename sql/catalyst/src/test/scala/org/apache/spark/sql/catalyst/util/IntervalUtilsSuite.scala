@@ -169,6 +169,19 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       fromYearMonthString)
     failFuncWithInvalidInput("-\t99-15", "Interval string does not match year-month format",
       fromYearMonthString)
+
+    assert(fromYearMonthString("178956970-6") == new CalendarInterval(Int.MaxValue - 1, 0, 0))
+    assert(fromYearMonthString("178956970-7") == new CalendarInterval(Int.MaxValue, 0, 0))
+
+    val e1 = intercept[IllegalArgumentException]{
+      assert(fromYearMonthString("178956970-8") == new CalendarInterval(Int.MinValue, 0, 0))
+    }.getMessage
+    assert(e1.contains("integer overflow"))
+    assert(fromYearMonthString("-178956970-8") == new CalendarInterval(Int.MinValue, 0, 0))
+    val e2 = intercept[IllegalArgumentException]{
+      assert(fromYearMonthString("-178956970-9") == new CalendarInterval(Int.MinValue, 0, 0))
+    }.getMessage
+    assert(e2.contains("integer overflow"))
   }
 
   test("from day-time string - legacy") {

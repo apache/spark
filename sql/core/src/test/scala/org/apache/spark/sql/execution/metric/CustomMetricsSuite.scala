@@ -22,7 +22,7 @@ import org.apache.spark.SparkFunSuite
 class CustomMetricsSuite extends SparkFunSuite {
 
   test("Build/parse custom metric metric type") {
-    Seq(new CustomSumMetric, new CustomAvgMetric).foreach { customMetric =>
+    Seq(new TestCustomSumMetric, new TestCustomAvgMetric).foreach { customMetric =>
       val metricType = CustomMetrics.buildV2CustomMetricTypeName(customMetric)
 
       assert(metricType == CustomMetrics.V2_CUSTOM + "_" + customMetric.getClass.getCanonicalName)
@@ -33,7 +33,7 @@ class CustomMetricsSuite extends SparkFunSuite {
   }
 
   test("Built-in CustomSumMetric") {
-    val metric = new CustomSumMetric
+    val metric = new TestCustomSumMetric
 
     val metricValues1 = Array(0L, 1L, 5L, 5L, 7L, 10L)
     assert(metric.aggregateTaskMetrics(metricValues1) == metricValues1.sum.toString)
@@ -43,7 +43,7 @@ class CustomMetricsSuite extends SparkFunSuite {
   }
 
   test("Built-in CustomAvgMetric") {
-    val metric = new CustomAvgMetric
+    val metric = new TestCustomAvgMetric
 
     val metricValues1 = Array(0L, 1L, 5L, 5L, 7L, 10L)
     assert(metric.aggregateTaskMetrics(metricValues1) == "4.667")
@@ -51,4 +51,14 @@ class CustomMetricsSuite extends SparkFunSuite {
     val metricValues2 = Array.empty[Long]
     assert(metric.aggregateTaskMetrics(metricValues2) == "0")
   }
+}
+
+private[spark] class TestCustomSumMetric extends CustomSumMetric {
+  override def name(): String = "CustomSumMetric"
+  override def description(): String = "Sum up CustomMetric"
+}
+
+private[spark] class TestCustomAvgMetric extends CustomAvgMetric {
+  override def name(): String = "CustomAvgMetric"
+  override def description(): String = "Average CustomMetric"
 }

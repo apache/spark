@@ -21,10 +21,10 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class CategoricalIndexTest(ReusedSQLTestCase, TestUtils):
+class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
     def test_categorical_index(self):
         pidx = pd.CategoricalIndex([1, 2, 3])
         kidx = ps.CategoricalIndex([1, 2, 3])
