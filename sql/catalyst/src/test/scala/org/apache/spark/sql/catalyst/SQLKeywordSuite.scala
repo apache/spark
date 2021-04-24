@@ -41,7 +41,7 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
   // Spark default mode, and the SQL standard.
   val keywordsInDoc: Array[Array[String]] = {
     val docPath = {
-      getWorkspaceFilePath("docs", "sql-ref-ansi-compliance.md")
+      getWorkspaceFilePath("docs", "sql-ref-ansi-compliance.md").toFile
     }
     fileToString(docPath).split("\n")
       .dropWhile(!_.startsWith("|Keyword|")).drop(2).takeWhile(_.startsWith("|"))
