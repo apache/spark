@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{ZoneId, ZoneOffset}
+import java.time.{Duration, Period, ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
@@ -695,6 +695,17 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(XxHash64(Seq(literal), 100), XxHash64(Seq(literal), 100L).eval())
     checkEvaluation(XxHash64(Seq(literal), 100L), XxHash64(Seq(literal), 100).eval())
+  }
+
+  test("SPARK-35113: HashExpression support DayTimeIntervalType/YearMonthIntervalType") {
+    val dayTime = Literal.create(Duration.ofSeconds(1237123123), DayTimeIntervalType)
+    val yearMonth = Literal.create(Period.ofMonths(1234), YearMonthIntervalType)
+    checkEvaluation(Murmur3Hash(Seq(dayTime), 10), -428664612)
+    checkEvaluation(Murmur3Hash(Seq(yearMonth), 10), -686520021)
+    checkEvaluation(XxHash64(Seq(dayTime), 10), 8228802290839366895L)
+    checkEvaluation(XxHash64(Seq(yearMonth), 10), -1774215319882784110L)
+    checkEvaluation(HiveHash(Seq(dayTime)), 743331816)
+    checkEvaluation(HiveHash(Seq(yearMonth)), 1234)
   }
 
   private def testHash(inputSchema: StructType): Unit = {

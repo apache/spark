@@ -42,6 +42,7 @@ trait LogicalPlanVisitor[T] {
     case p: Union => visitUnion(p)
     case p: Window => visitWindow(p)
     case p: Tail => visitTail(p)
+    case p: Sort => visitSort(p)
     case p: LogicalPlan => default(p)
   }
 
@@ -84,4 +85,6 @@ trait LogicalPlanVisitor[T] {
   def visitWindow(p: Window): T
 
   def visitTail(p: Tail): T
+
+  def visitSort(sort: Sort): T
 }

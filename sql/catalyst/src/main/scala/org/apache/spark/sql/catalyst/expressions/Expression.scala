@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, TreeNode, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, QuaternaryLike, TernaryLike, TreeNode, UnaryLike}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -786,7 +786,7 @@ abstract class TernaryExpression extends Expression with TernaryLike[Expression]
  * An expression with four inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */
-abstract class QuaternaryExpression extends Expression {
+abstract class QuaternaryExpression extends Expression with QuaternaryLike[Expression] {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -797,14 +797,13 @@ abstract class QuaternaryExpression extends Expression {
    * If subclass of QuaternaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
-    val exprs = children
-    val value1 = exprs(0).eval(input)
+    val value1 = first.eval(input)
     if (value1 != null) {
-      val value2 = exprs(1).eval(input)
+      val value2 = second.eval(input)
       if (value2 != null) {
-        val value3 = exprs(2).eval(input)
+        val value3 = third.eval(input)
         if (value3 != null) {
-          val value4 = exprs(3).eval(input)
+          val value4 = fourth.eval(input)
           if (value4 != null) {
             return nullSafeEval(value1, value2, value3, value4)
           }

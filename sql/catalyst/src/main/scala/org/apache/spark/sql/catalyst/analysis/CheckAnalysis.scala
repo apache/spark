@@ -125,12 +125,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
-      case CacheTable(u: UnresolvedRelation, _, _, _) =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
-
-      case UncacheTable(u: UnresolvedRelation, _, _) =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
-
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
@@ -260,7 +254,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
-          case Aggregate(groupingExprs, aggregateExprs, child) =>
+          case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
@@ -305,6 +299,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                     s"nor is it an aggregate function. " +
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
+              case s: ScalarSubquery
+                  if s.children.nonEmpty && !groupingExprs.exists(_.semanticEquals(s)) =>
+                failAnalysis(s"Correlated scalar subquery '${s.sql}' is neither " +
+                  "present in the group by, nor in an aggregate function. Add it to group by " +
+                  "using ordinal position or wrap it in first() (or first_value) if you don't " +
+                  "care which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
@@ -735,6 +735,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case child => child
     }
 
+    // Check whether the given expressions contains the subquery expression.
+    def containsExpr(expressions: Seq[Expression]): Boolean = {
+      expressions.exists(_.find(_.semanticEquals(expr)).isDefined)
+    }
+
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
 
@@ -750,13 +755,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           cleanQueryInScalarSubquery(query) match {
             case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
             case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
             case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
           }
 
           // Only certain operators are allowed to host subquery expression containing
           // outer references.
           plan match {
-            case _: Filter | _: Aggregate | _: Project | _: SupportsSubquery => // Ok
+            case _: Filter | _: Project | _: SupportsSubquery => // Ok
+            case a: Aggregate =>
+              // If the correlated scalar subquery is in the grouping expressions of an Aggregate,
+              // it must also be in the aggregate expressions to be rewritten in the optimization
+              // phase.
+              if (containsExpr(a.groupingExpressions) && !containsExpr(a.aggregateExpressions)) {
+                failAnalysis("Correlated scalar subqueries in the group by clause " +
+                  s"must also be in the aggregate expressions:\n$a")
+              }
             case other => failAnalysis(
               "Correlated scalar sub-queries can only be used in a " +
                 s"Filter/Aggregate/Project and a few commands: $plan")
@@ -879,14 +893,72 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     // +- SubqueryAlias t1, `t1`
     // +- Project [_1#73 AS c1#76, _2#74 AS c2#77]
     // +- LocalRelation [_1#73, _2#74]
-    def failOnNonEqualCorrelatedPredicate(found: Boolean, p: LogicalPlan): Unit = {
-      if (found) {
+    // SPARK-35080: The same issue can happen to correlated equality predicates when
+    // they do not guarantee one-to-one mapping between inner and outer attributes.
+    // For example:
+    // Table:
+    //   t1(a, b): [(0, 6), (1, 5), (2, 4)]
+    //   t2(c): [(6)]
+    //
+    // Query:
+    //   SELECT c, (SELECT COUNT(*) FROM t1 WHERE a + b = c) FROM t2
+    //
+    // Original subquery plan:
+    //   Aggregate [count(1)]
+    //   +- Filter ((a + b) = outer(c))
+    //      +- LocalRelation [a, b]
+    //
+    // Plan after pulling up correlated predicates:
+    //   Aggregate [a, b] [count(1), a, b]
+    //   +- LocalRelation [a, b]
+    //
+    // Plan after rewrite:
+    //   Project [c1, count(1)]
+    //   +- Join LeftOuter ((a + b) = c)
+    //      :- LocalRelation [c]
+    //      +- Aggregate [a, b] [count(1), a, b]
+    //         +- LocalRelation [a, b]
+    //
+    // The right hand side of the join transformed from the subquery will output
+    //   count(1) | a | b
+    //      1     | 0 | 6
+    //      1     | 1 | 5
+    //      1     | 2 | 4
+    // and the plan after rewrite will give the original query incorrect results.
+    def failOnUnsupportedCorrelatedPredicate(predicates: Seq[Expression], p: LogicalPlan): Unit = {
+      if (predicates.nonEmpty) {
         // Report a non-supported case as an exception
-        failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n$p")
+        failAnalysis("Correlated column is not allowed in predicate " +
+          s"${predicates.map(_.sql).mkString}:\n$p")
       }
     }
 
-    var foundNonEqualCorrelatedPred: Boolean = false
+    def containsAttribute(e: Expression): Boolean = {
+      e.find(_.isInstanceOf[Attribute]).isDefined
+    }
+
+    // Given a correlated predicate, check if it is either a non-equality predicate or
+    // equality predicate that does not guarantee one-on-one mapping between inner and
+    // outer attributes. When the correlated predicate does not contain any attribute
+    // (i.e. only has outer references), it is supported and should return false. E.G.:
+    //   (a = outer(c)) -> false
+    //   (outer(c) = outer(d)) -> false
+    //   (a > outer(c)) -> true
+    //   (a + b = outer(c)) -> true
+    // The last one is true because there can be multiple combinations of (a, b) that
+    // satisfy the equality condition. For example, if outer(c) = 0, then both (0, 0)
+    // and (-1, 1) can make the predicate evaluate to true.
+    def isUnsupportedPredicate(condition: Expression): Boolean = condition match {
+      // Only allow equality condition with one side being an attribute and another
+      // side being an expression without attributes from the inner query. Note
+      // OuterReference is a leaf node and will not be found here.
+      case Equality(_: Attribute, b) => containsAttribute(b)
+      case Equality(a, _: Attribute) => containsAttribute(a)
+      case e @ Equality(_, _) => containsAttribute(e)
+      case _ => true
+    }
+
+    val unsupportedPredicates = mutable.ArrayBuffer.empty[Expression]
 
     // Simplify the predicates before validating any unsupported correlation patterns in the plan.
     AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
@@ -929,22 +1001,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // The other operator is Join. Filter can be anywhere in a correlated subquery.
       case f: Filter =>
         val (correlated, _) = splitConjunctivePredicates(f.condition).partition(containsOuter)
-
-        // Find any non-equality correlated predicates
-        foundNonEqualCorrelatedPred = foundNonEqualCorrelatedPred || correlated.exists {
-          case _: EqualTo | _: EqualNullSafe => false
-          case _ => true
-        }
+        unsupportedPredicates ++= correlated.filter(isUnsupportedPredicate)
         failOnInvalidOuterReference(f)
 
       // Aggregate cannot host any correlated expressions
       // It can be on a correlation path if the correlation contains
-      // only equality correlated predicates.
+      // only supported correlated equality predicates.
       // It cannot be on a correlation path if the correlation has
       // non-equality correlated predicates.
       case a: Aggregate =>
         failOnInvalidOuterReference(a)
-        failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
+        failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, a)
 
       // Join can host correlated expressions.
       case j @ Join(left, right, joinType, _, _) =>

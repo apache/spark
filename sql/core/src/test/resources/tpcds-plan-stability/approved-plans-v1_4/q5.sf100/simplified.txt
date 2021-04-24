@@ -68,15 +68,14 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.catalog_sales [cs_catalog_page_sk,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
-                                                        SubqueryBroadcast [d_date_sk] #2
-                                                          ReusedExchange [d_date_sk] #3
+                                                        ReusedSubquery [d_date_sk] #1
                                             WholeStageCodegen (8)
                                               Project [cr_catalog_page_sk,cr_returned_date_sk,cr_return_amount,cr_net_loss]
                                                 Filter [cr_catalog_page_sk]
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.catalog_returns [cr_catalog_page_sk,cr_return_amount,cr_net_loss,cr_returned_date_sk]
-                                                        ReusedSubquery [d_date_sk] #2
+                                                        ReusedSubquery [d_date_sk] #1
                                         InputAdapter
                                           BroadcastExchange #6
                                             WholeStageCodegen (9)

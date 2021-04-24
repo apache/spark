@@ -2775,4 +2775,52 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-35051: add/subtract a day-time interval to/from a date") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      outstandingZoneIds.foreach { zid =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
+          Seq(
+            (LocalDate.of(1, 1, 1), Duration.ofDays(31)) -> LocalDateTime.of(1, 2, 1, 0, 0, 0),
+            (LocalDate.of(1582, 9, 15), Duration.ofDays(30).plus(1, ChronoUnit.MICROS)) ->
+              LocalDateTime.of(1582, 10, 15, 0, 0, 0, 1000),
+            (LocalDate.of(1900, 1, 1), Duration.ofDays(0).plusHours(1)) ->
+              LocalDateTime.of(1900, 1, 1, 1, 0, 0),
+            (LocalDate.of(1970, 1, 1), Duration.ofDays(-1).minusMinutes(1)) ->
+              LocalDateTime.of(1969, 12, 30, 23, 59, 0),
+            (LocalDate.of(2021, 3, 14), Duration.ofDays(1)) ->
+              LocalDateTime.of(2021, 3, 15, 0, 0, 0),
+            (LocalDate.of(2020, 12, 31), Duration.ofDays(4 * 30).plusMinutes(30)) ->
+              LocalDateTime.of(2021, 4, 30, 0, 30, 0),
+            (LocalDate.of(2020, 2, 29), Duration.ofDays(365).plusSeconds(59)) ->
+              LocalDateTime.of(2021, 2, 28, 0, 0, 59),
+            (LocalDate.of(10000, 1, 1), Duration.ofDays(-2)) ->
+              LocalDateTime.of(9999, 12, 30, 0, 0, 0)
+          ).foreach { case ((date, duration), expected) =>
+            val result = expected.atZone(zid).toInstant
+            val ts = date.atStartOfDay(zid).toInstant
+            val df = Seq((date, duration, result)).toDF("date", "interval", "result")
+            checkAnswer(
+              df.select($"date" + $"interval", $"interval" + $"date", $"result" - $"interval",
+                $"result" - $"date"),
+              Row(result, result, ts, duration))
+          }
+        }
+      }
+
+      Seq(
+        "2021-04-14" -> "date + i",
+        "1900-04-14" -> "date - i").foreach { case (date, op) =>
+        val e = intercept[SparkException] {
+          Seq(
+            (LocalDate.parse(date), Duration.of(Long.MaxValue, ChronoUnit.MICROS)))
+            .toDF("date", "i")
+            .selectExpr(op)
+            .collect()
+        }.getCause
+        assert(e.isInstanceOf[ArithmeticException])
+        assert(e.getMessage.contains("long overflow"))
+      }
+    }
+  }
 }

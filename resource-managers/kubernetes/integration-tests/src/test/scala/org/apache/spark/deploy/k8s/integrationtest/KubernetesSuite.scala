@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.Pod
-import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.client.{Watcher, WatcherException}
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
@@ -343,7 +343,8 @@ class KubernetesSuite extends SparkFunSuite
       .withLabel("spark-role", "executor")
       .watch(new Watcher[Pod] {
         logDebug("Beginning watch of executors")
-        override def onClose(cause: KubernetesClientException): Unit =
+        override def onClose(): Unit = logInfo("Ending watch of executors")
+        override def onClose(cause: WatcherException): Unit =
           logInfo("Ending watch of executors")
         override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
           val name = resource.getMetadata.getName

@@ -225,20 +225,20 @@ Output [7]: [ss_ticket_number#5, bought_city#31, amt#32, profit#33, c_current_ad
 Input [9]: [ss_ticket_number#5, ss_customer_sk#1, bought_city#31, amt#32, profit#33, c_customer_sk#34, c_current_addr_sk#35, c_first_name#36, c_last_name#37]
 
 (40) ReusedExchange [Reuses operator id: 28]
-Output [2]: [ca_address_sk#21, ca_city#22]
+Output [2]: [ca_address_sk#39, ca_city#40]
 
 (41) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [c_current_addr_sk#35]
-Right keys [1]: [ca_address_sk#21]
-Join condition: NOT (ca_city#22 = bought_city#31)
+Right keys [1]: [ca_address_sk#39]
+Join condition: NOT (ca_city#40 = bought_city#31)
 
 (42) Project [codegen id : 8]
-Output [7]: [c_last_name#37, c_first_name#36, ca_city#22, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
-Input [9]: [ss_ticket_number#5, bought_city#31, amt#32, profit#33, c_current_addr_sk#35, c_first_name#36, c_last_name#37, ca_address_sk#21, ca_city#22]
+Output [7]: [c_last_name#37, c_first_name#36, ca_city#40, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
+Input [9]: [ss_ticket_number#5, bought_city#31, amt#32, profit#33, c_current_addr_sk#35, c_first_name#36, c_last_name#37, ca_address_sk#39, ca_city#40]
 
 (43) TakeOrderedAndProject
-Input [7]: [c_last_name#37, c_first_name#36, ca_city#22, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
-Arguments: 100, [c_last_name#37 ASC NULLS FIRST, c_first_name#36 ASC NULLS FIRST, ca_city#22 ASC NULLS FIRST, bought_city#31 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#37, c_first_name#36, ca_city#22, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
+Input [7]: [c_last_name#37, c_first_name#36, ca_city#40, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
+Arguments: 100, [c_last_name#37 ASC NULLS FIRST, c_first_name#36 ASC NULLS FIRST, ca_city#40 ASC NULLS FIRST, bought_city#31 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#37, c_first_name#36, ca_city#40, bought_city#31, ss_ticket_number#5, amt#32, profit#33]
 
 ===== Subqueries =====
 

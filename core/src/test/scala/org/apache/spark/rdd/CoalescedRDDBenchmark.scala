@@ -78,4 +78,10 @@ object CoalescedRDDBenchmark extends BenchmarkBase {
       coalescedRDD(numIters)
     }
   }
+
+  override def afterAll(): Unit = {
+    if (sc != null) {
+      sc.stop()
+    }
+  }
 }

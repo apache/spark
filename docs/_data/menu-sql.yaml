@@ -32,6 +32,10 @@
       url: sql-data-sources-orc.html
     - text: JSON Files
       url: sql-data-sources-json.html
+    - text: CSV Files
+      url: sql-data-sources-csv.html
+    - text: Text Files
+      url: sql-data-sources-text.html
     - text: Hive Tables
       url: sql-data-sources-hive-tables.html
     - text: JDBC To Other Databases
@@ -188,6 +192,8 @@
                   url: sql-ref-syntax-qry-select-lateral-view.html
                 - text: PIVOT Clause
                   url: sql-ref-syntax-qry-select-pivot.html
+                - text: TRANSFORM Clause
+                  url: sql-ref-syntax-qry-select-transform.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements

@@ -39,22 +39,25 @@ import org.apache.spark.sql.types._
   group = "agg_funcs",
   since = "1.0.0")
 case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
 
   override def nullable: Boolean = true
 
   // Return data type.
   override def dataType: DataType = resultType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function sum")
+    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "sum")
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision + 10, scale)
     case _: IntegralType => LongType
+    case _: YearMonthIntervalType => YearMonthIntervalType
+    case _: DayTimeIntervalType => DayTimeIntervalType
     case _ => DoubleType
   }
 
@@ -148,4 +151,6 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
         CheckOverflowInSum(sum, d, !SQLConf.get.ansiEnabled))
     case _ => sum
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Sum = copy(child = newChild)
 }

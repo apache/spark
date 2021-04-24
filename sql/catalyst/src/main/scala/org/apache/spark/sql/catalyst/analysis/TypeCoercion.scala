@@ -167,6 +167,28 @@ abstract class TypeCoercionBase {
   }
 
   /**
+   * Type coercion rule that combines multiple type coercion rules and applies them in a single tree
+   * traversal.
+   */
+  case class CombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends TypeCoercionRule {
+    override def transform: PartialFunction[Expression, Expression] = {
+      val transforms = rules.map(_.transform)
+      Function.unlift { e: Expression =>
+        val result = transforms.foldLeft(e) {
+          case (current, transform) => transform.applyOrElse(current, identity[Expression])
+        }
+        if (result ne e) {
+          Some(result)
+        } else {
+          None
+        }
+      }
+    }
+
+    override val ruleName: String = rules.map(_.ruleName).mkString("Combined[", ", ", "]")
+  }
+
+  /**
    * Widens the data types of the children of Union/Except/Intersect.
    * 1. When ANSI mode is off:
    *   Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
@@ -194,9 +216,9 @@ abstract class TypeCoercionBase {
    *   The implicit conversion is determined by the closest common data type from the precedent
    *   lists from left and right child. See the comments of Object `AnsiTypeCoercion` for details.
    */
-  object WidenSetOperationTypes extends TypeCoercionRule {
+  object WidenSetOperationTypes extends Rule[LogicalPlan] {
 
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
       plan resolveOperatorsUpWithNewOutput {
         case s @ Except(left, right, isAll) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
@@ -294,8 +316,7 @@ abstract class TypeCoercionBase {
    *    Analysis Exception will be raised at the type checking phase.
    */
   object InConversion extends TypeCoercionRule {
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -342,8 +363,7 @@ abstract class TypeCoercionBase {
    */
   object FunctionArgumentConversion extends TypeCoercionRule {
 
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -448,8 +468,7 @@ abstract class TypeCoercionBase {
    * converted to fractional types.
    */
   object Division extends TypeCoercionRule {
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
       case e if !e.childrenResolved => e
@@ -458,7 +477,7 @@ abstract class TypeCoercionBase {
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
       case d @ Divide(left, right, _) if isNumericOrNull(left) && isNumericOrNull(right) =>
-        d.withNewChildren(Seq(Cast(left, DoubleType), Cast(right, DoubleType)))
+        d.copy(left = Cast(left, DoubleType), right = Cast(right, DoubleType))
     }
 
     private def isNumericOrNull(ex: Expression): Boolean = {
@@ -472,10 +491,10 @@ abstract class TypeCoercionBase {
    * This rule cast the integral inputs to long type, to avoid overflow during calculation.
    */
   object IntegralDivision extends TypeCoercionRule {
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
       case d @ IntegralDivide(left, right, _) =>
-        d.withNewChildren(Seq(mayCastToLong(left), mayCastToLong(right)))
+        d.copy(left = mayCastToLong(left), right = mayCastToLong(right))
     }
 
     private def mayCastToLong(expr: Expression): Expression = expr.dataType match {
@@ -488,8 +507,7 @@ abstract class TypeCoercionBase {
    * Coerces the type of different branches of a CASE WHEN statement to a common type.
    */
   object CaseWhenCoercion extends TypeCoercionRule {
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       case c: CaseWhen if c.childrenResolved && !haveSameType(c.inputTypesForMerging) =>
         val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
         maybeCommonType.map { commonType =>
@@ -506,8 +524,7 @@ abstract class TypeCoercionBase {
    * Coerces the type of different branches of If statement to a common type.
    */
   object IfCoercion extends TypeCoercionRule {
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if !haveSameType(i.inputTypesForMerging) =>
@@ -527,7 +544,7 @@ abstract class TypeCoercionBase {
    * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
    */
   object StackCoercion extends TypeCoercionRule {
-    override def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       case s @ Stack(children) if s.childrenResolved && s.hasFoldableNumRows =>
         Stack(children.zipWithIndex.map {
           // The first child is the number of rows for stack.
@@ -547,19 +564,15 @@ abstract class TypeCoercionBase {
    */
   object ConcatCoercion extends TypeCoercionRule {
 
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
-      plan resolveOperators { case p =>
-        p transformExpressionsUp {
-          // Skip nodes if unresolved or empty children
-          case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
-          case c @ Concat(children) if conf.concatBinaryAsString ||
-            !children.map(_.dataType).forall(_ == BinaryType) =>
-            val newChildren = c.children.map { e =>
-              implicitCast(e, StringType).getOrElse(e)
-            }
-            c.copy(children = newChildren)
+    override val transform: PartialFunction[Expression, Expression] = {
+      // Skip nodes if unresolved or empty children
+      case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
+      case c @ Concat(children) if conf.concatBinaryAsString ||
+        !children.map(_.dataType).forall(_ == BinaryType) =>
+        val newChildren = c.children.map { e =>
+          implicitCast(e, StringType).getOrElse(e)
         }
-      }
+        c.copy(children = newChildren)
     }
   }
 
@@ -568,7 +581,7 @@ abstract class TypeCoercionBase {
    * to a common type.
    */
   object MapZipWithCoercion extends TypeCoercionRule {
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       // Lambda function isn't resolved when the rule is executed.
       case m @ MapZipWith(left, right, function) if m.arguments.forall(a => a.resolved &&
           MapType.acceptsType(a.dataType)) && !m.leftKeyType.sameType(m.rightKeyType) =>
@@ -595,30 +608,26 @@ abstract class TypeCoercionBase {
    */
   object EltCoercion extends TypeCoercionRule {
 
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
-      plan resolveOperators { case p =>
-        p transformExpressionsUp {
-          // Skip nodes if unresolved or not enough children
-          case c @ Elt(children, _) if !c.childrenResolved || children.size < 2 => c
-          case c @ Elt(children, _) =>
-            val index = children.head
-            val newIndex = implicitCast(index, IntegerType).getOrElse(index)
-            val newInputs = if (conf.eltOutputAsString ||
-              !children.tail.map(_.dataType).forall(_ == BinaryType)) {
-              children.tail.map { e =>
-                implicitCast(e, StringType).getOrElse(e)
-              }
-            } else {
-              children.tail
-            }
-            c.copy(children = newIndex +: newInputs)
+    override val transform: PartialFunction[Expression, Expression] = {
+      // Skip nodes if unresolved or not enough children
+      case c @ Elt(children, _) if !c.childrenResolved || children.size < 2 => c
+      case c @ Elt(children, _) =>
+        val index = children.head
+        val newIndex = implicitCast(index, IntegerType).getOrElse(index)
+        val newInputs = if (conf.eltOutputAsString ||
+          !children.tail.map(_.dataType).forall(_ == BinaryType)) {
+          children.tail.map { e =>
+            implicitCast(e, StringType).getOrElse(e)
+          }
+        } else {
+          children.tail
         }
-      }
+        c.copy(children = newIndex +: newInputs)
     }
   }
 
-  object DateTimeOperations extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+  object DateTimeOperations extends TypeCoercionRule {
+    override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
       case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
@@ -652,8 +661,7 @@ abstract class TypeCoercionBase {
       }
     }
 
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -705,7 +713,7 @@ abstract class TypeCoercionBase {
           }
 
         }
-        udf.withNewChildren(children)
+        udf.copy(children = children)
     }
 
     private def udfInputToCastType(input: DataType, expectedType: DataType): DataType = {
@@ -738,8 +746,7 @@ abstract class TypeCoercionBase {
    * Cast WindowFrame boundaries to the type they operate upon.
    */
   object WindowFrameCoercion extends TypeCoercionRule {
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       case s @ WindowSpecDefinition(_, Seq(order), SpecifiedWindowFrame(RangeFrame, lower, upper))
           if order.resolved =>
         s.copy(frameSpecification = SpecifiedWindowFrame(
@@ -766,7 +773,7 @@ abstract class TypeCoercionBase {
    * TODO(SPARK-28589): implement ANSI type type coercion and handle string literals.
    */
   object StringLiteralCoercion extends TypeCoercionRule {
-    override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
       case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
@@ -805,8 +812,9 @@ abstract class TypeCoercionBase {
 object TypeCoercion extends TypeCoercionBase {
 
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
-    InConversion ::
-      WidenSetOperationTypes ::
+    WidenSetOperationTypes ::
+    CombinedTypeCoercionRule(
+      InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
@@ -822,8 +830,7 @@ object TypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion ::
-      Nil
+      StringLiteralCoercion :: Nil) :: Nil
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
 
@@ -1057,8 +1064,7 @@ object TypeCoercion extends TypeCoercionBase {
       }
     }
 
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -1104,11 +1110,11 @@ object TypeCoercion extends TypeCoercionBase {
   /**
    * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
    */
-  object BooleanEquality extends Rule[LogicalPlan] {
+  object BooleanEquality extends TypeCoercionRule {
     private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
     private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -1152,39 +1158,46 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
    * to instances higher in the query tree.
    */
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val newPlan = coerceTypes(plan)
-    if (plan.fastEquals(newPlan)) {
-      plan
-    } else {
-      propagateTypes(newPlan)
+    val typeCoercionFn = transform
+    def rewrite(plan: LogicalPlan): LogicalPlan = {
+      val withNewChildren = plan.mapChildren(rewrite)
+      if (!withNewChildren.childrenResolved) {
+        withNewChildren
+      } else {
+        // Only propagate types if the children have changed.
+        val withPropagatedTypes = if (withNewChildren ne plan) {
+          propagateTypes(withNewChildren)
+        } else {
+          plan
+        }
+        withPropagatedTypes.transformExpressionsUp(typeCoercionFn)
+      }
     }
+    rewrite(plan)
   }
 
-  protected def coerceTypes(plan: LogicalPlan): LogicalPlan
+  def transform: PartialFunction[Expression, Expression]
 
-  private def propagateTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-    // No propagation required for leaf nodes.
-    case q: LogicalPlan if q.children.isEmpty => q
-
-    // Don't propagate types from unresolved children.
-    case q: LogicalPlan if !q.childrenResolved => q
-
-    case q: LogicalPlan =>
-      val inputMap = q.inputSet.toSeq.map(a => (a.exprId, a)).toMap
-      q transformExpressions {
+  private def propagateTypes(plan: LogicalPlan): LogicalPlan = {
+    // Check if the inputs have changed.
+    val references = AttributeMap(plan.references.collect {
+      case a if a.resolved => a -> a
+    }.toSeq)
+    def sameButDifferent(a: Attribute): Boolean = {
+      references.get(a).exists(b => b.dataType != a.dataType || b.nullable != a.nullable)
+    }
+    val inputMap = AttributeMap(plan.inputSet.collect {
+      case a if a.resolved && sameButDifferent(a) => a -> a
+    }.toSeq)
+    if (inputMap.isEmpty) {
+      // Nothing changed.
+      plan
+    } else {
+      // Update the references if the dataType/nullability has changed.
+      plan transformExpressions {
         case a: AttributeReference =>
-          inputMap.get(a.exprId) match {
-            // This can happen when an Attribute reference is born in a non-leaf node, for
-            // example due to a call to an external script like in the Transform operator.
-            // TODO: Perhaps those should actually be aliases?
-            case None => a
-            // Leave the same if the dataTypes match.
-            case Some(newType) if a.dataType == newType.dataType => a
-            case Some(newType) =>
-              logDebug(s"Promoting $a from ${a.dataType} to ${newType.dataType} in " +
-                s" ${q.simpleString(conf.maxToStringFields)}")
-              newType
-          }
+          inputMap.getOrElse(a, a)
       }
+    }
   }
 }

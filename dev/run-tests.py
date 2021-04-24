@@ -123,17 +123,17 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     >>> [x.name for x in determine_modules_to_test([modules.sql])]
     ... # doctest: +NORMALIZE_WHITESPACE
     ['sql', 'avro', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
-     'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
+     'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-ml']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'examples', 'hive', 'hive-thriftserver', 'mllib', 'pyspark-ml',
-     'pyspark-mllib', 'pyspark-sql', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-mllib', 'pyspark-pandas', 'pyspark-sql', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'core', 'examples', 'graphx', 'hive', 'hive-thriftserver',
-     'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib',
+     'mllib', 'mllib-local', 'pyspark-core', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas',
      'pyspark-resource', 'pyspark-sql', 'pyspark-streaming', 'repl', 'root',
      'sparkr', 'sql', 'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10',
      'streaming-kinesis-asl']
@@ -656,16 +656,10 @@ def main():
         # If we're running the tests in GitHub Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
-            if os.environ["GITHUB_INPUT_BRANCH"] != "":
-                # Dispatched request
-                # Note that it assumes GitHub Actions has already merged
-                # the given `GITHUB_INPUT_BRANCH` branch.
+            if os.environ["APACHE_SPARK_REF"] != "":
+                # Fork repository
                 changed_files = identify_changed_files_from_git_commits(
-                    "HEAD", target_branch=os.environ["GITHUB_SHA"])
-            elif os.environ["GITHUB_BASE_REF"] != "":
-                # Pull requests
-                changed_files = identify_changed_files_from_git_commits(
-                    os.environ["GITHUB_SHA"], target_branch=os.environ["GITHUB_BASE_REF"])
+                    "HEAD", target_ref=os.environ["APACHE_SPARK_REF"])
             else:
                 # Build for each commit.
                 changed_files = identify_changed_files_from_git_commits(
