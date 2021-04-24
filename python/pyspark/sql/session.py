@@ -482,18 +482,8 @@ class SparkSession(SparkConversionMixin):
         """
         Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
         """
-        if schema is None or isinstance(schema, (list, tuple)):
-            struct = self._inferSchema(rdd, samplingRatio, names=schema)
-            converter = _create_converter(struct)
-            rdd = rdd.map(converter)
-            if isinstance(schema, (list, tuple)):
-                for i, name in enumerate(schema):
-                    struct.fields[i].name = name
-                    struct.names[i] = name
-            schema = struct
-
-        elif not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+        converter = _create_converter(schema)
+        rdd = rdd.map(converter)
 
         # convert python objects to sql data
         rdd = rdd.map(schema.toInternal)
@@ -508,18 +498,8 @@ class SparkSession(SparkConversionMixin):
         if not isinstance(data, list):
             data = list(data)
 
-        if schema is None or isinstance(schema, (list, tuple)):
-            struct = self._inferSchemaFromList(data, names=schema)
-            converter = _create_converter(struct)
-            data = map(converter, data)
-            if isinstance(schema, (list, tuple)):
-                for i, name in enumerate(schema):
-                    struct.fields[i].name = name
-                    struct.names[i] = name
-            schema = struct
-
-        elif not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+        converter = _create_converter(schema)
+        data = map(converter, data)
 
         # convert python objects to sql data
         data = [schema.toInternal(row) for row in data]
@@ -691,8 +671,27 @@ class SparkSession(SparkConversionMixin):
             def prepare(obj):
                 verify_func(obj)
                 return obj,
+        elif schema is None or isinstance(schema, (list, tuple)):
+            if isinstance(data, RDD):
+                struct = self._inferSchema(data, samplingRatio, names=schema)
+            else:
+                struct = self._inferSchemaFromList(data, names=schema)
+            if isinstance(schema, (list, tuple)):
+                for i, name in enumerate(schema):
+                    struct.fields[i].name = name
+                    struct.names[i] = name
+            schema = struct
+
+            verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
+
+            def prepare(obj):
+                verify_func(obj)
+                return obj,
         else:
             prepare = lambda obj: obj
+
+        if not isinstance(schema, StructType):
+            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
 
         if isinstance(data, RDD):
             rdd, schema = self._createFromRDD(data.map(prepare), schema, samplingRatio)
