@@ -162,15 +162,13 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             logWarning("Failed to close worker socket", e)
         }
       }
-      if (reuseWorker) {
-        val key = (worker, context.taskAttemptId)
-        PythonRunner.runningMonitorThreads.remove(key)
-      }
     }
 
     writerThread.start()
     if (reuseWorker) {
       val key = (worker, context.taskAttemptId)
+      // SPARK-35009: avoid creating multiple monitor threads for the same python worker
+      // and task context
       if (PythonRunner.runningMonitorThreads.add(key)) {
         new MonitorThread(SparkEnv.get, worker, context).start()
       }
@@ -576,7 +574,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     setDaemon(true)
 
-    override def run(): Unit = {
+    private def monitorWorker(): Unit = {
       // Kill the worker if it is interrupted, checking until task completion.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
       while (!context.isInterrupted && !context.isCompleted) {
@@ -595,6 +593,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             case e: Exception =>
               logError("Exception when trying to kill worker", e)
           }
+        }
+      }
+    }
+
+    override def run(): Unit = {
+      try {
+        monitorWorker()
+      } finally {
+        if (reuseWorker) {
+          val key = (worker, context.taskAttemptId)
+          PythonRunner.runningMonitorThreads.remove(key)
         }
       }
     }
