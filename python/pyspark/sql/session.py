@@ -478,33 +478,6 @@ class SparkSession(SparkConversionMixin):
             schema = rdd.map(lambda row: _infer_schema(row, names)).reduce(_merge_type)
         return schema
 
-    def _createFromRDD(self, rdd, schema, samplingRatio):
-        """
-        Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
-        """
-        converter = _create_converter(schema)
-        rdd = rdd.map(converter)
-
-        # convert python objects to sql data
-        rdd = rdd.map(schema.toInternal)
-        return rdd, schema
-
-    def _createFromLocal(self, data, schema):
-        """
-        Create an RDD for DataFrame from a list or pandas.DataFrame, returns
-        the RDD and schema.
-        """
-        # make sure data could consumed multiple times
-        if not isinstance(data, list):
-            data = list(data)
-
-        converter = _create_converter(schema)
-        data = map(converter, data)
-
-        # convert python objects to sql data
-        data = [schema.toInternal(row) for row in data]
-        return self._sc.parallelize(data), schema
-
     @staticmethod
     def _create_shell_session():
         """
@@ -655,48 +628,70 @@ class SparkSession(SparkConversionMixin):
         return self._create_dataframe(data, schema, samplingRatio, verifySchema)
 
     def _create_dataframe(self, data, schema, samplingRatio, verifySchema):
-        if isinstance(schema, StructType):
-            verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
-            def prepare(obj):
-                verify_func(obj)
-                return obj
-        elif isinstance(schema, DataType):
-            dataType = schema
-            schema = StructType().add("value", schema)
-
-            verify_func = _make_type_verifier(
-                dataType, name="field value") if verifySchema else lambda _: True
-
-            def prepare(obj):
-                verify_func(obj)
-                return obj,
-        elif schema is None or isinstance(schema, (list, tuple)):
-            if isinstance(data, RDD):
-                struct = self._inferSchema(data, samplingRatio, names=schema)
+        def inner_map(f, d):
+            if isinstance(d, RDD):
+                return d.map(f)
             else:
-                struct = self._inferSchemaFromList(data, names=schema)
-            if isinstance(schema, (list, tuple)):
-                for i, name in enumerate(schema):
-                    struct.fields[i].name = name
-                    struct.names[i] = name
-            schema = struct
+                return map(f, d)
 
-            verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
+        def prepare(data, schema):
+            if isinstance(schema, StructType):
+                verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
-            def prepare(obj):
-                verify_func(obj)
-                return obj,
-        else:
-            prepare = lambda obj: obj
+                def prepare(obj):
+                    verify_func(obj)
+                    return obj
+            elif isinstance(schema, DataType):
+                dataType = schema
+                schema = StructType().add("value", schema)
+                verify_func = _make_type_verifier(
+                    dataType, name="field value") if verifySchema else lambda _: True
 
-        if not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+                def prepare(obj):
+                    verify_func(obj)
+                    return obj,
+            else:
+                def prepare(obj):
+                    return obj
 
-        if isinstance(data, RDD):
-            rdd, schema = self._createFromRDD(data.map(prepare), schema, samplingRatio)
-        else:
-            rdd, schema = self._createFromLocal(map(prepare, data), schema)
+            return inner_map(prepare, data), schema
+
+        def infer_verify_convert(data, schema):
+            # make sure data could consumed multiple times
+            if not isinstance(data, RDD) and not isinstance(data, list):
+                data = list(data)
+
+            if schema is None or isinstance(schema, (list, tuple)):
+                if isinstance(data, RDD):
+                    struct = self._inferSchema(data, samplingRatio, names=schema)
+                else:
+                    struct = self._inferSchemaFromList(data, names=schema)
+                converter = _create_converter(struct)
+                verify_func = _make_type_verifier(struct) if verifySchema else lambda _: True
+
+                def verified_converter(obj):
+                    verify_func(obj)
+                    return converter(obj)
+                data = inner_map(verified_converter, data)
+                if isinstance(schema, (list, tuple)):
+                    for i, name in enumerate(schema):
+                        struct.fields[i].name = name
+                        struct.names[i] = name
+                schema = struct
+            elif not isinstance(schema, StructType):
+                raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+
+            return data, schema
+
+        # verify schema and wrap primitive DataType if necessary
+        data, schema = prepare(data, schema)
+        # infer schema from data and verify and convert
+        data, schema = infer_verify_convert(data, schema)
+        # convert python objects to sql data
+        data = inner_map(schema.toInternal, data)
+
+        rdd = data if isinstance(data, RDD) else self._sc.parallelize(data)
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
         df = DataFrame(jdf, self._wrapped)
