@@ -30,7 +30,7 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams, \
     JavaPredictor, _JavaPredictorParams, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.linalg import Vectors
+from pyspark.ml.linalg import Vectors, VectorUDT
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
@@ -2724,7 +2724,7 @@ class OneVsRestModel(Model, _OneVsRestParams, JavaMLReadable, JavaMLWritable):
                     predArray.append(x)
                 return Vectors.dense(predArray)
 
-            rawPredictionUDF = udf(func)
+            rawPredictionUDF = udf(func, VectorUDT())
             aggregatedDataset = aggregatedDataset.withColumn(
                 self.getRawPredictionCol(), rawPredictionUDF(aggregatedDataset[accColName]))
 
