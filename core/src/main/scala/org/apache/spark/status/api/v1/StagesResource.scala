@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.net.{URLDecoder, URLEncoder}
 import java.util.{HashMap, List => JList, Locale}
 import javax.ws.rs.{NotFoundException => _, _}
 import javax.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
@@ -152,10 +153,11 @@ private[v1] class StagesResource extends BaseAppResource {
       // information like the columns to be sorted, search value typed by the user in the search
       // box, pagination index etc. For more information on these query parameters,
       // refer https://datatables.net/manual/server-side.
-      if (uriQueryParameters.getFirst("search[value]") != null &&
-        uriQueryParameters.getFirst("search[value]").length > 0) {
+      searchValue = encodeKeyAndGetValue(uriQueryParameters, "search[value]", null)
+      if (searchValue != null && searchValue.length > 0) {
         isSearch = true
-        searchValue = uriQueryParameters.getFirst("search[value]")
+      } else {
+        searchValue = null
       }
       val _tasksToShow: Seq[TaskData] = doPagination(uriQueryParameters, stageId, stageAttemptId,
         isSearch, totalRecords.toInt)
@@ -185,15 +187,37 @@ private[v1] class StagesResource extends BaseAppResource {
     }
   }
 
+  // The request URL can be raw or encoded. To avoid the parameter key being
+  // encoded twice in queryParameters, try to encode it at most twice and lookup
+  // it in the queryParameters.
+  def encodeKeyAndGetValue(queryParameters: MultivaluedMap[String, String],
+    key: String, defaultValue: String): String = {
+    var value = queryParameters.getFirst(key)
+    if (value == null) {
+      var encodedKey = URLEncoder.encode(key, "UTF-8")
+      value = queryParameters.getFirst(encodedKey)
+      if (value == null) {
+        encodedKey = URLEncoder.encode(encodedKey, "UTF-8")
+        value = queryParameters.getFirst(encodedKey)
+        if (value == null) {
+          value = defaultValue
+        }
+      }
+    }
+    value
+  }
+
   // Performs pagination on the server side
   def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int,
     stageAttemptId: Int, isSearch: Boolean, totalRecords: Int): Seq[TaskData] = {
     var columnNameToSort = queryParameters.getFirst("columnNameToSort")
+    columnNameToSort = URLDecoder.decode(columnNameToSort, "UTF-8")
+    columnNameToSort = URLDecoder.decode(columnNameToSort, "UTF-8")
     // Sorting on Logs column will default to Index column sort
     if (columnNameToSort.equalsIgnoreCase("Logs")) {
       columnNameToSort = "Index"
     }
-    val isAscendingStr = queryParameters.getFirst("order[0][dir]")
+    val isAscendingStr = encodeKeyAndGetValue(queryParameters, "order[0][dir]", "asc")
     var pageStartIndex = 0
     var pageLength = totalRecords
     // We fetch only the desired rows upto the specified page length for all cases except when a
