@@ -122,17 +122,16 @@ abstract class SparkFunSuite
   }
 
   /**
-   * Get a Path relative to the project containing the test.
-   * It is assumed that tests are executed from the project's root directory,
-   * so the returned path is simply a relative path composed of the given elements.
+   * Get a Path relative to the project. It is assumed that tests are executed
+   * from the project's root directory, so the returned path is simply a relative
+   * path composed of the given elements.
    */
   protected final def getProjectFilePath(first: String, more: String*): Path = {
     java.nio.file.Paths.get(first, more: _*)
   }
 
   /**
-   * Get a Path relative to the root project containing the test.
-   * It is assumed that a spark home is set.
+   * Get a Path relative to the root project. It is assumed that a spark home is set.
    */
   protected final def getWorkspaceFilePath(first: String, more: String*): Path = {
     if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
