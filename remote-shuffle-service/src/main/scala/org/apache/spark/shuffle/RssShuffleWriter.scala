@@ -57,6 +57,7 @@ class RssShuffleWriter[K, V, C](
 
   private val bufferManager: RecordSerializationBuffer[K, V] = {
     if (!bufferOptions.supportAggregate) {
+      logInfo(s"Create WriteBufferManager with spill size ${bufferOptions.bufferSpillThreshold}")
       new WriteBufferManager[K, V](
         serializer = serializer,
         bufferSize = bufferOptions.individualBufferSize,
@@ -65,11 +66,15 @@ class RssShuffleWriter[K, V, C](
         createCombiner = createCombiner)
     } else {
       if (shuffleDependency.aggregator.isEmpty) {
+        logInfo(s"Create RecordPlainSerializationBuffer with spill " +
+          s"size ${bufferOptions.bufferSpillThreshold}")
         new RecordPlainSerializationBuffer[K, V](
           serializer = serializer,
           spillSize = bufferOptions.bufferSpillThreshold
         )
       } else {
+        logInfo(s"Create RecordCombinedSerializationBuffer with spill " +
+          s"size ${bufferOptions.bufferSpillThreshold}")
         new RecordCombinedSerializationBuffer[K, V, C](
           createCombiner = shuffleDependency.aggregator.get.createCombiner,
           mergeValue = shuffleDependency.aggregator.get.mergeValue,
