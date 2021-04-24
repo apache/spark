@@ -871,21 +871,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
     val from = ctx.relation.asScala.foldLeft(null: LogicalPlan) { (left, relation) =>
       val right = plan(relation.relationPrimary)
-      val join = right.optionalMap(left)(Join(_, _, Inner, None, JoinHint.NONE))
+      val joinType = if (relation.LATERAL != null) LateralJoin(Inner) else Inner
+      val join = right.optionalMap(left)(Join(_, _, joinType, None, JoinHint.NONE))
       withJoinRelations(join, relation)
     }
     if (ctx.pivotClause() != null) {
-      if (!ctx.lateralView.isEmpty || !ctx.lateralClause.isEmpty) {
+      if (!ctx.lateralView.isEmpty) {
         throw QueryParsingErrors.lateralWithPivotInFromClauseNotAllowedError(ctx)
       }
       withPivot(ctx.pivotClause, from)
-    } else if (!ctx.lateralView.isEmpty) {
-      if (!ctx.lateralClause.isEmpty) {
-        throw QueryParsingErrors.lateralJoinWithLateralViewNotAllowedError(ctx)
-      }
-      ctx.lateralView.asScala.foldLeft(from)(withGenerate)
     } else {
-      ctx.lateralClause.asScala.foldLeft(from)(withLateralJoin)
+      ctx.lateralView.asScala.foldLeft(from)(withGenerate)
     }
   }
 
@@ -1099,16 +1095,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       // scalastyle:on caselocale
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.quoted).toSeq,
       query)
-  }
-
-  /**
-   * Add a [[Join]] with join type LateralJoin(Inner) to the logical plan.
-   */
-  private def withLateralJoin(
-      left: LogicalPlan,
-      ctx: LateralClauseContext): LogicalPlan = withOrigin(ctx) {
-    val right = plan(ctx.relationPrimary)
-    Join(left, right, LateralJoin(Inner), None, JoinHint.NONE)
   }
 
   /**

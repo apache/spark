@@ -407,25 +407,12 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
           throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
       }
     } else {
-      // Change the unresolved star to an expanded star to indicate the star has been
-      // expanded once.
-      ExpandedStar(this) :: Nil
+      // Leave the star unchanged which might be resolved using a different input plan.
+      this :: Nil
     }
   }
 
   override def toString: String = target.map(_ + ".").getOrElse("") + "*"
-}
-
-/**
- * Represent an [[UnresolvedStar]] that has been to expand once.
- * This can be used to resolve a star expression using multiple plans.
- */
-case class ExpandedStar(star: UnresolvedStar) extends Star with Unevaluable {
-
-  override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] =
-    star.expand(input, resolver)
-
-  override def toString: String = star.toString
 }
 
 /**

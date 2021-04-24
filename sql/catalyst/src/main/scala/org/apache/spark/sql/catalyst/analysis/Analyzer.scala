@@ -1598,13 +1598,6 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     /**
-     * Check if any of the expressions contains an [[UnresolvedStar]].
-     */
-    def containsUnresolvedStar(exprs: Seq[Expression]): Boolean = {
-      exprs.exists(_.find(_.isInstanceOf[UnresolvedStar]).isDefined)
-    }
-
-    /**
      * Return a function to expand a star expression using the given logical plan.
      */
     private def expandStar(plan: LogicalPlan): Star => Seq[NamedExpression] = {
@@ -1659,9 +1652,6 @@ class Analyzer(override val catalogManager: CatalogManager)
             case s: Star => expand(s)
             case o => o :: Nil
           })
-        // count(*) has been replaced by count(1)
-        case o if containsUnresolvedStar(o.children) =>
-          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'")
       }
     }
   }
@@ -2455,6 +2445,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         inner: LogicalPlan,
         outer: LogicalPlan): Seq[NamedExpression] = {
 
+      // Expand the star expression using the inner plan.
       def expandInner(star: Star): Seq[NamedExpression] =
         star.expand(inner, resolver)
 
@@ -2469,10 +2460,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
       }
 
-      buildExpandedProjectList(
-        buildExpandedProjectList(expressions, inner, expandInner),
-        outer,
-        expandOuter)
+      buildExpandedProjectList(expressions, inner, expandInner) match {
+        case expanded if !containsStar(expanded) => expanded
+        // Expand the remaining star expressions using the outer query plan.
+        case other => buildExpandedProjectList(other, outer, expandOuter)
+      }
     }
 
     /**

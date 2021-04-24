@@ -588,7 +588,7 @@ hintStatement
     ;
 
 fromClause
-    : FROM relation (',' lateralClause)* (',' relation)* lateralView* pivotClause?
+    : FROM relation (',' relation)* lateralView* pivotClause?
     ;
 
 aggregationClause
@@ -637,17 +637,13 @@ lateralView
     : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=identifier (AS? colName+=identifier (',' colName+=identifier)*)?
     ;
 
-lateralClause
-    : LATERAL right=relationPrimary
-    ;
-
 setQuantifier
     : DISTINCT
     | ALL
     ;
 
 relation
-    : relationPrimary joinRelation*
+    : LATERAL? relationPrimary joinRelation*
     ;
 
 joinRelation

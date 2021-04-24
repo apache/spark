@@ -174,6 +174,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 hof.failAnalysis(
                   s"cannot resolve '${hof.sql}' due to argument data type mismatch: $message")
             }
+          // Check if there are expressions with children containing star expressions.
+          case e if e.children.exists(_.isInstanceOf[Star]) =>
+            e.failAnalysis(s"Invalid usage of '*' in expression '${e.prettyName}'")
         }
 
         operator transformExpressionsUp {
@@ -181,7 +184,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
 
-          case s @ ExpandedStar(UnresolvedStar(Some(target))) =>
+          case s @ UnresolvedStar(Some(target)) =>
             val from = operator.inputSet.map(_.name).mkString(", ")
             val targetString = target.mkString(".")
             s.failAnalysis(s"cannot resolve '$targetString.*' given input columns '$from'")
@@ -868,7 +871,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Make sure a plan's expressions do not contain :
     // 1. Aggregate expressions that have mixture of outer and local references.
-    // 2. Expressions containing outer references on plan nodes other than Filter.
+    // 2. Expressions containing outer references on plan nodes other than allowed operators.
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
       if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
