@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern,
+  UNARY_POSITIVE}
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -105,6 +107,9 @@ case class UnaryMinus(
       case funcName => s"$funcName(${child.sql})"
     }
   }
+
+  override protected def withNewChildInternal(newChild: Expression): UnaryMinus =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -125,12 +130,17 @@ case class UnaryPositive(child: Expression)
 
   override def dataType: DataType = child.dataType
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNARY_POSITIVE)
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, c => c)
 
   protected override def nullSafeEval(input: Any): Any = input
 
   override def sql: String = s"(+ ${child.sql})"
+
+  override protected def withNewChildInternal(newChild: Expression): UnaryPositive =
+    copy(child = newChild)
 }
 
 /**
@@ -183,6 +193,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
   }
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
+
+  override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
 }
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
@@ -190,6 +202,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
   protected val failOnError: Boolean
 
   override def dataType: DataType = left.dataType
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_ARITHMETIC)
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
@@ -309,6 +323,9 @@ case class Add(
   }
 
   override def exactMathMethod: Option[String] = Some("addExact")
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Add =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -352,6 +369,9 @@ case class Subtract(
   }
 
   override def exactMathMethod: Option[String] = Some("subtractExact")
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Subtract = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -380,12 +400,18 @@ case class Multiply(
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical
 trait DivModLike extends BinaryArithmetic {
 
   protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
+
+  // Whether we should check overflow or not in ANSI mode.
+  protected def checkDivideOverflow: Boolean = false
 
   override def nullable: Boolean = true
 
@@ -407,6 +433,9 @@ trait DivModLike extends BinaryArithmetic {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
           throw QueryExecutionErrors.divideByZeroError
+        }
+        if (checkDivideOverflow && input1 == Long.MinValue && input2 == -1) {
+          throw QueryExecutionErrors.overflowInIntegralDivideError()
         }
         evalOperation(input1, input2)
       }
@@ -433,6 +462,15 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
+    val checkIntegralDivideOverflow = if (checkDivideOverflow) {
+      s"""
+        |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
+        |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+        |""".stripMargin
+    } else {
+      ""
+    }
+
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
@@ -448,6 +486,7 @@ trait DivModLike extends BinaryArithmetic {
           $divByZero
         } else {
           ${eval1.code}
+          $checkIntegralDivideOverflow
           ${ev.value} = $operation;
         }""")
     } else {
@@ -469,6 +508,7 @@ trait DivModLike extends BinaryArithmetic {
             ${ev.isNull} = true;
           } else {
             $failOnErrorBranch
+            $checkIntegralDivideOverflow
             ${ev.value} = $operation;
           }
         }""")
@@ -506,6 +546,9 @@ case class Divide(
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Divide = copy(left = newLeft, right = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -525,6 +568,11 @@ case class IntegralDivide(
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends DivModLike {
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+
+  override def checkDivideOverflow: Boolean = left.dataType match {
+    case LongType if failOnError => true
+    case _ => false
+  }
 
   override def inputType: AbstractDataType = TypeCollection(LongType, DecimalType)
 
@@ -553,6 +601,10 @@ case class IntegralDivide(
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): IntegralDivide =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -607,6 +659,9 @@ case class Remainder(
   }
 
   override def evalOperation(left: Any, right: Any): Any = mod(left, right)
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Remainder = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -791,6 +846,9 @@ case class Pmod(
   }
 
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Pmod =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -866,6 +924,9 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
          |$codes
       """.stripMargin)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Least =
+    copy(children = newChildren)
 }
 
 /**
@@ -941,4 +1002,7 @@ case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpress
          |$codes
       """.stripMargin)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Greatest =
+    copy(children = newChildren)
 }

@@ -23,7 +23,7 @@
          :                    :        :        +- * Project (8)
          :                    :        :           +- * Filter (7)
          :                    :        :              +- * ColumnarToRow (6)
-         :                    :        :                 +- Scan parquet default.household_demographics (5)
+         :                    :        :                 +- Scan parquet default.date_dim (5)
          :                    :        +- * Project (15)
          :                    :           +- * Filter (14)
          :                    :              +- * ColumnarToRow (13)
@@ -31,7 +31,7 @@
          :                    +- * Project (22)
          :                       +- * Filter (21)
          :                          +- * ColumnarToRow (20)
-         :                             +- Scan parquet default.date_dim (19)
+         :                             +- Scan parquet default.household_demographics (19)
          +- * Filter (32)
             +- * ColumnarToRow (31)
                +- Scan parquet default.customer (30)
@@ -54,96 +54,96 @@ Condition : ((isnotnull(ss_store_sk#3) AND isnotnull(ss_hdemo_sk#2)) AND isnotnu
 
 (4) BroadcastExchange
 Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, false] as bigint)),false), [id=#6]
+Arguments: HashedRelationBroadcastMode(List(cast(input[4, int, true] as bigint)),false), [id=#6]
 
-(5) Scan parquet default.household_demographics
-Output [4]: [hd_demo_sk#7, hd_buy_potential#8, hd_dep_count#9, hd_vehicle_count#10]
+(5) Scan parquet default.date_dim
+Output [3]: [d_date_sk#7, d_year#8, d_dom#9]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_vehicle_count), IsNotNull(hd_dep_count), Or(EqualTo(hd_buy_potential,>10000         ),EqualTo(hd_buy_potential,Unknown        )), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
-ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string,hd_dep_count:int,hd_vehicle_count:int>
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_dom), GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2), In(d_year, [1998,1999,2000]), In(d_date_sk, [2451790,2451119,2451180,2451454,2450874,2450906,2450967,2451485,2451850,2451514,2451270,2451758,2451028,2451546,2450997,2450996,2451393,2451667,2451453,2451819,2450905,2451331,2451577,2451089,2451301,2451545,2451605,2451851,2451181,2451149,2451820,2451362,2451392,2451240,2450935,2451637,2451484,2451058,2451300,2451727,2451759,2450815,2451698,2451150,2451332,2451606,2451666,2451211,2450846,2450875,2450966,2450936,2451361,2451212,2451880,2451059,2451789,2451423,2451576,2450816,2451088,2451728,2451027,2451120,2451881,2451697,2450847,2451271,2451636,2451515,2451424,2451239]), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
 
 (6) ColumnarToRow
-Input [4]: [hd_demo_sk#7, hd_buy_potential#8, hd_dep_count#9, hd_vehicle_count#10]
+Input [3]: [d_date_sk#7, d_year#8, d_dom#9]
 
 (7) Filter
-Input [4]: [hd_demo_sk#7, hd_buy_potential#8, hd_dep_count#9, hd_vehicle_count#10]
-Condition : (((((isnotnull(hd_vehicle_count#10) AND isnotnull(hd_dep_count#9)) AND ((hd_buy_potential#8 = >10000         ) OR (hd_buy_potential#8 = Unknown        ))) AND (hd_vehicle_count#10 > 0)) AND ((cast(hd_dep_count#9 as double) / cast(hd_vehicle_count#10 as double)) > 1.0)) AND isnotnull(hd_demo_sk#7))
+Input [3]: [d_date_sk#7, d_year#8, d_dom#9]
+Condition : (((((isnotnull(d_dom#9) AND (d_dom#9 >= 1)) AND (d_dom#9 <= 2)) AND d_year#8 IN (1998,1999,2000)) AND d_date_sk#7 INSET (2451790,2451119,2451180,2451454,2450874,2450906,2450967,2451485,2451850,2451514,2451270,2451758,2451028,2451546,2450997,2450996,2451393,2451667,2451453,2451819,2450905,2451331,2451577,2451089,2451301,2451545,2451605,2451851,2451181,2451149,2451820,2451362,2451392,2451240,2450935,2451637,2451484,2451058,2451300,2451727,2451759,2450815,2451698,2451150,2451332,2451606,2451666,2451211,2450846,2450875,2450966,2450936,2451361,2451212,2451880,2451059,2451789,2451423,2451576,2450816,2451088,2451728,2451027,2451120,2451881,2451697,2450847,2451271,2451636,2451515,2451424,2451239)) AND isnotnull(d_date_sk#7))
 
 (8) Project
-Output [1]: [hd_demo_sk#7]
-Input [4]: [hd_demo_sk#7, hd_buy_potential#8, hd_dep_count#9, hd_vehicle_count#10]
+Output [1]: [d_date_sk#7]
+Input [3]: [d_date_sk#7, d_year#8, d_dom#9]
 
 (9) BroadcastHashJoin [codegen id : 2]
-Left keys [1]: [ss_hdemo_sk#2]
-Right keys [1]: [hd_demo_sk#7]
+Left keys [1]: [ss_sold_date_sk#5]
+Right keys [1]: [d_date_sk#7]
 Join condition: None
 
 (10) Project [codegen id : 2]
-Output [4]: [ss_customer_sk#1, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
-Input [6]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5, hd_demo_sk#7]
+Output [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4]
+Input [6]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5, d_date_sk#7]
 
 (11) BroadcastExchange
-Input [4]: [ss_customer_sk#1, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [id=#11]
+Input [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4]
+Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false), [id=#10]
 
 (12) Scan parquet default.store
-Output [2]: [s_store_sk#12, s_county#13]
+Output [2]: [s_store_sk#11, s_county#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [In(s_county, [Fairfield County,Ziebach County,Bronx County,Barrow County]), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_county:string>
 
 (13) ColumnarToRow
-Input [2]: [s_store_sk#12, s_county#13]
+Input [2]: [s_store_sk#11, s_county#12]
 
 (14) Filter
-Input [2]: [s_store_sk#12, s_county#13]
-Condition : (s_county#13 IN (Fairfield County,Ziebach County,Bronx County,Barrow County) AND isnotnull(s_store_sk#12))
+Input [2]: [s_store_sk#11, s_county#12]
+Condition : (s_county#12 IN (Fairfield County,Ziebach County,Bronx County,Barrow County) AND isnotnull(s_store_sk#11))
 
 (15) Project
-Output [1]: [s_store_sk#12]
-Input [2]: [s_store_sk#12, s_county#13]
+Output [1]: [s_store_sk#11]
+Input [2]: [s_store_sk#11, s_county#12]
 
 (16) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_store_sk#3]
-Right keys [1]: [s_store_sk#12]
+Right keys [1]: [s_store_sk#11]
 Join condition: None
 
 (17) Project [codegen id : 3]
-Output [3]: [ss_customer_sk#1, ss_ticket_number#4, ss_sold_date_sk#5]
-Input [5]: [ss_customer_sk#1, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5, s_store_sk#12]
+Output [3]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4]
+Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, s_store_sk#11]
 
 (18) BroadcastExchange
-Input [3]: [ss_customer_sk#1, ss_ticket_number#4, ss_sold_date_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[2, int, true] as bigint)),false), [id=#14]
+Input [3]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [id=#13]
 
-(19) Scan parquet default.date_dim
-Output [3]: [d_date_sk#15, d_year#16, d_dom#17]
+(19) Scan parquet default.household_demographics
+Output [4]: [hd_demo_sk#14, hd_buy_potential#15, hd_dep_count#16, hd_vehicle_count#17]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_dom), GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2), In(d_year, [1998,1999,2000]), In(d_date_sk, [2451790,2451119,2451180,2451454,2450874,2450906,2450967,2451485,2451850,2451514,2451270,2451758,2451028,2451546,2450997,2450996,2451393,2451667,2451453,2451819,2450905,2451331,2451577,2451089,2451301,2451545,2451605,2451851,2451181,2451149,2451820,2451362,2451392,2451240,2450935,2451637,2451484,2451058,2451300,2451727,2451759,2450815,2451698,2451150,2451332,2451606,2451666,2451211,2450846,2450875,2450966,2450936,2451361,2451212,2451880,2451059,2451789,2451423,2451576,2450816,2451088,2451728,2451027,2451120,2451881,2451697,2450847,2451271,2451636,2451515,2451424,2451239]), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
+Location [not included in comparison]/{warehouse_dir}/household_demographics]
+PushedFilters: [IsNotNull(hd_vehicle_count), IsNotNull(hd_dep_count), Or(EqualTo(hd_buy_potential,>10000         ),EqualTo(hd_buy_potential,Unknown        )), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string,hd_dep_count:int,hd_vehicle_count:int>
 
 (20) ColumnarToRow
-Input [3]: [d_date_sk#15, d_year#16, d_dom#17]
+Input [4]: [hd_demo_sk#14, hd_buy_potential#15, hd_dep_count#16, hd_vehicle_count#17]
 
 (21) Filter
-Input [3]: [d_date_sk#15, d_year#16, d_dom#17]
-Condition : (((((isnotnull(d_dom#17) AND (d_dom#17 >= 1)) AND (d_dom#17 <= 2)) AND d_year#16 IN (1998,1999,2000)) AND d_date_sk#15 INSET (2451790,2451119,2451180,2451454,2450874,2450906,2450967,2451485,2451850,2451514,2451270,2451758,2451028,2451546,2450997,2450996,2451393,2451667,2451453,2451819,2450905,2451331,2451577,2451089,2451301,2451545,2451605,2451851,2451181,2451149,2451820,2451362,2451392,2451240,2450935,2451637,2451484,2451058,2451300,2451727,2451759,2450815,2451698,2451150,2451332,2451606,2451666,2451211,2450846,2450875,2450966,2450936,2451361,2451212,2451880,2451059,2451789,2451423,2451576,2450816,2451088,2451728,2451027,2451120,2451881,2451697,2450847,2451271,2451636,2451515,2451424,2451239)) AND isnotnull(d_date_sk#15))
+Input [4]: [hd_demo_sk#14, hd_buy_potential#15, hd_dep_count#16, hd_vehicle_count#17]
+Condition : (((((isnotnull(hd_vehicle_count#17) AND isnotnull(hd_dep_count#16)) AND ((hd_buy_potential#15 = >10000         ) OR (hd_buy_potential#15 = Unknown        ))) AND (hd_vehicle_count#17 > 0)) AND ((cast(hd_dep_count#16 as double) / cast(hd_vehicle_count#17 as double)) > 1.0)) AND isnotnull(hd_demo_sk#14))
 
 (22) Project
-Output [1]: [d_date_sk#15]
-Input [3]: [d_date_sk#15, d_year#16, d_dom#17]
+Output [1]: [hd_demo_sk#14]
+Input [4]: [hd_demo_sk#14, hd_buy_potential#15, hd_dep_count#16, hd_vehicle_count#17]
 
 (23) BroadcastHashJoin [codegen id : 4]
-Left keys [1]: [ss_sold_date_sk#5]
-Right keys [1]: [d_date_sk#15]
+Left keys [1]: [ss_hdemo_sk#2]
+Right keys [1]: [hd_demo_sk#14]
 Join condition: None
 
 (24) Project [codegen id : 4]
 Output [2]: [ss_customer_sk#1, ss_ticket_number#4]
-Input [4]: [ss_customer_sk#1, ss_ticket_number#4, ss_sold_date_sk#5, d_date_sk#15]
+Input [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4, hd_demo_sk#14]
 
 (25) HashAggregate [codegen id : 4]
 Input [2]: [ss_customer_sk#1, ss_ticket_number#4]

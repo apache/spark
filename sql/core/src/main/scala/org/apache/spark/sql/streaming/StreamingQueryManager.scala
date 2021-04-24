@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
@@ -226,6 +226,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     listenerBus.post(event)
   }
 
+  // scalastyle:off argcount
   private def createQuery(
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
@@ -236,7 +237,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       useTempCheckpointLocation: Boolean,
       recoverFromCheckpointLocation: Boolean,
       trigger: Trigger,
-      triggerClock: Clock): StreamingQueryWrapper = {
+      triggerClock: Clock,
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQueryWrapper = {
     val analyzedPlan = df.queryExecution.analyzed
     df.queryExecution.assertAnalyzed()
 
@@ -249,7 +251,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       outputMode,
       df.sparkSession.sessionState.newHadoopConf(),
       trigger.isInstanceOf[ContinuousTrigger],
-      analyzedPlan)
+      analyzedPlan,
+      catalogAndIdent)
 
     val analyzedStreamWritePlan =
       sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
@@ -272,7 +275,9 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           analyzedStreamWritePlan))
     }
   }
+  // scalastyle:on argcount
 
+  // scalastyle:off argcount
   /**
    * Start a [[StreamingQuery]].
    *
@@ -288,6 +293,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
    *                                       will be thrown.
    * @param trigger [[Trigger]] for the query.
    * @param triggerClock [[Clock]] to use for the triggering.
+   * @param catalogAndIdent Catalog and identifier for the sink, set when it is a V2 catalog table
    */
   @throws[TimeoutException]
   private[sql] def startQuery(
@@ -300,7 +306,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       useTempCheckpointLocation: Boolean = false,
       recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = Trigger.ProcessingTime(0),
-      triggerClock: Clock = new SystemClock()): StreamingQuery = {
+      triggerClock: Clock = new SystemClock(),
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQuery = {
     val query = createQuery(
       userSpecifiedName,
       userSpecifiedCheckpointLocation,
@@ -311,7 +318,9 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       useTempCheckpointLocation,
       recoverFromCheckpointLocation,
       trigger,
-      triggerClock)
+      triggerClock,
+      catalogAndIdent)
+    // scalastyle:on argcount
 
     // The following code block checks if a stream with the same name or id is running. Then it
     // returns an Option of an already active stream to stop outside of the lock

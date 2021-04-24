@@ -728,8 +728,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       case r: Range => r
     }
     assert(ranges.length == 2)
-    // Ensure the two Range instances are equal according to their equal method
-    assert(ranges.head == ranges.last)
     val execRanges = df.queryExecution.sparkPlan.collect {
       case r: RangeExec => r
     }
@@ -1266,4 +1264,6 @@ private case class DummySparkPlan(
   ) extends SparkPlan {
   override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan =
+    copy(children = newChildren)
 }

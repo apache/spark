@@ -418,12 +418,7 @@ class MasterSuite extends SparkFunSuite
           (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl + "/")
         }
 
-        // with LocalCluster, we have masters and workers in the same JVM, each overwriting
-        // system property spark.ui.proxyBase.
-        // so we need to manage this property explicitly for test
-        System.getProperty("spark.ui.proxyBase") should startWith
-          (s"$reverseProxyUrl/proxy/worker-")
-        System.setProperty("spark.ui.proxyBase", reverseProxyUrl)
+        System.getProperty("spark.ui.proxyBase") should be (reverseProxyUrl)
         val html = Utils
           .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
         html should include ("Spark Master at spark://")
