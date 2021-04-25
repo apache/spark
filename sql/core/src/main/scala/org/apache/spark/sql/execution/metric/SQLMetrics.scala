@@ -113,7 +113,7 @@ object SQLMetrics {
    */
   def createV2CustomMetric(sc: SparkContext, customMetric: CustomMetric): SQLMetric = {
     val acc = new SQLMetric(CustomMetrics.buildV2CustomMetricTypeName(customMetric))
-    acc.register(sc, name = Some(customMetric.name()), countFailedValues = false)
+    acc.register(sc, name = Some(customMetric.description()), countFailedValues = false)
     acc
   }
 

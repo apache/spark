@@ -214,9 +214,9 @@ case class Grouping(child: Expression) extends Expression with Unevaluable
     Examples:
       > SELECT name, _FUNC_(), sum(age), avg(height) FROM VALUES (2, 'Alice', 165), (5, 'Bob', 180) people(age, name, height) GROUP BY cube(name, height);
         Alice	0	2	165.0
+        Bob	0	5	180.0
         Alice	1	2	165.0
         NULL	3	7	172.5
-        Bob	0	5	180.0
         Bob	1	5	180.0
         NULL	2	2	165.0
         NULL	2	5	180.0
@@ -275,24 +275,5 @@ object GroupingAnalytics {
         Some(selectedGroupByExprs, BaseGroupingSets.distinctGroupByExprs(groups))
       }
     }
-  }
-}
-
-/**
- * A reference to an grouping expression in [[Aggregate]] node.
- *
- * @param ordinal The ordinal of the grouping expression in [[Aggregate]] that this expression
- *                refers to.
- * @param dataType The [[DataType]] of the referenced grouping expression.
- * @param nullable True if null is a valid value for the referenced grouping expression.
- */
-case class GroupingExprRef(
-    ordinal: Int,
-    dataType: DataType,
-    nullable: Boolean)
-  extends LeafExpression with Unevaluable {
-
-  override def stringArgs: Iterator[Any] = {
-    Iterator(ordinal)
   }
 }

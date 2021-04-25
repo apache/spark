@@ -287,7 +287,7 @@ object PhysicalAggregation {
     (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
-    case a @ logical.Aggregate(groupingExpressions, resultExpressions, child) =>
+    case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
       // A single aggregate expression might appear multiple times in resultExpressions.
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
       // build a set of semantically distinct aggregate expressions and re-write expressions so
@@ -297,9 +297,11 @@ object PhysicalAggregation {
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
-          case a
-            if AggregateExpression.isAggregate(a) && !equivalentAggregateExpressions.addExpr(a) =>
-            a
+          case agg: AggregateExpression
+            if !equivalentAggregateExpressions.addExpr(agg) => agg
+          case udf: PythonUDF
+            if PythonUDF.isGroupedAggPandasUDF(udf) &&
+              !equivalentAggregateExpressions.addExpr(udf) => udf
         }
       }
 
@@ -320,7 +322,7 @@ object PhysicalAggregation {
       // which takes the grouping columns and final aggregate result buffer as input.
       // Thus, we must re-write the result expressions so that their attributes match up with
       // the attributes of the final result projection's input row:
-      val rewrittenResultExpressions = a.aggregateExpressionsWithoutGroupingRefs.map { expr =>
+      val rewrittenResultExpressions = resultExpressions.map { expr =>
         expr.transformDown {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
