@@ -207,7 +207,7 @@ private[spark] class Client(
       yarnClient.submitApplication(appContext)
       launcherBackend.setAppId(appId.toString)
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
-
+      printTrackingInfo(appId)
       appId
     } catch {
       case e: Throwable =>
@@ -343,6 +343,12 @@ private[spark] class Client(
   /** Get the application report from the ResourceManager for an application we have submitted. */
   def getApplicationReport(appId: ApplicationId): ApplicationReport =
     yarnClient.getApplicationReport(appId)
+
+  /**  Get the application Tracking url for an application we have submitted. */
+  private def printTrackingInfo(appId: ApplicationId): Unit = {
+    val trackingUrl = getApplicationReport(appId).getTrackingUrl
+    print(s"Application Id: ${appId}, Tracking URL: ${trackingUrl}")
+  }
 
   /**
    * Return the security token used by this client to communicate with the ApplicationMaster.
