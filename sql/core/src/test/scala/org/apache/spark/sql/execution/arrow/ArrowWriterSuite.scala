@@ -54,6 +54,8 @@ class ArrowWriterSuite extends SparkFunSuite {
             case BinaryType => reader.getBinary(rowId)
             case DateType => reader.getInt(rowId)
             case TimestampType => reader.getLong(rowId)
+            case YearMonthIntervalType => reader.getInt(rowId)
+            case DayTimeIntervalType => reader.getLong(rowId)
           }
           assert(value === datum)
       }
@@ -73,6 +75,8 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DateType, Seq(0, 1, 2, null, 4))
     check(TimestampType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong), "America/Los_Angeles")
     check(NullType, Seq(null, null, null))
+    check(YearMonthIntervalType, Seq(null, 0, 1, -1, scala.Int.MaxValue, scala.Int.MinValue))
+    check(DayTimeIntervalType,Seq(null, 0L, 1000L, -1000L, (scala.Long.MaxValue - 807L), (scala.Long.MinValue + 808L)))
   }
 
   test("get multiple") {
@@ -97,6 +101,8 @@ class ArrowWriterSuite extends SparkFunSuite {
         case DoubleType => reader.getDoubles(0, data.size)
         case DateType => reader.getInts(0, data.size)
         case TimestampType => reader.getLongs(0, data.size)
+        case YearMonthIntervalType => reader.getInts(0, data.size)
+        case DayTimeIntervalType => reader.getLongs(0, data.size)
       }
       assert(values === data)
 
@@ -111,6 +117,8 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DoubleType, (0 until 10).map(_.toDouble))
     check(DateType, (0 until 10))
     check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), "America/Los_Angeles")
+    check(YearMonthIntervalType, (0 until 10))
+    check(DayTimeIntervalType, (-10 until 10).map(_ * 1000.toLong))
   }
 
   test("array") {
