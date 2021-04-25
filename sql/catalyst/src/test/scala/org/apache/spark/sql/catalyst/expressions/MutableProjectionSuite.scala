@@ -50,8 +50,9 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
   testBothCodegenAndInterpreted("unsafe buffer") {
     val inputRow = InternalRow.fromSeq(Seq(
       false, 1.toByte, 9.toShort, -18, 53L, 3.2f, 7.8, 4, 9L, Int.MinValue, Long.MaxValue))
-    val numBytes = UnsafeRow.calculateBitSetWidthInBytes(fixedLengthTypes.length)
-    val unsafeBuffer = UnsafeRow.createFromByteArray(numBytes, fixedLengthTypes.length)
+    val numFields = fixedLengthTypes.length
+    val numBytes = 8 * numFields + UnsafeRow.calculateBitSetWidthInBytes(numFields)
+    val unsafeBuffer = UnsafeRow.createFromByteArray(numBytes, numFields)
     val proj = createMutableProjection(fixedLengthTypes)
     val projUnsafeRow = proj.target(unsafeBuffer)(inputRow)
     assert(SafeProjection.create(fixedLengthTypes)(projUnsafeRow) === inputRow)
