@@ -315,12 +315,13 @@ object GeneratorNestedColumnAliasing {
 
                 // As we change the child of the generator, its output data type must be updated.
                 val updatedGeneratorOutput = rewrittenG.generatorOutput
-                    .zip(rewrittenG.generator.elementSchema.toAttributes)
-                    .map { case (oldAttr, newAttr) =>
+                  .zip(rewrittenG.generator.elementSchema.toAttributes)
+                  .map { case (oldAttr, newAttr) =>
                   newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
                 }
                 assert(updatedGeneratorOutput.length == rewrittenG.generatorOutput.length,
-                  "Updated generator output must have same length as original generator output.")
+                  "Updated generator output must have the same length " +
+                    "with original generator output.")
                 val updatedGenerate = rewrittenG.copy(generatorOutput = updatedGeneratorOutput)
 
                 // Replace nested column accessor with generator output.
