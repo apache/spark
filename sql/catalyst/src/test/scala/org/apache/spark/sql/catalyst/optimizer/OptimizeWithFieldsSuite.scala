@@ -99,7 +99,7 @@ class OptimizeWithFieldsSuite extends PlanTest {
     val correctAnswer = testRelation
       .select(
         Alias(UpdateFields('a, WithField("b1", Literal(5)) :: Nil), "out1")(),
-        Alias(UpdateFields('a, WithField("b1", Literal(5)) :: Nil), "out2")())
+        Alias(UpdateFields('a, WithField("B1", Literal(5)) :: Nil), "out2")())
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -127,7 +127,7 @@ class OptimizeWithFieldsSuite extends PlanTest {
     }
   }
 
-  test("SPARK-35213: ensure optimize WithFields maintains correct struct ordering") {
+  test("SPARK-35213: ensure optimize WithFields maintains correct WithField ordering") {
     val originalQuery = testRelation
       .select(
         Alias(UpdateFields('a,

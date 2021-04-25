@@ -50,32 +50,21 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
 
       val newNames = mutable.ArrayBuffer.empty[String]
       val newValues = mutable.HashMap.empty[String, Expression]
+      // Used to remember the casing of the last instance
+      val nameMap = mutable.HashMap.empty[String, String]
 
-      if (caseSensitive) {
-        names.zip(values).foreach { case (name, value) =>
-          if (newValues.contains(name)) {
-            newValues += name -> value
-          } else {
-            newNames += name
-            newValues += name -> value
-          }
+      names.zip(values).foreach { case (name, value) =>
+        val normalizedName = if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
+        if (nameMap.contains(normalizedName)) {
+          newValues += normalizedName -> value
+        } else {
+          newNames += normalizedName
+          newValues += normalizedName -> value
         }
-      } else {
-        names.zip(values).foreach { case (name, value) =>
-          val lowercaseName = name.toLowerCase(Locale.ROOT)
-          if (newValues.contains(lowercaseName)) {
-            // Add both versions so we pull out the latest value based on whichever casing was
-            // provided first
-            newValues += name -> value
-            newValues += lowercaseName -> value
-          } else {
-            newNames += name
-            newValues += name -> value
-          }
-        }
+        nameMap += normalizedName -> name
       }
 
-      val newWithFields = newNames.map(n => WithField(n, newValues(n)))
+      val newWithFields = newNames.map(n => WithField(nameMap(n), newValues(n)))
       UpdateFields(structExpr, newWithFields.toSeq)
 
     case UpdateFields(UpdateFields(struct, fieldOps1), fieldOps2) =>
