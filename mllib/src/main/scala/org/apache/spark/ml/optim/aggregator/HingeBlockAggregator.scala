@@ -19,35 +19,32 @@ package org.apache.spark.ml.optim.aggregator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.InstanceBlock
-import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
 
+
 /**
- * BinaryLogisticBlockAggregator computes the gradient and loss used in binary logistic
- * classification for blocks in sparse or dense matrix in an online fashion.
+ * HingeBlockAggregator computes the gradient and loss for Huber loss function
+ * as used in linear regression for blocks in sparse or dense matrix in an online fashion.
  *
- * Two BinaryLogisticBlockAggregator can be merged together to have a summary of loss and
- * gradient of the corresponding joint dataset.
+ * Two BlockHuberAggregators can be merged together to have a summary of loss and gradient
+ * of the corresponding joint dataset.
  *
  * NOTE: The feature values are expected to already have be scaled (multiplied by bcInverseStd,
  * but NOT centered) before computation.
  *
  * @param bcCoefficients The coefficients corresponding to the features.
- * @param fitIntercept Whether to fit an intercept term.
- * @param fitWithMean Whether to center the data with mean before training, in a virtual way.
- *                    If true, we MUST adjust the intercept of both initial coefficients and
- *                    final solution in the caller.
+ * @param fitIntercept Whether to fit an intercept term. When true, will perform data centering
+ *                     in a virtual way. Then we MUST adjust the intercept of both initial
+ *                     coefficients and final solution in the caller.
  */
-private[ml] class BinaryLogisticBlockAggregator(
+private[ml] class HingeBlockAggregator(
     bcInverseStd: Broadcast[Array[Double]],
     bcScaledMean: Broadcast[Array[Double]],
-    fitIntercept: Boolean,
-    fitWithMean: Boolean)(bcCoefficients: Broadcast[Vector])
-  extends DifferentiableLossAggregator[InstanceBlock, BinaryLogisticBlockAggregator]
-  with Logging {
+    fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
+  extends DifferentiableLossAggregator[InstanceBlock, HingeBlockAggregator]
+    with Logging {
 
-  if (fitWithMean) {
-    require(fitIntercept, s"for training without intercept, should not center the vectors")
+  if (fitIntercept) {
     require(bcScaledMean != null && bcScaledMean.value.length == bcInverseStd.value.length,
       "scaled means is required when center the vectors")
   }
@@ -70,7 +67,7 @@ private[ml] class BinaryLogisticBlockAggregator(
   // pre-computed margin of an empty vector.
   // with this variable as an offset, for a sparse vector, we only need to
   // deal with non-zero values in prediction.
-  private val marginOffset = if (fitWithMean) {
+  private val marginOffset = if (fitIntercept) {
     coefficientsArray.last -
       BLAS.javaBLAS.ddot(numFeatures, coefficientsArray, 1, bcScaledMean.value, 1)
   } else {
@@ -78,11 +75,11 @@ private[ml] class BinaryLogisticBlockAggregator(
   }
 
   /**
-   * Add a new training instance block to this BinaryLogisticBlockAggregator, and update the loss
+   * Add a new training instance block to this HingeBlockAggregator, and update the loss
    * and gradient of the objective function.
    *
    * @param block The instance block of data point to be added.
-   * @return This BinaryLogisticBlockAggregator object.
+   * @return This HingeBlockAggregator object.
    */
   def add(block: InstanceBlock): this.type = {
     require(block.matrix.isTransposed)
@@ -97,10 +94,7 @@ private[ml] class BinaryLogisticBlockAggregator(
     // vec/arr here represents margins
     val vec = new DenseVector(Array.ofDim[Double](size))
     val arr = vec.values
-    if (fitIntercept) {
-      val offset = if (fitWithMean) marginOffset else coefficientsArray.last
-      java.util.Arrays.fill(arr, offset)
-    }
+    if (fitIntercept) java.util.Arrays.fill(arr, marginOffset)
     BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
 
     // in-place convert margins to multiplier
@@ -113,17 +107,17 @@ private[ml] class BinaryLogisticBlockAggregator(
       val weight = block.getWeight(i)
       localWeightSum += weight
       if (weight > 0) {
+        // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
+        // Therefore the gradient is -(2y - 1)*x
         val label = block.getLabel(i)
-        val margin = arr(i)
-        if (label > 0) {
-          // The following is equivalent to log(1 + exp(-margin)) but more numerically stable.
-          localLossSum += weight * Utils.log1pExp(-margin)
-        } else {
-          localLossSum += weight * (Utils.log1pExp(-margin) + margin)
-        }
-        val multiplier = weight * (1.0 / (1.0 + math.exp(-margin)) - label)
-        arr(i) = multiplier
-        multiplierSum += multiplier
+        val labelScaled = label + label - 1.0
+        val loss = (1.0 - labelScaled * arr(i)) * weight
+        if (loss > 0) {
+          localLossSum += loss
+          val multiplier = -labelScaled * weight
+          arr(i) = multiplier
+          multiplierSum += multiplier
+        } else { arr(i) = 0.0 }
       } else { arr(i) = 0.0 }
       i += 1
     }
@@ -153,14 +147,12 @@ private[ml] class BinaryLogisticBlockAggregator(
         throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
     }
 
-    if (fitWithMean) {
+    if (fitIntercept) {
       // above update of the linear part of gradientSumArray does NOT take the centering
       // into account, here we need to adjust this part.
       BLAS.javaBLAS.daxpy(numFeatures, -multiplierSum, bcScaledMean.value, 1,
         gradientSumArray, 1)
-    }
 
-    if (fitIntercept) {
       // update the intercept part of gradientSumArray
       gradientSumArray(numFeatures) += multiplierSum
     }
