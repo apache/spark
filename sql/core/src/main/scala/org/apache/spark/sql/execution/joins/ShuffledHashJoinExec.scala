@@ -59,16 +59,6 @@ case class ShuffledHashJoinExec(
     case _ => super.outputOrdering
   }
 
-  override def requiredChildDistribution: Seq[Distribution] = {
-    if (isSkewJoin) {
-      // We re-arrange the shuffle partitions to deal with skew join, and the new children
-      // partitioning doesn't satisfy `HashClusteredDistribution`.
-      UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
-    } else {
-      super.requiredChildDistribution
-    }
-  }
-
   /**
    * This is called by generated Java class, should be public.
    */

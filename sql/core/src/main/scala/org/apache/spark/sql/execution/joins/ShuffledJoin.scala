@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftExistence, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution, Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 
 /**
  * Holds common logic for join operators by shuffling two child relations
@@ -29,7 +29,13 @@ trait ShuffledJoin extends BaseJoinExec {
   def isSkewJoin: Boolean
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+    if (isSkewJoin) {
+      // We re-arrange the shuffle partitions to deal with skew join, and the new children
+      // partitioning doesn't satisfy `HashClusteredDistribution`.
+      UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
+    } else {
+      HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+    }
   }
 
   override def outputPartitioning: Partitioning = joinType match {
