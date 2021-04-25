@@ -36,7 +36,7 @@ from pyspark.sql.types import (  # type: ignore
     _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase, ExamplePointUDT, PythonOnlyUDT, \
-    ExamplePoint, PythonOnlyPoint, MyObject
+    ExamplePoint, PythonOnlyPoint, MyObject, have_pandas, pandas_requirement_message
 
 
 class TypesTests(ReusedSQLTestCase):
@@ -186,6 +186,15 @@ class TypesTests(ReusedSQLTestCase):
                 (datetime.datetime(1970, 1, 1, 0, 0, tzinfo=datetime.timezone.utc),)
             ])
             self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp")
+
+    # SPARK-35211: inferred schema verification
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_infer_schema_from_pandas_udt(self):
+        from pyspark.testing.sqlutils import ExamplePoint
+        import pandas as pd
+        input = pd.DataFrame({'point': pd.Series([ExamplePoint(1.0, 1.0), ExamplePoint(2.0, 2.0)])})
+        df = self.spark.createDataFrame(input, verifySchema=False)
+        self.assertEqual(df.schema, StructType([StructField('point', ExamplePointUDT(), True)]))
 
     def test_infer_schema_not_enough_names(self):
         df = self.spark.createDataFrame([["a", "b"]], ["col1"])

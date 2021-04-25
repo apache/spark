@@ -537,10 +537,28 @@ class SparkSession(SparkConversionMixin):
                 prefer_timestamp_ntz=prefer_timestamp_ntz)).reduce(_merge_type)
         return schema
 
+    def _create_verified_converter(self, schema, verifySchema):
+        """
+        If verifySchema is True, create the converter with additional schema verification;
+        Otherwise, create the converter
+        """
+        converter = _create_converter(schema)
+
+        def verify_and_convert(obj):
+            verify_func = _make_type_verifier(schema)
+            verify_func(obj)
+            return converter(obj)
+
+        if verifySchema:
+            return verify_and_convert
+        else:
+            return converter
+
     def _createFromRDD(
         self,
         rdd: "RDD[Any]",
         schema: Optional[Union[DataType, List[str]]],
+        verifySchema: bool,
         samplingRatio: Optional[float]
     ) -> Tuple["RDD[Tuple]", StructType]:
         """
@@ -548,7 +566,7 @@ class SparkSession(SparkConversionMixin):
         """
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchema(rdd, samplingRatio, names=schema)
-            converter = _create_converter(struct)
+            converter = self._create_verified_converter(struct, verifySchema)
             tupled_rdd = rdd.map(converter)
             if isinstance(schema, (list, tuple)):
                 for i, name in enumerate(schema):
@@ -567,7 +585,10 @@ class SparkSession(SparkConversionMixin):
         return internal_rdd, struct
 
     def _createFromLocal(
-        self, data: Iterable[Any], schema: Optional[Union[DataType, List[str]]]
+        self,
+        data: Iterable[Any],
+        schema: Optional[Union[DataType, List[str]]],
+        verifySchema: bool
     ) -> Tuple["RDD[Tuple]", StructType]:
         """
         Create an RDD for DataFrame from a list or pandas.DataFrame, returns
@@ -579,7 +600,7 @@ class SparkSession(SparkConversionMixin):
 
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchemaFromList(data, names=schema)
-            converter = _create_converter(struct)
+            converter = self._create_verified_converter(struct, verifySchema)
             tupled_data: Iterable[Tuple] = map(converter, data)
             if isinstance(schema, (list, tuple)):
                 for i, name in enumerate(schema):
@@ -693,7 +714,8 @@ class SparkSession(SparkConversionMixin):
 
         When ``schema`` is ``None``, it will try to infer the schema (column names and types)
         from ``data``, which should be an RDD of either :class:`Row`,
-        :class:`namedtuple`, or :class:`dict`.
+        :class:`namedtuple`, or :class:`dict`. The inferred schema must match the real data, or an
+        exception will be thrown at runtime.
 
         When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string, it must match
         the real data, or an exception will be thrown at runtime. If the given schema is not
@@ -725,7 +747,10 @@ class SparkSession(SparkConversionMixin):
         samplingRatio : float, optional
             the sample ratio of rows used for inferring
         verifySchema : bool, optional
-            verify data types of every row against schema. Enabled by default.
+            verify data types of every row against schema. Enabled by default. Specifically, if
+            schema is provided, schema verification will be performed against the provided schema;
+            if schema is not provided and can be inferred (eg. from UDT), schema verification will
+            be performed against the inferred schema.
 
         Returns
         -------
@@ -816,6 +841,7 @@ class SparkSession(SparkConversionMixin):
         verifySchema: bool,
     ) -> DataFrame:
         if isinstance(schema, StructType):
+            no_need_to_prepare = not verifySchema
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
             @no_type_check
@@ -823,6 +849,7 @@ class SparkSession(SparkConversionMixin):
                 verify_func(obj)
                 return obj
         elif isinstance(schema, DataType):
+            no_need_to_prepare = not verifySchema
             dataType = schema
             schema = StructType().add("value", schema)
 
@@ -834,12 +861,15 @@ class SparkSession(SparkConversionMixin):
                 verify_func(obj)
                 return obj,
         else:
+            no_need_to_prepare = True
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):
-            rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
+            rdd, struct = self._createFromRDD(
+                data if no_need_to_prepare else data.map(prepare), schema, samplingRatio)
         else:
-            rdd, struct = self._createFromLocal(map(prepare, data), schema)
+            rdd, struct = self._createFromLocal(
+                data if no_need_to_prepare else map(prepare, data), schema)
         jrdd = self._jvm.SerDeUtil.toJavaArray(
             rdd._to_java_object_rdd()  # type: ignore[attr-defined]
         )

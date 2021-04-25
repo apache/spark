@@ -790,6 +790,47 @@ class DataFrameTests(ReusedSQLTestCase):
                 os.environ['TZ'] = orig_env_tz
             time.tzset()
 
+    # SPARK-35211: inferred schema verification
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_create_dataframe_from_pandas_with_matched_udt(self):
+        from pyspark.testing.sqlutils import ExamplePoint
+        import pandas as pd
+        pdf = pd.DataFrame({'point': pd.Series([ExamplePoint(1.0, 1.0), ExamplePoint(2.0, 2.0)])})
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": "false"}):
+            df1 = self.spark.createDataFrame(pdf, verifySchema=True)
+            df2 = self.spark.createDataFrame(pdf, verifySchema=False)
+            self.assertEquals(df1.collect(), df2.collect())
+
+    # SPARK-35211: inferred schema verification
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_create_dataframe_from_pandas_with_mismatched_udt(self):
+        from pyspark.testing.sqlutils import ExamplePoint
+        import pandas as pd
+        pdf = pd.DataFrame({'point': pd.Series([ExamplePoint(1, 1), ExamplePoint(2, 2)])})
+        # The underlying sqlType of ExamplePoint is ArrayType(DoubleType(), False)
+        # There is a data type mismatch between 1 and DoubleType, a TypeError is expected
+        with self.assertRaises(TypeError):
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": "false"}):
+                self.spark.createDataFrame(pdf)
+        # With verifySchema disabled, there will be unexpected behaviours
+        self.assertEquals(self.spark.createDataFrame(pdf, verifySchema=False).collect(),
+                          [Row(point=ExamplePoint(0.0, 0.0)), Row(point=ExamplePoint(0.0, 0.0))])
+
+    def test_create_dataframe_with_mactched_datatype(self):
+        data = [{'a': 1.0}, {'a': 2.0}, {'a': 3.0}]
+        df1 = self.spark.createDataFrame(data, schema="a: double", verifySchema=True)
+        df2 = self.spark.createDataFrame(data, schema="a: double", verifySchema=False)
+        self.assertEquals(df1.collect(), df2.collect())
+
+    def test_create_dataframe_with_mismatched_datatype(self):
+        # With verifySchema enabled, error will be raised during schema verification
+        data = [{'a': 1}, {'a': 2}, {'a': 3}]
+        with self.assertRaises(TypeError):
+            self.spark.createDataFrame(data, schema="a: double")
+        # With verifySchema disabled, there will be unexpected behaviours
+        df = self.spark.createDataFrame(data, schema="a: double", verifySchema=False)
+        self.assertEquals(df.collect(), [Row(a=None), Row(a=None), Row(a=None)])
+
     def test_repr_behaviors(self):
         import re
         pattern = re.compile(r'^ *\|', re.MULTILINE)
