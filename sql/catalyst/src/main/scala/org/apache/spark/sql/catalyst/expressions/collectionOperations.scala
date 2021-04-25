@@ -2723,7 +2723,7 @@ object Sequence {
       val stop = input2.asInstanceOf[T]
       val step = input3.asInstanceOf[T]
 
-      var i: Int = getSequenceLength(start, stop, step)
+      var i: Int = getSequenceLength(start, stop, step, step)
       val arr = new Array[T](i)
       while (i > 0) {
         i -= 1
@@ -2741,7 +2741,7 @@ object Sequence {
         elemType: String): String = {
       val i = ctx.freshName("i")
       s"""
-         |${genSequenceLengthCode(ctx, start, stop, step, i)}
+         |${genSequenceLengthCode(ctx, start, stop, step, step, i)}
          |$arr = new $elemType[$i];
          |while ($i > 0) {
          |  $i--;
@@ -2869,7 +2869,7 @@ object Sequence {
         val stopMicros: Long = num.toLong(stop) * scale
 
         val maxEstimatedArrayLength =
-          getSequenceLength(startMicros, stopMicros, intervalStepInMicros)
+          getSequenceLength(startMicros, stopMicros, input3, intervalStepInMicros)
 
         val stepSign = if (stopMicros >= startMicros) +1 else -1
         val exclusiveItem = stopMicros + stepSign
@@ -2917,7 +2917,7 @@ object Sequence {
         s"""
            |final long $intervalInMicros =
            |  $stepMicros + $stepMonths * ${microsPerMonth}L + $stepDays * ${MICROS_PER_DAY}L;
-           |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
+           |${genSequenceLengthCode(ctx, startMicros, stopMicros, step, intervalInMicros, arrLength)}
           """.stripMargin
 
       val check = if (scale == MICROS_PER_DAY) {
@@ -2972,15 +2972,16 @@ object Sequence {
     }
   }
 
-  private def getSequenceLength[U](start: U, stop: U, step: U)(implicit num: Integral[U]): Int = {
+  private def getSequenceLength[U](start: U, stop: U, step: Any, estimatedStep: U)
+      (implicit num: Integral[U]): Int = {
     import num._
     require(
-      (step > num.zero && start <= stop)
-        || (step < num.zero && start >= stop)
-        || (step == num.zero && start == stop),
+      (estimatedStep > num.zero && start <= stop)
+        || (estimatedStep < num.zero && start >= stop)
+        || (estimatedStep == num.zero && start == stop),
       s"Illegal sequence boundaries: $start to $stop by $step")
 
-    val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / step.toLong
+    val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / estimatedStep.toLong
 
     require(
       len <= MAX_ROUNDED_ARRAY_LENGTH,
@@ -2994,16 +2995,17 @@ object Sequence {
       start: String,
       stop: String,
       step: String,
+      estimatedStep: String,
       len: String): String = {
     val longLen = ctx.freshName("longLen")
     s"""
-       |if (!(($step > 0 && $start <= $stop) ||
-       |  ($step < 0 && $start >= $stop) ||
-       |  ($step == 0 && $start == $stop))) {
+       |if (!(($estimatedStep > 0 && $start <= $stop) ||
+       |  ($estimatedStep < 0 && $start >= $stop) ||
+       |  ($estimatedStep == 0 && $start == $stop))) {
        |  throw new IllegalArgumentException(
        |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
        |}
-       |long $longLen = $stop == $start ? 1L : 1L + ((long) $stop - $start) / $step;
+       |long $longLen = $stop == $start ? 1L : 1L + ((long) $stop - $start) / $estimatedStep;
        |if ($longLen > $MAX_ROUNDED_ARRAY_LENGTH) {
        |  throw new IllegalArgumentException(
        |    "Too long sequence: " + $longLen + ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH");

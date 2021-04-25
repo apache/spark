@@ -29,7 +29,6 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -933,7 +932,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(Date.valueOf("1970-02-01")),
           Literal(negateExact(stringToInterval("interval 1 month")))),
         EmptyRow,
-        s"sequence boundaries: 0 to 2678400000000 by -${28 * MICROS_PER_DAY}")
+        s"sequence boundaries: 0 to 2678400000000 by -1 months")
 
       // SPARK-32133: Sequence step must be a day interval if start and end values are dates
       checkExceptionInExpression[IllegalArgumentException](Sequence(
@@ -1107,7 +1106,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(Date.valueOf("1970-02-01")),
           Literal(Period.ofMonths(-1))),
         EmptyRow,
-        s"sequence boundaries: 0 to 2678400000000 by -${28 * MICROS_PER_DAY}")
+        s"sequence boundaries: 0 to 2678400000000 by -1")
 
       assert(Sequence(
         Cast(Literal("2011-03-01"), DateType),
