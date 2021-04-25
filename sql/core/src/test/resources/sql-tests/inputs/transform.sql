@@ -11,6 +11,18 @@ CREATE OR REPLACE TEMPORARY VIEW script_trans AS SELECT * FROM VALUES
 (7, 8, 9)
 AS script_trans(a, b, c);
 
+CREATE OR REPLACE TEMPORARY VIEW complex_trans AS SELECT * FROM VALUES
+(1, 2, 4),
+(1, 1, 7),
+(2, 1, 9),
+(2, 3, 2),
+(3, 1, 1),
+(2, 2, 5),
+(3, 2, 8),
+(1, 3, 5),
+(3, 3, 10)
+as complex_trans(a, b, c);
+
 SELECT TRANSFORM(a)
 USING 'cat' AS (a)
 FROM t;
@@ -342,3 +354,41 @@ SELECT TRANSFORM(b, MAX(a) AS max_a, CAST(sum(c) AS STRING))
 FROM script_trans
 WHERE a <= 2
 GROUP BY b;
+
+-- SPARK-33985 TRANSFORM with CLUSTER BY/ORDER BY/SORT BY
+FROM (
+  FROM complex_trans
+  MAP a, b, c
+    USING 'cat' AS (a, b, c)
+  CLUSTER BY a
+) map_output
+REDUCE a, b, c
+  USING 'cat' AS (a, b, b);
+
+FROM (
+  SELECT TRANSFORM(a, b, c)
+   USING 'cat' AS (a, b, c)
+  FROM complex_trans
+  CLUSTER BY a
+) map_output
+SELECT TRANSFORM(a, b, c)
+  USING 'cat' AS (a, b, b);
+
+FROM (
+  FROM complex_trans
+  MAP a, b, c
+    USING 'cat' AS (a, b, c)
+  ORDER BY b
+) map_output
+REDUCE a, b, c
+  USING 'cat' AS (a, b, b);
+
+
+FROM (
+  SELECT TRANSFORM(a, b, c)
+   USING 'cat' AS (a, b, c)
+  FROM complex_trans
+  ORDER BY b
+) map_output
+SELECT TRANSFORM(a, b, c)
+  USING 'cat' AS (a, b, b);
