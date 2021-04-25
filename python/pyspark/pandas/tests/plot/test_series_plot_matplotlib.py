@@ -25,7 +25,12 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.pandas.testing.utils import have_matplotlib, ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import (
+    have_matplotlib,
+    matplotlib_requirement_message,
+    PandasOnSparkTestCase,
+    TestUtils,
+)
 
 if have_matplotlib:
     import matplotlib
@@ -34,8 +39,8 @@ if have_matplotlib:
     matplotlib.use("agg")
 
 
-@unittest.skipIf(not have_matplotlib, "matplotlib is not installed.")
-class SeriesPlotMatplotlibTest(ReusedSQLTestCase, TestUtils):
+@unittest.skipIf(not have_matplotlib, matplotlib_requirement_message)
+class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

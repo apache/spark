@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, Un
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -2171,6 +2172,8 @@ case class ElementAt(
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {

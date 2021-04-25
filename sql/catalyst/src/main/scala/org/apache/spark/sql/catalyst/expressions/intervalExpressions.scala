@@ -337,6 +337,7 @@ case class MultiplyYMInterval(
   }
 
   override def toString: String = s"($left * $right)"
+  override def sql: String = s"(${left.sql} * ${right.sql})"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): MultiplyYMInterval =
@@ -383,6 +384,7 @@ case class MultiplyDTInterval(
   }
 
   override def toString: String = s"($left * $right)"
+  override def sql: String = s"(${left.sql} * ${right.sql})"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): MultiplyDTInterval =
@@ -441,6 +443,7 @@ case class DivideYMInterval(
   }
 
   override def toString: String = s"($left / $right)"
+  override def sql: String = s"(${left.sql} / ${right.sql})"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): DivideYMInterval =
@@ -488,6 +491,7 @@ case class DivideDTInterval(
   }
 
   override def toString: String = s"($left / $right)"
+  override def sql: String = s"(${left.sql} / ${right.sql})"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): DivideDTInterval =

@@ -22,10 +22,10 @@ from distutils.version import LooseVersion
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class DatetimeIndexTest(ReusedSQLTestCase, TestUtils):
+class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
     @property
     def fixed_freqs(self):
         return [

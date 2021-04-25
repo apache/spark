@@ -31,7 +31,8 @@ from pyspark import pandas as ps
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
-from pyspark.pandas.utils import default_session, sql_conf as sqlc, SPARK_CONF_ARROW_ENABLED
+from pyspark.pandas.utils import default_session, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
 tabulate_requirement_message = None
@@ -44,7 +45,7 @@ have_tabulate = tabulate_requirement_message is None
 
 matplotlib_requirement_message = None
 try:
-    import matplotlib  # noqa: F401
+    import matplotlib  # type: ignore # noqa: F401
 except ImportError as e:
     # If matplotlib requirement is not satisfied, skip related tests.
     matplotlib_requirement_message = str(e)
@@ -52,90 +53,14 @@ have_matplotlib = matplotlib_requirement_message is None
 
 plotly_requirement_message = None
 try:
-    import plotly  # noqa: F401
+    import plotly  # type: ignore # noqa: F401
 except ImportError as e:
     # If plotly requirement is not satisfied, skip related tests.
     plotly_requirement_message = str(e)
 have_plotly = plotly_requirement_message is None
 
 
-class SQLTestUtils(object):
-    """
-    This util assumes the instance of this to have 'spark' attribute, having a spark session.
-    It is usually used with 'ReusedSQLTestCase' class but can be used if you feel sure the
-    the implementation of this class has 'spark' attribute.
-    """
-
-    @contextmanager
-    def sql_conf(self, pairs):
-        """
-        A convenient context manager to test some configuration specific logic. This sets
-        `value` to the configuration `key` and then restores it back when it exits.
-        """
-        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
-
-        with sqlc(pairs, spark=self.spark):
-            yield
-
-    @contextmanager
-    def database(self, *databases):
-        """
-        A convenient context manager to test with some specific databases. This drops the given
-        databases if it exists and sets current database to "default" when it exits.
-        """
-        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
-
-        try:
-            yield
-        finally:
-            for db in databases:
-                self.spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db)
-            self.spark.catalog.setCurrentDatabase("default")
-
-    @contextmanager
-    def table(self, *tables):
-        """
-        A convenient context manager to test with some specific tables. This drops the given tables
-        if it exists.
-        """
-        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
-
-        try:
-            yield
-        finally:
-            for t in tables:
-                self.spark.sql("DROP TABLE IF EXISTS %s" % t)
-
-    @contextmanager
-    def tempView(self, *views):
-        """
-        A convenient context manager to test with some specific views. This drops the given views
-        if it exists.
-        """
-        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
-
-        try:
-            yield
-        finally:
-            for v in views:
-                self.spark.catalog.dropTempView(v)
-
-    @contextmanager
-    def function(self, *functions):
-        """
-        A convenient context manager to test with some specific functions. This drops the given
-        functions if it exists.
-        """
-        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
-
-        try:
-            yield
-        finally:
-            for f in functions:
-                self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
-
-
-class ReusedSQLTestCase(unittest.TestCase, SQLTestUtils):
+class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
         cls.spark = default_session()
@@ -315,7 +240,7 @@ class TestUtils(object):
             yield tempfile.mktemp(dir=tmp)
 
 
-class ComparisonTestBase(ReusedSQLTestCase):
+class ComparisonTestBase(PandasOnSparkTestCase):
     @property
     def kdf(self):
         return ps.from_pandas(self.pdf)
@@ -360,7 +285,7 @@ def assert_produces_warning(
 
     Notes
     -----
-    Replicated from pandas._testing.
+    Replicated from pandas/_testing/_warnings.py.
 
     Parameters
     ----------

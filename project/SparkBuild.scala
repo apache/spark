@@ -414,6 +414,10 @@ object SparkBuild extends PomBuild {
 
   enable(YARN.settings)(yarn)
 
+  if (profiles.contains("sparkr")) {
+    enable(SparkR.settings)(core)
+  }
+
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
    * jar.
@@ -689,7 +693,9 @@ object ExcludedDependencies {
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"))
+      ExclusionRule("javax.ws.rs", "jsr311-api"),
+      ExclusionRule("io.netty", "netty-handler"),
+      ExclusionRule("io.netty", "netty-transport-native-epoll"))
   )
 }
 
@@ -884,6 +890,25 @@ object PySparkAssembly {
     }
   }
 
+}
+
+object SparkR {
+  import scala.sys.process.Process
+
+  val buildRPackage = taskKey[Unit]("Build the R package")
+  lazy val settings = Seq(
+    buildRPackage := {
+      val command = baseDirectory.value / ".." / "R" / "install-dev.sh"
+      Process(command.toString).!!
+    },
+    (Compile / compile) := (Def.taskDyn {
+      val c = (Compile / compile).value
+      Def.task {
+        (Compile / buildRPackage).value
+        c
+      }
+    }).value
+  )
 }
 
 object Unidoc {

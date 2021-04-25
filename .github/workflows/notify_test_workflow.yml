@@ -56,13 +56,19 @@ jobs:
             // Wait 3 seconds to make sure the fork repository triggered a workflow.
             await new Promise(r => setTimeout(r, 3000))
 
-            const runs = await github.request(endpoint, params)
+            let runs
+            try {
+              runs = await github.request(endpoint, params)
+            } catch (error) {
+              console.error(error)
+              // Assume that runs were not found.
+            }
 
             const name = 'Build and test'
             const head_sha = context.payload.pull_request.head.sha
             let status = 'queued'
 
-            if (runs.data.workflow_runs.length === 0) {
+            if (!runs || runs.data.workflow_runs.length === 0) {
               status = 'completed'
               const conclusion = 'action_required'
 

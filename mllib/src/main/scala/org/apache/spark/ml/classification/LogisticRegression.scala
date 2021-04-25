@@ -982,14 +982,14 @@ class LogisticRegression @Since("1.2.0") (
         val adapt = Array.ofDim[Double](numClasses)
         BLAS.javaBLAS.dgemv("N", numClasses, numFeatures, 1.0,
           initialSolution, numClasses, scaledMean, 1, 0.0, adapt, 1)
-        BLAS.getBLAS(numFeatures).daxpy(numClasses, 1.0, adapt, 0, 1,
+        BLAS.javaBLAS.daxpy(numClasses, 1.0, adapt, 0, 1,
           initialSolution, numClasses * numFeatures, 1)
       } else {
-        // orginal `initialCoefWithInterceptArray` is for problem:
+        // original `initialSolution` is for problem:
         // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
         // we should adjust it to the initial solution for problem:
         // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
-        val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, initialSolution, 1, scaledMean, 1)
+        val adapt = BLAS.javaBLAS.ddot(numFeatures, initialSolution, 1, scaledMean, 1)
         initialSolution(numFeatures) += adapt
       }
     }
@@ -1018,14 +1018,14 @@ class LogisticRegression @Since("1.2.0") (
         val adapt = Array.ofDim[Double](numClasses)
         BLAS.javaBLAS.dgemv("N", numClasses, numFeatures, 1.0,
           solution, numClasses, scaledMean, 1, 0.0, adapt, 1)
-        BLAS.getBLAS(numFeatures).daxpy(numClasses, -1.0, adapt, 0, 1,
+        BLAS.javaBLAS.daxpy(numClasses, -1.0, adapt, 0, 1,
           solution, numClasses * numFeatures, 1)
       } else {
         // the final solution is for problem:
         // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
         // we should adjust it back for original problem:
         // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
-        val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, solution, 1, scaledMean, 1)
+        val adapt = BLAS.javaBLAS.ddot(numFeatures, solution, 1, scaledMean, 1)
         solution(numFeatures) -= adapt
       }
     }
