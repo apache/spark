@@ -23,11 +23,13 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.types.{CalendarIntervalType, Decimal, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // The style of textual representation of intervals
@@ -93,20 +95,11 @@ object IntervalUtils {
 
   private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
 
-  private val yearMonthFuzzyPattern = "[^-|+]*?([+|-]?[\\d]+-[\\d]+).*".r
-
   def fromYearMonthString(input: UTF8String): CalendarInterval = {
     if (input == null || input.toString == null) {
       throw new IllegalArgumentException("Interval year-month string must be not null")
     } else {
-      val intervalString = input.trimAll().toString
-      intervalString match {
-        case yearMonthFuzzyPattern(payLoad) =>
-          fromYearMonthString(payLoad)
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Interval string does not match year-month format of 'y-m': $input")
-      }
+      fromYearMonthString(input.trimAll().toString)
     }
   }
 
@@ -128,14 +121,24 @@ object IntervalUtils {
             s"Error parsing interval year-month string: ${e.getMessage}", e)
       }
     }
+
     input.trim match {
       case yearMonthPattern("-", yearStr, monthStr) =>
         toInterval(yearStr, monthStr, -1)
       case yearMonthPattern(_, yearStr, monthStr) =>
         toInterval(yearStr, monthStr, 1)
       case _ =>
-        throw new IllegalArgumentException(
-          s"Interval string does not match year-month format of 'y-m': $input")
+        try {
+          CatalystSqlParser.parseExpression(input) match {
+            case Literal(value: Int, _: YearMonthIntervalType) => new CalendarInterval(value, 0, 0)
+            case Literal(value: CalendarInterval, _: CalendarIntervalType) => value
+            case _ => throw new IllegalArgumentException(
+              s"Interval string does not match year-month format of 'y-m': $input")
+          }
+        } catch {
+          case NonFatal(e) => throw new IllegalArgumentException(
+            s"Interval string does not match year-month format of 'y-m': $input")
+        }
     }
   }
 
