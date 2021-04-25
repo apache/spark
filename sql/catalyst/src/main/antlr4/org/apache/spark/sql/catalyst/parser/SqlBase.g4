@@ -606,7 +606,13 @@ groupByClause
     ;
 
 groupingAnalytics
-    : (ROLLUP | CUBE | GROUPING SETS)  '(' groupingSet (',' groupingSet)* ')'
+    : (ROLLUP | CUBE) '(' groupingSet (',' groupingSet)* ')'
+    | GROUPING SETS '(' groupingElement (',' groupingElement)* ')'
+    ;
+
+groupingElement
+    : groupingAnalytics
+    | groupingSet
     ;
 
 groupingSet

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
@@ -26,6 +26,15 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object SimplifyExtractValueOps extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // One place where this optimization is invalid is an aggregation where the select
+    // list expression is a function of a grouping expression:
+    //
+    // SELECT struct(a,b).a FROM tbl GROUP BY struct(a,b)
+    //
+    // cannot be simplified to SELECT a FROM tbl GROUP BY struct(a,b). So just skip this
+    // optimization for Aggregates (although this misses some cases where the optimization
+    // can be made).
+    case a: Aggregate => a
     case p => p.transformExpressionsUp {
       // Remove redundant field extraction.
       case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>

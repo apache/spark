@@ -18,10 +18,10 @@
 from pyspark import pandas as ps
 from pyspark.pandas import config
 from pyspark.pandas.config import Option, DictWrapper
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class ConfigTest(ReusedSQLTestCase):
+class ConfigTest(PandasOnSparkTestCase):
     def setUp(self):
         config._options_dict["test.config"] = Option(key="test.config", doc="", default="default")
 

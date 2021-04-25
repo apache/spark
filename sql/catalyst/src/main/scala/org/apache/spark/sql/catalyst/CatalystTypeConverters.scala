@@ -304,18 +304,23 @@ object CatalystTypeConverters {
       row.getUTF8String(column).toString
   }
 
-  private object DateConverter extends CatalystTypeConverter[Date, Date, Any] {
-    override def toCatalystImpl(scalaValue: Date): Int = DateTimeUtils.fromJavaDate(scalaValue)
+  private object DateConverter extends CatalystTypeConverter[Any, Date, Any] {
+    override def toCatalystImpl(scalaValue: Any): Int = scalaValue match {
+      case d: Date => DateTimeUtils.fromJavaDate(d)
+      case l: LocalDate => DateTimeUtils.localDateToDays(l)
+      case other => throw new IllegalArgumentException(
+        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          + s"cannot be converted to the ${DateType.sql} type")
+    }
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateTimeUtils.toJavaDate(catalystValue.asInstanceOf[Int])
     override def toScalaImpl(row: InternalRow, column: Int): Date =
       DateTimeUtils.toJavaDate(row.getInt(column))
   }
 
-  private object LocalDateConverter extends CatalystTypeConverter[LocalDate, LocalDate, Any] {
-    override def toCatalystImpl(scalaValue: LocalDate): Int = {
-      DateTimeUtils.localDateToDays(scalaValue)
-    }
+  private object LocalDateConverter extends CatalystTypeConverter[Any, LocalDate, Any] {
+    override def toCatalystImpl(scalaValue: Any): Int =
+      DateConverter.toCatalystImpl(scalaValue)
     override def toScala(catalystValue: Any): LocalDate = {
       if (catalystValue == null) null
       else DateTimeUtils.daysToLocalDate(catalystValue.asInstanceOf[Int])
@@ -324,9 +329,14 @@ object CatalystTypeConverters {
       DateTimeUtils.daysToLocalDate(row.getInt(column))
   }
 
-  private object TimestampConverter extends CatalystTypeConverter[Timestamp, Timestamp, Any] {
-    override def toCatalystImpl(scalaValue: Timestamp): Long =
-      DateTimeUtils.fromJavaTimestamp(scalaValue)
+  private object TimestampConverter extends CatalystTypeConverter[Any, Timestamp, Any] {
+    override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
+      case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+      case i: Instant => DateTimeUtils.instantToMicros(i)
+      case other => throw new IllegalArgumentException(
+        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          + s"cannot be converted to the ${TimestampType.sql} type")
+    }
     override def toScala(catalystValue: Any): Timestamp =
       if (catalystValue == null) null
       else DateTimeUtils.toJavaTimestamp(catalystValue.asInstanceOf[Long])
@@ -334,9 +344,9 @@ object CatalystTypeConverters {
       DateTimeUtils.toJavaTimestamp(row.getLong(column))
   }
 
-  private object InstantConverter extends CatalystTypeConverter[Instant, Instant, Any] {
-    override def toCatalystImpl(scalaValue: Instant): Long =
-      DateTimeUtils.instantToMicros(scalaValue)
+  private object InstantConverter extends CatalystTypeConverter[Any, Instant, Any] {
+    override def toCatalystImpl(scalaValue: Any): Long =
+      TimestampConverter.toCatalystImpl(scalaValue)
     override def toScala(catalystValue: Any): Instant =
       if (catalystValue == null) null
       else DateTimeUtils.microsToInstant(catalystValue.asInstanceOf[Long])

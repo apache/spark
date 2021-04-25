@@ -14,21 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.scheduler
 
-package org.apache.spark.sql.catalyst.optimizer
-
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.annotation.DeveloperApi
 
 /**
- * This rule ensures that [[Aggregate]] nodes contain all required [[GroupingExprRef]]
- * references for optimization phase.
+ * :: DeveloperApi ::
+ * Stores information about an Miscellaneous Process to pass from the scheduler to SparkListeners.
  */
-object EnforceGroupingReferencesInAggregates extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan transform {
-      case a: Aggregate =>
-        Aggregate.withGroupingRefs(a.groupingExpressions, a.aggregateExpressions, a.child)
-    }
-  }
-}
+
+@DeveloperApi
+class MiscellaneousProcessDetails(
+    val hostPort: String,
+    val cores: Int,
+    val logUrlInfo: Map[String, String]) extends Serializable

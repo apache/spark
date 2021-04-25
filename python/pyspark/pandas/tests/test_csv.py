@@ -24,14 +24,14 @@ import pandas as pd
 import numpy as np
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 def normalize_text(s):
     return "\n".join(map(str.strip, s.strip().split("\n")))
 
 
-class CsvTest(ReusedSQLTestCase, TestUtils):
+class CsvTest(PandasOnSparkTestCase, TestUtils):
     def setUp(self):
         self.tmp_dir = tempfile.mkdtemp(prefix=CsvTest.__name__)
 

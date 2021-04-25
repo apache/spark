@@ -198,13 +198,13 @@ SELECT '1' - cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'subtracttimestamps('1', CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: argument 1 requires timestamp type, however, ''1'' is of string type.; line 1 pos 7
+cannot resolve '('1' - CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: argument 1 requires timestamp type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query
 SELECT '1' - cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
-struct<subtractdates(1, CAST(2017-12-11 09:30:00 AS DATE)):day-time interval>
+struct<(1 - CAST(2017-12-11 09:30:00 AS DATE)):day-time interval>
 -- !query output
 NULL
 
@@ -781,7 +781,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) - '1' FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'subtracttimestamps(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP), '1')' due to data type mismatch: argument 2 requires timestamp type, however, ''1'' is of string type.; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) - '1')' due to data type mismatch: argument 2 requires timestamp type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query
