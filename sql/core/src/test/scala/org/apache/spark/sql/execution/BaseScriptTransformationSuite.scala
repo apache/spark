@@ -603,7 +603,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-35220: DayTimeIntervalType/YearMonthIntervalString show different " +
+  test("SPARK-35220: DayTimeIntervalType/YearMonthIntervalType show different " +
     "between hive serde and row format delimited\t") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
