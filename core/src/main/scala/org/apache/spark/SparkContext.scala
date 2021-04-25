@@ -1816,7 +1816,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * Return an array of executors' host name from the block manager.
    */
   def getExecutorHosts: Array[String] = {
-    getExecutorMemoryStatus.map(_._1).toArray
+    // need only host name, not port
+    getExecutorMemoryStatus.map(_._1.split(":")(0)).toArray
   }
 
   /**
