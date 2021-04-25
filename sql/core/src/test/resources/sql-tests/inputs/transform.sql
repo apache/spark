@@ -367,7 +367,7 @@ REDUCE a, b, c
 
 FROM (
   SELECT TRANSFORM(a, b, c)
-   USING 'cat' AS (a, b, c)
+    USING 'cat' AS (a, b, c)
   FROM complex_trans
   CLUSTER BY a
 ) map_output
@@ -386,7 +386,7 @@ REDUCE a, b, c
 
 FROM (
   SELECT TRANSFORM(a, b, c)
-   USING 'cat' AS (a, b, c)
+    USING 'cat' AS (a, b, c)
   FROM complex_trans
   ORDER BY b
 ) map_output
