@@ -1813,14 +1813,6 @@ class SparkContext(config: SparkConf) extends Logging {
   def version: String = SPARK_VERSION
 
   /**
-   * Return an array of executors' host name from the block manager.
-   */
-  def getExecutorHosts: Array[String] = {
-    // need only host name, not port
-    getExecutorMemoryStatus.map(_._1.split(":")(0)).toArray
-  }
-
-  /**
    * Return a map from the block manager to the max memory available for caching and the remaining
    * memory available for caching.
    */
