@@ -2622,6 +2622,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val MERGE_ENABLE_DATASOURCE =
+    buildConf("spark.sql.merge.output2ds.enabled").doc("whether enable auto merge small files for datasource api")
+    .booleanConf.createWithDefault(false)
+
+  val MERGE_AVG_CONDSIZE =
+    buildConf("spark.sql.merge.output.avgcond").doc("trigger merge when avg-file-size of output less than the threshold")
+    .longConf.createWithDefault(128000000)
+
+  val MERGE_AVG_OUTSIZE =
+    buildConf("spark.sql.merge.output.avgoutput").doc("the target avg-file-size after merge end")
+    .longConf.createWithDefault(256000000)
+
   /**
    * Holds information about keys that have been deprecated.
    *

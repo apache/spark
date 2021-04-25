@@ -24,10 +24,10 @@ import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{ProjectExec, SQLExecution, SortExec, SparkPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
@@ -232,6 +232,181 @@ object FileFormatWriter extends Logging {
     }
   }
 
+  def writeRdd(
+                sparkSession: SparkSession,
+                rdd: RDD[InternalRow],
+                fileFormat: FileFormat,
+                committer: FileCommitProtocol,
+                outputSpec: OutputSpec,
+                hadoopConf: Configuration,
+                partitionColumns: Seq[Attribute],
+                bucketSpec: Option[BucketSpec],
+                statsTrackers: Seq[WriteJobStatsTracker],
+                options: Map[String, String])
+  : Set[String] = {
+    val job = Job.getInstance(hadoopConf)
+    job.setOutputKeyClass(classOf[Void])
+    job.setOutputValueClass(classOf[InternalRow])
+    FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
+
+    val partitionSet = AttributeSet(partitionColumns)
+    val dataColumns = outputSpec.outputColumns.filterNot(partitionSet.contains)
+
+    val bucketIdExpression = bucketSpec.map { spec =>
+      val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
+      // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
+      // guarantee the data distribution is same between shuffle and bucketed data source, which
+      // enables us to only shuffle one side when join a bucketed table and a normal one.
+      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
+    }
+
+    val caseInsensitiveOptions = CaseInsensitiveMap(options)
+
+    val dataSchema = dataColumns.toStructType
+    DataSourceUtils.verifySchema(fileFormat, dataSchema)
+    // Note: prepareWrite has side effect. It sets "job".
+    val outputWriterFactory =
+      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
+
+    val description = new WriteJobDescription(
+      uuid = UUID.randomUUID().toString,
+      serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
+      outputWriterFactory = outputWriterFactory,
+      allColumns = outputSpec.outputColumns,
+      dataColumns = dataColumns,
+      partitionColumns = partitionColumns,
+      bucketIdExpression = bucketIdExpression,
+      path = outputSpec.outputPath,
+      customPartitionLocations = outputSpec.customPartitionLocations,
+      maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
+        .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
+      timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
+        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
+      statsTrackers = statsTrackers
+    )
+
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+    committer.setupJob(job)
+
+    try {
+      val jobIdInstant = new Date().getTime
+      val ret = new Array[WriteTaskResult](rdd.partitions.length)
+      sparkSession.sparkContext.runJob(
+        rdd,
+        (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
+          executeTask(
+            description = description,
+            jobIdInstant = jobIdInstant,
+            sparkStageId = taskContext.stageId(),
+            sparkPartitionId = taskContext.partitionId(),
+            sparkAttemptNumber = taskContext.taskAttemptId().toInt & Integer.MAX_VALUE,
+            committer,
+            iterator = iter)
+        },
+        rdd.partitions.indices,
+        (index, res: WriteTaskResult) => {
+          committer.onTaskCommit(res.commitMsg)
+          ret(index) = res
+        })
+
+      val commitMsgs = ret.map(_.commitMsg)
+
+      committer.commitJob(job, commitMsgs)
+      logInfo(s"Write Job ${description.uuid} committed.")
+
+      processStats(description.statsTrackers, ret.map(_.summary.stats))
+      logInfo(s"Finished processing stats for write job ${description.uuid}.")
+
+      // return a set of all the partition paths that were updated during this job
+      ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
+    } catch { case cause: Throwable =>
+      logError(s"Aborting job ${description.uuid}.", cause)
+      committer.abortJob(job)
+      throw new SparkException("Job aborted.", cause)
+    }
+  }
+
+  def writeRdd2(
+                 sparkSession: SparkSession,
+                 rdd: RDD[InternalRow],
+                 fileFormat: FileFormat,
+                 map4Committer: Map[Int,FileCommitProtocol],
+                 committerJobPair:Seq[(FileCommitProtocol,Job)],
+                 outputSpec: OutputSpec,
+                 hadoopConf: Configuration,
+                 partitionColumns: Seq[Attribute],
+                 statsTrackers: Seq[WriteJobStatsTracker],
+                 options: Map[String, String])
+  : Set[String] = {
+    val partitionSet = AttributeSet(partitionColumns)
+    val dataColumns = outputSpec.outputColumns.filterNot(partitionSet.contains)
+    val dataSchema = dataColumns.toStructType
+    val caseInsensitiveOptions = CaseInsensitiveMap(options)
+
+    val job = Job.getInstance(hadoopConf)
+    job.setOutputKeyClass(classOf[Void])
+    job.setOutputValueClass(classOf[InternalRow])
+    // Note: prepareWrite has side effect. It sets "job".
+    val outputWriterFactory =
+      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
+
+    val description = new WriteJobDescription(
+      uuid = UUID.randomUUID().toString,
+      serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
+      outputWriterFactory = outputWriterFactory,
+      allColumns = outputSpec.outputColumns,
+      dataColumns = dataColumns,
+      partitionColumns = partitionColumns,
+      bucketIdExpression = None,
+      path = "",
+      customPartitionLocations = outputSpec.customPartitionLocations,
+      maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
+        .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
+      timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
+        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
+      statsTrackers = statsTrackers
+    )
+
+    // update committer in map4Committer meantime
+    committerJobPair.foreach{pair=>pair._1.setupJob(pair._2)}
+
+    try {
+      val jobIdInstant = new Date().getTime
+      val ret = new Array[WriteTaskResult](rdd.partitions.length)
+      sparkSession.sparkContext.runJob(
+        rdd,
+        (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
+          executeTask4SpecCommitter(
+            description = description,
+            jobIdInstant = jobIdInstant,
+            sparkStageId = taskContext.stageId(),
+            sparkPartitionId = taskContext.partitionId(),
+            sparkAttemptNumber = taskContext.taskAttemptId().toInt & Integer.MAX_VALUE,
+            map4Committer,
+            iterator = iter)
+        },
+        rdd.partitions.indices,
+        (index, res: WriteTaskResult) => {
+          ret(index) = res
+        })
+
+      val commitMsgs = ret.map(_.commitMsg)
+      committerJobPair.foreach{pair=>pair._1.commitJob(pair._2,commitMsgs)}
+      logInfo(s"Write Job ${description.uuid} committed.")
+
+      processStats(description.statsTrackers, ret.map(_.summary.stats))
+      logInfo(s"Finished processing stats for write job ${description.uuid}.")
+
+      // return a set of all the partition paths that were updated during this job
+      ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
+    } catch { case cause: Throwable =>
+      logError(s"Aborting job ${description.uuid}.", cause)
+      committerJobPair.foreach{pair=>pair._1.abortJob(pair._2)}
+      throw new SparkException("Job aborted.", cause)
+    }
+  }
+
   /** Writes data out in a single Spark task. */
   private def executeTask(
       description: WriteJobDescription,
@@ -289,6 +464,62 @@ object FileFormatWriter extends Logging {
       case e: FetchFailedException =>
         throw e
       case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
+        // If any output file to write already exists, it does not make sense to re-run this task.
+        // We throw the exception and let Executor throw ExceptionFailure to abort the job.
+        throw new TaskOutputFileAlreadyExistException(f)
+      case t: Throwable =>
+        throw new SparkException("Task failed while writing rows.", t)
+    }
+  }
+
+  private def executeTask4SpecCommitter(
+                                         description: WriteJobDescription,
+                                         jobIdInstant: Long,
+                                         sparkStageId: Int,
+                                         sparkPartitionId: Int,
+                                         sparkAttemptNumber: Int,
+                                         map4Committer: Map[Int,FileCommitProtocol],
+                                         iterator: Iterator[InternalRow]): WriteTaskResult = {
+
+    val jobId = SparkHadoopWriterUtils.createJobID(new Date(jobIdInstant), sparkStageId)
+    val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
+    val taskAttemptId = new TaskAttemptID(taskId, sparkAttemptNumber)
+
+    // Set up the attempt context required to use in the output committer.
+    val taskAttemptContext: TaskAttemptContext = {
+      // Set up the configuration object
+      val hadoopConf = description.serializableHadoopConf.value
+      hadoopConf.set("mapreduce.job.id", jobId.toString)
+      hadoopConf.set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
+      hadoopConf.set("mapreduce.task.attempt.id", taskAttemptId.toString)
+      hadoopConf.setBoolean("mapreduce.task.ismap", true)
+      hadoopConf.setInt("mapreduce.task.partition", 0)
+
+      new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
+    }
+
+    logInfo("handle partition id " + sparkPartitionId)
+    val committer = map4Committer(sparkPartitionId)
+    committer.setupTask(taskAttemptContext)
+    val dataWriter = new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
+    try {
+      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+        // Execute the task to write rows out and commit the task.
+        while (iterator.hasNext) {
+          dataWriter.write(iterator.next())
+        }
+        dataWriter.commit()
+      })(catchBlock = {
+        // If there is an error, abort the task
+        dataWriter.abort()
+        logError(s"Job $jobId aborted.")
+      }, finallyBlock = {
+        dataWriter.close()
+      })
+    } catch {
+      case e: FetchFailedException =>
+        throw e
+      case f: FileAlreadyExistsException =>
         // If any output file to write already exists, it does not make sense to re-run this task.
         // We throw the exception and let Executor throw ExceptionFailure to abort the job.
         throw new TaskOutputFileAlreadyExistException(f)
