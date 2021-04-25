@@ -775,8 +775,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       checkReusedExchangeOutputPartitioningRewrite(df1.union(df2), classOf[HashPartitioning])
 
       // ReusedExchange is RangePartitioning
-      val df3 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
-      val df4 = Seq(1 -> "a").toDF("i", "j").orderBy($"i")
+      val df3 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").orderBy($"i")
+      val df4 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").orderBy($"i")
       checkReusedExchangeOutputPartitioningRewrite(df3.union(df4), classOf[RangePartitioning])
 
       // InMemoryTableScan is HashPartitioning
