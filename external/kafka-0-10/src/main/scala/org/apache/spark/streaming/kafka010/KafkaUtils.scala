@@ -60,6 +60,7 @@ object KafkaUtils extends Logging {
           "If you want to prefer brokers, you must provide a mapping using PreferFixed " +
           "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you.")
       case PreferConsistent => ju.Collections.emptyMap[TopicPartition, String]()
+      case PreferRandom => PreferRandom.random(sc.getExecutorHosts)
       case PreferFixed(hostMap) => hostMap
     }
     val kp = new ju.HashMap[String, Object](kafkaParams)

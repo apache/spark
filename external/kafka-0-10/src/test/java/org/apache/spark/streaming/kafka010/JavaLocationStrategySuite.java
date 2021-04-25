@@ -54,6 +54,10 @@ public class JavaLocationStrategySuite implements Serializable {
     final LocationStrategy c5 = LocationStrategies.PreferFixed(hosts);
     final LocationStrategy c6 = LocationStrategies.PreferFixed(sHosts);
     Assert.assertEquals(c5, c6);
+
+    final LocationStrategy c7 = LocationStrategies.PreferRandom();
+    final LocationStrategy c8 = LocationStrategies.PreferRandom();
+    Assert.assertSame(c7, c8);
   }
 
 }
