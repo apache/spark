@@ -37,7 +37,7 @@ private case object PreferBrokers extends LocationStrategy
 
 private case object PreferConsistent extends LocationStrategy
 
-private case object PreferRandom extends LocationStrategy {
+private case class PreferRandom(hosts: Array[String]) extends LocationStrategy {
   class RandomLocationStrategyMap(hosts: Array[String])
     extends ju.HashMap[TopicPartition, String] {
     override def get(key: Object): String = {
@@ -45,7 +45,7 @@ private case object PreferRandom extends LocationStrategy {
     }
   }
 
-  def random(hosts: Array[String]): RandomLocationStrategyMap = {
+  def random: RandomLocationStrategyMap = {
     new RandomLocationStrategyMap(hosts)
   }
 }
@@ -68,12 +68,11 @@ object LocationStrategies {
   def PreferConsistent: LocationStrategy =
     org.apache.spark.streaming.kafka010.PreferConsistent
 
-
   /**
    * Use this in some cases, it will randomly distribute partitions across all executors.
    */
-  def PreferRandom: LocationStrategy =
-    org.apache.spark.streaming.kafka010.PreferRandom
+  def PreferRandom(hosts: Array[String]): LocationStrategy =
+    org.apache.spark.streaming.kafka010.PreferRandom(hosts)
 
   /**
    * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
