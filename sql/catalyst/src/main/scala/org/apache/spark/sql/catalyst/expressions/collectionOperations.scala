@@ -2484,8 +2484,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
 
       The start and stop expressions must resolve to the same type.
       If start and stop expressions resolve to the 'date' or 'timestamp' type
-      then the step expression must resolve to the 'interval' type, otherwise to the same type
-      as the start and stop expressions.
+      then the step expression must resolve to the 'interval' or 'year-month' or 'day-time' type,
+      otherwise to the same type as the start and stop expressions.
   """,
   arguments = """
     Arguments:
@@ -2568,7 +2568,13 @@ case class Sequence(
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        s"$prettyName only supports integral, timestamp or date types")
+        s"""
+           |$prettyName uses the wrong parameter type. The parameter type must conform to:
+           |1. The start and stop expressions must resolve to the same type.
+           |2. If start and stop expressions resolve to the 'date' or 'timestamp' type
+           |then the step expression must resolve to the 'interval' or 'year-month' or 'day-time' type,
+           |otherwise to the same type as the start and stop expressions.
+         """.stripMargin)
     }
   }
 
@@ -2754,6 +2760,8 @@ object Sequence {
       YearMonthIntervalType,
       Period.of(0, 1, 0))
 
+    val intervalType: DataType = YearMonthIntervalType
+
     def splitStep(input: Any): (Int, Int, Long) = {
       (input.asInstanceOf[Int], 0, 0)
     }
@@ -2776,6 +2784,8 @@ object Sequence {
       (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
       DayTimeIntervalType,
       Duration.ofDays(1))
+
+    val intervalType: DataType = DayTimeIntervalType
 
     def splitStep(input: Any): (Int, Int, Long) = {
       (0, 0, input.asInstanceOf[Long])
@@ -2800,6 +2810,8 @@ object Sequence {
       CalendarIntervalType,
       new CalendarInterval(0, 1, 0))
 
+    val intervalType: DataType = CalendarIntervalType
+
     def splitStep(input: Any): (Int, Int, Long) = {
       val step = input.asInstanceOf[CalendarInterval]
       (step.months, step.days, step.microseconds)
@@ -2822,10 +2834,11 @@ object Sequence {
     val defaultStep: DefaultStep
 
     private val backedSequenceImpl = new IntegralSequenceImpl[T](dt)
-    private val microsPerDay = HOURS_PER_DAY * MICROS_PER_HOUR
     // We choose a minimum days(28) in one month to calculate the `intervalStepInMicros`
     // in order to make sure the estimated array length is long enough
-    private val microsPerMonth = 28 * microsPerDay
+    private val microsPerMonth = 28 * MICROS_PER_DAY
+
+    protected val intervalType: DataType
 
     protected def splitStep(input: Any): (Int, Int, Long)
 
@@ -2836,7 +2849,7 @@ object Sequence {
 
       if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
         throw new IllegalArgumentException(
-          "sequence step must be a day interval if start and end values are dates")
+          s"sequence step must be a day ${intervalType.typeName} if start and end values are dates")
       }
 
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
@@ -2851,9 +2864,10 @@ object Sequence {
         // To estimate the resulted array length we need to make assumptions
         // about a month length in days and a day length in microseconds
         val intervalStepInMicros =
-          stepMicros + stepMonths * microsPerMonth + stepDays * microsPerDay
+          stepMicros + stepMonths * microsPerMonth + stepDays * MICROS_PER_DAY
         val startMicros: Long = num.toLong(start) * scale
         val stopMicros: Long = num.toLong(stop) * scale
+
         val maxEstimatedArrayLength =
           getSequenceLength(startMicros, stopMicros, intervalStepInMicros)
 
@@ -2902,7 +2916,7 @@ object Sequence {
       val sequenceLengthCode =
         s"""
            |final long $intervalInMicros =
-           |  $stepMicros + $stepMonths * ${microsPerMonth}L + $stepDays * ${microsPerDay}L;
+           |  $stepMicros + $stepMonths * ${microsPerMonth}L + $stepDays * ${MICROS_PER_DAY}L;
            |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
           """.stripMargin
 
@@ -2910,7 +2924,7 @@ object Sequence {
         s"""
            |if ($stepMonths == 0 && $stepDays == 0) {
            |  throw new IllegalArgumentException(
-           |    "sequence step must be a day interval if start and end values are dates");
+           |    "sequence step must be a day ${intervalType.typeName} if start and end values are dates");
            |}
           """.stripMargin
         } else {
