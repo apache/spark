@@ -571,9 +571,9 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     >>> model.getMaxBlockSizeInMB()
     0.0
     >>> model.coefficients
-    DenseVector([0.0, -0.2792, -0.1833])
+    DenseVector([0.0, -1.0319, -0.5159])
     >>> model.intercept
-    1.0206118982229047
+    2.579645978780695
     >>> model.numClasses
     2
     >>> model.numFeatures
@@ -582,12 +582,12 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     >>> model.predict(test0.head().features)
     1.0
     >>> model.predictRaw(test0.head().features)
-    DenseVector([-1.4831, 1.4831])
+    DenseVector([-4.1274, 4.1274])
     >>> result = model.transform(test0).head()
     >>> result.newPrediction
     1.0
     >>> result.rawPrediction
-    DenseVector([-1.4831, 1.4831])
+    DenseVector([-4.1274, 4.1274])
     >>> svm_path = temp_path + "/svm"
     >>> svm.save(svm_path)
     >>> svm2 = LinearSVC.load(svm_path)
