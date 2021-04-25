@@ -110,6 +110,7 @@ object IntervalUtils {
    */
   def fromYearMonthString(input: String): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
+    val errorPrefix = "Error parsing interval year-month string"
     def toInterval(yearStr: String, monthStr: String, sign: Int): CalendarInterval = {
       try {
         val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
@@ -118,7 +119,7 @@ object IntervalUtils {
       } catch {
         case NonFatal(e) =>
           throw new IllegalArgumentException(
-            s"Error parsing interval year-month string: ${e.getMessage}", e)
+            s"$errorPrefix: ${e.getMessage}", e)
       }
     }
 
@@ -136,8 +137,13 @@ object IntervalUtils {
               s"Interval string does not match year-month format of 'y-m': $input")
           }
         } catch {
-          case NonFatal(e) => throw new IllegalArgumentException(
-            s"Interval string does not match year-month format of 'y-m': $input")
+          case NonFatal(e) =>
+            if (e.getMessage.contains(errorPrefix)) {
+              throw new IllegalArgumentException(e.getMessage)
+            } else {
+              throw new IllegalArgumentException(
+                s"Interval string does not match year-month format of 'y-m': $input")
+            }
         }
     }
   }
