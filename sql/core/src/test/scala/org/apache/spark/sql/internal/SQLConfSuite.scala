@@ -117,6 +117,21 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test(s"SPARK-35168: ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} should respect" +
+      s" ${SQLConf.SHUFFLE_PARTITIONS.key}") {
+    spark.sessionState.conf.clear()
+    try {
+      sql(s"SET ${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key}=true")
+      sql(s"SET ${SQLConf.COALESCE_PARTITIONS_ENABLED.key}=true")
+      sql(s"SET ${SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key}=1")
+      sql(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=2")
+      checkAnswer(sql(s"SET ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}"),
+        Row(SQLConf.SHUFFLE_PARTITIONS.key, "2"))
+    } finally {
+      spark.sessionState.conf.clear()
+    }
+  }
+
   test("SPARK-31234: reset will not change static sql configs and spark core configs") {
     val conf = spark.sparkContext.getConf.getAll.toMap
     val appName = conf.get("spark.app.name")
