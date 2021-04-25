@@ -25,6 +25,8 @@ import org.apache.spark.sql.connector.CustomMetric
 object CustomMetrics {
   private[spark] val V2_CUSTOM = "v2Custom"
 
+  private[spark] val numRowsPerUpdate = 100L
+
   /**
    * Given a class name, builds and returns a metric type for a V2 custom metric class
    * `CustomMetric`.

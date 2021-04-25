@@ -22,7 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.ContinuousPartitionReaderFactory
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.NextIterator
 
@@ -92,10 +92,18 @@ class ContinuousDataSourceRDD(
 
     val partitionReader = readerForPartition.getPartitionReader()
     new NextIterator[InternalRow] {
+      private var numRow = 0L
+
       override def getNext(): InternalRow = {
-        partitionReader.currentMetricsValues.foreach { metric =>
-          customMetrics(metric.name()).set(metric.value())
+        if (numRow % CustomMetrics.numRowsPerUpdate == 0) {
+          partitionReader.currentMetricsValues.foreach { metric =>
+            assert(customMetrics.contains(metric.name()),
+              s"Custom metrics ${customMetrics.keys.mkString(", ")} do not contain the metric " +
+                s"${metric.name()}")
+            customMetrics(metric.name()).set(metric.value())
+          }
         }
+        numRow += 1
         readerForPartition.next() match {
           case null =>
             finished = true
