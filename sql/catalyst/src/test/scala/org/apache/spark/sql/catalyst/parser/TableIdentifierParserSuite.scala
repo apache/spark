@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{SQLKeywordUtils, TableIdentifier}
 import org.apache.spark.sql.internal.SQLConf
 
