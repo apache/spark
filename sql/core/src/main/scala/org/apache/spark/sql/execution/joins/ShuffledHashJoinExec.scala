@@ -41,7 +41,8 @@ case class ShuffledHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan)
+    right: SparkPlan,
+    isSkewJoin: Boolean = false)
   extends HashJoin with ShuffledJoin {
 
   override lazy val metrics = Map(
@@ -56,6 +57,16 @@ case class ShuffledHashJoinExec(
   override def outputOrdering: Seq[SortOrder] = joinType match {
     case FullOuter => Nil
     case _ => super.outputOrdering
+  }
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    if (isSkewJoin) {
+      // We re-arrange the shuffle partitions to deal with skew join, and the new children
+      // partitioning doesn't satisfy `HashClusteredDistribution`.
+      UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
+    } else {
+      super.requiredChildDistribution
+    }
   }
 
   /**

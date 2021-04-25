@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClustered
  * using the join keys.
  */
 trait ShuffledJoin extends BaseJoinExec {
+  def isSkewJoin: Boolean
+
   override def requiredChildDistribution: Seq[Distribution] = {
     HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
   }
