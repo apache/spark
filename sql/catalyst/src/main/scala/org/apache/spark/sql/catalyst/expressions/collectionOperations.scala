@@ -2572,8 +2572,8 @@ case class Sequence(
            |$prettyName uses the wrong parameter type. The parameter type must conform to:
            |1. The start and stop expressions must resolve to the same type.
            |2. If start and stop expressions resolve to the 'date' or 'timestamp' type
-           |then the step expression must resolve to the 'interval' or 'year-month' or 'day-time' type,
-           |otherwise to the same type as the start and stop expressions.
+           |then the step expression must resolve to the 'interval' or 'year-month' or
+           |'day-time' type, otherwise to the same type as the start and stop expressions.
          """.stripMargin)
     }
   }
@@ -2924,9 +2924,10 @@ object Sequence {
         s"""
            |if ($stepMonths == 0 && $stepDays == 0) {
            |  throw new IllegalArgumentException(
-           |    "sequence step must be a day ${intervalType.typeName} if start and end values are dates");
+           |    "sequence step must be a day ${intervalType.typeName} " +
+           |    "if start and end values are dates");
            |}
-          """.stripMargin
+         """.stripMargin
         } else {
           ""
         }
