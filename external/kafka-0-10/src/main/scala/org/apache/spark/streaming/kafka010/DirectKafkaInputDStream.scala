@@ -17,20 +17,22 @@
 
 package org.apache.spark.streaming.kafka010
 
-import org.apache.kafka.clients.consumer._
-import org.apache.kafka.common.TopicPartition
-import org.apache.spark.internal.Logging
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.scheduler.rate.RateEstimator
-import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
-import org.apache.spark.streaming.{StreamingContext, Time}
-
+import java.{ util => ju }
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
-import java.{util => ju}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
+import org.apache.kafka.clients.consumer._
+import org.apache.kafka.common.TopicPartition
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{StreamingContext, Time}
+import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
+import org.apache.spark.streaming.scheduler.rate.RateEstimator
 
 /**
  *  A DStream where

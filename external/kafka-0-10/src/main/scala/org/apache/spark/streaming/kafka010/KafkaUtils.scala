@@ -17,17 +17,18 @@
 
 package org.apache.spark.streaming.kafka010
 
+import java.{ util => ju }
+
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
+
 import org.apache.spark.SparkContext
-import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.api.java.{ JavaInputDStream, JavaStreamingContext }
 import org.apache.spark.streaming.dstream._
-
-import java.{util => ju}
 
 /**
  * object for constructing Kafka streams and RDDs
