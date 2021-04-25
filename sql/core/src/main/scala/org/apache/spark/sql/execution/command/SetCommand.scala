@@ -138,7 +138,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
             s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
         Seq(Row(
           SQLConf.SHUFFLE_PARTITIONS.key,
-          sparkSession.sessionState.conf.numShufflePartitions.toString))
+          sparkSession.sessionState.conf.defaultNumShufflePartitions.toString))
       }
       (keyValueOutput, runFunc)
 
