@@ -96,6 +96,8 @@ object EvaluatePython {
       case c: Short => c.toByte
       case c: Int => c.toByte
       case c: Long => c.toByte
+      case c: Float => c.toByte
+      case c: Double => c.toByte
     }
 
     case ShortType => (obj: Any) => nullSafeConvert(obj) {
@@ -103,6 +105,8 @@ object EvaluatePython {
       case c: Short => c
       case c: Int => c.toShort
       case c: Long => c.toShort
+      case c: Float => c.toShort
+      case c: Double => c.toShort
     }
 
     case IntegerType => (obj: Any) => nullSafeConvert(obj) {
@@ -110,6 +114,8 @@ object EvaluatePython {
       case c: Short => c.toInt
       case c: Int => c
       case c: Long => c.toInt
+      case c: Float => c.toInt
+      case c: Double => c.toInt
     }
 
     case LongType => (obj: Any) => nullSafeConvert(obj) {
@@ -117,16 +123,26 @@ object EvaluatePython {
       case c: Short => c.toLong
       case c: Int => c.toLong
       case c: Long => c
+      case c: Float => c.toLong
+      case c: Double => c.toLong
     }
 
     case FloatType => (obj: Any) => nullSafeConvert(obj) {
       case c: Float => c
       case c: Double => c.toFloat
+      case c: Byte => c.toFloat
+      case c: Short => c.toFloat
+      case c: Int => c.toFloat
+      case c: Long => c.toFloat
     }
 
     case DoubleType => (obj: Any) => nullSafeConvert(obj) {
       case c: Float => c.toDouble
       case c: Double => c
+      case c: Byte => c.toDouble
+      case c: Short => c.toDouble
+      case c: Int => c.toDouble
+      case c: Long => c.toDouble
     }
 
     case dt: DecimalType => (obj: Any) => nullSafeConvert(obj) {
