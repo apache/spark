@@ -15,30 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.metric
+package org.apache.spark.sql.connector.metric;
 
-import org.apache.spark.sql.connector.metric.CustomMetric
+import org.apache.spark.annotation.Evolving;
 
-object CustomMetrics {
-  private[spark] val V2_CUSTOM = "v2Custom"
+import java.util.Arrays;
+import java.text.DecimalFormat;
 
-  /**
-   * Given a class name, builds and returns a metric type for a V2 custom metric class
-   * `CustomMetric`.
-   */
-  def buildV2CustomMetricTypeName(customMetric: CustomMetric): String = {
-    s"${V2_CUSTOM}_${customMetric.getClass.getCanonicalName}"
-  }
-
-  /**
-   * Given a V2 custom metric type name, this method parses it and returns the corresponding
-   * `CustomMetric` class name.
-   */
-  def parseV2CustomMetricType(metricType: String): Option[String] = {
-    if (metricType.startsWith(s"${V2_CUSTOM}_")) {
-      Some(metricType.drop(V2_CUSTOM.length + 1))
+/**
+ * Built-in `CustomMetric` that computes average of metric values. Note that please extend this
+ * class and override `name` and `description` to create your custom metric for real usage.
+ *
+ * @since 3.2.0
+ */
+@Evolving
+public abstract class CustomAvgMetric implements CustomMetric {
+  @Override
+  public String aggregateTaskMetrics(long[] taskMetrics) {
+    if (taskMetrics.length > 0) {
+      double average = ((double)Arrays.stream(taskMetrics).sum()) / taskMetrics.length;
+      return new DecimalFormat("#0.000").format(average);
     } else {
-      None
+      return "0";
     }
   }
 }
