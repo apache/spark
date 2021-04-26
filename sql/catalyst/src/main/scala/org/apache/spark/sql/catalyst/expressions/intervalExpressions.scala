@@ -430,6 +430,9 @@ case class DivideYMInterval(
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
+    println(this)
+    println(num)
+    println(num.getClass)
     checkDivideOverflow(interval.asInstanceOf[Int], num)
     evalFunc(interval.asInstanceOf[Int], num)
   }
@@ -484,6 +487,7 @@ case class DivideDTInterval(
   def checkDivideOverflow(month: Long, num: Any): Unit = {
     if (month == Long.MinValue) {
       num match {
+        case l: Long if l == -1L => throw QueryExecutionErrors.overflowInIntegralDivideError()
         case integer: Integer if integer.intValue() == -1 =>
           throw QueryExecutionErrors.overflowInIntegralDivideError()
         case _ =>

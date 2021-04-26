@@ -1290,7 +1290,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0
 struct<>
 -- !query output
 java.lang.ArithmeticException
-Overflow in integral divide.
+Overflow
 
 
 -- !query
@@ -1299,7 +1299,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0D
 struct<>
 -- !query output
 java.lang.ArithmeticException
-Overflow in integral divide.
+not in range
 
 
 -- !query
@@ -1342,7 +1342,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0
 struct<>
 -- !query output
 java.lang.ArithmeticException
-Overflow in integral divide.
+Overflow
 
 
 -- !query
@@ -1351,4 +1351,4 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0D
 struct<>
 -- !query output
 java.lang.ArithmeticException
-Overflow in integral divide.
+not in range
