@@ -357,15 +357,6 @@ GROUP BY b;
 
 -- SPARK-33985: TRANSFORM with CLUSTER BY/ORDER BY/SORT BY
 FROM (
-  FROM complex_trans
-  MAP a, b
-    USING 'cat' AS (a, b)
-  CLUSTER BY a
-) map_output
-REDUCE a, b
-  USING 'cat' AS (a, b);
-
-FROM (
   SELECT TRANSFORM(a, b)
     USING 'cat' AS (a, b)
   FROM complex_trans
@@ -373,16 +364,6 @@ FROM (
 ) map_output
 SELECT TRANSFORM(a, b)
   USING 'cat' AS (a, b);
-
-FROM (
-  FROM complex_trans
-  MAP a, b
-    USING 'cat' AS (a, b)
-  ORDER BY a
-) map_output
-REDUCE a, b
-  USING 'cat' AS (a, b);
-
 
 FROM (
   SELECT TRANSFORM(a, b)
