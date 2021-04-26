@@ -438,19 +438,33 @@ case class DivideYMInterval(
     case LongType =>
       val math = classOf[LongMath].getName
       val javaType = CodeGenerator.javaType(dataType)
-      defineCodeGen(ctx, ev, (m, n) =>
+      val micros = left.genCode(ctx)
+      val num = right.genCode(ctx)
+      val checkIntegralDivideOverflow =
+        s"""
+           |if (${micros.value} == ${Int.MinValue}L && ${num.value} == -1L)
+           |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+           |""".stripMargin
+      nullSafeCodeGen(ctx, ev, (m, n) =>
         // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit to `Int`.
         // Casting to `Int` is safe here.
         s"""
-           |checkDivideOverflow($m, $n);
-           |($javaType)($math.divide($m, $n, java.math.RoundingMode.HALF_UP))
+           |$checkIntegralDivideOverflow
+           |${ev.value} = ($javaType)($math.divide($m, $n, java.math.RoundingMode.HALF_UP));
         """.stripMargin)
     case _: IntegralType =>
       val math = classOf[IntMath].getName
-      defineCodeGen(ctx, ev, (m, n) =>
+      val micros = left.genCode(ctx)
+      val num = right.genCode(ctx)
+      val checkIntegralDivideOverflow =
         s"""
-           |checkDivideOverflow($m, $n);
-           |$math.divide($m, $n, java.math.RoundingMode.HALF_UP)
+           |if (${micros.value} == ${Int.MinValue}L && ${num.value} == -1L)
+           |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+           |""".stripMargin
+      nullSafeCodeGen(ctx, ev, (m, n) =>
+        s"""
+           |$checkIntegralDivideOverflow
+           |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
         """.stripMargin)
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
@@ -511,10 +525,18 @@ case class DivideDTInterval(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
     case _: IntegralType =>
       val math = classOf[LongMath].getName
-      defineCodeGen(ctx, ev, (m, n) =>
+      val micros = left.genCode(ctx)
+      val num = right.genCode(ctx)
+      val checkIntegralDivideOverflow =
         s"""
-           |checkDivideOverflow($m, $n);
-           |$math.divide($m, $n, java.math.RoundingMode.HALF_UP)
+           |if (${micros.value} == ${Long.MinValue}L && ${num.value} == -1L)
+           |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+           |""".stripMargin
+
+      nullSafeCodeGen(ctx, ev, (m, n) =>
+      s"""
+           |$checkIntegralDivideOverflow
+           |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
         """.stripMargin)
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
