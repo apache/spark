@@ -221,7 +221,7 @@ object BLASBenchmark extends BenchmarkBase {
       val beta = rnd.nextDouble
       val y = Array.fill(n) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("dspmv[U]", n, iters,
+      val benchmark = new Benchmark("dspmv[U]", n * (n + 1) / 2, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -249,7 +249,7 @@ object BLASBenchmark extends BenchmarkBase {
       val x = Array.fill(n) { rnd.nextDouble }
       val a = Array.fill(n * (n + 1) / 2) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("dspr[U]", n, iters,
+      val benchmark = new Benchmark("dspr[U]", n * (n + 1) / 2, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -277,7 +277,7 @@ object BLASBenchmark extends BenchmarkBase {
       val x = Array.fill(n) { rnd.nextDouble }
       val a = Array.fill(n * n) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("dsyr[U]", n, iters,
+      val benchmark = new Benchmark("dsyr[U]", n * (n + 1) / 2, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -309,7 +309,7 @@ object BLASBenchmark extends BenchmarkBase {
       val beta = rnd.nextDouble
       val y = Array.fill(m) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("dgemv[N]", n, iters,
+      val benchmark = new Benchmark("dgemv[N]", m * n, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -341,7 +341,7 @@ object BLASBenchmark extends BenchmarkBase {
       val beta = rnd.nextDouble
       val y = Array.fill(n) { rnd.nextDouble }
 
-      val benchmark = new Benchmark("dgemv[T]", n, iters,
+      val benchmark = new Benchmark("dgemv[T]", m * n, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -373,7 +373,7 @@ object BLASBenchmark extends BenchmarkBase {
       val beta = rnd.nextFloat
       val y = Array.fill(m) { rnd.nextFloat }
 
-      val benchmark = new Benchmark("sgemv[N]", n, iters,
+      val benchmark = new Benchmark("sgemv[N]", m * n, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -405,7 +405,7 @@ object BLASBenchmark extends BenchmarkBase {
       val beta = rnd.nextFloat
       val y = Array.fill(n) { rnd.nextFloat }
 
-      val benchmark = new Benchmark("sgemv[T]", n, iters,
+      val benchmark = new Benchmark("sgemv[T]", m * n, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -440,7 +440,7 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextDouble }
       var ldc = m
 
-      val benchmark = new Benchmark("dgemm[N,N]", m*n, iters,
+      val benchmark = new Benchmark("dgemm[N,N]", m * n * k, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -475,7 +475,7 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextDouble }
       var ldc = m
 
-      val benchmark = new Benchmark("dgemm[N,T]", m*n, iters,
+      val benchmark = new Benchmark("dgemm[N,T]", m * n * k, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -510,7 +510,7 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextDouble }
       var ldc = m
 
-      val benchmark = new Benchmark("dgemm[T,N]", m*n, iters,
+      val benchmark = new Benchmark("dgemm[T,N]", m * n * k, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -545,7 +545,7 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextDouble }
       var ldc = m
 
-      val benchmark = new Benchmark("dgemm[T,T]", m*n, iters,
+      val benchmark = new Benchmark("dgemm[T,T]", m * n * k, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -580,7 +580,7 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextFloat }
       var ldc = m
 
-      val benchmark = new Benchmark("sgemm[N,N]", m*n, iters,
+      val benchmark = new Benchmark("sgemm[N,N]", m * n * k, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -615,7 +615,7 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextFloat }
       var ldc = m
 
-      val benchmark = new Benchmark("sgemm[N,T]", m*n, iters,
+      val benchmark = new Benchmark("sgemm[N,T]", m * n * k, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -650,7 +650,7 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextFloat }
       var ldc = m
 
-      val benchmark = new Benchmark("sgemm[T,N]", m*n, iters,
+      val benchmark = new Benchmark("sgemm[T,N]", m * n * k, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
@@ -685,7 +685,7 @@ object BLASBenchmark extends BenchmarkBase {
       val c = Array.fill(m * n) { rnd.nextFloat }
       var ldc = m
 
-      val benchmark = new Benchmark("sgemm[T,T]", m*n, iters,
+      val benchmark = new Benchmark("sgemm[T,T]", m * n * k, iters,
                                     warmupTime = 30.seconds,
                                     minTime = 30.seconds,
                                     output = output)
