@@ -12,16 +12,16 @@ CREATE OR REPLACE TEMPORARY VIEW script_trans AS SELECT * FROM VALUES
 AS script_trans(a, b, c);
 
 CREATE OR REPLACE TEMPORARY VIEW complex_trans AS SELECT * FROM VALUES
-(1, 2, 4),
-(1, 1, 7),
-(2, 1, 9),
-(2, 3, 2),
-(3, 1, 1),
-(2, 2, 5),
-(3, 2, 8),
-(1, 3, 5),
-(3, 3, 10)
-as complex_trans(a, b, c);
+(1, 1),
+(1, 1),
+(2, 2),
+(2, 2),
+(3, 3),
+(2, 2),
+(3, 3),
+(1, 1),
+(3, 3)
+as complex_trans(a, b);
 
 SELECT TRANSFORM(a)
 USING 'cat' AS (a)
@@ -358,37 +358,37 @@ GROUP BY b;
 -- SPARK-33985 TRANSFORM with CLUSTER BY/ORDER BY/SORT BY
 FROM (
   FROM complex_trans
-  MAP a, b, c
-    USING 'cat' AS (a, b, c)
+  MAP a, b
+    USING 'cat' AS (a, b)
   CLUSTER BY a
 ) map_output
-REDUCE a, b, c
-  USING 'cat' AS (a, b, b);
+REDUCE a, b
+  USING 'cat' AS (a, b);
 
 FROM (
-  SELECT TRANSFORM(a, b, c)
-    USING 'cat' AS (a, b, c)
+  SELECT TRANSFORM(a, b)
+    USING 'cat' AS (a, b)
   FROM complex_trans
   CLUSTER BY a
 ) map_output
-SELECT TRANSFORM(a, b, c)
-  USING 'cat' AS (a, b, b);
+SELECT TRANSFORM(a, b)
+  USING 'cat' AS (a, b);
 
 FROM (
   FROM complex_trans
-  MAP a, b, c
-    USING 'cat' AS (a, b, c)
-  ORDER BY b
+  MAP a, b
+    USING 'cat' AS (a, b)
+  ORDER BY a
 ) map_output
-REDUCE a, b, c
-  USING 'cat' AS (a, b, b);
+REDUCE a, b
+  USING 'cat' AS (a, b);
 
 
 FROM (
-  SELECT TRANSFORM(a, b, c)
-    USING 'cat' AS (a, b, c)
+  SELECT TRANSFORM(a, b)
+    USING 'cat' AS (a, b)
   FROM complex_trans
-  ORDER BY b
+  ORDER BY a
 ) map_output
-SELECT TRANSFORM(a, b, c)
-  USING 'cat' AS (a, b, b);
+SELECT TRANSFORM(a, b)
+  USING 'cat' AS (a, b);
