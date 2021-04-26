@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import org.apache.spark.SparkFunSuite
-import org.mockito.Mockito
-
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import java.util.concurrent.atomic.AtomicBoolean
+
+import org.mockito.Mockito
+
+import org.apache.spark.SparkFunSuite
 
 class JDBCRDDSuite extends SparkFunSuite {
 
