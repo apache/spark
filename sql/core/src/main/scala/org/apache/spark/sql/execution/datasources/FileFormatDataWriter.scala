@@ -276,14 +276,13 @@ abstract class BaseDynamicPartitionDataWriter(
   }
 
   /**
-   * Increase the file counter and open a new OutputWriter.
-   * This is used when number of records records exceeding limit.
+   * Open a new output writer when number of records exceeding limit.
    *
    * @param partitionValues the partition which all tuples being written by this `OutputWriter`
    *                        belong to
    * @param bucketId the bucket which all tuples being written by this `OutputWriter` belong to
    */
-  protected def increaseFileCounter(
+  protected def renewCurrentWriterIfTooManyRecords(
       partitionValues: Option[InternalRow],
       bucketId: Option[Int]): Unit = {
     // Exceeded the threshold in terms of the number of records per file.
@@ -339,7 +338,7 @@ class DynamicPartitionDataSingleWriter(
       renewCurrentWriter(currentPartitionValues, currentBucketId, closeCurrentWriter = true)
     } else if (description.maxRecordsPerFile > 0 &&
       recordsInFile >= description.maxRecordsPerFile) {
-      increaseFileCounter(currentPartitionValues, currentBucketId)
+      renewCurrentWriterIfTooManyRecords(currentPartitionValues, currentBucketId)
     }
     writeRecord(record)
   }
@@ -442,7 +441,7 @@ class DynamicPartitionDataConcurrentWriter(
 
     if (description.maxRecordsPerFile > 0 &&
       recordsInFile >= description.maxRecordsPerFile) {
-      increaseFileCounter(currentWriterId.partitionValues, currentWriterId.bucketId)
+      renewCurrentWriterIfTooManyRecords(currentWriterId.partitionValues, currentWriterId.bucketId)
       // Update writer status in concurrent writers map, as a new writer is created.
       updateCurrentWriterStatusInMap()
     }
