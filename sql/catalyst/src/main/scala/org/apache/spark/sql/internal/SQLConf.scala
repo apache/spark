@@ -541,8 +541,8 @@ object SQLConf {
   val SKEW_JOIN_ENABLED =
     buildConf("spark.sql.adaptive.skewJoin.enabled")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark dynamically " +
-        "handles skew in sort-merge join by splitting (and replicating if needed) skewed " +
-        "partitions.")
+        "handles skew in shuffled join (sort-merge and shuffled hash) by splitting (and " +
+        "replicating if needed) skewed partitions.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
