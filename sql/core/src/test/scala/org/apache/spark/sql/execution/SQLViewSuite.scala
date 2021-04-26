@@ -49,7 +49,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("create a permanent view on a permanent view") {
     withView("jtv1", "jtv2") {
-      sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3").explain(true)
+      sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE VIEW jtv2 AS SELECT * FROM jtv1 WHERE id < 6")
       checkAnswer(sql("select count(*) FROM jtv2"), Row(2))
     }
