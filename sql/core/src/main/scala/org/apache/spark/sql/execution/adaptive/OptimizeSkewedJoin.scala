@@ -148,7 +148,7 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
   /*
    * This method aim to optimize the skewed join with the following steps:
    * 1. Check whether the shuffle partition is skewed based on the median size
-   *    and the skewed partition threshold in origin smj.
+   *    and the skewed partition threshold in origin shuffled join (smj and shj).
    * 2. Assuming partition0 is skewed in left side, and it has 5 mappers (Map0, Map1...Map4).
    *    And we may split the 5 Mappers into 3 mapper ranges [(Map0, Map1), (Map2, Map3), (Map4)]
    *    based on the map size and the max split number.
