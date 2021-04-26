@@ -528,8 +528,7 @@ public final class ArrowColumnVector extends ColumnVector {
 
     @Override
     int getInt(int rowId) {
-      int months = accessor.get(rowId);
-      return months;
+      return accessor.get(rowId);
     }
   }
 
@@ -546,9 +545,9 @@ public final class ArrowColumnVector extends ColumnVector {
     @Override
     long getLong(int rowId) {
       accessor.get(rowId, intervalDayHolder);
-      final long microseconds = intervalDayHolder.days * MICROS_PER_DAY
-                              + (long)intervalDayHolder.milliseconds * MICROS_PER_MILLIS;
-      return microseconds;
+      return Math.addExact(
+              intervalDayHolder.days * MICROS_PER_DAY,
+              intervalDayHolder.milliseconds * MICROS_PER_MILLIS);
     }
   }
 }

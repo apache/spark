@@ -418,7 +418,7 @@ private[arrow] class IntervalDayWriter(val valueVector: IntervalDayVector)
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val totalMicroseconds = input.getLong(ordinal)
     val days = totalMicroseconds / MICROS_PER_DAY
-    val millis = (totalMicroseconds - days * MICROS_PER_DAY) / MICROS_PER_MILLIS
+    val millis = (totalMicroseconds % MICROS_PER_DAY) / MICROS_PER_MILLIS
     valueVector.set(count, days.toInt, millis.toInt)
   }
 

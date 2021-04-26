@@ -43,6 +43,23 @@ $.extend( $.fn.dataTable.ext.type.order, {
         a = ConvertDurationString( a );
         b = ConvertDurationString( b );
         return ((a < b) ? 1 : ((a > b) ? -1 : 0));
+    },
+
+    "size-pre": function (data) {
+        var floatValue = parseFloat(data)
+        return isNaN(floatValue) ? 0 : floatValue;
+    },
+
+    "size-asc": function (a, b) {
+        a = parseFloat(a);
+        b = parseFloat(b);
+        return ((a < b) ? -1 : ((a > b) ? 1 : 0));
+    },
+
+    "size-desc": function (a, b) {
+        a = parseFloat(a);
+        b = parseFloat(b);
+        return ((a < b) ? 1 : ((a > b) ? -1 : 0));
     }
 } );
 
@@ -562,10 +579,27 @@ $(document).ready(function () {
                         }
                     ],
                     "columnDefs": [
-                        { "visible": false, "targets": 15 },
-                        { "visible": false, "targets": 16 },
-                        { "visible": false, "targets": 17 },
-                        { "visible": false, "targets": 18 }
+                        // SPARK-35087 [type:size] means String with structures like : 'size / records',
+                        // they should be sorted as numerical-order instead of lexicographical-order by default.
+                        // The targets: $id represents column id which comes from stagespage-template.html
+                        // #summary-executor-table.If the relative position of the columns in the table
+                        // #summary-executor-table has changed,please be careful to adjust the column index here
+                        // Input Size / Records
+                        {"type": "size", "targets": 9},
+                        // Output Size / Records
+                        {"type": "size", "targets": 10},
+                        // Shuffle Read Size / Records
+                        {"type": "size", "targets": 11},
+                        // Shuffle Write Size / Records
+                        {"type": "size", "targets": 12},
+                        // Peak JVM Memory OnHeap / OffHeap
+                        {"visible": false, "targets": 15},
+                        // Peak Execution Memory OnHeap / OffHeap
+                        {"visible": false, "targets": 16},
+                        // Peak Storage Memory OnHeap / OffHeap
+                        {"visible": false, "targets": 17},
+                        // Peak Pool Memory Direct / Mapped
+                        {"visible": false, "targets": 18}
                     ],
                     "deferRender": true,
                     "order": [[0, "asc"]],
