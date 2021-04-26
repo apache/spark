@@ -39,17 +39,15 @@ case class UpdatingSessionsExec(
     sessionExpression: Attribute,
     child: SparkPlan) extends UnaryExecNode {
 
-  private val groupWithoutSessionExpression = keyExpressions.filterNot {
+  private val groupingWithoutSessionExpression = keyExpressions.filterNot {
     p => p.semanticEquals(sessionExpression)
   }
-  private val groupingWithoutSessionAttributes = groupWithoutSessionExpression.map(_.toAttribute)
-
-  val childOrdering = Seq((groupingWithoutSessionAttributes ++ Seq(sessionExpression))
-    .map(SortOrder(_, Ascending)))
+  private val groupingWithoutSessionAttributes =
+    groupingWithoutSessionExpression.map(_.toAttribute)
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
-    val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
+    val inMemoryThreshold = sqlContext.conf.sessionWindowBufferInMemoryThreshold
+    val spillThreshold = sqlContext.conf.sessionWindowBufferSpillThreshold
 
     child.execute().mapPartitions { iter =>
       new UpdatingSessionsIterator(iter, keyExpressions, sessionExpression,
@@ -62,10 +60,10 @@ case class UpdatingSessionsExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (groupWithoutSessionExpression.isEmpty) {
+    if (groupingWithoutSessionExpression.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(groupWithoutSessionExpression) :: Nil
+      ClusteredDistribution(groupingWithoutSessionExpression) :: Nil
     }
   }
 

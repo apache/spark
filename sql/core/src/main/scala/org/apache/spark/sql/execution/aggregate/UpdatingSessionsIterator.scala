@@ -56,13 +56,18 @@ class UpdatingSessionsIterator(
   private[this] val sessionProjection: UnsafeProjection =
     UnsafeProjection.create(Seq(sessionExpression), inputSchema)
 
+  // Below three variables hold the information for "current session".
   private var currentKeys: InternalRow = _
   private var currentSession: UnsafeRow = _
+  private var rowsForCurrentSession: ExternalAppendOnlyUnsafeRowArray = _
 
-  private var currentRows: ExternalAppendOnlyUnsafeRowArray = _
-
+  // Below two variables hold the information for "returning rows". The reason we have this in
+  // addition to "current session" is that there could be the chance that iterator for returning
+  // rows on previous session wasn't fully consumed and there's a new session being started.
   private var returnRows: ExternalAppendOnlyUnsafeRowArray = _
   private var returnRowsIter: Iterator[InternalRow] = _
+
+  // Mark this to raise error on any operations after the iterator figures out the error.
   private var errorOnIterator: Boolean = false
 
   private val processedKeys: mutable.HashSet[InternalRow] = new mutable.HashSet[InternalRow]()
@@ -115,7 +120,7 @@ class UpdatingSessionsIterator(
         } else if (sessionStart <= getSessionEnd(currentSession)) {
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
-          currentRows.add(row.asInstanceOf[UnsafeRow])
+          rowsForCurrentSession.add(row.asInstanceOf[UnsafeRow])
         } else {
           closeCurrentSession(keyChanged = false)
           startNewSession(row, keys, sessionStruct)
@@ -146,8 +151,8 @@ class UpdatingSessionsIterator(
     currentKeys = groupingKey.copy()
     currentSession = sessionStruct.copy()
 
-    currentRows = new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
-    currentRows.add(currentRow.asInstanceOf[UnsafeRow])
+    rowsForCurrentSession = new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+    rowsForCurrentSession.add(currentRow.asInstanceOf[UnsafeRow])
   }
 
   private def getSessionStart(sessionStruct: UnsafeRow): Long = {
@@ -193,8 +198,8 @@ class UpdatingSessionsIterator(
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
     assert(returnRowsIter == null || !returnRowsIter.hasNext)
 
-    returnRows = currentRows
-    currentRows = null
+    returnRows = rowsForCurrentSession
+    rowsForCurrentSession = null
 
     val groupingKey = generateGroupingKey()
 
