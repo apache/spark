@@ -477,6 +477,7 @@ case class Join(
       case LeftOuter | FullOuter | RightOuter => patterns = patterns :+ OUTER_JOIN
       case LeftSemiOrAnti(_) => patterns = patterns :+ LEFT_SEMI_OR_ANTI_JOIN
       case NaturalJoin(_) | UsingJoin(_, _) => patterns = patterns :+ NATURAL_LIKE_JOIN
+      case LateralJoin(_) => patterns = patterns :+ LATERAL_JOIN
       case _ =>
     }
     patterns

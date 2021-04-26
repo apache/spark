@@ -3341,8 +3341,8 @@ struct<x:double,f1:int,y:double>
 
 -- !query
 select * from
-   int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
-   lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2)
+  int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
+  lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2)
 -- !query schema
 struct<q1:bigint,q2:bigint,q1:bigint,q2:bigint,xq1:bigint,yq1:bigint,yq2:bigint>
 -- !query output
@@ -3360,8 +3360,8 @@ struct<q1:bigint,q2:bigint,q1:bigint,q2:bigint,xq1:bigint,yq1:bigint,yq2:bigint>
 
 -- !query
 select x.* from
-   int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
-   lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2)
+  int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
+  lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2)
 -- !query schema
 struct<q1:bigint,q2:bigint>
 -- !query output
@@ -3379,8 +3379,8 @@ struct<q1:bigint,q2:bigint>
 
 -- !query
 select * from
-   int8_tbl a left join
-   lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1
+  int8_tbl a left join
+  lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1
 -- !query schema
 struct<q1:bigint,q2:bigint,q1:bigint,q2:bigint,x:bigint>
 -- !query output
@@ -3398,8 +3398,8 @@ struct<q1:bigint,q2:bigint,q1:bigint,q2:bigint,x:bigint>
 
 -- !query
 select * from
-   int8_tbl a left join
-   lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1
+  int8_tbl a left join
+  lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1
 -- !query schema
 struct<q1:bigint,q2:bigint,q1:bigint,q2:bigint,x:bigint>
 -- !query output
@@ -3417,7 +3417,7 @@ struct<q1:bigint,q2:bigint,q1:bigint,q2:bigint,x:bigint>
 
 -- !query
 select * from int4_tbl i left join
-   lateral (select * from int2_tbl j where i.f1 = j.f1) k on true
+  lateral (select * from int2_tbl j where i.f1 = j.f1) k on true
 -- !query schema
 struct<f1:int,f1:smallint>
 -- !query output
@@ -3430,10 +3430,10 @@ struct<f1:int,f1:smallint>
 
 -- !query
 select * from
-   int8_tbl a left join lateral
-   (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
-    int8_tbl b cross join int8_tbl c) ss
-   on a.q2 = ss.bq1
+  int8_tbl a left join lateral
+  (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
+   int8_tbl b cross join int8_tbl c) ss
+  on a.q2 = ss.bq1
 -- !query schema
 struct<q1:bigint,q2:bigint,bq1:bigint,cq1:bigint,least(outer(a.q1), q1, q1):bigint>
 -- !query output
