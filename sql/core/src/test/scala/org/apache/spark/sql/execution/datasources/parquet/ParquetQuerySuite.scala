@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.sql.{Date, Timestamp}
 import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -30,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupportedException, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -40,7 +41,8 @@ import org.apache.spark.util.Utils
 /**
  * A test suite that tests various Parquet queries.
  */
-abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSparkSession {
+abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSparkSession
+  with ExplainSuiteHelper {
   import testImplicits._
 
   test("simple select queries") {
@@ -48,54 +50,6 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       checkAnswer(sql("SELECT _1 FROM t where t._1 > 5"), (6 until 10).map(Row.apply(_)))
       checkAnswer(sql("SELECT _1 FROM t as tmp where tmp._1 < 5"), (0 until 5).map(Row.apply(_)))
     }
-  }
-
-  test("test aggregate pushdown") {
-    spark.conf.set(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key, "true")
-    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
-      (9, "mno", 7), (2, null, 6))
-    spark.createDataFrame(data).toDF("c1", "c2", "c3").createOrReplaceTempView("tmp")
-    withParquetTable(data, "t") {
-      sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
-      val selectAgg = sql("SELECT min(_3), min(_3), max(_3), min(_1), max(_1), max(_1)," +
-        " count(*), count(_1), count(_2), count(_3) FROM t")
-      // selectAgg.explain(true)
-      // scalastyle:off line.size.limit
-      // == Parsed Logical Plan ==
-      // 'Project [unresolvedalias('min('_3), None), unresolvedalias('min('_3), None), unresolvedalias('max('_3), None), unresolvedalias('min('_1), None), unresolvedalias('max('_1), None), unresolvedalias('max('_1), None), unresolvedalias('count(1), None), unresolvedalias('count('_1), None), unresolvedalias('count('_2), None), unresolvedalias('count('_3), None)]
-      // +- 'UnresolvedRelation [t], [], false
-      //
-      // == Analyzed Logical Plan ==
-      // min(_3): int, min(_3): int, max(_3): int, min(_1): int, max(_1): int, max(_1): int, count(1): bigint, count(_1): bigint, count(_2): bigint, count(_3): bigint
-      // Aggregate [min(_3#23) AS min(_3)#43, min(_3#23) AS min(_3)#44, max(_3#23) AS max(_3)#45, min(_1#21) AS min(_1)#46, max(_1#21) AS max(_1)#47, max(_1#21) AS max(_1)#48, count(1) AS count(1)#49L, count(_1#21) AS count(_1)#50L, count(_2#22) AS count(_2)#51L, count(_3#23) AS count(_3)#52L]
-      // +- SubqueryAlias t
-      // +- View (`t`, [_1#21,_2#22,_3#23])
-      // +- RelationV2[_1#21, _2#22, _3#23] parquet file:/private/var/folders/hm/dghdj3hn791fd9bfmwnl12km0000gn/T/spark-6609ad86-7ff5-4f83-96e2-fea5f2c85646
-      //
-      // == Optimized Logical Plan ==
-      // Aggregate [min(Min(_3,IntegerType)#66) AS min(_3)#43, min(Min(_3,IntegerType)#67) AS min(_3)#44, max(Max(_3,IntegerType)#68) AS max(_3)#45, min(Min(_1,IntegerType)#69) AS min(_1)#46, max(Max(_1,IntegerType)#70) AS max(_1)#47, max(Max(_1,IntegerType)#71) AS max(_1)#48, count(Count(1,LongType,false)#72L) AS count(1)#49L, count(Count(_1,LongType,false)#73L) AS count(_1)#50L, count(Count(_2,LongType,false)#74L) AS count(_2)#51L, count(Count(_3,LongType,false)#75L) AS count(_3)#52L]
-      // +- RelationV2[Min(_3,IntegerType)#66, Min(_3,IntegerType)#67, Max(_3,IntegerType)#68, Min(_1,IntegerType)#69, Max(_1,IntegerType)#70, Max(_1,IntegerType)#71, Count(1,LongType,false)#72L, Count(_1,LongType,false)#73L, Count(_2,LongType,false)#74L, Count(_3,LongType,false)#75L] parquet file:/private/var/folders/hm/dghdj3hn791fd9bfmwnl12km0000gn/T/spark-6609ad86-7ff5-4f83-96e2-fea5f2c85646
-      //
-      // == Physical Plan ==
-      //   AdaptiveSparkPlan isFinalPlan=false
-      // +- HashAggregate(keys=[], functions=[min(Min(_3,IntegerType)#66), min(Min(_3,IntegerType)#67), max(Max(_3,IntegerType)#68), min(Min(_1,IntegerType)#69), max(Max(_1,IntegerType)#70), max(Max(_1,IntegerType)#71), count(Count(1,LongType,false)#72L), count(Count(_1,LongType,false)#73L), count(Count(_2,LongType,false)#74L), count(Count(_3,LongType,false)#75L)], output=[min(_3)#43, min(_3)#44, max(_3)#45, min(_1)#46, max(_1)#47, max(_1)#48, count(1)#49L, count(_1)#50L, count(_2)#51L, count(_3)#52L])
-      // +- HashAggregate(keys=[], functions=[partial_min(Min(_3,IntegerType)#66), partial_min(Min(_3,IntegerType)#67), partial_max(Max(_3,IntegerType)#68), partial_min(Min(_1,IntegerType)#69), partial_max(Max(_1,IntegerType)#70), partial_max(Max(_1,IntegerType)#71), partial_count(Count(1,LongType,false)#72L), partial_count(Count(_1,LongType,false)#73L), partial_count(Count(_2,LongType,false)#74L), partial_count(Count(_3,LongType,false)#75L)], output=[min#86, min#87, max#88, min#89, max#90, max#91, count#92L, count#93L, count#94L, count#95L])
-      // +- Project [Min(_3,IntegerType)#66, Min(_3,IntegerType)#67, Max(_3,IntegerType)#68, Min(_1,IntegerType)#69, Max(_1,IntegerType)#70, Max(_1,IntegerType)#71, Count(1,LongType,false)#72L, Count(_1,LongType,false)#73L, Count(_2,LongType,false)#74L, Count(_3,LongType,false)#75L]
-      // +- BatchScan[Min(_3,IntegerType)#66, Min(_3,IntegerType)#67, Max(_3,IntegerType)#68, Min(_1,IntegerType)#69, Max(_1,IntegerType)#70, Max(_1,IntegerType)#71, Count(1,LongType,false)#72L, Count(_1,LongType,false)#73L, Count(_2,LongType,false)#74L, Count(_3,LongType,false)#75L] ParquetScan DataFilters: [], Format: parquet, Location: InMemoryFileIndex(1 paths)[file:/private/var/folders/hm/dghdj3hn791fd9bfmwnl12km0000gn/T/spark-66..., PartitionFilters: [], PushedFilters: [], ReadSchema: struct<_1:int,_2:string,_3:int>, PushedFilters: []
-      // scalastyle:on line.size.limit
-
-      // selectAgg.show()
-      // +-------+-------+-------+-------+-------+-------+--------+---------+---------+---------+
-      // |min(_3)|min(_3)|max(_3)|min(_1)|max(_1)|max(_1)|count(1)|count(_1)|count(_2)|count(_3)|
-      // +-------+-------+-------+-------+-------+-------+--------+---------+---------+---------+
-      // |      2|      2|     19|     -2|      9|      9|       6|        6|        4|        6|
-      // +-------+-------+-------+-------+-------+-------+--------+---------+---------+---------+
-
-      checkAnswer(selectAgg, Seq(Row(2, 2, 19, -2, 9, 9, 6, 6, 4, 6)))
-    }
-    spark.sessionState.catalog.dropTable(
-      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
-    spark.conf.unset(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key)
   }
 
   test("appending") {
@@ -945,6 +899,205 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
             readParquet(schema, path).collect()
           }.getCause.getCause
           assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
+    }
+  }
+
+  test("test aggregate push down") {
+    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
+      (9, "mno", 7), (2, null, 6))
+    withParquetTable(data, "t") {
+      withSQLConf(
+        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+
+        // This is not pushed down since aggregates have arithmetic operation
+        val selectAgg1 = sql("SELECT min(_3 + _1), max(_3 + _1) FROM t")
+        checkAnswer(selectAgg1, Seq(Row(0, 19)))
+
+        // sum is not pushed down
+        val selectAgg2 = sql("SELECT sum(_3) FROM t")
+        checkAnswer(selectAgg2, Seq(Row(40)))
+
+        val selectAgg3 = sql("SELECT min(_3), min(_3), max(_3), min(_1), max(_1), max(_1)," +
+          " count(*), count(_1), count(_2), count(_3) FROM t")
+
+        selectAgg3.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment =
+              "PushedAggregation: [Min(_3,IntegerType), " +
+                "Min(_3,IntegerType), " +
+                "Max(_3,IntegerType), " +
+                "Min(_1,IntegerType), " +
+                "Max(_1,IntegerType), " +
+                "Max(_1,IntegerType), " +
+                "Count(1,LongType,false), " +
+                "Count(_1,LongType,false), " +
+                "Count(_2,LongType,false), " +
+                "Count(_3,LongType,false)]"
+            checkKeywordsExistsInExplain(selectAgg3, expected_plan_fragment)
+        }
+
+        checkAnswer(selectAgg3, Seq(Row(2, 2, 19, -2, 9, 9, 6, 6, 4, 6)))
+      }
+    }
+    spark.sessionState.catalog.dropTable(
+      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
+  }
+
+  test("aggregate pushdown for different data types") {
+    implicit class StringToDate(s: String) {
+      def date: Date = Date.valueOf(s)
+    }
+
+    implicit class StringToTs(s: String) {
+      def ts: Timestamp = Timestamp.valueOf(s)
+    }
+
+    val rows =
+      Seq(
+        Row(
+          "a string",
+          true,
+          10.toByte,
+          "Spark SQL".getBytes,
+          12.toShort,
+          3,
+          Long.MaxValue,
+          0.15.toFloat,
+          0.75D,
+          Decimal("12.345678"),
+          ("2021-01-01").date,
+          ("2015-01-01 23:50:59.123").ts),
+        Row(
+          "test string",
+          false,
+          1.toByte,
+          "Parquet".getBytes,
+          2.toShort,
+          null,
+          Long.MinValue,
+          0.25.toFloat,
+          0.85D,
+          Decimal("1.2345678"),
+          ("2015-01-01").date,
+          ("2021-01-01 23:50:59.123").ts),
+        Row(
+          null,
+          true,
+          10000.toByte,
+          "Spark ML".getBytes,
+          222.toShort,
+          113,
+          11111111L,
+          0.25.toFloat,
+          0.75D,
+          Decimal("12345.678"),
+          ("2004-06-19").date,
+          ("1999-08-26 10:43:59.123").ts)
+      )
+
+    val schema = StructType(List(StructField("StringCol", StringType, true),
+      StructField("BooleanCol", BooleanType, false),
+      StructField("ByteCol", ByteType, false),
+      StructField("BinaryCol", BinaryType, false),
+      StructField("ShortCol", ShortType, false),
+      StructField("IntegerCol", IntegerType, true),
+      StructField("LongCol", LongType, false),
+      StructField("FloatCol", FloatType, false),
+      StructField("DoubleCol", DoubleType, false),
+      StructField("DecimalCol", DecimalType(25, 5), true),
+      StructField("DateCol", DateType, false),
+      StructField("TimestampCol", TimestampType, false)).toArray)
+
+    val rdd = sparkContext.parallelize(rows)
+    spark.createDataFrame(rdd, schema).createOrReplaceTempView("test")
+    val enableVectorizedReader = Seq("false", "true")
+    for (testVectorizedReader <- enableVectorizedReader) {
+      withSQLConf(
+        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+        vectorizedReaderEnabledKey -> testVectorizedReader) {
+        withTempPath { file =>
+          val df1 = spark.createDataFrame(rdd, schema)
+          df1.write.parquet(file.getCanonicalPath)
+          val df2 = spark.read.parquet(file.getCanonicalPath)
+          df2.createOrReplaceTempView("test")
+
+          val testMin = sql("SELECT min(StringCol), min(BooleanCol), min(ByteCol), " +
+            "min(BinaryCol), min(ShortCol), min(IntegerCol), min(LongCol), min(FloatCol), " +
+            "min(DoubleCol), min(DecimalCol), min(DateCol) FROM test")
+
+          testMin.queryExecution.optimizedPlan.collect {
+            case _: DataSourceV2ScanRelation =>
+              val expected_plan_fragment =
+                "PushedAggregation: [Min(StringCol,StringType), " +
+                  "Min(BooleanCol,BooleanType), " +
+                  "Min(ByteCol,ByteType), " +
+                  "Min(BinaryCol,BinaryType), " +
+                  "Min(ShortCol,ShortType), " +
+                  "Min(IntegerCol,IntegerType), " +
+                  "Min(LongCol,LongType), " +
+                  "Min(FloatCol,FloatType), " +
+                  "Min(DoubleCol,DoubleType), " +
+                  "Min(DecimalCol,DecimalType(25,5)), " +
+                  "Min(DateCol,DateType)]"
+              checkKeywordsExistsInExplain(testMin, expected_plan_fragment)
+          }
+
+          checkAnswer(testMin, Seq(Row("a string", false, 1.toByte, "Parquet".getBytes,
+            2.toShort, 3, -9223372036854775808L, 0.15.toFloat, 0.75D, 1.23457,
+            ("2004-06-19").date)))
+
+          val testMax = sql("SELECT max(StringCol), max(BooleanCol), max(ByteCol), " +
+            "max(BinaryCol), max(ShortCol), max(IntegerCol), max(LongCol), max(FloatCol), " +
+            "max(DoubleCol), max(DecimalCol), max(DateCol) FROM test")
+
+          testMax.queryExecution.optimizedPlan.collect {
+            case _: DataSourceV2ScanRelation =>
+              val expected_plan_fragment =
+                "PushedAggregation: [Max(StringCol,StringType), " +
+                  "Max(BooleanCol,BooleanType)," +
+                  " Max(ByteCol,ByteType), " +
+                  "Max(BinaryCol,BinaryType)," +
+                  " Max(ShortCol,ShortType), " +
+                  "Max(IntegerCol,IntegerType)," +
+                  " Max(LongCol,LongType), " +
+                  "Max(FloatCol,FloatType)," +
+                  " Max(DoubleCol,DoubleType), " +
+                  "Max(DecimalCol,DecimalType(25,5)), " +
+                  "Max(DateCol,DateType)]"
+              checkKeywordsExistsInExplain(testMax, expected_plan_fragment)
+          }
+
+          checkAnswer(testMax, Seq(Row("test string", true, 16.toByte, "Spark SQL".getBytes,
+            222.toShort, 113, 9223372036854775807L, 0.25.toFloat, 0.85D, 12345.678,
+            ("2021-01-01").date)))
+
+          val testCount = sql("SELECT count(*), count(StringCol), count(BooleanCol)," +
+            " count(ByteCol), count(BinaryCol), count(ShortCol), count(IntegerCol)," +
+            " count(LongCol), count(FloatCol), count(DoubleCol)," +
+            " count(DecimalCol), count(DateCol), count(TimestampCol) FROM test")
+
+          testCount.queryExecution.optimizedPlan.collect {
+            case _: DataSourceV2ScanRelation =>
+              val expected_plan_fragment =
+                "PushedAggregation: [Count(1,LongType,false), " +
+                  "Count(StringCol,LongType,false), " +
+                  "Count(BooleanCol,LongType,false), " +
+                  "Count(ByteCol,LongType,false), " +
+                  "Count(BinaryCol,LongType,false), " +
+                  "Count(ShortCol,LongType,false), " +
+                  "Count(IntegerCol,LongType,false), " +
+                  "Count(LongCol,LongType,false), " +
+                  "Count(FloatCol,LongType,false), " +
+                  "Count(DoubleCol,LongType,false), " +
+                  "Count(DecimalCol,LongType,false), " +
+                  "Count(DateCol,LongType,false), " +
+                  "Count(TimestampCol,LongType,false)]"
+              checkKeywordsExistsInExplain(testCount, expected_plan_fragment)
+          }
+
+          checkAnswer(testCount, Seq(Row(3, 2, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 3)))
         }
       }
     }

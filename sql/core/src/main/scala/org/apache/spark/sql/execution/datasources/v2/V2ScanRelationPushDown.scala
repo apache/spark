@@ -114,11 +114,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
               case agg: AggregateExpression =>
                 i += 1
                 val aggFunction: aggregate.AggregateFunction = agg.aggregateFunction match {
-                  case max: aggregate.Max => aggregate.Max(output(i - 1))
-                  case min: aggregate.Min => aggregate.Min(output(i - 1))
-                  case sum: aggregate.Sum => aggregate.Sum(output(i - 1))
-                  case avg: aggregate.Average => aggregate.Average(output(i - 1))
-                  case count: aggregate.Count => aggregate.PushDownCount(output(i - 1), true)
+                  case _: aggregate.Max => aggregate.Max(output(i - 1))
+                  case _: aggregate.Min => aggregate.Min(output(i - 1))
+                  case _: aggregate.Sum => aggregate.Sum(output(i - 1))
+                  case _: aggregate.Average => aggregate.Average(output(i - 1))
+                  case _: aggregate.Count => aggregate.Sum(output(i - 1))
                   case _ => agg.aggregateFunction
                 }
                 agg.copy(aggregateFunction = aggFunction, filter = None)

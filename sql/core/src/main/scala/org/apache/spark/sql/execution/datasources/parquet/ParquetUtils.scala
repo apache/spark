@@ -173,13 +173,13 @@ object ParquetUtils {
     parquetTypes.zipWithIndex.map {
       case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
         dataSchema.fields(i).dataType match {
-          case b: ByteType =>
+          case ByteType =>
             mutableRow.setByte(i, values(i).asInstanceOf[Integer].toByte)
-          case s: ShortType =>
+          case ShortType =>
             mutableRow.setShort(i, values(i).asInstanceOf[Integer].toShort)
-          case int: IntegerType =>
+          case IntegerType =>
             mutableRow.setInt(i, values(i).asInstanceOf[Integer])
-          case d: DateType =>
+          case DateType =>
             val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
               datetimeRebaseMode, "Parquet")
             mutableRow.update(i, dateRebaseFunc(values(i).asInstanceOf[Integer]))
@@ -190,7 +190,7 @@ object ParquetUtils {
         }
       case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
         dataSchema.fields(i).dataType match {
-          case long: LongType =>
+          case LongType =>
             mutableRow.setLong(i, values(i).asInstanceOf[Long])
           case d: DecimalType =>
             val decimal = Decimal(values(i).asInstanceOf[Long], d.precision, d.scale)
@@ -199,9 +199,9 @@ object ParquetUtils {
         }
       case (PrimitiveType.PrimitiveTypeName.INT96, i) =>
         dataSchema.fields(i).dataType match {
-          case l: LongType =>
+          case LongType =>
             mutableRow.setLong(i, values(i).asInstanceOf[Long])
-          case d: TimestampType =>
+          case TimestampType =>
             val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
               int96RebaseMode, "Parquet INT96")
             val julianMicros =
@@ -222,9 +222,9 @@ object ParquetUtils {
       case (PrimitiveType.PrimitiveTypeName.BINARY, i) =>
         val bytes = values(i).asInstanceOf[Binary].getBytes
         dataSchema.fields(i).dataType match {
-          case s: StringType =>
+          case StringType =>
             mutableRow.update(i, UTF8String.fromBytes(bytes))
-          case b: BinaryType =>
+          case BinaryType =>
             mutableRow.update(i, bytes)
           case d: DecimalType =>
             val decimal =
@@ -282,13 +282,13 @@ object ParquetUtils {
     parquetTypes.zipWithIndex.map {
       case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
         dataSchema.fields(i).dataType match {
-          case b: ByteType =>
+          case ByteType =>
             columnVectors(i).appendByte(values(i).asInstanceOf[Integer].toByte)
-          case s: ShortType =>
+          case ShortType =>
             columnVectors(i).appendShort(values(i).asInstanceOf[Integer].toShort)
-          case int: IntegerType =>
+          case IntegerType =>
             columnVectors(i).appendInt(values(i).asInstanceOf[Integer])
-          case d: DateType =>
+          case DateType =>
             val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
               datetimeRebaseMode, "Parquet")
             columnVectors(i).appendInt(dateRebaseFunc(values(i).asInstanceOf[Integer]))
@@ -298,9 +298,9 @@ object ParquetUtils {
         columnVectors(i).appendLong(values(i).asInstanceOf[Long])
       case (PrimitiveType.PrimitiveTypeName.INT96, i) =>
         dataSchema.fields(i).dataType match {
-          case l: LongType =>
+          case LongType =>
             columnVectors(i).appendLong(values(i).asInstanceOf[Long])
-          case d: TimestampType =>
+          case TimestampType =>
             val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
               int96RebaseMode, "Parquet INT96")
             val julianMicros =
