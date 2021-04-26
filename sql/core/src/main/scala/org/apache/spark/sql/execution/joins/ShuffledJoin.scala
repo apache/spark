@@ -28,6 +28,12 @@ import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClustered
 trait ShuffledJoin extends BaseJoinExec {
   def isSkewJoin: Boolean
 
+  override def nodeName: String = {
+    if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
+  }
+
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
+
   override def requiredChildDistribution: Seq[Distribution] = {
     if (isSkewJoin) {
       // We re-arrange the shuffle partitions to deal with skew join, and the new children

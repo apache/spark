@@ -45,12 +45,6 @@ case class SortMergeJoinExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override def nodeName: String = {
-    if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
-  }
-
-  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
-
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.
     case _: InnerLike =>
