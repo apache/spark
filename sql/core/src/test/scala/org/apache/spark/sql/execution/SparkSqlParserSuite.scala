@@ -296,7 +296,6 @@ class SparkSqlParserSuite extends AnalysisTest {
          |FROM testData
       """.stripMargin,
       ScriptTransformation(
-        Seq(UnresolvedStar(None)),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
@@ -316,7 +315,6 @@ class SparkSqlParserSuite extends AnalysisTest {
          |HAVING sum(b) > 10
       """.stripMargin,
       ScriptTransformation(
-        Seq(UnresolvedStar(None)),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
@@ -347,7 +345,6 @@ class SparkSqlParserSuite extends AnalysisTest {
          |WINDOW w AS (PARTITION BY a ORDER BY b)
       """.stripMargin,
       ScriptTransformation(
-        Seq(UnresolvedStar(None)),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
@@ -385,7 +382,6 @@ class SparkSqlParserSuite extends AnalysisTest {
          |HAVING sum(b) > 10
       """.stripMargin,
       ScriptTransformation(
-        Seq(UnresolvedStar(None)),
         "cat",
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),

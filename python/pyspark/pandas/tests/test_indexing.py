@@ -24,7 +24,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import SparkPandasIndexingError
-from pyspark.pandas.testing.utils import ComparisonTestBase, ReusedSQLTestCase, compare_both
+from pyspark.testing.pandasutils import ComparisonTestBase, PandasOnSparkTestCase, compare_both
 
 
 class BasicIndexingTest(ComparisonTestBase):
@@ -153,7 +153,7 @@ class BasicIndexingTest(ComparisonTestBase):
         )
 
 
-class IndexingTest(ReusedSQLTestCase):
+class IndexingTest(PandasOnSparkTestCase):
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -1089,7 +1089,7 @@ class IndexingTest(ReusedSQLTestCase):
         kdf.iloc[0, 1] = 50
         self.assert_eq(kdf, pdf)
 
-        with self.assertRaisesRegex(ValueError, "Incompatible indexer with Series"):
+        with self.assertRaisesRegex(ValueError, "setting an array element with a sequence."):
             kdf.iloc[0, 0] = -kdf.max_speed
         with self.assertRaisesRegex(ValueError, "shape mismatch"):
             kdf.iloc[:, [1, 0]] = -kdf.max_speed
@@ -1227,14 +1227,7 @@ class IndexingTest(ReusedSQLTestCase):
         self.assert_eq(kser, pser)
         self.assert_eq(kdf, pdf)
 
-        # TODO: matching the behavior with pandas 1.2 and uncomment below test.
-        # with self.assertRaisesRegex(
-        #     ValueError,
-        #     "cannot set using a list-like indexer with a different length than the value",
-        # ):
-        #     kser.iloc[[1]] = -kdf.b
-
-        with self.assertRaisesRegex(ValueError, "Incompatible indexer with DataFrame"):
+        with self.assertRaisesRegex(ValueError, "setting an array element with a sequence."):
             kser.iloc[1] = kdf[["b"]]
 
     def test_iloc_raises(self):

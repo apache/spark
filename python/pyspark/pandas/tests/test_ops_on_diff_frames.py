@@ -22,12 +22,11 @@ import unittest
 import pandas as pd
 import numpy as np
 
-import pyspark
-
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.pandas.frame import DataFrame
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes,
     extension_dtypes_available,
@@ -36,7 +35,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
+class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -1151,25 +1150,17 @@ class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
         pdf.iloc[[0, 1, 2], 1] = -pdf.max_speed
         self.assert_eq(kdf, pdf)
 
-        # TODO: matching the behavior with pandas 1.2 and uncomment below test
-        # with self.assertRaisesRegex(
-        #     ValueError,
-        #     "shape mismatch: value array of shape (3,) could not be broadcast to indexing "
-        #     "result of shape (2,1)",
-        # ):
-        #     kdf.iloc[[1, 2], [1]] = -another_kdf.max_speed
+        with self.assertRaisesRegex(
+            ValueError, "shape mismatch",
+        ):
+            kdf.iloc[[1, 2], [1]] = -another_kdf.max_speed
 
         kdf.iloc[[0, 1, 2], 1] = 10 * another_kdf.max_speed
         pdf.iloc[[0, 1, 2], 1] = 10 * pdf.max_speed
         self.assert_eq(kdf, pdf)
 
-        # TODO: matching the behavior with pandas 1.2 and uncomment below test
-        # with self.assertRaisesRegex(
-        #     ValueError,
-        #     "shape mismatch: value array of shape (3,) could not be broadcast to indexing "
-        #     "result of shape (1,)",
-        # ):
-        #     kdf.iloc[[0], 1] = 10 * another_kdf.max_speed
+        with self.assertRaisesRegex(ValueError, "shape mismatch"):
+            kdf.iloc[[0], 1] = 10 * another_kdf.max_speed
 
     def test_series_loc_setitem(self):
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
@@ -1269,12 +1260,11 @@ class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kdf, pdf)
         self.assert_eq(ksery, psery)
 
-        # TODO: matching the behavior with pandas 1.2 and uncomment below test.
-        # with self.assertRaisesRegex(
-        #     ValueError,
-        #     "cannot set using a list-like indexer with a different length than the value",
-        # ):
-        #     kser.iloc[[1, 2]] = -kser_another
+        with self.assertRaisesRegex(
+            ValueError,
+            "cannot set using a list-like indexer with a different length than the value",
+        ):
+            kser.iloc[[1, 2]] = -kser_another
 
         kser.iloc[[0, 1, 2]] = 10 * kser_another
         pser.iloc[[0, 1, 2]] = 10 * pser_another
@@ -1282,11 +1272,11 @@ class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kdf, pdf)
         self.assert_eq(ksery, psery)
 
-        # with self.assertRaisesRegex(
-        #     ValueError,
-        #     "cannot set using a list-like indexer with a different length than the value",
-        # ):
-        #     kser.iloc[[0]] = 10 * kser_another
+        with self.assertRaisesRegex(
+            ValueError,
+            "cannot set using a list-like indexer with a different length than the value",
+        ):
+            kser.iloc[[0]] = 10 * kser_another
 
         kser1.iloc[[0, 1, 2]] = -kser_another
         pser1.iloc[[0, 1, 2]] = -pser_another
@@ -1294,11 +1284,11 @@ class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kdf, pdf)
         self.assert_eq(ksery, psery)
 
-        # with self.assertRaisesRegex(
-        #     ValueError,
-        #     "cannot set using a list-like indexer with a different length than the value",
-        # ):
-        #     kser1.iloc[[1, 2]] = -kser_another
+        with self.assertRaisesRegex(
+            ValueError,
+            "cannot set using a list-like indexer with a different length than the value",
+        ):
+            kser1.iloc[[1, 2]] = -kser_another
 
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
         kdf = ps.from_pandas(pdf)
@@ -1317,12 +1307,11 @@ class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kdf, pdf)
         self.assert_eq(ksery, psery)
 
-        # TODO: matching the behavior with pandas 1.2 and uncomment below test.
-        # with self.assertRaisesRegex(
-        #     ValueError,
-        #     "cannot set using a list-like indexer with a different length than the value",
-        # ):
-        #     kiloc[[1, 2]] = -kser_another
+        with self.assertRaisesRegex(
+            ValueError,
+            "cannot set using a list-like indexer with a different length than the value",
+        ):
+            kiloc[[1, 2]] = -kser_another
 
         kiloc[[0, 1, 2]] = 10 * kser_another
         piloc[[0, 1, 2]] = 10 * pser_another
@@ -1330,11 +1319,11 @@ class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kdf, pdf)
         self.assert_eq(ksery, psery)
 
-        # with self.assertRaisesRegex(
-        #     ValueError,
-        #     "cannot set using a list-like indexer with a different length than the value",
-        # ):
-        #     kiloc[[0]] = 10 * kser_another
+        with self.assertRaisesRegex(
+            ValueError,
+            "cannot set using a list-like indexer with a different length than the value",
+        ):
+            kiloc[[0]] = 10 * kser_another
 
     def test_update(self):
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [10, 20, 30]})
@@ -1559,10 +1548,7 @@ class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
         kser1 = ps.from_pandas(pser1)
         kser2 = ps.from_pandas(pser2)
 
-        if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
-            self.assertRaises(ValueError, lambda: kser1.repeat(kser2))
-        else:
-            self.assert_eq(kser1.repeat(kser2).sort_index(), pser1.repeat(pser2).sort_index())
+        self.assert_eq(kser1.repeat(kser2).sort_index(), pser1.repeat(pser2).sort_index())
 
     def test_series_ops(self):
         pser1 = pd.Series([1, 2, 3, 4, 5, 6, 7], name="x", index=[11, 12, 13, 14, 15, 16, 17])
@@ -1784,7 +1770,7 @@ class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
         )
 
 
-class OpsOnDiffFramesDisabledTest(ReusedSQLTestCase, SQLTestUtils):
+class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -1863,7 +1849,7 @@ class OpsOnDiffFramesDisabledTest(ReusedSQLTestCase, SQLTestUtils):
         another_kdf = ps.DataFrame(pdf)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kdf.iloc[[1, 2], [1]] = another_kdf.max_speed
+            kdf.iloc[[1, 2], [1]] = another_kdf.max_speed.iloc[[1, 2]]
 
     def test_series_loc_setitem(self):
         pser = pd.Series([1, 2, 3], index=["cobra", "viper", "sidewinder"])
@@ -1889,7 +1875,7 @@ class OpsOnDiffFramesDisabledTest(ReusedSQLTestCase, SQLTestUtils):
         kser_another = ps.from_pandas(pser_another)
 
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
-            kser.iloc[[1]] = -kser_another
+            kser.iloc[[1]] = -kser_another.iloc[[1]]
 
     def test_where(self):
         pdf1 = pd.DataFrame({"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]})

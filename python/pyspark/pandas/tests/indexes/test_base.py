@@ -22,7 +22,6 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-import pyspark
 
 import pyspark.pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
@@ -32,10 +31,10 @@ from pyspark.pandas.missing.indexes import (
     MissingPandasLikeIndex,
     MissingPandasLikeMultiIndex,
 )
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
 
-class IndexesTest(ReusedSQLTestCase, TestUtils):
+class IndexesTest(PandasOnSparkTestCase, TestUtils):
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -280,12 +279,7 @@ class IndexesTest(ReusedSQLTestCase, TestUtils):
         pidx.names = ["renamed_number", None]
         kidx.names = ["renamed_number", None]
         self.assertEqual(kidx.names, pidx.names)
-        if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
-            # PySpark < 2.4 does not support struct type with arrow enabled.
-            with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
-                self.assert_eq(kidx, pidx)
-        else:
-            self.assert_eq(kidx, pidx)
+        self.assert_eq(kidx, pidx)
 
         with self.assertRaises(PandasNotImplementedError):
             kidx.name
@@ -1401,11 +1395,7 @@ class IndexesTest(ReusedSQLTestCase, TestUtils):
 
         self.assert_eq(kidx.asof("2014-01-01"), pidx.asof("2014-01-01"))
         self.assert_eq(kidx.asof("2014-01-02"), pidx.asof("2014-01-02"))
-        if LooseVersion(pyspark.__version__) >= LooseVersion("3.0"):
-            self.assert_eq(repr(kidx.asof("1999-01-02")), repr(pidx.asof("1999-01-02")))
-        else:
-            # FIXME: self.assert_eq(repr(kidx.asof("1999-01-02")), repr(pidx.asof("1999-01-02")))
-            pass
+        self.assert_eq(repr(kidx.asof("1999-01-02")), repr(pidx.asof("1999-01-02")))
 
         # Decreasing values
         pidx = pd.Index(["2014-01-03", "2014-01-02", "2013-12-31"])
@@ -1427,11 +1417,7 @@ class IndexesTest(ReusedSQLTestCase, TestUtils):
         self.assert_eq(kidx.asof("2014-01-01"), pd.Timestamp("2014-01-02 00:00:00"))
         self.assert_eq(kidx.asof("2014-01-02"), pd.Timestamp("2014-01-02 00:00:00"))
         self.assert_eq(kidx.asof("1999-01-02"), pd.Timestamp("2013-12-31 00:00:00"))
-        if LooseVersion(pyspark.__version__) >= LooseVersion("3.0"):
-            self.assert_eq(repr(kidx.asof("2015-01-02")), repr(pd.NaT))
-        else:
-            # FIXME: self.assert_eq(repr(kidx.asof("2015-01-02")), repr(pd.NaT))
-            pass
+        self.assert_eq(repr(kidx.asof("2015-01-02")), repr(pd.NaT))
 
         # Not increasing, neither decreasing (ValueError)
         kidx = ps.Index(["2013-12-31", "2015-01-02", "2014-01-03"])
@@ -2249,13 +2235,7 @@ class IndexesTest(ReusedSQLTestCase, TestUtils):
         kmidx = ps.from_pandas(pmidx)
 
         self.assert_eq(kidx.tolist(), pidx.tolist())
-
-        if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
-            # PySpark < 2.4 does not support struct type with arrow enabled.
-            with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
-                self.assert_eq(kmidx.tolist(), pmidx.tolist())
-        else:
-            self.assert_eq(kidx.tolist(), pidx.tolist())
+        self.assert_eq(kmidx.tolist(), pmidx.tolist())
 
     def test_index_ops(self):
         pidx = pd.Index([1, 2, 3, 4, 5])
