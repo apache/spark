@@ -21,7 +21,6 @@ import java.{ util => ju }
 
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
-
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network._
@@ -163,7 +162,14 @@ private[spark] class KafkaRDD[K, V](
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     val allExecs = executors()
     val tp = part.topicPartition
-    val prefHost = preferredHosts.get(tp)
+
+    // preferredHosts is null while locationStrategy is PreferRandom
+    val prefHost = if (null != preferredHosts) {
+      preferredHosts.get(tp)
+    } else {
+      allExecs(new ju.Random().nextInt(allExecs.length)).host
+    }
+
     val prefExecs = if (null == prefHost) allExecs else allExecs.filter(_.host == prefHost)
     val execs = if (prefExecs.isEmpty) allExecs else prefExecs
     if (execs.isEmpty) {
