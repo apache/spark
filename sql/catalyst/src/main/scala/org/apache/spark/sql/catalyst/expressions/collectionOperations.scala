@@ -2484,8 +2484,8 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
 
       The start and stop expressions must resolve to the same type.
       If start and stop expressions resolve to the 'date' or 'timestamp' type
-      then the step expression must resolve to the 'interval' or 'year-month' or 'day-time' type,
-      otherwise to the same type as the start and stop expressions.
+      then the step expression must resolve to the 'interval' or 'year-month interval' or
+      'day-time interval' type, otherwise to the same type as the start and stop expressions.
   """,
   arguments = """
     Arguments:
@@ -2572,8 +2572,9 @@ case class Sequence(
            |$prettyName uses the wrong parameter type. The parameter type must conform to:
            |1. The start and stop expressions must resolve to the same type.
            |2. If start and stop expressions resolve to the 'date' or 'timestamp' type
-           |then the step expression must resolve to the 'interval' or 'year-month' or
-           |'day-time' type, otherwise to the same type as the start and stop expressions.
+           |then the step expression must resolve to the 'interval' or
+           |'${YearMonthIntervalType.typeName}' or '${DayTimeIntervalType.typeName}' type,
+           |otherwise to the same type as the start and stop expressions.
          """.stripMargin)
     }
   }
@@ -2917,8 +2918,9 @@ object Sequence {
         s"""
            |final long $intervalInMicros =
            |  $stepMicros + $stepMonths * ${microsPerMonth}L + $stepDays * ${MICROS_PER_DAY}L;
-           |${genSequenceLengthCode(ctx, startMicros, stopMicros, step, intervalInMicros, arrLength)}
-          """.stripMargin
+           |${genSequenceLengthCode(
+              ctx, startMicros, stopMicros, step, intervalInMicros, arrLength)}
+         """.stripMargin
 
       val check = if (scale == MICROS_PER_DAY) {
         s"""
