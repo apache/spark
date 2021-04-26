@@ -78,7 +78,6 @@ import org.apache.spark.sql.types.DataType;
  *       {@link org.apache.spark.sql.catalyst.util.ArrayData}</li>
  *   <li>{@link org.apache.spark.sql.types.MapType}:
  *       {@link org.apache.spark.sql.catalyst.util.MapData}</li>
- *   <li>any other type: {@code Object}</li>
  * </ul>
  *
  * @param <R> the JVM type of result values

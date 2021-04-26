@@ -1573,8 +1573,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           // results and confuse users if there is any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
           if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              f1.nameParts.length == 1 &&
-              f1.nameParts.head == "count" &&
+              f1.nameParts == Seq("count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
               case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
@@ -1959,30 +1958,26 @@ class Analyzer(override val catalogManager: CatalogManager)
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
   object LookupFunctions extends Rule[LogicalPlan] {
-    import CatalogV2Implicits._
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
       plan.resolveExpressions {
-        case f @ UnresolvedFunction(NonSessionCatalogAndIdentifier(_, _), _, _, _, _) =>
-          f
-        case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _)
-          if externalFunctionNameSet.contains(normalizeFuncName(ident)) => f
-        case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _)
-          if v1SessionCatalog.isRegisteredFunction(ident) => f
-        case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _)
-          if v1SessionCatalog.isPersistentFunction(ident) =>
-          externalFunctionNameSet.add(normalizeFuncName(ident))
-          f
         case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _) =>
-          withPosition(f) {
-            throw new NoSuchFunctionException(
-              ident.database.getOrElse(v1SessionCatalog.getCurrentDatabase),
-              ident.funcName)
+          if (externalFunctionNameSet.contains(normalizeFuncName(ident)) ||
+            v1SessionCatalog.isRegisteredFunction(ident)) {
+            f
+          } else if (v1SessionCatalog.isPersistentFunction(ident)) {
+            externalFunctionNameSet.add(normalizeFuncName(ident))
+            f
+          } else {
+            withPosition(f) {
+              throw new NoSuchFunctionException(
+                ident.database.getOrElse(v1SessionCatalog.getCurrentDatabase),
+                ident.funcName)
+            }
           }
         case f: UnresolvedFunction =>
-          withPosition(f) {
-            throw new NoSuchFunctionException(f.nameParts.asIdentifier)
-          }
+          // v2 functions - do nothing for now
+          f
       }
     }
 
@@ -2030,35 +2025,24 @@ class Analyzer(override val catalogManager: CatalogManager)
               }
             }
 
-          case u @ UnresolvedFunction(AsFunctionIdentifier(ident), arguments,
-            isDistinct, filter, ignoreNulls) => withPosition(u) {
-              processFunctionExpr(v1SessionCatalog.lookupFunction(ident, arguments),
-                arguments, isDistinct, filter, ignoreNulls)
-            }
+          case u @ UnresolvedFunction(AsFunctionIdentifier(ident),
+            arguments, isDistinct, filter, ignoreNulls) => withPosition(u) {
+            processFunctionExpr(v1SessionCatalog.lookupFunction(ident, arguments),
+              arguments, isDistinct, filter, ignoreNulls)
+          }
 
-          case u @ UnresolvedFunction(parts, arguments, isDistinct, filter, ignoreNulls) =>
+          case u @ UnresolvedFunction(nameParts, arguments, isDistinct, filter, ignoreNulls) =>
             withPosition(u) {
-              // resolve built-in or temporary functions with v2 catalog
-              val resultExpression = if (parts.length == 1) {
-                v1SessionCatalog.lookupBuiltinOrTempFunction(parts.head, arguments).map(
-                  processFunctionExpr(_, arguments, isDistinct, filter, ignoreNulls)
-                )
-              } else {
-                None
+              expandIdentifier(nameParts) match {
+                case NonSessionCatalogAndIdentifier(catalog, ident) =>
+                  if (!catalog.isFunctionCatalog) {
+                    throw new AnalysisException(s"Trying to lookup function '$ident' in " +
+                      s"catalog '${catalog.name()}', but it is not a FunctionCatalog.")
+                  }
+                  lookupV2Function(catalog.asFunctionCatalog, ident, arguments, isDistinct,
+                    filter, ignoreNulls)
+                case _ => u
               }
-
-              resultExpression.getOrElse(
-                expandIdentifier(parts) match {
-                  case NonSessionCatalogAndIdentifier(catalog, ident) =>
-                    if (!catalog.isFunctionCatalog) {
-                      throw new AnalysisException(s"Trying to lookup function '$ident' in catalog" +
-                        s" '${catalog.name()}', but it is not a FunctionCatalog.")
-                    }
-                    lookupV2Function(catalog.asFunctionCatalog, ident, arguments, isDistinct,
-                      filter, ignoreNulls)
-                  case _ => u
-                }
-              )
             }
         }
     }

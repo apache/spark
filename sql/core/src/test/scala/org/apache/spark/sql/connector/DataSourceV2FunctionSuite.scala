@@ -66,12 +66,22 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("looking up higher-order function with non-session catalog") {
+    checkAnswer(sql("SELECT transform(array(1, 2, 3), x -> x + 1)"),
+      Row(Array(2, 3, 4)) :: Nil)
+  }
+
   test("built-in override with default v2 function catalog") {
     // a built-in function with the same name should take higher priority
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
       addFunction(Identifier.of(Array.empty, "length"), new JavaStrLen(new JavaStrLenNoImpl))
       checkAnswer(sql("SELECT length('abc')"), Row(3))
     }
+  }
+
+  test("built-in override with non-session catalog") {
+    addFunction(Identifier.of(Array.empty, "length"), new JavaStrLen(new JavaStrLenNoImpl))
+    checkAnswer(sql("SELECT length('abc')"), Row(3))
   }
 
   test("temp function override with default v2 function catalog") {

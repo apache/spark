@@ -162,6 +162,9 @@ private[sql] trait LookupCatalog extends Logging {
         case _ => None
       }
       parts match {
+        case Seq(name)
+          if catalogManager.v1SessionCatalog.isRegisteredFunction(FunctionIdentifier(name)) =>
+          Some(FunctionIdentifier(name))
         case CatalogAndMultipartIdentifier(None, names)
           if CatalogV2Util.isSessionCatalog(currentCatalog) =>
           namesToFunctionIdentifier(names)
