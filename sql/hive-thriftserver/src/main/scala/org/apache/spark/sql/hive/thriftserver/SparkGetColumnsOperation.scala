@@ -131,7 +131,7 @@ private[hive] class SparkGetColumnsOperation(
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
     case dt @ (BooleanType | _: NumericType | DateType | TimestampType |
-               CalendarIntervalType | NullType) =>
+               CalendarIntervalType | NullType | YearMonthIntervalType | DayTimeIntervalType) =>
       Some(dt.defaultSize)
     case CharType(n) => Some(n)
     case StructType(fields) =>
@@ -171,8 +171,8 @@ private[hive] class SparkGetColumnsOperation(
     case BooleanType => java.sql.Types.BOOLEAN
     case ByteType => java.sql.Types.TINYINT
     case ShortType => java.sql.Types.SMALLINT
-    case IntegerType => java.sql.Types.INTEGER
-    case LongType => java.sql.Types.BIGINT
+    case IntegerType | YearMonthIntervalType => java.sql.Types.INTEGER
+    case LongType | DayTimeIntervalType => java.sql.Types.BIGINT
     case FloatType => java.sql.Types.FLOAT
     case DoubleType => java.sql.Types.DOUBLE
     case _: DecimalType => java.sql.Types.DECIMAL
