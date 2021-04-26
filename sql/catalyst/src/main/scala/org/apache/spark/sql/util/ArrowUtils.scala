@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.complex.MapVector
-import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, IntervalUnit, TimeUnit, Types}
+import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, IntervalUnit, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
 import org.apache.spark.sql.internal.SQLConf
@@ -54,8 +54,8 @@ private[sql] object ArrowUtils {
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       }
     case NullType => ArrowType.Null.INSTANCE
-    case YearMonthIntervalType => Types.MinorType.INTERVALYEAR.getType
-    case DayTimeIntervalType => Types.MinorType.INTERVALDAY.getType
+    case YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
+    case DayTimeIntervalType => new ArrowType.Interval(IntervalUnit.DAY_TIME)
     case _ =>
       throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
   }

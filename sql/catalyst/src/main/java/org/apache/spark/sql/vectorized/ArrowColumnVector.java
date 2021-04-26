@@ -545,9 +545,8 @@ public final class ArrowColumnVector extends ColumnVector {
     @Override
     long getLong(int rowId) {
       accessor.get(rowId, intervalDayHolder);
-      return Math.addExact(
-              intervalDayHolder.days * MICROS_PER_DAY,
-              intervalDayHolder.milliseconds * MICROS_PER_MILLIS);
+      return Math.addExact(Math.multiplyExact(intervalDayHolder.days, MICROS_PER_DAY),
+                           intervalDayHolder.milliseconds * MICROS_PER_MILLIS);
     }
   }
 }

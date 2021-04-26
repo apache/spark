@@ -421,5 +421,4 @@ private[arrow] class IntervalDayWriter(val valueVector: IntervalDayVector)
     val millis = (totalMicroseconds % MICROS_PER_DAY) / MICROS_PER_MILLIS
     valueVector.set(count, days.toInt, millis.toInt)
   }
-
 }
