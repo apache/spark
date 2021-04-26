@@ -430,9 +430,6 @@ case class DivideYMInterval(
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    println(this)
-    println(num)
-    println(num.getClass)
     checkDivideOverflow(interval.asInstanceOf[Int], num)
     evalFunc(interval.asInstanceOf[Int], num)
   }
