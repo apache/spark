@@ -29,58 +29,90 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-abstract class ExtractIntervalPart(
-    child: Expression,
+abstract class ExtractIntervalPart[T](
     val dataType: DataType,
-    func: CalendarInterval => Any,
-    funcName: String)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant with Serializable {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-
-  override protected def nullSafeEval(interval: Any): Any = {
-    func(interval.asInstanceOf[CalendarInterval])
-  }
-
+    func: T => Any,
+    funcName: String) extends UnaryExpression with NullIntolerant with Serializable {
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.$funcName($c)")
   }
+
+  override protected def nullSafeEval(interval: Any): Any = {
+    func(interval.asInstanceOf[T])
+  }
 }
 
 case class ExtractIntervalYears(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getYears, "getYears") {
+  extends ExtractIntervalPart[CalendarInterval](IntegerType, getYears, "getYears") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalYears =
     copy(child = newChild)
 }
 
 case class ExtractIntervalMonths(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths") {
+  extends ExtractIntervalPart[CalendarInterval](ByteType, getMonths, "getMonths") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMonths =
     copy(child = newChild)
 }
 
 case class ExtractIntervalDays(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getDays, "getDays") {
+  extends ExtractIntervalPart[CalendarInterval](IntegerType, getDays, "getDays") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalDays =
     copy(child = newChild)
 }
 
 case class ExtractIntervalHours(child: Expression)
-  extends ExtractIntervalPart(child, LongType, getHours, "getHours") {
+  extends ExtractIntervalPart[CalendarInterval](ByteType, getHours, "getHours") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalHours =
     copy(child = newChild)
 }
 
 case class ExtractIntervalMinutes(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes") {
+  extends ExtractIntervalPart[CalendarInterval](ByteType, getMinutes, "getMinutes") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMinutes =
     copy(child = newChild)
 }
 
 case class ExtractIntervalSeconds(child: Expression)
-  extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds") {
+  extends ExtractIntervalPart[CalendarInterval](DecimalType(8, 6), getSeconds, "getSeconds") {
   override protected def withNewChildInternal(newChild: Expression): ExtractIntervalSeconds =
+    copy(child = newChild)
+}
+
+case class YearsOfYMInterval(child: Expression)
+    extends ExtractIntervalPart[Int](IntegerType, getYears, "getYears") {
+  override protected def withNewChildInternal(newChild: Expression): YearsOfYMInterval =
+    copy(child = newChild)
+}
+
+case class MonthsOfYMInterval(child: Expression)
+    extends ExtractIntervalPart[Int](ByteType, getMonths, "getMonths") {
+  override protected def withNewChildInternal(newChild: Expression): MonthsOfYMInterval =
+    copy(child = newChild)
+}
+
+case class DaysOfDTInterval(child: Expression)
+    extends ExtractIntervalPart[Long](IntegerType, getDays, "getDays") {
+  override protected def withNewChildInternal(newChild: Expression): DaysOfDTInterval = {
+    copy(child = newChild)
+  }
+}
+
+case class HoursOfDTInterval(child: Expression)
+    extends ExtractIntervalPart[Long](ByteType, getHours, "getHours") {
+  override protected def withNewChildInternal(newChild: Expression): HoursOfDTInterval =
+    copy(child = newChild)
+}
+
+case class MinutesOfDTInterval(child: Expression)
+    extends ExtractIntervalPart[Long](ByteType, getMinutes, "getMinutes") {
+  override protected def withNewChildInternal(newChild: Expression): MinutesOfDTInterval =
+    copy(child = newChild)
+}
+
+case class SecondsOfDTInterval(child: Expression)
+    extends ExtractIntervalPart[Long](DecimalType(8, 6), getSeconds, "getSeconds") {
+  override protected def withNewChildInternal(newChild: Expression): SecondsOfDTInterval =
     copy(child = newChild)
 }
 
@@ -96,6 +128,19 @@ object ExtractIntervalPart {
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => ExtractIntervalHours(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => ExtractIntervalMinutes(source)
     case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => ExtractIntervalSeconds(source)
+    case _ => errorHandleFunc
+  }
+
+  def parseExtractFieldANSI(
+      extractField: String,
+      source: Expression,
+      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
+    case "YEAR" if source.dataType == YearMonthIntervalType => YearsOfYMInterval(source)
+    case "MONTH" if source.dataType == YearMonthIntervalType => MonthsOfYMInterval(source)
+    case "DAY" if source.dataType == DayTimeIntervalType => DaysOfDTInterval(source)
+    case "HOUR" if source.dataType == DayTimeIntervalType => HoursOfDTInterval(source)
+    case "MINUTE" if source.dataType == DayTimeIntervalType => MinutesOfDTInterval(source)
+    case "SECOND" if source.dataType == DayTimeIntervalType => SecondsOfDTInterval(source)
     case _ => errorHandleFunc
   }
 }

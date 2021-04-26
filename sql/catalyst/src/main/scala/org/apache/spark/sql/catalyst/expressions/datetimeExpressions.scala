@@ -2378,15 +2378,17 @@ object DatePart {
       Literal(null, DoubleType)
     } else {
       val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
-      val analysisException = QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(
-        fieldStr, source)
-      if (source.dataType == CalendarIntervalType) {
-        ExtractIntervalPart.parseExtractField(
-          fieldStr,
-          source,
-          throw analysisException)
-      } else {
-        DatePart.parseExtractField(fieldStr, source, throw analysisException)
+
+      def analysisException =
+        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(fieldStr, source)
+
+      source.dataType match {
+        case YearMonthIntervalType | DayTimeIntervalType =>
+          ExtractIntervalPart.parseExtractFieldANSI(fieldStr, source, analysisException)
+        case CalendarIntervalType =>
+          ExtractIntervalPart.parseExtractField(fieldStr, source, analysisException)
+        case _ =>
+          DatePart.parseExtractField(fieldStr, source, analysisException)
       }
     }
   }
