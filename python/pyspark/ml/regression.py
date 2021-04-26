@@ -371,7 +371,7 @@ class LinearRegressionModel(_JavaRegressionModel, _LinearRegressionParams, Gener
             instance of :py:class:`pyspark.sql.DataFrame`
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lr_summary = self._call_java("evaluate", dataset)
         return LinearRegressionSummary(java_lr_summary)
 
@@ -2294,7 +2294,7 @@ class GeneralizedLinearRegressionModel(_JavaRegressionModel, _GeneralizedLinearR
             instance of :py:class:`pyspark.sql.DataFrame`
         """
         if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+            raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_glr_summary = self._call_java("evaluate", dataset)
         return GeneralizedLinearRegressionSummary(java_glr_summary)
 

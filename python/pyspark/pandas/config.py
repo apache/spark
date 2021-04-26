@@ -101,7 +101,7 @@ class Option:
         Validate the given value and throw an exception with related information such as key.
         """
         if not isinstance(v, self.types):
-            raise ValueError(
+            raise TypeError(
                 "The value for option '%s' was %s; however, expected types are "
                 "[%s]." % (self.key, type(v), str(self.types))
             )

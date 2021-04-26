@@ -77,16 +77,16 @@ class ConfigTest(PandasOnSparkTestCase):
         self.assertEqual(ps.get_option("test.config.int.none"), None)
 
     def test_different_types(self):
-        with self.assertRaisesRegex(ValueError, "was <class 'int'>"):
+        with self.assertRaisesRegex(TypeError, "was <class 'int'>"):
             ps.set_option("test.config.list", 1)
 
-        with self.assertRaisesRegex(ValueError, "however, expected types are"):
+        with self.assertRaisesRegex(TypeError, "however, expected types are"):
             ps.set_option("test.config.float", "abc")
 
-        with self.assertRaisesRegex(ValueError, "[<class 'int'>]"):
+        with self.assertRaisesRegex(TypeError, "[<class 'int'>]"):
             ps.set_option("test.config.int", "abc")
 
-        with self.assertRaisesRegex(ValueError, "(<class 'int'>, <class 'NoneType'>)"):
+        with self.assertRaisesRegex(TypeError, "(<class 'int'>, <class 'NoneType'>)"):
             ps.set_option("test.config.int.none", "abc")
 
     def test_check_func(self):
