@@ -407,9 +407,7 @@ case class DivideYMInterval(
     if (month == Int.MinValue) {
       num match {
         case l: Long if l == -1L => throw QueryExecutionErrors.overflowInIntegralDivideError()
-        case number: Number if number.doubleValue() == -1.0D =>
-          throw QueryExecutionErrors.overflowInIntegralDivideError()
-        case decimal: Decimal if decimal.equals(Decimal.apply(-1)) =>
+        case integer: Integer if integer.intValue() == -1 =>
           throw QueryExecutionErrors.overflowInIntegralDivideError()
         case _ =>
       }
@@ -456,18 +454,12 @@ case class DivideYMInterval(
         """.stripMargin)
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
-        s"""
-           |checkDivideOverflow($m, $n);
-           |((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
-           |.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
-        """.stripMargin)
+        s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
+        ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
     case _: FractionalType =>
       val math = classOf[DoubleMath].getName
       defineCodeGen(ctx, ev, (m, n) =>
-        s"""
-           |checkDivideOverflow($m, $n);
-           |$math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP)
-        """.stripMargin)
+        s"$math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP)")
   }
 
   override def toString: String = s"($left / $right)"
@@ -492,9 +484,7 @@ case class DivideDTInterval(
   def checkDivideOverflow(month: Long, num: Any): Unit = {
     if (month == Long.MinValue) {
       num match {
-        case number: Number if number.doubleValue() == -1.0D =>
-          throw QueryExecutionErrors.overflowInIntegralDivideError()
-        case decimal: Decimal if decimal.equals(Decimal.apply(-1)) =>
+        case integer: Integer if integer.intValue() == -1 =>
           throw QueryExecutionErrors.overflowInIntegralDivideError()
         case _ =>
       }
@@ -527,18 +517,12 @@ case class DivideDTInterval(
         """.stripMargin)
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
-        s"""
-           |checkDivideOverflow($m, $n);
-           |((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
-           |.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
-        """.stripMargin)
+        s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
+        ".setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()")
     case _: FractionalType =>
       val math = classOf[DoubleMath].getName
       defineCodeGen(ctx, ev, (m, n) =>
-        s"""
-           |checkDivideOverflow($m, $n);
-           |$math.roundToLong($m / (double)$n, java.math.RoundingMode.HALF_UP)
-        """.stripMargin)
+        s"$math.roundToLong($m / (double)$n, java.math.RoundingMode.HALF_UP)")
   }
 
   override def toString: String = s"($left / $right)"
