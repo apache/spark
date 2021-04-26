@@ -258,7 +258,7 @@ class InMemoryTable(
 
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColumns = readSchema.map(_.name).filter(metadataColumnNames.contains)
-      val nonMetadataColumns = schema.filterNot(f => metadataColumns.contains(f.name))
+      val nonMetadataColumns = readSchema.filterNot(f => metadataColumns.contains(f.name))
       new BufferedRowsReaderFactory(metadataColumns, nonMetadataColumns, tableSchema)
     }
   }
@@ -528,6 +528,9 @@ private class BufferedRowsReader(
     field.dataType match {
       case StructType(fields) =>
         val childRow = row.toSeq(schema)(index).asInstanceOf[InternalRow]
+        if (childRow == null) {
+          return null
+        }
         val childSchema = schema(index).dataType.asInstanceOf[StructType]
         val resultValue = new Array[Any](fields.length)
         fields.zipWithIndex.foreach { case (childField, idx) =>
@@ -536,7 +539,7 @@ private class BufferedRowsReader(
         }
         new GenericInternalRow(resultValue)
       case dt =>
-        row.get(index, dt)
+        row.get(index, CharVarcharUtils.replaceCharVarcharWithString(dt))
     }
   }
 }
