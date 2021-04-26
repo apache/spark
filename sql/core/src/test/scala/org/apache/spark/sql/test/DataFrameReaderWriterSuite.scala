@@ -18,7 +18,7 @@
 package org.apache.spark.sql.test
 
 import java.io.File
-import java.util.Locale
+import java.util.{Locale, Random}
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
@@ -1222,8 +1222,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
   test("SPARK-26164: Allow concurrent writers for multiple partitions and buckets") {
     withTable("t1", "t2") {
+      // Uses fixed seed to ensure reproducible test execution
+      val r = new Random(31)
       val df = spark.range(200).map(_ => {
-        val n = scala.util.Random.nextInt
+        val n = r.nextInt()
         (n, n.toString, n % 5)
       }).toDF("k1", "k2", "part")
       df.write.format("parquet").saveAsTable("t1")

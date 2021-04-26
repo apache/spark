@@ -21,6 +21,7 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.catalyst.InternalRow
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -361,7 +363,8 @@ class DynamicPartitionDataConcurrentWriter(
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol,
     concurrentOutputWriterSpec: ConcurrentOutputWriterSpec)
-  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer) {
+  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer)
+  with Logging {
 
   /** Wrapper class to index a unique concurrent output writer. */
   private case class WriterIndex(
@@ -380,6 +383,12 @@ class DynamicPartitionDataConcurrentWriter(
    */
   private var sorted: Boolean = false
   private val concurrentWriters = mutable.HashMap[WriterIndex, WriterStatus]()
+
+  /**
+   * The index for current writer. Intentionally make the index mutable and reusable.
+   * Avoid JVM GC issue when many short-living `WriterIndex` objects are created
+   * if switching between concurrent writers frequently.
+   */
   private val currentWriterId = WriterIndex(None, None)
 
   /**
@@ -428,7 +437,7 @@ class DynamicPartitionDataConcurrentWriter(
           statsTrackers.foreach(_.newPartition(currentWriterId.partitionValues.get))
         }
       }
-      retrieveWriterInMap()
+      setupCurrentWriterUsingMap()
     }
 
     if (description.maxRecordsPerFile > 0 &&
@@ -471,7 +480,7 @@ class DynamicPartitionDataConcurrentWriter(
   /**
    * Retrieve writer in map, or create a new writer if not exists.
    */
-  private def retrieveWriterInMap(): Unit = {
+  private def setupCurrentWriterUsingMap(): Unit = {
     if (concurrentWriters.contains(currentWriterId)) {
       val status = concurrentWriters(currentWriterId)
       currentWriter = status.outputWriter
@@ -493,10 +502,13 @@ class DynamicPartitionDataConcurrentWriter(
             s" which is beyond max value ${concurrentOutputWriterSpec.maxWriters + 1}")
       }
       concurrentWriters.put(
-        WriterIndex(currentWriterId.partitionValues, currentWriterId.bucketId),
+        currentWriterId.copy(),
         new WriterStatus(currentWriter, recordsInFile, fileCounter))
       if (concurrentWriters.size >= concurrentOutputWriterSpec.maxWriters && !sorted) {
         // Fall back to sort-based sequential writer mode.
+        logInfo(s"Number of concurrent writers ${concurrentWriters.size} reaches the threshold. " +
+          "Fall back from concurrent writers to sort-based sequential writer. You may change " +
+          s"threshold with configuration ${SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key}")
         sorted = true
       }
     }
