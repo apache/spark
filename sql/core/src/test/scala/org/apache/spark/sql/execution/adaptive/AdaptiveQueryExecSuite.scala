@@ -737,7 +737,7 @@ class AdaptiveQueryExecSuite
           // skewed inner join optimization
           val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
             s"SELECT /*+ $joinHint(skewData1) */ * FROM skewData1 " +
-              s"JOIN skewData2 ON key1 = key2")
+              "JOIN skewData2 ON key1 = key2")
           val inner = if (isSMJ) {
             findTopLevelSortMergeJoin(innerAdaptivePlan)
           } else {
@@ -748,24 +748,24 @@ class AdaptiveQueryExecSuite
           // skewed left outer join optimization
           val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
             s"SELECT /*+ $joinHint(skewData2) */ * FROM skewData1 " +
-              s"LEFT OUTER JOIN skewData2 ON key1 = key2")
-          val leftSmj = if (isSMJ) {
+              "LEFT OUTER JOIN skewData2 ON key1 = key2")
+          val leftJoin = if (isSMJ) {
             findTopLevelSortMergeJoin(leftAdaptivePlan)
           } else {
             findTopLevelShuffledHashJoin(leftAdaptivePlan)
           }
-          checkSkewJoin(leftSmj, 2, 0)
+          checkSkewJoin(leftJoin, 2, 0)
 
           // skewed right outer join optimization
           val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
             s"SELECT /*+ $joinHint(skewData1) */ * FROM skewData1 " +
-              s"RIGHT OUTER JOIN skewData2 ON key1 = key2")
-          val rightSmj = if (isSMJ) {
+              "RIGHT OUTER JOIN skewData2 ON key1 = key2")
+          val rightJoin = if (isSMJ) {
             findTopLevelSortMergeJoin(rightAdaptivePlan)
           } else {
             findTopLevelShuffledHashJoin(rightAdaptivePlan)
           }
-          checkSkewJoin(rightSmj, 0, 1)
+          checkSkewJoin(rightJoin, 0, 1)
         }
       }
     }
