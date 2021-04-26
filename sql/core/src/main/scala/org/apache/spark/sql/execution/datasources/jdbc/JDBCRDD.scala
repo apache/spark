@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
 
@@ -29,8 +30,6 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
-
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
