@@ -54,30 +54,38 @@ object IntervalUtils {
   }
   import IntervalUnit._
 
-  def getYears(interval: CalendarInterval): Int = {
-    interval.months / MONTHS_PER_YEAR
-  }
+  def getYears(months: Int): Int = months / MONTHS_PER_YEAR
 
-  def getMonths(interval: CalendarInterval): Byte = {
-    (interval.months % MONTHS_PER_YEAR).toByte
-  }
+  def getYears(interval: CalendarInterval): Int = getYears(interval.months)
+
+  def getMonths(months: Int): Byte = (months % MONTHS_PER_YEAR).toByte
+
+  def getMonths(interval: CalendarInterval): Byte = getMonths(interval.months)
+
+  def getDays(microseconds: Long): Int = (microseconds / MICROS_PER_DAY).toInt
 
   def getDays(interval: CalendarInterval): Int = {
-    val daysInMicroseconds = (interval.microseconds / MICROS_PER_DAY).toInt
+    val daysInMicroseconds = getDays(interval.microseconds)
     Math.addExact(interval.days, daysInMicroseconds)
   }
 
-  def getHours(interval: CalendarInterval): Long = {
-    (interval.microseconds % MICROS_PER_DAY) / MICROS_PER_HOUR
+  def getHours(microseconds: Long): Byte = {
+    ((microseconds % MICROS_PER_DAY) / MICROS_PER_HOUR).toByte
   }
 
-  def getMinutes(interval: CalendarInterval): Byte = {
-    ((interval.microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
+  def getHours(interval: CalendarInterval): Byte = getHours(interval.microseconds)
+
+  def getMinutes(microseconds: Long): Byte = {
+    ((microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
   }
 
-  def getSeconds(interval: CalendarInterval): Decimal = {
-    Decimal(interval.microseconds % MICROS_PER_MINUTE, 8, 6)
+  def getMinutes(interval: CalendarInterval): Byte = getMinutes(interval.microseconds)
+
+  def getSeconds(microseconds: Long): Decimal = {
+    Decimal(microseconds % MICROS_PER_MINUTE, 8, 6)
   }
+
+  def getSeconds(interval: CalendarInterval): Decimal = getSeconds(interval.microseconds)
 
   private def toLongWithRange(
       fieldName: IntervalUnit,
