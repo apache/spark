@@ -751,8 +751,14 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private def fetchUpToMaxBytes(): Unit = {
-    // Return immediately if Netty is still OOMed and there're ongoing fetch requests
-    if (NettyUtils.isNettyOOMOnShuffle.get() && reqsInFlight > 0) return
+    if (NettyUtils.isNettyOOMOnShuffle.get()) {
+      if (reqsInFlight > 0) {
+        // Return immediately if Netty is still OOMed and there're ongoing fetch requests
+        return
+      } else {
+        NettyUtils.isNettyOOMOnShuffle.compareAndSet(true, false)
+      }
+    }
 
     // Send fetch requests up to maxBytesInFlight. If you cannot fetch from a remote host
     // immediately, defer the request until the next time it can be processed.
