@@ -121,44 +121,34 @@ object ExtractIntervalPart {
   def parseExtractField(
       extractField: String,
       source: Expression,
-      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" =>
-      if (source.dataType == YearMonthIntervalType) {
+      errorHandleFunc: => Nothing): Expression = {
+    (extractField.toUpperCase(Locale.ROOT), source.dataType) match {
+      case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", YearMonthIntervalType) =>
         ExtractANSIIntervalYears(source)
-      } else {
+      case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", CalendarIntervalType) =>
         ExtractIntervalYears(source)
-      }
-    case "MONTH" | "MON" | "MONS" | "MONTHS" =>
-      if (source.dataType == YearMonthIntervalType) {
+      case ("MONTH" | "MON" | "MONS" | "MONTHS", YearMonthIntervalType) =>
         ExtractANSIIntervalMonths(source)
-      } else {
+      case ("MONTH" | "MON" | "MONS" | "MONTHS", CalendarIntervalType) =>
         ExtractIntervalMonths(source)
-      }
-    case "DAY" | "D" | "DAYS" =>
-      if (source.dataType == DayTimeIntervalType) {
+      case ("DAY" | "D" | "DAYS", DayTimeIntervalType) =>
         ExtractANSIIntervalDays(source)
-      } else {
+      case ("DAY" | "D" | "DAYS", CalendarIntervalType) =>
         ExtractIntervalDays(source)
-      }
-    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" =>
-      if (source.dataType == DayTimeIntervalType) {
+      case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", DayTimeIntervalType) =>
         ExtractANSIIntervalHours(source)
-      } else {
+      case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", CalendarIntervalType) =>
         ExtractIntervalHours(source)
-      }
-    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" =>
-      if (source.dataType == DayTimeIntervalType) {
+      case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", DayTimeIntervalType) =>
         ExtractANSIIntervalMinutes(source)
-      } else {
+      case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", CalendarIntervalType) =>
         ExtractIntervalMinutes(source)
-      }
-    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" =>
-      if (source.dataType == DayTimeIntervalType) {
+      case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", DayTimeIntervalType) =>
         ExtractANSIIntervalSeconds(source)
-      } else {
+      case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", CalendarIntervalType) =>
         ExtractIntervalSeconds(source)
-      }
-    case _ => errorHandleFunc
+      case _ => errorHandleFunc
+    }
   }
 }
 
