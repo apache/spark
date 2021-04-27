@@ -313,7 +313,6 @@ private[spark] class BlockManager(
         in.close()
       }
     } else {
-      println(checksumFile.toString)
       // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
       Cause.UNKNOWN
     }

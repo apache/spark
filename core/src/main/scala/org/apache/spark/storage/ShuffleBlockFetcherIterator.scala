@@ -870,8 +870,6 @@ private class BufferReleasingInputStream(
     if (!closed) {
       delegate.close()
       iterator.releaseCurrentResultBuffer()
-      // scalastyle:off
-      println("buffer released")
       closed = true
     }
   }

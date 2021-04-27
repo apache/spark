@@ -410,10 +410,7 @@ private[spark] class IndexShuffleBlockResolver(
             if (checksumFile.exists()) {
               checksumFile.delete()
             }
-            // scalastyle:off
-            println(checksumFile.toString)
             if (!checksumTmp.renameTo(checksumFile)) {
-              println("FAILED to rename checksumFile")
               // It's not worthwhile to fail here after index file and data file are already
               // successfully stored due to checksum is only used for the corner error case.
               logWarning("fail to rename file " + checksumTmp + " to " + checksumFile)
