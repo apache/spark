@@ -863,3 +863,4 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(mergedBlock.size === inputBlocks.map(_.size).sum)
   }
 }
+
