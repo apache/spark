@@ -167,7 +167,7 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     Configuration.setConfiguration(null)
     withTempDir { dir =>
       val dummyKrb5Conf = File.createTempFile("dummy", "krb5.conf", dir)
-      val origKrb5Conf = sys.props("java.security.krb5.conf")
+      val origKrb5Conf = sys.props(KRB5_CONF_PROP)
       try {
         // Set dummy krb5.conf and refresh config so this assertion is expected to fail.
         // The thrown exception is dependent on the actual JDBC driver class.
