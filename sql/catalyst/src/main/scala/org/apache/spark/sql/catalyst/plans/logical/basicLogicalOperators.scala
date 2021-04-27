@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, TypeCoercion, TypeCoercionBase}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -28,9 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  INNER_LIKE_JOIN, JOIN, LEFT_SEMI_OR_ANTI_JOIN, NATURAL_LIKE_JOIN, OUTER_JOIN, TreePattern
-}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -165,6 +161,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
   override protected lazy val validConstraints: ExpressionSet = {
     val predicates = splitConjunctivePredicates(condition)
@@ -781,23 +779,14 @@ case class Range(
 /**
  * This is a Group by operator with the aggregate functions and projections.
  *
- * @param groupingExpressions Expressions for grouping keys.
- * @param aggregateExpressions Expressions for a project list, which can contain
- *                             [[AggregateExpression]]s and [[GroupingExprRef]]s.
- * @param child The child of the aggregate node.
+ * @param groupingExpressions expressions for grouping keys
+ * @param aggregateExpressions expressions for a project list, which could contain
+ *                             [[AggregateExpression]]s.
  *
- * Expressions without aggregate functions in [[aggregateExpressions]] can contain
- * [[GroupingExprRef]]s to refer to complex grouping expressions in [[groupingExpressions]]. These
- * references ensure that optimization rules don't change the aggregate expressions to invalid ones
- * that no longer refer to any grouping expressions and also simplify the expression transformations
- * on the node (need to transform the expression only once).
- *
- * For example, in the following query Spark shouldn't optimize the aggregate expression
- * `Not(IsNull(c))` to `IsNotNull(c)` as the grouping expression is `IsNull(c)`:
- * SELECT not(c IS NULL)
- * FROM t
- * GROUP BY c IS NULL
- * Instead, the aggregate expression should contain `Not(GroupingExprRef(0))`.
+ * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
+ * separating projection from grouping and aggregate, we should avoid expression-level optimization
+ * on aggregateExpressions, which could reference an expression in groupingExpressions.
+ * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
  */
 case class Aggregate(
     groupingExpressions: Seq[Expression],
@@ -824,71 +813,13 @@ case class Aggregate(
     }
   }
 
-  private def expandGroupingReferences(e: Expression): Expression = {
-    e match {
-      case _ if AggregateExpression.isAggregate(e) => e
-      case g: GroupingExprRef => groupingExpressions(g.ordinal)
-      case _ => e.mapChildren(expandGroupingReferences)
-    }
-  }
-
-  lazy val aggregateExpressionsWithoutGroupingRefs = {
-    aggregateExpressions.map(expandGroupingReferences(_).asInstanceOf[NamedExpression])
-  }
-
   override lazy val validConstraints: ExpressionSet = {
-    val nonAgg = aggregateExpressionsWithoutGroupingRefs.
-      filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
+    val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
-}
-
-object Aggregate {
-  private def collectComplexGroupingExpressions(groupingExpressions: Seq[Expression]) = {
-    val complexGroupingExpressions = mutable.Map.empty[Expression, (Expression, Int)]
-    var i = 0
-    groupingExpressions.foreach { ge =>
-      if (!ge.foldable && ge.children.nonEmpty &&
-        !complexGroupingExpressions.contains(ge.canonicalized)) {
-        complexGroupingExpressions += ge.canonicalized -> (ge, i)
-      }
-      i += 1
-    }
-    complexGroupingExpressions
-  }
-
-  private def insertGroupingReferences(
-      aggregateExpressions: Seq[NamedExpression],
-      groupingExpressions: collection.Map[Expression, (Expression, Int)]): Seq[NamedExpression] = {
-    def insertGroupingExprRefs(e: Expression): Expression = {
-      e match {
-        case _ if AggregateExpression.isAggregate(e) => e
-        case _ if groupingExpressions.contains(e.canonicalized) =>
-          val (groupingExpression, ordinal) = groupingExpressions(e.canonicalized)
-          GroupingExprRef(ordinal, groupingExpression.dataType, groupingExpression.nullable)
-        case _ => e.mapChildren(insertGroupingExprRefs)
-      }
-    }
-
-    aggregateExpressions.map(insertGroupingExprRefs(_).asInstanceOf[NamedExpression])
-  }
-
-  def withGroupingRefs(
-      groupingExpressions: Seq[Expression],
-      aggregateExpressions: Seq[NamedExpression],
-      child: LogicalPlan): Aggregate = {
-    val complexGroupingExpressions = collectComplexGroupingExpressions(groupingExpressions)
-    val aggrExprWithGroupingReferences = if (complexGroupingExpressions.nonEmpty) {
-      insertGroupingReferences(aggregateExpressions, complexGroupingExpressions)
-    } else {
-      aggregateExpressions
-    }
-
-    new Aggregate(groupingExpressions, aggrExprWithGroupingReferences, child)
-  }
 }
 
 case class Window(

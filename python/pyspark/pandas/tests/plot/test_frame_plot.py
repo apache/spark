@@ -22,10 +22,10 @@ from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option, option_context
 from pyspark.pandas.plot import TopNPlotBase, SampledPlotBase, HistogramPlotBase
 from pyspark.pandas.exceptions import PandasNotImplementedError
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class DataFramePlotTest(ReusedSQLTestCase):
+class DataFramePlotTest(PandasOnSparkTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

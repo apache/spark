@@ -31,6 +31,7 @@ import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric}
 import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, SupportsTruncate, WriteBuilder}
@@ -503,7 +504,21 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         startingStreamOffsets,
         failOnDataLoss(caseInsensitiveOptions))
     }
+
+    override def supportedCustomMetrics(): Array[CustomMetric] = {
+      Array(new OffsetOutOfRangeMetric, new DataLossMetric)
+    }
   }
+}
+
+private[spark] class OffsetOutOfRangeMetric extends CustomSumMetric {
+  override def name(): String = "offsetOutOfRange"
+  override def description(): String = "estimated number of fetched offsets out of range"
+}
+
+private[spark] class DataLossMetric extends CustomSumMetric {
+  override def name(): String = "dataLoss"
+  override def description(): String = "number of data loss error"
 }
 
 private[kafka010] object KafkaSourceProvider extends Logging {
