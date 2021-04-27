@@ -675,7 +675,10 @@ object FunctionRegistry {
     // csv
     expression[CsvToStructs]("from_csv"),
     expression[SchemaOfCsv]("schema_of_csv"),
-    expression[StructsToCsv]("to_csv")
+    expression[StructsToCsv]("to_csv"),
+
+    // mask
+    expression[Mask]("mask")
   )
 
   val builtin: SimpleFunctionRegistry = {

@@ -73,6 +73,19 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val testDataForMask: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      TestData(0, "a") ::
+      TestData(1, "A") ::
+      TestData(2, "1") ::
+      TestData(3, "?") ::
+      TestData(4, "ab1dDE-fG234h%~JKL!mN*+OpQ5Rs6tu#?78<>vWx9yZ;0") ::
+      TestData(5, "") ::
+      TestData(6, null) :: Nil, 1).toDF()
+    df.createOrReplaceTempView("testDataForMask")
+    df
+  }
+
   protected lazy val negativeData: DataFrame = {
     val df = spark.sparkContext.parallelize(
       (1 to 100).map(i => TestData(-i, (-i).toString))).toDF()

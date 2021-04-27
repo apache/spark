@@ -669,6 +669,149 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       Row("ab", "cde"))
   }
 
+  test("mask") {
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("w"), lit("d"), lit("!"))),
+      Seq(Row("w"), Row("W"), Row("d"), Row("!"),
+        Row("wwdwWW!wWdddw!!WWW!wW!!WwWdWwdww!!dd!!wWwdwW!d"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      sql("SELECT mask(value, 'W', 'w', 'd', '!') FROM testDataForMask"),
+      Seq(Row("w"), Row("W"), Row("d"), Row("!"),
+        Row("wwdwWW!wWdddw!!WWW!wW!!WwWdWwdww!!dd!!wWwdwW!d"), Row(""), Row(null))
+    )
+  }
+
+  test("mask - the length of mask > 1") {
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("WT"), lit("w"), lit("d"), lit("!"))),
+      Seq(Row("w"), Row("W"), Row("d"), Row("!"),
+        Row("wwdwWW!wWdddw!!WWW!wW!!WwWdWwdww!!dd!!wWwdwW!d"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("wijk"), lit("d"), lit("!"))),
+      Seq(Row("w"), Row("W"), Row("d"), Row("!"),
+        Row("wwdwWW!wWdddw!!WWW!wW!!WwWdWwdww!!dd!!wWwdwW!d"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("w"), lit("d3ti#"), lit("!"))),
+      Seq(Row("w"), Row("W"), Row("d"), Row("!"),
+        Row("wwdwWW!wWdddw!!WWW!wW!!WwWdWwdww!!dd!!wWwdwW!d"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("w"), lit("d"), lit("!#%&"))),
+      Seq(Row("w"), Row("W"), Row("d"), Row("!"),
+        Row("wwdwWW!wWdddw!!WWW!wW!!WwWdWwdww!!dd!!wWwdwW!d"), Row(""), Row(null))
+    )
+  }
+
+  test("mask - suppress mask") {
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit(-1), lit("w"), lit("d"), lit("!"))),
+      Seq(Row("w"), Row("A"), Row("d"), Row("!"),
+        Row("wwdwDE!wGdddw!!JKL!wN!!OwQdRwdww!!dd!!wWwdwZ!d"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit(-1), lit("d"), lit("!"))),
+      Seq(Row("a"), Row("W"), Row("d"), Row("!"),
+        Row("abddWW!fWdddh!!WWW!mW!!WpWdWsdtu!!dd!!vWxdyW!d"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("w"), lit(-1), lit("!"))),
+      Seq(Row("w"), Row("W"), Row("1"), Row("!"),
+        Row("ww1wWW!wW234w!!WWW!wW!!WwW5Ww6ww!!78!!wWw9wW!0"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("w"), lit("d"), lit(-1))),
+      Seq(Row("w"), Row("W"), Row("d"), Row("?"),
+        Row("wwdwWW-wWdddw%~WWW!wW*+WwWdWwdww#?dd<>wWwdwW;d"), Row(""), Row(null))
+    )
+  }
+
+  test("mask - null mask or null target") {
+    checkAnswer(
+      testDataForMask.select(mask(lit(null), lit("W"), lit("w"), lit("d"), lit("!"))),
+      Seq(Row(null), Row(null), Row(null), Row(null), Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit(null), lit("w"), lit("d"), lit("!"))),
+      Seq(Row(null), Row(null), Row(null), Row(null), Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit(null), lit("d"), lit("!"))),
+      Seq(Row(null), Row(null), Row(null), Row(null), Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("w"), lit(null), lit("!"))),
+      Seq(Row(null), Row(null), Row(null), Row(null), Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("w"), lit("d"), lit(null))),
+      Seq(Row(null), Row(null), Row(null), Row(null), Row(null), Row(null), Row(null))
+    )
+  }
+
+  test("mask - default mask") {
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit(""), lit("w"), lit("d"), lit("!"))),
+      Seq(Row("w"), Row("X"), Row("d"), Row("!"),
+        Row("wwdwXX!wXdddw!!XXX!wX!!XwXdXwdww!!dd!!wXwdwX!d"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit(""), lit("d"), lit("!"))),
+      Seq(Row("x"), Row("W"), Row("d"), Row("!"),
+        Row("xxdxWW!xWdddx!!WWW!xW!!WxWdWxdxx!!dd!!xWxdxW!d"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("w"), lit(""), lit("!"))),
+      Seq(Row("w"), Row("W"), Row("n"), Row("!"),
+        Row("wwnwWW!wWnnnw!!WWW!wW!!WwWnWwnww!!nn!!wWwnwW!n"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      testDataForMask.select(mask($"value", lit("W"), lit("w"), lit("d"), lit(""))),
+      Seq(Row("w"), Row("W"), Row("d"), Row("?"),
+        Row("wwdwWW-wWdddw%~WWW!wW*+WwWdWwdww#?dd<>wWwdwW;d"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      sql("SELECT mask(value) FROM testDataForMask"),
+      Seq(Row("x"), Row("X"), Row("n"), Row("?"),
+        Row("xxnxXX-xXnnnx%~XXX!xX*+XxXnXxnxx#?nn<>xXxnxX;n"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      sql("SELECT mask(value, 'W') FROM testDataForMask"),
+      Seq(Row("x"), Row("W"), Row("n"), Row("?"),
+        Row("xxnxWW-xWnnnx%~WWW!xW*+WxWnWxnxx#?nn<>xWxnxW;n"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      sql("SELECT mask(value, 'W', 'w') FROM testDataForMask"),
+      Seq(Row("w"), Row("W"), Row("n"), Row("?"),
+        Row("wwnwWW-wWnnnw%~WWW!wW*+WwWnWwnww#?nn<>wWwnwW;n"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      sql("SELECT mask(value, 'W', 'w', 'd') FROM testDataForMask"),
+      Seq(Row("w"), Row("W"), Row("d"), Row("?"),
+        Row("wwdwWW-wWdddw%~WWW!wW*+WwWdWwdww#?dd<>wWwdwW;d"), Row(""), Row(null))
+    )
+  }
+
   test("monotonically_increasing_id") {
     // Make sure we have 2 partitions, each with 2 records.
     val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>

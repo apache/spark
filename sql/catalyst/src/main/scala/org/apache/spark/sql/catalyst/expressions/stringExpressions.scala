@@ -22,6 +22,7 @@ import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
 import java.util.regex.Pattern
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
@@ -2648,4 +2649,271 @@ case class Sentences(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
     copy(str = newFirst, language = newSecond, country = newThird)
 
+}
+
+/**
+ * Returns a masked version of value specified in first argument.
+ * By default, upper case letters are converted to "X",
+ * lower case letters are converted to "x", digit letters are converted to "n"
+ * and other letters are not converted.
+ * For example mask("abcd-EFGH-8765-4321") results in xxxx-XXXX-nnnn-nnnn.
+ * You can override the characters used in the mask by supplying additional arguments:
+ * The second argument controls the mask character for upper case letters,
+ * the third argument for lower case letters, the fourth argument for digit letters,
+ * and the fifth argument for other letters.
+ * Each mask argument should be a string whose length is 1 or 4-bit codepoint.
+ * If a string whose length is greater than 1 is specified for a mask argument,
+ * only the first character is recognized.
+ * If -1 is specified for a mask argument, the corresponding letters are not masked.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str[, upper [, lower [, digit [, other]]]]) - Masks the value.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_("abcd-EFGH-8765-4321", "U", "l", "#");
+       llll-UUUU-####-####
+  """,
+  since = "3.2.0",
+  group = "data_masking_funcs")
+// scalastyle:on line.size.limit
+case class Mask(
+    value: Expression,
+    upper: Expression,
+    lower: Expression,
+    digit: Expression,
+    other: Expression)
+  extends Expression with ExpectsInputTypes with NullIntolerant {
+
+  def this(str: Expression, upper: Expression, lower: Expression, digit: Expression) = {
+    this(str, upper, lower, digit, Literal(MaskTransformer.DEFAULT_MASKED_OTHER))
+  }
+
+  def this(str: Expression, upper: Expression, lower: Expression) =
+    this(str, upper, lower, Literal(MaskTransformer.DEFAULT_MASKED_DIGIT))
+
+  def this(str: Expression, upper: Expression) = {
+    this(str, upper, Literal(MaskTransformer.DEFAULT_MASKED_LOWERCASE))
+  }
+
+  def this(str: Expression) = {
+    this(str, Literal(MaskTransformer.DEFAULT_MASKED_UPPERCASE))
+  }
+
+  override def children: Seq[Expression] = value::upper::lower::digit::other::Nil
+
+  override def dataType: DataType = StringType
+
+  override def foldable: Boolean =
+    value.foldable && upper.foldable && lower.foldable && digit.foldable && other.foldable
+
+  override def nullable: Boolean =
+    value.nullable || upper.nullable || lower.nullable || digit.nullable || other.nullable
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringType,
+      TypeCollection(StringType, IntegerType),
+      TypeCollection(StringType, IntegerType),
+      TypeCollection(StringType, IntegerType),
+      TypeCollection(StringType, IntegerType))
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Mask =
+    copy(value = newChildren(0), upper = newChildren(1),
+      lower = newChildren(2), digit = newChildren(3), other = newChildren(4))
+
+  override def eval(input: InternalRow): UTF8String = {
+    val maskTarget = Option(value.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
+    if (maskTarget == null) {
+      return null
+    }
+
+    val upperMask = upper.eval(input)
+    if (upperMask == null) {
+      return null
+    }
+
+    val lowerMask = lower.eval(input)
+    if (lowerMask == null) {
+      return null
+    }
+
+    val digitMask = digit.eval(input)
+    if (digitMask == null) {
+      return null
+    }
+
+    val otherMask = other.eval(input)
+    if (otherMask == null) {
+      return null
+    }
+
+    def configTransformer(maskValue: Any, f: Int => MaskTransformer): Unit = {
+      maskValue match {
+        case u: UTF8String =>
+          val s = u.toString
+          if (s.length > 0) f(s(0))
+        case i: Int => f(i)
+        case _ =>
+      }
+    }
+
+    val transformer = new MaskTransformer()
+    configTransformer(upperMask, transformer.withMaskedUpperChar)
+    configTransformer(lowerMask, transformer.withMaskedLowerChar)
+    configTransformer(digitMask, transformer.withMaskedDigitChar)
+    configTransformer(otherMask, transformer.withMaskedDigitChar)
+
+    val ret = new StringBuilder
+    maskTarget.chars().iterator().asScala.foreach(
+      c => ret.append (transformer.transformChar(c).toChar))
+
+    UTF8String.fromString(ret.toString())
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val i = ctx.freshName("i")
+    val value = ctx.freshName("value")
+    val strLength = ctx.freshName("strLength")
+    val builder = ctx.freshName("builder")
+    val transformer = ctx.freshName("transformer")
+    val c = ctx.freshName("c")
+    val s = ctx.freshName("s")
+    nullSafeCodeGen(ctx, ev, (v, u, l, d, o) => {
+      val declarationPart =
+        s"""
+           |final String $value = $v.toString();
+           |final int $strLength = $value.length();
+           |final StringBuilder $builder = new StringBuilder($strLength);
+           |MaskTransformer $transformer = new MaskTransformer();
+        """.stripMargin
+
+      val configPart = genTransformerCode(ctx, upper, transformer, "withMaskedUpperChar", u) +
+        genTransformerCode(ctx, lower, transformer, "withMaskedLowerChar", l) +
+        genTransformerCode(ctx, digit, transformer, "withMaskedDigitChar", d) +
+        genTransformerCode(ctx, other, transformer, "withMaskedOtherChar", o)
+
+      val maskingPart =
+        s"""
+           |for (int $i = 0; $i < $strLength; $i++) {
+           |  char $c = $value.charAt($i);
+           |  $builder.appendCodePoint($transformer.transformChar($c));
+           |}
+           |${ev.value} = UTF8String.fromString($builder.toString());
+        """
+      declarationPart + configPart + maskingPart
+    })
+  }
+
+  private def genTransformerCode(
+      ctx: CodegenContext,
+      expr: Expression,
+      transformer: String,
+      method: String,
+      variable: String): String = {
+    val s = ctx.freshName("s")
+    if (expr.dataType == StringType) {
+      s"""
+         |String $s = $variable.toString();
+         |if ($s.length() > 0) $transformer.$method($s.charAt(0));
+       """.stripMargin
+    } else {
+      s"""
+         |$transformer.$method($variable);
+       """.stripMargin
+    }
+  }
+
+  private def nullSafeCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: (String, String, String, String, String) => String): ExprCode = {
+    val strGen = children(0).genCode(ctx)
+    val upperGen = children(1).genCode(ctx)
+    val lowerGen = children(2).genCode(ctx)
+    val digitGen = children(3).genCode(ctx)
+    val otherGen = children(4).genCode(ctx)
+    val resultCode =
+      f(strGen.value, upperGen.value, lowerGen.value, digitGen.value, otherGen.value)
+
+    if (nullable) {
+      val nullSafeEval =
+        strGen.code + ctx.nullSafeExec(children(0).nullable, strGen.isNull) {
+          upperGen.code + ctx.nullSafeExec(children(1).nullable, upperGen.isNull) {
+            lowerGen.code + ctx.nullSafeExec(children(2).nullable, lowerGen.isNull) {
+              digitGen.code + ctx.nullSafeExec(children(3).nullable, digitGen.isNull) {
+                otherGen.code + ctx.nullSafeExec(children(4).nullable, otherGen.isNull) {
+                  s"""
+                    ${ev.isNull} = false; // resultCode could change nullability.
+                    $resultCode
+                   """
+                }
+              }
+            }
+          }
+        }
+
+      ev.copy(code = code"""
+        boolean ${ev.isNull} = true;
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval""")
+    } else {
+      ev.copy(code = code"""
+        ${strGen.code}
+        ${upperGen.code}
+        ${lowerGen.code}
+        ${digitGen.code}
+        ${otherGen.code}
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
+    }
+  }
+}
+
+class MaskTransformer() {
+  import MaskTransformer._
+
+  var maskedUpperChar: Int = DEFAULT_MASKED_UPPERCASE
+  var maskedLowerChar: Int = DEFAULT_MASKED_LOWERCASE
+  var maskedDigitChar: Int = DEFAULT_MASKED_DIGIT
+  var maskedOtherChar: Int = DEFAULT_MASKED_OTHER
+
+  def withMaskedUpperChar(c: Int): this.type = {
+    maskedUpperChar = c
+    this
+  }
+
+  def withMaskedLowerChar(c: Int): this.type = {
+    maskedLowerChar = c
+    this
+  }
+
+  def withMaskedDigitChar(c: Int): this.type = {
+    maskedDigitChar = c
+    this
+  }
+
+  def withMaskedOtherChar(c: Int): this.type = {
+    maskedOtherChar = c
+    this
+  }
+
+  def transformChar(c: Int): Int = {
+    Character.getType(c) match {
+      case Character.UPPERCASE_LETTER if maskedUpperChar != UNMASKED_VAL => maskedUpperChar
+      case Character.LOWERCASE_LETTER if maskedLowerChar != UNMASKED_VAL => maskedLowerChar
+      case Character.DECIMAL_DIGIT_NUMBER if maskedDigitChar != UNMASKED_VAL => maskedDigitChar
+      case Character.UPPERCASE_LETTER | Character.LOWERCASE_LETTER
+           | Character.DECIMAL_DIGIT_NUMBER => c
+      case _ if maskedOtherChar != UNMASKED_VAL => maskedOtherChar
+      case _ => c
+    }
+  }
+}
+
+object MaskTransformer {
+  val UNMASKED_VAL: Int = -1
+  val DEFAULT_MASKED_UPPERCASE: Int = 'X'
+  val DEFAULT_MASKED_LOWERCASE: Int = 'x'
+  val DEFAULT_MASKED_DIGIT: Int = 'n'
+  val DEFAULT_MASKED_OTHER: Int = UNMASKED_VAL
 }

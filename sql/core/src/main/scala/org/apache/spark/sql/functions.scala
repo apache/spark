@@ -2906,6 +2906,32 @@ object functions {
   def upper(e: Column): Column = withExpr { Upper(e.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
+  // Data masking functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns a masked version of value specified in the first argument.
+   * The second argument controls the mask character for upper case letters,
+   * the third argument for lower case letters, the fourth argument for digit letters,
+   * and the fifth argument for other letters.
+   * For example mask("abcd-EFGH-8765-4321", 'x', 'X', 'n', -1) results in xxxx-XXXX-nnnn-nnnn.
+   * Each mask argument should be a string whose length is 1 or 4-bit codepoint.
+   * If a string whose length is greater than 1 is specified for a mask argument,
+   * only the first character is recognized.
+   * If -1 is specified for a mask argument, the corresponding letters are not masked.
+   * @since 3.2.0
+   * @return
+   */
+  def mask(
+      value: Column,
+      upper: Column,
+      lower: Column,
+      digit: Column,
+      other: Column): Column = withExpr {
+    Mask(value.expr, upper.expr, lower.expr, digit.expr, other.expr)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
