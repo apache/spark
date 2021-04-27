@@ -39,9 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  EXPRESSION_WITH_RANDOM_SEED, NATURAL_LIKE_JOIN, WINDOW_EXPRESSION
-}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -836,14 +834,6 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupAndResolveTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
-      case c @ CacheTable(UnresolvedRelation(ident, _, false), _, _, _) =>
-        lookupAndResolveTempView(ident)
-          .map(view => c.copy(table = view))
-          .getOrElse(c)
-      case c @ UncacheTable(UnresolvedRelation(ident, _, false), _, _) =>
-        lookupAndResolveTempView(ident)
-          .map(view => c.copy(table = view, isTempView = true))
-          .getOrElse(c)
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
         write.table match {
@@ -1022,16 +1012,6 @@ class Analyzer(override val catalogManager: CatalogManager)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
-      case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
-        lookupV2Relation(u.multipartIdentifier, u.options, false)
-          .map(v2Relation => c.copy(table = v2Relation))
-          .getOrElse(c)
-
-      case c @ UncacheTable(u @ UnresolvedRelation(_, _, false), _, _) =>
-        lookupV2Relation(u.multipartIdentifier, u.options, false)
-          .map(v2Relation => c.copy(table = v2Relation))
-          .getOrElse(c)
-
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
         write.table match {
@@ -1128,20 +1108,6 @@ class Analyzer(override val catalogManager: CatalogManager)
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
           case other => i.copy(table = other)
         }
-
-      case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
-        lookupRelation(u.multipartIdentifier, u.options, false)
-          .map(resolveViews)
-          .map(EliminateSubqueryAliases(_))
-          .map(relation => c.copy(table = relation))
-          .getOrElse(c)
-
-      case c @ UncacheTable(u @ UnresolvedRelation(_, _, false), _, _) =>
-        lookupRelation(u.multipartIdentifier, u.options, false)
-          .map(resolveViews)
-          .map(EliminateSubqueryAliases(_))
-          .map(relation => c.copy(table = relation))
-          .getOrElse(c)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
@@ -1413,9 +1379,6 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
-      // TODO: Remove this logic and see SPARK-34035
-      case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(input = t.child.output)
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
 
@@ -2214,7 +2177,8 @@ class Analyzer(override val catalogManager: CatalogManager)
      *     outer plan to get evaluated.
      */
     private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
-      plan transformExpressions {
+      plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY,
+        EXISTS_SUBQUERY, IN_SUBQUERY), ruleId) {
         case s @ ScalarSubquery(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId) if !sub.resolved =>
@@ -2231,7 +2195,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     /**
      * Resolve and rewrite all subqueries in an operator tree..
      */
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+      _.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY), ruleId) {
       // In case of HAVING (a filter after an aggregate) we use both the aggregate and
       // its child for resolution.
       case f @ Filter(_, a: Aggregate) if f.childrenResolved =>
@@ -3825,9 +3790,9 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    plan resolveOperators {
+    plan.resolveOperatorsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, FILTER), ruleId) {
       case f @ Filter(_, a: Aggregate) if f.resolved =>
-        f transformExpressions {
+        f.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
           case s: SubqueryExpression if s.children.nonEmpty =>
             // Collect the aliases from output of aggregate.
             val outerAliases = a.aggregateExpressions collect { case a: Alias => a }

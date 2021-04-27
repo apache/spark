@@ -30,11 +30,11 @@ from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
     MissingPandasLikeSeriesGroupBy,
 )
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
 from pyspark.pandas.groupby import is_multi_agg_with_relabel
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class GroupByTest(ReusedSQLTestCase, TestUtils):
+class GroupByTest(PandasOnSparkTestCase, TestUtils):
     def test_groupby_simple(self):
         pdf = pd.DataFrame(
             {

@@ -54,6 +54,22 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
 
+  val KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION =
+    ConfigBuilder("spark.kubernetes.driver.service.deleteOnTermination")
+      .doc("If true, driver service will be deleted on Spark application termination. " +
+        "If false, it will be cleaned up when the driver pod is deletion.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val KUBERNETES_DRIVER_OWN_PVC =
+    ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
+      .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +
+        "instead of the executor pods")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")

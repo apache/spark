@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import glob
 import os
 import struct
@@ -29,13 +30,13 @@ have_numpy = False
 try:
     import scipy.sparse  # noqa: F401
     have_scipy = True
-except:
+except ImportError:
     # No SciPy, but that's okay, we'll skip those tests
     pass
 try:
     import numpy as np  # noqa: F401
     have_numpy = True
-except:
+except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 

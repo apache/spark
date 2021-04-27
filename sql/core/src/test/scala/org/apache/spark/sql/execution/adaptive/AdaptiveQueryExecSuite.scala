@@ -1575,4 +1575,19 @@ class AdaptiveQueryExecSuite
       checkNoCoalescePartitions(df.sort($"key"), ENSURE_REQUIREMENTS)
     }
   }
+
+  test("SPARK-35239: Coalesce shuffle partition should handle empty input RDD") {
+    withTable("t") {
+      withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        spark.sql("CREATE TABLE t (c1 int) USING PARQUET")
+        val (_, adaptive) = runAdaptiveAndVerifyResult("SELECT c1, count(*) FROM t GROUP BY c1")
+        assert(
+          collect(adaptive) {
+            case c @ CustomShuffleReaderExec(_, partitionSpecs) if partitionSpecs.length == 1 => c
+          }.length == 1
+        )
+      }
+    }
+  }
 }

@@ -207,6 +207,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("IntegralDivide: throw exception on overflow under ANSI mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Literal(Long.MinValue), Literal(-1L)), "Overflow in integral divide.")
+    }
+  }
+
   test("% (Remainder)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))

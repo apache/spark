@@ -58,7 +58,7 @@ jobs:
 
                   // Iterator GitHub Checks in the PR
                   for await (const cr of checkRuns.data.check_runs) {
-                    if (cr.name == 'Build and test') {
+                    if (cr.name == 'Build and test' && cr.conclusion != "action_required") {
                       // text contains parameters to make request in JSON.
                       const params = JSON.parse(cr.output.text)
 
@@ -74,7 +74,8 @@ jobs:
                           check_run_id: cr.id,
                           output: cr.output,
                           status: run.data.status,
-                          conclusion: run.data.conclusion
+                          conclusion: run.data.conclusion,
+                          details_url: run.data.details_url
                         })
                       } else {
                         console.log('    Run ' + cr.id + ': set status (' + run.data.status + ')')
@@ -84,6 +85,7 @@ jobs:
                           check_run_id: cr.id,
                           output: cr.output,
                           status: run.data.status,
+                          details_url: run.data.details_url
                         })
                       }
 

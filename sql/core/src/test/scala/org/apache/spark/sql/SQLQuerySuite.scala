@@ -1078,7 +1078,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     // these keys does not exist as default yet
     checkAnswer(sql(s"SET ${key}no"), Row(key + "no", "<undefined>"))
-    checkAnswer(sql("SET dfs.replication"), Row("dfs.replication", "<undefined>"))
+    checkAnswer(sql("SET dfs.hosts"), Row("dfs.hosts", "<undefined>"))
 
     // io.file.buffer.size has a default value from `SparkHadoopUtil.newConfiguration`
     checkAnswer(sql("SET io.file.buffer.size"), Row("io.file.buffer.size", "65536"))
