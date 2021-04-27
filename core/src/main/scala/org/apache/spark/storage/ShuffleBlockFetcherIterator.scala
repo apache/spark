@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{InputStream, IOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util.zip.{Adler32, CheckedInputStream}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -28,9 +29,10 @@ import scala.util.{Failure, Success}
 
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
@@ -151,6 +153,8 @@ final class ShuffleBlockFetcherIterator(
    * at most once for those corrupted blocks.
    */
   private[this] val corruptedBlocks = mutable.HashSet[BlockId]()
+
+  private[this] val checksumEnabled = SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM)
 
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
@@ -297,28 +301,30 @@ final class ShuffleBlockFetcherIterator(
 
     val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
     for ((address, blockInfos) <- blocksByAddress) {
-      if (Seq(blockManager.blockManagerId.executorId, fallback).contains(address.executorId)) {
-        checkBlockSizes(blockInfos)
-        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
-          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
-        numBlocksToFetch += mergedBlockInfos.size
-        localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
-        localBlockBytes += mergedBlockInfos.map(_.size).sum
-      } else if (blockManager.hostLocalDirManager.isDefined &&
-        address.host == blockManager.blockManagerId.host) {
-        checkBlockSizes(blockInfos)
-        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
-          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
-        numBlocksToFetch += mergedBlockInfos.size
-        val blocksForAddress =
-          mergedBlockInfos.map(info => (info.blockId, info.size, info.mapIndex))
-        hostLocalBlocksByExecutor += address -> blocksForAddress
-        hostLocalBlocks ++= blocksForAddress.map(info => (info._1, info._3))
-        hostLocalBlockBytes += mergedBlockInfos.map(_.size).sum
-      } else {
-        remoteBlockBytes += blockInfos.map(_._2).sum
-        collectFetchRequests(address, blockInfos, collectedRemoteRequests)
-      }
+      remoteBlockBytes += blockInfos.map(_._2).sum
+      collectFetchRequests(address, blockInfos, collectedRemoteRequests)
+//      if (Seq(blockManager.blockManagerId.executorId, fallback).contains(address.executorId)) {
+//        checkBlockSizes(blockInfos)
+//        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
+//          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
+//        numBlocksToFetch += mergedBlockInfos.size
+//        localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
+//        localBlockBytes += mergedBlockInfos.map(_.size).sum
+//      } else if (blockManager.hostLocalDirManager.isDefined &&
+//        address.host == blockManager.blockManagerId.host) {
+//        checkBlockSizes(blockInfos)
+//        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
+//          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
+//        numBlocksToFetch += mergedBlockInfos.size
+//        val blocksForAddress =
+//          mergedBlockInfos.map(info => (info.blockId, info.size, info.mapIndex))
+//        hostLocalBlocksByExecutor += address -> blocksForAddress
+//        hostLocalBlocks ++= blocksForAddress.map(info => (info._1, info._3))
+//        hostLocalBlockBytes += mergedBlockInfos.map(_.size).sum
+//      } else {
+//        remoteBlockBytes += blockInfos.map(_._2).sum
+//        collectFetchRequests(address, blockInfos, collectedRemoteRequests)
+//      }
     }
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
     val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes
@@ -584,6 +590,8 @@ final class ShuffleBlockFetcherIterator(
 
     var result: FetchResult = null
     var input: InputStream = null
+    // it's only initialized when checksum enabled.
+    var checkedIn: CheckedInputStream = null
     var streamCompressedOrEncrypted: Boolean = false
     // Take the next fetched result and try to decompress it to detect data corruption,
     // then fetch it one more time if it's corrupt, throw FailureFetchResult if the second fetch
@@ -597,7 +605,7 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
-          if (address != blockManager.blockManagerId) {
+          if (true) {
             if (hostLocalBlocks.contains(blockId -> mapIndex)) {
               shuffleMetrics.incLocalBlocksFetched(1)
               shuffleMetrics.incLocalBytesRead(buf.size)
@@ -636,7 +644,12 @@ final class ShuffleBlockFetcherIterator(
           }
 
           val in = try {
-            buf.createInputStream()
+            var bufIn = buf.createInputStream()
+            if (checksumEnabled) {
+              checkedIn = new CheckedInputStream(bufIn, new Adler32)
+              bufIn = checkedIn
+            }
+            bufIn
           } catch {
             // The exception could only be throwed by local shuffle block
             case e: IOException =>
@@ -663,16 +676,30 @@ final class ShuffleBlockFetcherIterator(
             }
           } catch {
             case e: IOException =>
-              buf.release()
               if (buf.isInstanceOf[FileSegmentManagedBuffer]
                   || corruptedBlocks.contains(blockId)) {
+                buf.release()
                 throwFetchFailedException(blockId, mapIndex, address, e)
               } else {
-                logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
-                corruptedBlocks += blockId
-                fetchRequests += FetchRequest(
-                  address, Array(FetchBlockInfo(blockId, size, mapIndex)))
-                result = null
+                logWarning(s"Got an corrupted block $blockId from $address", e)
+                // A disk issue indicates the data on disk has already corrupted, so it's
+                // meaningless to retry on this case. We'll give a retry in the case of
+                // network issue and other unknown issues (in order to keep the same
+                // behavior as previously)
+                val allowRetry = !checksumEnabled ||
+                  diagnoseCorruption(checkedIn, address, blockId) != Cause.DISK
+                buf.release()
+                if (allowRetry) {
+                  logInfo(s"Will retry the block $blockId")
+                  corruptedBlocks += blockId
+                  fetchRequests += FetchRequest(
+                    address, Array(FetchBlockInfo(blockId, size, mapIndex)))
+                  result = null
+                } else {
+                  logError(s"Block $blockId is corrupted due to disk issue, won't retry.")
+                  throwFetchFailedException(
+                    blockId, mapIndex, address, e, s"Block $blockId is corrupted due to disk issue")
+                }
               }
           } finally {
             // TODO: release the buf here to free memory earlier
@@ -699,7 +726,50 @@ final class ShuffleBlockFetcherIterator(
         currentResult.blockId,
         currentResult.mapIndex,
         currentResult.address,
-        detectCorrupt && streamCompressedOrEncrypted))
+        detectCorrupt && streamCompressedOrEncrypted,
+        Option(checkedIn)))
+  }
+
+  /**
+   * Get the suspect corruption cause for the corrupted block. It should be only invoked
+   * when checksum is enabled.
+   *
+   * This will firstly consume the rest of stream of the corrupted block to calculate the
+   * checksum of the block. Then, it will raise a synchronized RPC call along with the
+   * checksum to ask the server(where the corrupted block is fetched from) to diagnose the
+   * cause of corruption and return it.
+   *
+   * Any exception raised during the process will result in the [[Cause.UNKNOWN]] of the
+   * corruption cause since corruption diagnosis is only a best effort.
+   *
+   * @param checkedIn the [[CheckedInputStream]] which is used to calculate the checksum.
+   * @param address the address where the corrupted block is fetched from.
+   * @param blockId the blockId of the corrupted block.
+   * @return the cause of corruption, which should be one of the [[Cause]].
+   */
+  private[storage] def diagnoseCorruption(
+      checkedIn: CheckedInputStream,
+      address: BlockManagerId,
+      blockId: BlockId): Cause = {
+    logInfo("Start corruption diagnosis.")
+    val startTimeNs = System.nanoTime()
+    val buffer = new Array[Byte](8192)
+    // consume the remaining data to calculate the checksum
+    try {
+      while (checkedIn.read(buffer, 0, 8192) != -1) {}
+    } catch {
+      case e: IOException =>
+        logWarning("IOException throws while consuming the rest stream of the corrupted block", e)
+        // scalastyle:off
+        println("NOT THIS UNKNOWN-1")
+        return Cause.UNKNOWN
+    }
+    val checksum = checkedIn.getChecksum.getValue
+    val cause = shuffleClient.diagnoseCorruption(
+      address.host, address.port, address.executorId, blockId.toString, checksum)
+    val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
+    logInfo(s"Finished corruption diagnosis in ${duration}ms, cause: $cause")
+    cause
   }
 
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
@@ -766,12 +836,14 @@ final class ShuffleBlockFetcherIterator(
       blockId: BlockId,
       mapIndex: Int,
       address: BlockManagerId,
-      e: Throwable) = {
+      e: Throwable,
+      message: String = null) = {
+    val msg = Option(message).getOrElse(e.getMessage)
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
-        throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, e)
+        throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, msg, e)
       case ShuffleBlockBatchId(shuffleId, mapId, startReduceId, _) =>
-        throw new FetchFailedException(address, shuffleId, mapId, mapIndex, startReduceId, e)
+        throw new FetchFailedException(address, shuffleId, mapId, mapIndex, startReduceId, msg, e)
       case _ =>
         throw new SparkException(
           "Failed to get block " + blockId + ", which is not a shuffle block", e)
@@ -790,7 +862,8 @@ private class BufferReleasingInputStream(
     private val blockId: BlockId,
     private val mapIndex: Int,
     private val address: BlockManagerId,
-    private val detectCorruption: Boolean)
+    private val detectCorruption: Boolean,
+    private val checkedInOpt: Option[CheckedInputStream])
   extends InputStream {
   private[this] var closed = false
 
@@ -801,6 +874,8 @@ private class BufferReleasingInputStream(
     if (!closed) {
       delegate.close()
       iterator.releaseCurrentResultBuffer()
+      // scalastyle:off
+      println("buffer released")
       closed = true
     }
   }
@@ -832,8 +907,15 @@ private class BufferReleasingInputStream(
       block
     } catch {
       case e: IOException if detectCorruption =>
+        val message = checkedInOpt.map { checkedIn =>
+          println("diagnoseCorruption")
+          val cause = iterator.diagnoseCorruption(checkedIn, address, blockId)
+          s"Block $blockId is corrupted due to $cause"
+        }.orNull
         IOUtils.closeQuietly(this)
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
+        // We'd never retry the block whatever the cause is since the block has been
+        // partially consumed by downstream RDDs.
+        iterator.throwFetchFailedException(blockId, mapIndex, address, e, message)
     }
   }
 }

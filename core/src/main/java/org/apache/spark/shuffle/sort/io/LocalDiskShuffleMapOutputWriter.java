@@ -17,14 +17,14 @@
 
 package org.apache.spark.shuffle.sort.io;
 
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.channels.FileChannel;
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.Optional;
+import java.util.zip.Adler32;
+import java.util.zip.CheckedOutputStream;
+import java.util.zip.Checksum;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +34,7 @@ import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
 import org.apache.spark.internal.config.package$;
+import org.apache.spark.io.CountingWritableChannel;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
 import org.apache.spark.util.Utils;
@@ -57,11 +58,15 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   private long currChannelPosition;
   private long bytesWrittenToMergedFile = 0L;
 
+  private Checksum checksumCal = null;
+  private long[] partitionChecksums = new long[0];
+
   private final File outputFile;
   private File outputTempFile;
   private FileOutputStream outputFileStream;
-  private FileChannel outputFileChannel;
+  private CountingWritableChannel outputChannel;
   private BufferedOutputStream outputBufferedFileStream;
+  private CheckedOutputStream checkedOutputStream;
 
   public LocalDiskShuffleMapOutputWriter(
       int shuffleId,
@@ -76,6 +81,11 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
       (int) (long) sparkConf.get(
         package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
     this.partitionLengths = new long[numPartitions];
+    boolean checksumEnabled = (boolean) sparkConf.get(package$.MODULE$.SHUFFLE_CHECKSUM());
+    if (checksumEnabled) {
+      this.checksumCal = new Adler32();
+      this.partitionChecksums = new long[numPartitions];
+    }
     this.outputFile = blockResolver.getDataFile(shuffleId, mapId);
     this.outputTempFile = null;
   }
@@ -89,8 +99,8 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     if (outputTempFile == null) {
       outputTempFile = Utils.tempFileWith(outputFile);
     }
-    if (outputFileChannel != null) {
-      currChannelPosition = outputFileChannel.position();
+    if (outputChannel != null) {
+      currChannelPosition = outputChannel.getCount();
     } else {
       currChannelPosition = 0L;
     }
@@ -100,12 +110,12 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   @Override
   public MapOutputCommitMessage commitAllPartitions() throws IOException {
     // Check the position after transferTo loop to see if it is in the right position and raise a
-    // exception if it is incorrect. The position will not be increased to the expected length
+    // exception if it is incorrect. The po sition will not be increased to the expected length
     // after calling transferTo in kernel version 2.6.32. This issue is described at
     // https://bugs.openjdk.java.net/browse/JDK-7052359 and SPARK-3948.
-    if (outputFileChannel != null && outputFileChannel.position() != bytesWrittenToMergedFile) {
+    if (outputChannel != null && outputChannel.getCount() != bytesWrittenToMergedFile) {
       throw new IOException(
-          "Current position " + outputFileChannel.position() + " does not equal expected " +
+          "Current position " + outputChannel.getCount() + " does not equal expected " +
               "position " + bytesWrittenToMergedFile + " after transferTo. Please check your " +
               " kernel version to see if it is 2.6.32, as there is a kernel bug which will lead " +
               "to unexpected behavior when using transferTo. You can set " +
@@ -115,8 +125,22 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
     log.debug("Writing shuffle index file for mapId {} with length {}", mapId,
         partitionLengths.length);
-    blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
-    return MapOutputCommitMessage.of(partitionLengths);
+    blockResolver.writeMetadataFileAndCommit(shuffleId, mapId, partitionLengths, partitionChecksums, resolvedTmp);
+    // test
+    FileOutputStream f = new FileOutputStream(blockResolver.getDataFile(shuffleId, mapId), true);
+    long sum = 0;
+    for (long partitionLength : partitionLengths) {
+      sum += partitionLength;
+    }
+    // scalastyle:off
+    System.out.println("write 12 sum=" + sum);
+    f.write(12);
+    byte[] ba = new byte[1];
+    ba[0] = 12;
+    ByteBuffer buffer = ByteBuffer.wrap(ba);
+    f.getChannel().write(buffer, sum - 1);
+    f.close();
+    return MapOutputCommitMessage.of(partitionLengths, partitionChecksums);
   }
 
   @Override
@@ -131,28 +155,38 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     if (outputBufferedFileStream != null) {
       outputBufferedFileStream.close();
     }
-    if (outputFileChannel != null) {
-      outputFileChannel.close();
+    if (outputChannel != null) {
+      outputChannel.close();
+    }
+    if (checkedOutputStream != null) {
+      checkedOutputStream.close();
     }
     if (outputFileStream != null) {
       outputFileStream.close();
     }
+    checksumCal.reset();
   }
 
   private void initStream() throws IOException {
     if (outputFileStream == null) {
       outputFileStream = new FileOutputStream(outputTempFile, true);
     }
+    if (checksumCal != null && checkedOutputStream == null) {
+      checkedOutputStream = new CheckedOutputStream(outputFileStream, checksumCal);
+    }
     if (outputBufferedFileStream == null) {
-      outputBufferedFileStream = new BufferedOutputStream(outputFileStream, bufferSize);
+      outputBufferedFileStream = new BufferedOutputStream(
+        checksumCal != null ? checkedOutputStream : outputFileStream, bufferSize);
     }
   }
 
   private void initChannel() throws IOException {
     // This file needs to opened in append mode in order to work around a Linux kernel bug that
     // affects transferTo; see SPARK-3948 for more details.
-    if (outputFileChannel == null) {
-      outputFileChannel = new FileOutputStream(outputTempFile, true).getChannel();
+    if (outputChannel == null) {
+      FileOutputStream fileOut = new FileOutputStream(outputTempFile, true);
+      OutputStream out = checksumCal != null ? new CheckedOutputStream(fileOut, checksumCal) : fileOut;
+      outputChannel = new CountingWritableChannel(Channels.newChannel(out));
     }
   }
 
@@ -169,7 +203,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     @Override
     public OutputStream openStream() throws IOException {
       if (partStream == null) {
-        if (outputFileChannel != null) {
+        if (outputChannel != null) {
           throw new IllegalStateException("Requested an output channel for a previous write but" +
               " now an output stream has been requested. Should not be using both channels" +
               " and streams to write.");
@@ -243,6 +277,10 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
       isClosed = true;
       partitionLengths[partitionId] = count;
       bytesWrittenToMergedFile += count;
+      if (checksumCal != null) {
+        partitionChecksums[partitionId] = checksumCal.getValue();
+        checksumCal.reset();
+      }
     }
 
     private void verifyNotClosed() {
@@ -261,19 +299,23 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
 
     public long getCount() throws IOException {
-      long writtenPosition = outputFileChannel.position();
+      long writtenPosition = outputChannel.getCount();
       return writtenPosition - currChannelPosition;
     }
 
     @Override
     public WritableByteChannel channel() {
-      return outputFileChannel;
+      return outputChannel;
     }
 
     @Override
     public void close() throws IOException {
       partitionLengths[partitionId] = getCount();
       bytesWrittenToMergedFile += partitionLengths[partitionId];
+      if (checksumCal != null) {
+        partitionChecksums[partitionId] = checksumCal.getValue();
+        checksumCal.reset();
+      }
     }
   }
 }

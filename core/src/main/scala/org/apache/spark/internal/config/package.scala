@@ -1359,6 +1359,14 @@ package object config {
         s"The buffer size must be greater than 0 and less than or equal to ${Int.MaxValue}.")
       .createWithDefault(4096)
 
+  private[spark] val SHUFFLE_CHECKSUM =
+    ConfigBuilder("spark.shuffle.checksum")
+      .doc("Whether to calculate the checksum of shuffle output. If enabled, Spark will try " +
+        "its best to tell if shuffle data corruption is caused by network or disk or others.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_COMPRESS =
     ConfigBuilder("spark.shuffle.compress")
       .doc("Whether to compress shuffle output. Compression will use " +

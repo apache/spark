@@ -21,8 +21,10 @@ import java.io._
 import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import java.nio.file.Files
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
+import java.util.zip.{Adler32, CheckedInputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -42,11 +44,13 @@ import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Network
+import org.apache.spark.io.CountingWritableChannel
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
+import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -54,7 +58,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
@@ -274,6 +278,53 @@ private[spark] class BlockManager(
   }
 
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
+
+  override def diagnoseShuffleBlockCorruption(blockId: BlockId, clientChecksum: Long): Cause = {
+    assert(blockId.isInstanceOf[ShuffleBlockId],
+      s"Corruption diagnosis only supports shuffle block yet, but got $blockId")
+    val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
+    val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
+    val checksumFile = resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId)
+    val reduceId = shuffleBlock.reduceId
+    if (checksumFile.exists()) {
+      var in: DataInputStream = null
+      try {
+        val channel = Files.newByteChannel(checksumFile.toPath)
+        channel.position(reduceId * 8L)
+        in = new DataInputStream(Channels.newInputStream(channel))
+        val goldenChecksum = in.readLong()
+        val blockData = resolver.getBlockData(blockId)
+        val checksumIn = new CheckedInputStream(blockData.createInputStream(), new Adler32)
+        val buffer = new Array[Byte](8192)
+        while (checksumIn.read(buffer, 0, 8192) != -1) {}
+        val recalculatedChecksum = checksumIn.getChecksum.getValue
+        // scalastyle:off
+        println(s"golden=${goldenChecksum}")
+        println(s"Recal=${recalculatedChecksum}")
+        println(s"client=${clientChecksum}")
+        if (goldenChecksum != recalculatedChecksum) {
+          Cause.DISK
+        } else if (goldenChecksum != clientChecksum) {
+          Cause.NETWORK
+        } else {
+          println("NOT THIS UNKNONW-4")
+          Cause.UNKNOWN
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Exception throws while diagnosing shuffle block corruption.", e)
+          println(s"NOT THIS UNKNONW-5 ${e}")
+          Cause.UNKNOWN
+      } finally {
+        in.close()
+      }
+    } else {
+      println(s"NOT THIS UNKNONW-6")
+      println(checksumFile.toString)
+      // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
+      Cause.UNKNOWN
+    }
+  }
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.

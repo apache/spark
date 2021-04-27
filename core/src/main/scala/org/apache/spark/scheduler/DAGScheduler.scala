@@ -1762,7 +1762,7 @@ private[spark] class DAGScheduler(
           }
 
           if (shouldAbortStage) {
-            val abortMessage = if (disallowStageRetryForTest) {
+            val abortMessage = if (false) {
               "Fetch failure will not retry stage due to testing config"
             } else {
               s"""$failedStage (${failedStage.name})

@@ -54,6 +54,11 @@ class NettyBlockRpcServer(
     logTrace(s"Received request: $message")
 
     message match {
+      case diagnose: DiagnoseCorruption =>
+        val cause = blockManager
+          .diagnoseShuffleBlockCorruption(BlockId.apply(diagnose.blockId), diagnose.checksum)
+        responseContext.onSuccess(new CorruptionCause(cause).toByteBuffer)
+
       case openBlocks: OpenBlocks =>
         val blocksNum = openBlocks.blockIds.length
         val blocks = (0 until blocksNum).map { i =>

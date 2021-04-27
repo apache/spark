@@ -36,25 +36,37 @@ import org.apache.spark.annotation.Private;
 public final class MapOutputCommitMessage {
 
   private final long[] partitionLengths;
+  private final long[] partitionChecksums;
   private final Optional<MapOutputMetadata> mapOutputMetadata;
 
   private MapOutputCommitMessage(
-      long[] partitionLengths, Optional<MapOutputMetadata> mapOutputMetadata) {
+      long[] partitionLengths,
+      long[] partitionChecksums,
+      Optional<MapOutputMetadata> mapOutputMetadata) {
     this.partitionLengths = partitionLengths;
+    this.partitionChecksums = partitionChecksums;
     this.mapOutputMetadata = mapOutputMetadata;
   }
 
   public static MapOutputCommitMessage of(long[] partitionLengths) {
-    return new MapOutputCommitMessage(partitionLengths, Optional.empty());
+    return new MapOutputCommitMessage(partitionLengths, null, Optional.empty());
+  }
+
+  public static MapOutputCommitMessage of(long[] partitionLengths, long[] partitionChecksums) {
+    return new MapOutputCommitMessage(partitionLengths, partitionChecksums, Optional.empty());
   }
 
   public static MapOutputCommitMessage of(
       long[] partitionLengths, MapOutputMetadata mapOutputMetadata) {
-    return new MapOutputCommitMessage(partitionLengths, Optional.of(mapOutputMetadata));
+    return new MapOutputCommitMessage(partitionLengths, null, Optional.of(mapOutputMetadata));
   }
 
   public long[] getPartitionLengths() {
     return partitionLengths;
+  }
+
+  public long[] getPartitionChecksums() {
+    return partitionChecksums;
   }
 
   public Optional<MapOutputMetadata> getMapOutputMetadata() {

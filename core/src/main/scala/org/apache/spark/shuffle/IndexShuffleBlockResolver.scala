@@ -22,6 +22,8 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.NioBufferedFileInputStream
@@ -111,6 +113,22 @@ private[spark] class IndexShuffleBlockResolver(
   }
 
   /**
+   * Get the shuffle checksum file.
+   *
+   * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+   * read from the specified directories.
+   */
+  def getChecksumFile(
+      shuffleId: Int,
+      mapId: Long,
+      dirs: Option[Array[String]] = None): File = {
+    val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+    dirs
+      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
+      .getOrElse(blockManager.diskBlockManager.getFile(blockId))
+  }
+
+  /**
    * Remove data file and index file that contain the output data from one map.
    */
   def removeDataByMap(shuffleId: Int, mapId: Long): Unit = {
@@ -172,6 +190,26 @@ private[spark] class IndexShuffleBlockResolver(
     } else {
       null
     }
+  }
+
+  private def getChecksums(checksumFile: File, blockNum: Int): Array[Long] = {
+    if (!checksumFile.exists()) return null
+    val checksums = new ArrayBuffer[Long]
+    // Read the checksums of blocks
+    var in: DataInputStream = null
+    try {
+      in = new DataInputStream(new NioBufferedFileInputStream(checksumFile))
+      while (checksums.size < blockNum) {
+        checksums += in.readLong()
+      }
+    } catch {
+      case _: IOException | _: EOFException =>
+        return null
+    } finally {
+      in.close()
+    }
+
+    checksums.toArray
   }
 
   /**
@@ -276,32 +314,55 @@ private[spark] class IndexShuffleBlockResolver(
 
 
   /**
-   * Write an index file with the offsets of each block, plus a final offset at the end for the
-   * end of the output file. This will be used by getBlockData to figure out where each block
-   * begins and ends.
+   * Commit the data and metadata files as an atomic operation, use the existing ones, or
+   * replace them with new ones. Note that the metadata parameters (`lengths`, `checksums`)
+   * will be updated to match the existing ones if use the existing ones.
    *
-   * It will commit the data and index file as an atomic operation, use the existing ones, or
-   * replace them with new ones.
+   * There're two kinds of metadata files:
    *
-   * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
+   * - index file
+   * An index file contains the offsets of each block, plus a final offset at the end
+   * for the end of the output file. It will be used by [[getBlockData]] to figure out
+   * where each block begins and ends.
+   *
+   * - checksum file (optional)
+   * An checksum file contains the checksum of each block. It will be used to diagnose
+   * the cause when a block is corrupted. Note that empty `checksums` indicate that
+   * checksum is disabled.
    */
-  def writeIndexFileAndCommit(
+  def writeMetadataFileAndCommit(
       shuffleId: Int,
       mapId: Long,
       lengths: Array[Long],
+      checksums: Array[Long],
       dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
+
+    val checksumEnabled = checksums.nonEmpty
+    val (checksumFileOpt, checksumTmpOpt) = if (checksumEnabled) {
+      assert(lengths.length == checksums.length,
+        "The size of partition lengths and checksums should be equal")
+      val checksumFile = getChecksumFile(shuffleId, mapId)
+      (Some(checksumFile), Some(Utils.tempFileWith(checksumFile)))
+    } else {
+      (None, None)
+    }
+
     try {
       val dataFile = getDataFile(shuffleId, mapId)
       // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
       // the following check and rename are atomic.
       this.synchronized {
         val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
-        if (existingLengths != null) {
+        val existingChecksums =
+          checksumFileOpt.map(getChecksums(_, checksums.length)).getOrElse(checksums)
+        if (existingLengths != null && existingChecksums != null) {
           // Another attempt for the same task has already written our map outputs successfully,
           // so just use the existing partition lengths and delete our temporary map outputs.
           System.arraycopy(existingLengths, 0, lengths, 0, lengths.length)
+          System.arraycopy(existingChecksums, 0, checksums, 0, lengths.length)
+
           if (dataTmp != null && dataTmp.exists()) {
             dataTmp.delete()
           }
@@ -333,12 +394,42 @@ private[spark] class IndexShuffleBlockResolver(
           if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
             throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
           }
+
+          checksumTmpOpt.zip(checksumFileOpt).foreach { case (checksumTmp, checksumFile) =>
+            val out = new DataOutputStream(
+              new BufferedOutputStream(
+                new FileOutputStream(checksumTmp)
+              )
+            )
+            Utils.tryWithSafeFinally {
+              checksums.foreach(out.writeLong)
+            } {
+              out.close()
+            }
+
+            if (checksumFile.exists()) {
+              checksumFile.delete()
+            }
+            // scalastyle:off
+            println(checksumFile.toString)
+            if (!checksumTmp.renameTo(checksumFile)) {
+              println("FAILED to rename checksumFile")
+              // It's not worthwhile to fail here after index file and data file are already
+              // successfully stored due to checksum is only used for the corner error case.
+              logWarning("fail to rename file " + checksumTmp + " to " + checksumFile)
+            }
+          }
         }
       }
     } finally {
       logDebug(s"Shuffle index for mapId $mapId: ${lengths.mkString("[", ",", "]")}")
       if (indexTmp.exists() && !indexTmp.delete()) {
         logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
+      }
+      checksumTmpOpt.foreach { checksumTmp =>
+        if (checksumTmp.exists() && !checksumTmp.delete()) {
+          logError(s"Failed to delete temporary checksum file at ${checksumTmp.getAbsolutePath}")
+        }
       }
     }
   }

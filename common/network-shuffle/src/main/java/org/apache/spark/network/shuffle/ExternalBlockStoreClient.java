@@ -34,6 +34,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
+import org.apache.spark.network.corruption.Cause;
 import org.apache.spark.network.crypto.AuthClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
@@ -80,6 +81,16 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       bootstraps.add(new AuthClientBootstrap(conf, appId, secretKeyHolder));
     }
     clientFactory = context.createClientFactory(bootstraps);
+  }
+
+  @Override
+  public Cause diagnoseCorruption(
+      String host,
+      int port,
+      String execId,
+      String blockId,
+      long checksum) {
+    return null;
   }
 
   @Override

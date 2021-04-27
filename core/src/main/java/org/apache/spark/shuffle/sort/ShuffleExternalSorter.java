@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
 
+import org.apache.spark.SparkEnv$;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -179,7 +180,14 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       blockManager.diskBlockManager().createTempShuffleBlock();
     final File file = spilledFileInfo._2();
     final TempShuffleBlockId blockId = spilledFileInfo._1();
-    final SpillInfo spillInfo = new SpillInfo(numPartitions, file, blockId);
+    // If this's going to be the only spilled file, calculating the checksum for it when
+    // checksum enabled. Because in this case, we'll use `LocalDiskSingleSpillMapOutputWriter`
+    // to write the map output file, which simply renames this spill file to the map output file
+    // for efficiency. So it's only written once and here's our only chance to calculate the
+    // checksum for it.
+    final boolean checksumEnabled = (boolean) SparkEnv$.MODULE$.get().conf()
+      .get(package$.MODULE$.SHUFFLE_CHECKSUM()) && isLastFile && spills.isEmpty();
+    final SpillInfo spillInfo = new SpillInfo(numPartitions, file, checksumEnabled);
 
     // Unfortunately, we need a serializer instance in order to construct a DiskBlockObjectWriter.
     // Our write path doesn't actually use this serializer (since we end up calling the `write()`
@@ -192,6 +200,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     try (DiskBlockObjectWriter writer =
         blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse)) {
 
+      if (checksumEnabled) {
+        writer.enableChecksum();
+      }
+
       final int uaoSize = UnsafeAlignedOffset.getUaoSize();
       while (sortedRecords.hasNext()) {
         sortedRecords.loadNext();
@@ -202,6 +214,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
           if (currentPartition != -1) {
             final FileSegment fileSegment = writer.commitAndGet();
             spillInfo.partitionLengths[currentPartition] = fileSegment.length();
+            if (checksumEnabled) {
+              spillInfo.partitionChecksums[currentPartition] = (long) fileSegment.checksum().get();
+            }
           }
           currentPartition = partition;
         }

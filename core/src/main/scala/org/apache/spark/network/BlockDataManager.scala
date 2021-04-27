@@ -22,10 +22,13 @@ import scala.reflect.ClassTag
 import org.apache.spark.TaskContext
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
+import org.apache.spark.network.corruption.Cause
 import org.apache.spark.storage.{BlockId, StorageLevel}
 
 private[spark]
 trait BlockDataManager {
+
+  def diagnoseShuffleBlockCorruption(blockId: BlockId, clientChecksum: Long): Cause
 
   /**
    * Get the local directories that used by BlockManager to save the blocks to disk

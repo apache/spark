@@ -15,25 +15,51 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.api;
+package org.apache.spark.io;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 
 import org.apache.spark.annotation.Private;
 
 /**
- * Optional extension for partition writing that is optimized for transferring a single
- * file to the backing store.
+ * :: Private ::
+ * A wrapper for {@link java.nio.channels.WritableByteChannel} with the ability of counting
+ * written bytes.
  */
 @Private
-public interface SingleSpillShuffleMapOutputWriter {
+public class CountingWritableChannel implements WritableByteChannel {
 
-  /**
-   * Transfer a file that contains the bytes of all the partitions written by this map task.
-   */
-  void transferMapSpillFile(
-      File mapOutputFile,
-      long[] partitionLengths,
-      long[] checksums) throws IOException;
+  private WritableByteChannel delegate;
+
+  private long count;
+
+  public CountingWritableChannel(WritableByteChannel delegate) {
+    this.delegate = delegate;
+    this.count = 0;
+  }
+
+  public long getCount() {
+    return this.count;
+  }
+
+  @Override
+  public int write(ByteBuffer src) throws IOException {
+    int written = delegate.write(src);
+    if (written > 0) {
+      count += written;
+    }
+    return written;
+  }
+
+  @Override
+  public boolean isOpen() {
+    return delegate.isOpen();
+  }
+
+  @Override
+  public void close() throws IOException {
+    delegate.close();
+  }
 }

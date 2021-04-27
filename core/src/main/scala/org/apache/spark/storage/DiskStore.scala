@@ -31,6 +31,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.io.CountingWritableChannel
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
@@ -327,24 +328,4 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
   }
 
   override def deallocate(): Unit = source.close()
-}
-
-private class CountingWritableChannel(sink: WritableByteChannel) extends WritableByteChannel {
-
-  private var count = 0L
-
-  def getCount: Long = count
-
-  override def write(src: ByteBuffer): Int = {
-    val written = sink.write(src)
-    if (written > 0) {
-      count += written
-    }
-    written
-  }
-
-  override def isOpen(): Boolean = sink.isOpen()
-
-  override def close(): Unit = sink.close()
-
 }

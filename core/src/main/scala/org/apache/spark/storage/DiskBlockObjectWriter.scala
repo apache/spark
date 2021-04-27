@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
+import java.util.zip.{Adler32, CheckedOutputStream, Checksum}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
@@ -76,6 +77,9 @@ private[spark] class DiskBlockObjectWriter(
   private var initialized = false
   private var streamOpen = false
   private var hasBeenClosed = false
+  private var checksumEnabled = false
+  private var checksumCal: Checksum = null
+  private var checksumOutputStream: CheckedOutputStream = null
 
   /**
    * Cursors used to represent positions in the file.
@@ -101,12 +105,27 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsWritten = 0
 
+  /**
+   * Enable the checksum calculation of this writer. It's invalid to call on this
+   * when the writer has already opened.
+   */
+  def enableChecksum(): Unit = {
+    assert(!streamOpen && !initialized,
+      "Can't call enableChecksum() when the writer has already opened")
+    checksumEnabled = true
+    checksumCal = new Adler32()
+  }
+
   private def initialize(): Unit = {
     fos = new FileOutputStream(file, true)
     channel = fos.getChannel()
     ts = new TimeTrackingOutputStream(writeMetrics, fos)
+    if (checksumEnabled) {
+      checksumOutputStream = new CheckedOutputStream(ts, checksumCal)
+    }
     class ManualCloseBufferedOutputStream
-      extends BufferedOutputStream(ts, bufferSize) with ManualCloseOutputStream
+      extends BufferedOutputStream(if (checksumEnabled) checksumOutputStream else ts, bufferSize)
+        with ManualCloseOutputStream
     mcs = new ManualCloseBufferedOutputStream
   }
 
@@ -183,7 +202,14 @@ private[spark] class DiskBlockObjectWriter(
       }
 
       val pos = channel.position()
-      val fileSegment = new FileSegment(file, committedPosition, pos - committedPosition)
+      val checksum = if (checksumEnabled) {
+        val value = checksumCal.getValue
+        checksumCal.reset()
+        Some(value)
+      } else {
+        None
+      }
+      val fileSegment = new FileSegment(file, committedPosition, pos - committedPosition, checksum)
       committedPosition = pos
       // In certain compression codecs, more bytes are written after streams are closed
       writeMetrics.incBytesWritten(committedPosition - reportedPosition)

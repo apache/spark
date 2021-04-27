@@ -152,11 +152,13 @@ public class UnsafeShuffleWriterSuite {
 
     doAnswer(renameTempAnswer)
         .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), any(File.class));
+        .writeMetadataFileAndCommit(
+           anyInt(), anyLong(), any(long[].class), any(long[].class), any(File.class));
 
     doAnswer(renameTempAnswer)
         .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), eq(null));
+        .writeMetadataFileAndCommit(
+           anyInt(), anyLong(), any(long[].class), any(long[].class), eq(null));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());

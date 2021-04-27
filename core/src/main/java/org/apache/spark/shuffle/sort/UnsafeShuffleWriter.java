@@ -277,7 +277,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         partitionLengths = spills[0].partitionLengths;
         logger.debug("Merge shuffle spills for mapId {} with length {}", mapId,
             partitionLengths.length);
-        maybeSingleFileWriter.get().transferMapSpillFile(spills[0].file, partitionLengths);
+        maybeSingleFileWriter.get()
+          .transferMapSpillFile(spills[0].file, partitionLengths, spills[0].partitionChecksums);
       } else {
         partitionLengths = mergeSpillsUsingStandardWriter(spills);
       }

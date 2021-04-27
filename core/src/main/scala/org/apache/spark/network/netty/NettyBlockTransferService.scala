@@ -20,9 +20,11 @@ package org.apache.spark.network.netty
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.{HashMap => JHashMap, Map => JMap}
+import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
+import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{Success, Try}
 
@@ -31,15 +33,17 @@ import com.codahale.metrics.{Metric, MetricSet}
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ExecutorDeadException
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Network
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap}
+import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockFetcher}
-import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
+import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, CorruptionCause, DiagnoseCorruption, UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.storage.BlockManagerMessages.IsExecutorAlive
@@ -101,6 +105,44 @@ private[spark] class NettyBlockTransferService(
         allMetrics.putAll(server.getAllMetrics.getMetrics)
         allMetrics
       }
+    }
+  }
+
+  override def diagnoseCorruption(
+      host: String,
+      port: Int,
+      execId: String,
+      blockId: String,
+      checksum: Long): Cause = {
+    // A monitor for the thread to wait on.
+    val result = Promise[Cause]()
+    val client = clientFactory.createClient(host, port)
+    client.sendRpc(new DiagnoseCorruption(appId, execId, blockId, checksum).toByteBuffer,
+      new RpcResponseCallback {
+        override def onSuccess(response: ByteBuffer): Unit = {
+          val cause = BlockTransferMessage.Decoder
+            .fromByteBuffer(response).asInstanceOf[CorruptionCause]
+          result.success(cause.cause)
+        }
+
+        override def onFailure(e: Throwable): Unit = {
+          logger.warn("Failed to get the corruption cause.", e)
+          // scalastyle:off
+          println(s"NOT THIS UNKNOWN-2 ${e.getMessage}")
+          result.success(Cause.UNKNOWN)
+        }
+    })
+    val timeout = new RpcTimeout(
+      conf.get(Network.NETWORK_TIMEOUT).seconds,
+      Network.NETWORK_TIMEOUT.key)
+    try {
+      timeout.awaitResult(result.future)
+    } catch {
+      case _: TimeoutException =>
+        logger.warn("Failed to get the corruption cause due to timeout.")
+        // scalastyle:off
+        println("NOT THIS UNKNOWN-3")
+        Cause.UNKNOWN
     }
   }
 

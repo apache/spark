@@ -33,6 +33,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.corruption.Cause;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.GetLocalDirsForExecutors;
 import org.apache.spark.network.shuffle.protocol.LocalDirsForExecutors;
@@ -46,6 +47,15 @@ public abstract class BlockStoreClient implements Closeable {
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
+
+  public Cause diagnoseCorruption(
+      String host,
+      int port,
+      String execId,
+      String blockId,
+      long checksum) {
+    return Cause.UNKNOWN;
+  }
 
   /**
    * Fetch a sequence of blocks from a remote node asynchronously,

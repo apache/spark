@@ -15,23 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.sort;
+package org.apache.spark.network.corruption;
 
-import java.io.File;
-
-import org.apache.spark.storage.TempShuffleBlockId;
-
-/**
- * Metadata for a block of data written by {@link ShuffleExternalSorter}.
- */
-final class SpillInfo {
-  final long[] partitionLengths;
-  final long[] partitionChecksums;
-  final File file;
-
-  SpillInfo(int numPartitions, File file, boolean checksumEnabled) {
-    this.partitionLengths = new long[numPartitions];
-    this.partitionChecksums = checksumEnabled ? new long[numPartitions] : new long[0];
-    this.file = file;
-  }
+public enum Cause {
+    DISK, NETWORK, UNKNOWN;
 }
