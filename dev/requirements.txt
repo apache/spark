@@ -6,3 +6,13 @@ pydata_sphinx_theme
 ipython
 nbsphinx
 numpydoc
+
+# dependencies in pandas-on-spark.
+pandas>=0.23.2
+pyarrow>=0.10
+numpy>=1.14,<1.20.0
+
+# Optional dependencies in pandas-on-spark.
+mlflow>=1.0
+plotly>=4.8
+matplotlib>=3.0.0,<3.3.0
