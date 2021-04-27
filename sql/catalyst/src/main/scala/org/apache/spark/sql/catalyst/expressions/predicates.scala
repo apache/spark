@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{IN, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -309,6 +309,8 @@ case class Not(child: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
+
   // +---------+-----------+
   // | CHILD   | NOT CHILD |
   // +---------+-----------+
@@ -342,6 +344,7 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
     values.head
   }
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(IN_SUBQUERY)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {
@@ -434,7 +437,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override val nodePatterns: Seq[TreePattern] = Seq(IN)
+  final override val nodePatterns: Seq[TreePattern] = Seq(IN)
 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
@@ -546,6 +549,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
 
   override def nullable: Boolean = child.nullable || hasNull
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(INSET)
 
   protected override def nullSafeEval(value: Any): Any = {
     if (set.contains(value)) {
@@ -663,6 +668,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override def sqlOperator: String = "AND"
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
+
   // +---------+---------+---------+---------+
   // | AND     | TRUE    | FALSE   | UNKNOWN |
   // +---------+---------+---------+---------+
@@ -749,6 +756,8 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override def sqlOperator: String = "OR"
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(AND_OR)
+
   // +---------+---------+---------+---------+
   // | OR      | TRUE    | FALSE   | UNKNOWN |
   // +---------+---------+---------+---------+
@@ -819,6 +828,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   // Note that we need to give a superset of allowable input types since orderable types are not
   // finitely enumerable. The allowable types are checked below by checkInputDataTypes.
   override def inputType: AbstractDataType = AnyDataType
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>

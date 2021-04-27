@@ -294,7 +294,7 @@ object SparkBuild extends PomBuild {
     javaOptions ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
       var major = versionParts(0).toInt
-      if (major >= 16) Seq("--add-modules=jdk.incubator.vector") else Seq.empty
+      if (major >= 16) Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn") else Seq.empty
     },
 
     (Compile / doc / javacOptions) ++= {
@@ -413,6 +413,10 @@ object SparkBuild extends PomBuild {
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
   enable(YARN.settings)(yarn)
+
+  if (profiles.contains("sparkr")) {
+    enable(SparkR.settings)(core)
+  }
 
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
@@ -886,6 +890,25 @@ object PySparkAssembly {
     }
   }
 
+}
+
+object SparkR {
+  import scala.sys.process.Process
+
+  val buildRPackage = taskKey[Unit]("Build the R package")
+  lazy val settings = Seq(
+    buildRPackage := {
+      val command = baseDirectory.value / ".." / "R" / "install-dev.sh"
+      Process(command.toString).!!
+    },
+    (Compile / compile) := (Def.taskDyn {
+      val c = (Compile / compile).value
+      Def.task {
+        (Compile / buildRPackage).value
+        c
+      }
+    }).value
+  )
 }
 
 object Unidoc {

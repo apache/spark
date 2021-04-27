@@ -295,20 +295,119 @@ object NestedColumnAliasing {
  * This prunes unnecessary nested columns from [[Generate]], or [[Project]] -> [[Generate]]
  */
 object GeneratorNestedColumnAliasing {
+  // Partitions `attrToAliases` based on whether the attribute is in Generator's output.
+  private def aliasesOnGeneratorOutput(
+      attrToAliases: Map[ExprId, Seq[Alias]],
+      generatorOutput: Seq[Attribute]) = {
+    val generatorOutputExprId = generatorOutput.map(_.exprId)
+    attrToAliases.partition { k =>
+      generatorOutputExprId.contains(k._1)
+    }
+  }
+
+  // Partitions `nestedFieldToAlias` based on whether the attribute of nested field extractor
+  // is in Generator's output.
+  private def nestedFieldOnGeneratorOutput(
+      nestedFieldToAlias: Map[ExtractValue, Alias],
+      generatorOutput: Seq[Attribute]) = {
+    val generatorOutputSet = AttributeSet(generatorOutput)
+    nestedFieldToAlias.partition { pair =>
+      pair._1.references.subsetOf(generatorOutputSet)
+    }
+  }
+
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
     // Either `nestedPruningOnExpressions` or `nestedSchemaPruningEnabled` is enabled, we
     // need to prune nested columns through Project and under Generate. The difference is
     // when `nestedSchemaPruningEnabled` is on, nested columns will be pruned further at
     // file format readers if it is supported.
     case Project(projectList, g: Generate) if (SQLConf.get.nestedPruningOnExpressions ||
-        SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
+      SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
       // On top on `Generate`, a `Project` that might have nested column accessors.
       // We try to get alias maps for both project list and generator's children expressions.
-      NestedColumnAliasing.rewritePlanIfSubsetFieldsUsed(
-        plan, projectList ++ g.generator.children, g.qualifiedGeneratorOutput)
+      val attrToExtractValues = NestedColumnAliasing.getAttributeToExtractValues(
+        projectList ++ g.generator.children)
+      if (attrToExtractValues.isEmpty) {
+        return None
+      }
+      val generatorOutputSet = AttributeSet(g.qualifiedGeneratorOutput)
+      val (attrToExtractValuesOnGenerator, attrToExtractValuesNotOnGenerator) =
+        attrToExtractValues.partition { case (attr, _) =>
+          attr.references.subsetOf(generatorOutputSet) }
+
+      val pushedThrough = NestedColumnAliasing.rewritePlanWithAliases(
+        plan, attrToExtractValuesNotOnGenerator)
+
+      // If the generator output is `ArrayType`, we cannot push through the extractor.
+      // It is because we don't allow field extractor on two-level array,
+      // i.e., attr.field when attr is a ArrayType(ArrayType(...)).
+      // Similarily, we also cannot push through if the child of generator is `MapType`.
+      g.generator.children.head.dataType match {
+        case _: MapType => return Some(pushedThrough)
+        case ArrayType(_: ArrayType, _) => return Some(pushedThrough)
+        case _ =>
+      }
+
+      // Pruning on `Generator`'s output. We only process single field case.
+      // For multiple field case, we cannot directly move field extractor into
+      // the generator expression. A workaround is to re-construct array of struct
+      // from multiple fields. But it will be more complicated and may not worth.
+      // TODO(SPARK-34956): support multiple fields.
+      val nestedFieldsOnGenerator = attrToExtractValuesOnGenerator.values.flatten.toSet
+      if (nestedFieldsOnGenerator.size > 1 || nestedFieldsOnGenerator.isEmpty) {
+        Some(pushedThrough)
+      } else {
+        // Only one nested column accessor.
+        // E.g., df.select(explode($"items").as("item")).select($"item.a")
+        val nestedFieldOnGenerator = nestedFieldsOnGenerator.head
+        pushedThrough match {
+          case p @ Project(_, newG: Generate) =>
+            // Replace the child expression of `ExplodeBase` generator with
+            // nested column accessor.
+            // E.g., df.select(explode($"items").as("item")).select($"item.a") =>
+            //       df.select(explode($"items.a").as("item.a"))
+            val rewrittenG = newG.transformExpressions {
+              case e: ExplodeBase =>
+                val extractor = nestedFieldOnGenerator.transformUp {
+                  case _: Attribute =>
+                    e.child
+                  case g: GetStructField =>
+                    ExtractValue(g.child, Literal(g.extractFieldName), SQLConf.get.resolver)
+                }
+                e.withNewChildren(Seq(extractor))
+            }
+
+            // As we change the child of the generator, its output data type must be updated.
+            val updatedGeneratorOutput = rewrittenG.generatorOutput
+              .zip(rewrittenG.generator.elementSchema.toAttributes)
+              .map { case (oldAttr, newAttr) =>
+                newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
+              }
+            assert(updatedGeneratorOutput.length == rewrittenG.generatorOutput.length,
+              "Updated generator output must have the same length " +
+                "with original generator output.")
+            val updatedGenerate = rewrittenG.copy(generatorOutput = updatedGeneratorOutput)
+
+            // Replace nested column accessor with generator output.
+            val attrExprIdsOnGenerator = attrToExtractValuesOnGenerator.map { case (attr, _) =>
+              attr.exprId
+            }.toSet
+            val updatedProject = p.withNewChildren(Seq(updatedGenerate)).transformExpressions {
+              case f: ExtractValue if nestedFieldsOnGenerator.contains(f) =>
+                updatedGenerate.output
+                  .find(a => attrExprIdsOnGenerator.contains(a.exprId))
+                  .getOrElse(f)
+            }
+            Some(updatedProject)
+
+          case other =>
+            // We should not reach here.
+            throw new IllegalStateException(s"Unreasonable plan after optimization: $other")
+        }
+      }
 
     case g: Generate if SQLConf.get.nestedSchemaPruningEnabled &&
-        canPruneGenerator(g.generator) =>
+      canPruneGenerator(g.generator) =>
       // If any child output is required by higher projection, we cannot prune on it even we
       // only use part of nested column of it. A required child output means it is referred
       // as a whole or partially by higher projection, pruning it here will cause unresolved

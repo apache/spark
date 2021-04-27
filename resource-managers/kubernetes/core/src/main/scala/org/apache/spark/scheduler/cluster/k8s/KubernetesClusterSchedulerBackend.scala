@@ -134,6 +134,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
       }
     }
 
+    Utils.tryLogNonFatalError {
+      kubernetesClient
+        .persistentVolumeClaims()
+        .withLabel(SPARK_APP_ID_LABEL, applicationId())
+        .delete()
+    }
+
     if (shouldDeleteExecutors) {
       Utils.tryLogNonFatalError {
         kubernetesClient

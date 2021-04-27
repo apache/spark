@@ -239,6 +239,9 @@ private[kafka010] class KafkaDataConsumer(
     fetchedDataPool: FetchedDataPool) extends Logging {
   import KafkaDataConsumer._
 
+  private var offsetOutOfRange = 0L
+  private var dataLoss = 0L
+
   private val isTokenProviderEnabled =
     HadoopDelegationTokenManager.isServiceEnabled(SparkEnv.get.conf, "kafka")
 
@@ -329,7 +332,14 @@ private[kafka010] class KafkaDataConsumer(
 
           reportDataLoss(topicPartition, groupId, failOnDataLoss,
             s"Cannot fetch offset $toFetchOffset", e)
+
+          val oldToFetchOffsetd = toFetchOffset
           toFetchOffset = getEarliestAvailableOffsetBetween(consumer, toFetchOffset, untilOffset)
+          if (toFetchOffset == UNKNOWN_OFFSET) {
+            offsetOutOfRange += (untilOffset - oldToFetchOffsetd)
+          } else {
+            offsetOutOfRange += (toFetchOffset - oldToFetchOffsetd)
+          }
       }
     }
 
@@ -349,6 +359,9 @@ private[kafka010] class KafkaDataConsumer(
     val consumer = getOrRetrieveConsumer()
     consumer.getAvailableOffsetRange()
   }
+
+  def getNumOffsetOutOfRange(): Long = offsetOutOfRange
+  def getNumDataLoss(): Long = dataLoss
 
   /**
    * Release borrowed objects in data reader to the pool. Once the instance is created, caller
@@ -596,6 +609,7 @@ private[kafka010] class KafkaDataConsumer(
       message: String,
       cause: Throwable = null): Unit = {
     val finalMessage = s"$message ${additionalMessage(topicPartition, groupId, failOnDataLoss)}"
+    dataLoss += 1
     reportDataLoss0(failOnDataLoss, finalMessage, cause)
   }
 
