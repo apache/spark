@@ -32,20 +32,7 @@ trait WriteTaskStats extends Serializable
  * A trait for classes that are capable of collecting statistics on data that's being processed by
  * a single write task in [[FileFormatWriter]] - i.e. there should be one instance per executor.
  *
- * This trait is coupled with the way [[FileFormatWriter]] works, in the sense that its methods
- * will be called according to how tuples are being written out to disk, namely in sorted order
- * according to partitionValue(s), then bucketId.
- *
- * As such, a typical call scenario is:
- *
- * newPartition -> newBucket -> newFile -> newRow -.
- *    ^        |______^___________^ ^         ^____|
- *    |               |             |______________|
- *    |               |____________________________|
- *    |____________________________________________|
- *
- * newPartition and newBucket events are only triggered if the relation to be written out is
- * partitioned and/or bucketed, respectively.
+ * newPartition event is only triggered if the relation to be written out is partitioned.
  */
 trait WriteTaskStatsTracker {
 
@@ -57,21 +44,19 @@ trait WriteTaskStatsTracker {
   def newPartition(partitionValues: InternalRow): Unit
 
   /**
-   * Process the fact that a new bucket is about to written.
-   * Only triggered when the relation is bucketed by a (non-empty) sequence of columns.
-   * @param bucketId The bucket number.
-   */
-  def newBucket(bucketId: Int): Unit
-
-  /**
    * Process the fact that a new file is about to be written.
    * @param filePath Path of the file into which future rows will be written.
    */
   def newFile(filePath: String): Unit
 
   /**
+   * Process the fact that a file is finished to be written and closed.
+   * @param filePath Path of the file.
+   */
+  def closeFile(filePath: String): Unit
+
+  /**
    * Process the fact that a new row to update the tracked statistics accordingly.
-   * The row will be written to the most recently witnessed file (via `newFile`).
    * @note Keep in mind that any overhead here is per-row, obviously,
    *       so implementations should be as lightweight as possible.
    * @param row Current data row to be processed.
