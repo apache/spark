@@ -25,6 +25,7 @@ from io import StringIO
 import numpy as np
 import pandas as pd
 from pandas.tseries.offsets import DateOffset
+import pyspark
 from pyspark import StorageLevel
 from pyspark.ml.linalg import SparseVector
 from pyspark.sql import functions as F
@@ -40,17 +41,16 @@ from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
-from pyspark.testing.pandasutils import (
+from pyspark.pandas.testing.utils import (
     have_tabulate,
-    PandasOnSparkTestCase,
+    ReusedSQLTestCase,
+    SQLTestUtils,
     SPARK_CONF_ARROW_ENABLED,
-    tabulate_requirement_message,
 )
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.utils import name_like_string
 
 
-class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
+class DataFrameTest(ReusedSQLTestCase, SQLTestUtils):
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -565,7 +565,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = pd.DataFrame({"a": pd.Series([], dtype="i1"), "b": pd.Series([], dtype="str")})
 
         kdf = ps.from_pandas(pdf)
-        self.assert_eq(kdf, pdf)
+        if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
+            self.assert_eq(kdf, pdf)
+        else:
+            with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+                self.assert_eq(kdf, pdf)
 
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             kdf = ps.from_pandas(pdf)
@@ -597,7 +601,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         kdf = ps.from_pandas(pdf)
-        self.assert_eq(kdf, pdf)
+        if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
+            self.assert_eq(kdf, pdf)
+        else:
+            with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+                self.assert_eq(kdf, pdf)
 
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             kdf = ps.from_pandas(pdf)
@@ -2982,6 +2990,10 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(ktable.index, ptable.index)
         self.assert_eq(repr(ktable.index), repr(ptable.index))
 
+    @unittest.skipIf(
+        LooseVersion(pyspark.__version__) < LooseVersion("2.4"),
+        "stack won't work properly with PySpark<2.4",
+    )
     def test_stack(self):
         pdf_single_level_cols = pd.DataFrame(
             [[0, 1], [2, 3]], index=["cat", "dog"], columns=["weight", "height"]
@@ -3223,13 +3235,22 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pdf.cumprod().sum(), kdf.cumprod().sum(), almost=True)
 
     def test_cumprod(self):
-        pdf = pd.DataFrame(
-            [[2.0, 1.0, 1], [5, None, 2], [1.0, -1.0, -3], [2.0, 0, 4], [4.0, 9.0, 5]],
-            columns=list("ABC"),
-            index=np.random.rand(5),
-        )
-        kdf = ps.from_pandas(pdf)
-        self._test_cumprod(pdf, kdf)
+        if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
+            pdf = pd.DataFrame(
+                [[2.0, 1.0, 1], [5, None, 2], [1.0, -1.0, -3], [2.0, 0, 4], [4.0, 9.0, 5]],
+                columns=list("ABC"),
+                index=np.random.rand(5),
+            )
+            kdf = ps.from_pandas(pdf)
+            self._test_cumprod(pdf, kdf)
+        else:
+            pdf = pd.DataFrame(
+                [[2, 1, 1], [5, 1, 2], [1, -1, -3], [2, 0, 4], [4, 9, 5]],
+                columns=list("ABC"),
+                index=np.random.rand(5),
+            )
+            kdf = ps.from_pandas(pdf)
+            self._test_cumprod(pdf, kdf)
 
     def test_cumprod_multiindex_columns(self):
         arrays = [np.array(["A", "A", "B", "B"]), np.array(["one", "two", "one", "two"])]
@@ -4704,8 +4725,13 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         sparse_vector = SparseVector(len(sparse_values), sparse_values)
         pdf = pd.DataFrame({"a": [sparse_vector], "b": [10]})
 
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(kdf, pdf)
+        if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
+            with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+                kdf = ps.from_pandas(pdf)
+                self.assert_eq(kdf, pdf)
+        else:
+            kdf = ps.from_pandas(pdf)
+            self.assert_eq(kdf, pdf)
 
     def test_eval(self):
         pdf = pd.DataFrame({"A": range(1, 6), "B": range(10, 0, -2)})
@@ -4741,7 +4767,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         kdf.columns = columns
         self.assertRaises(ValueError, lambda: kdf.eval("x.a + y.b"))
 
-    @unittest.skipIf(not have_tabulate, tabulate_requirement_message)
+    @unittest.skipIf(not have_tabulate, "tabulate not installed")
     def test_to_markdown(self):
         pdf = pd.DataFrame(data={"animal_1": ["elk", "pig"], "animal_2": ["dog", "quetzal"]})
         kdf = ps.from_pandas(pdf)
@@ -5135,6 +5161,10 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(p_name, k_name)
             self.assert_eq(p_items, k_items)
 
+    @unittest.skipIf(
+        LooseVersion(pyspark.__version__) < LooseVersion("3.0"),
+        "tail won't work properly with PySpark<3.0",
+    )
     def test_tail(self):
         pdf = pd.DataFrame({"x": range(1000)})
         kdf = ps.from_pandas(pdf)
@@ -5154,6 +5184,10 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, "bad operand type for unary -: 'str'"):
             kdf.tail("10")
 
+    @unittest.skipIf(
+        LooseVersion(pyspark.__version__) < LooseVersion("3.0"),
+        "last_valid_index won't work properly with PySpark<3.0",
+    )
     def test_last_valid_index(self):
         pdf = pd.DataFrame(
             {"a": [1, 2, 3, None], "b": [1.0, 2.0, 3.0, None], "c": [100, 200, 400, None]},

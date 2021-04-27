@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
 import org.apache.spark.sql.types.StructType
 
 class TextOutputWriter(
-    val path: String,
+    path: String,
     dataSchema: StructType,
     lineSeparator: Array[Byte],
     context: TaskAttemptContext)

@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
 import org.apache.spark.sql.types.StructType
 
 class JsonOutputWriter(
-    val path: String,
+    path: String,
     options: JSONOptions,
     dataSchema: StructType,
     context: TaskAttemptContext)

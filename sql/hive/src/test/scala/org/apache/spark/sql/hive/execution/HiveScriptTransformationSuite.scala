@@ -39,8 +39,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
   import ScriptTransformationIOSchema._
 
-  override protected def defaultSerDe(): String = "hive-serde"
-
   override def createScriptTransformationExec(
       script: String,
       output: Seq[Attribute],

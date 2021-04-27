@@ -22,11 +22,12 @@ import unittest
 import pandas as pd
 import numpy as np
 
+import pyspark
+
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.pandas.frame import DataFrame
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes,
     extension_dtypes_available,
@@ -35,7 +36,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
+class OpsOnDiffFramesEnabledTest(ReusedSQLTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -1548,7 +1549,10 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         kser1 = ps.from_pandas(pser1)
         kser2 = ps.from_pandas(pser2)
 
-        self.assert_eq(kser1.repeat(kser2).sort_index(), pser1.repeat(pser2).sort_index())
+        if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
+            self.assertRaises(ValueError, lambda: kser1.repeat(kser2))
+        else:
+            self.assert_eq(kser1.repeat(kser2).sort_index(), pser1.repeat(pser2).sort_index())
 
     def test_series_ops(self):
         pser1 = pd.Series([1, 2, 3, 4, 5, 6, 7], name="x", index=[11, 12, 13, 14, 15, 16, 17])
@@ -1770,7 +1774,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
 
-class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
+class OpsOnDiffFramesDisabledTest(ReusedSQLTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

@@ -19,11 +19,11 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
 from pyspark.pandas.window import Rolling
 
 
-class RollingTest(PandasOnSparkTestCase, TestUtils):
+class RollingTest(ReusedSQLTestCase, TestUtils):
     def test_rolling_error(self):
         with self.assertRaisesRegex(ValueError, "window must be >= 0"):
             ps.range(10).rolling(window=-1)

@@ -53,11 +53,11 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
 
   private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
   private[this] var numFiles: Int = 0
-  private[this] var numSubmittedFiles: Int = 0
+  private[this] var submittedFiles: Int = 0
   private[this] var numBytes: Long = 0L
   private[this] var numRows: Long = 0L
 
-  private[this] val submittedFiles = mutable.HashSet[String]()
+  private[this] var curFile: Option[String] = None
 
   /**
    * Get the size of the file expected to have been written by a worker.
@@ -134,20 +134,23 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
     partitions.append(partitionValues)
   }
 
+  override def newBucket(bucketId: Int): Unit = {
+    // currently unhandled
+  }
+
   override def newFile(filePath: String): Unit = {
-    submittedFiles += filePath
-    numSubmittedFiles += 1
+    statCurrentFile()
+    curFile = Some(filePath)
+    submittedFiles += 1
   }
 
-  override def closeFile(filePath: String): Unit = {
-    updateFileStats(filePath)
-    submittedFiles.remove(filePath)
-  }
-
-  private def updateFileStats(filePath: String): Unit = {
-    getFileSize(filePath).foreach { len =>
-      numBytes += len
-      numFiles += 1
+  private def statCurrentFile(): Unit = {
+    curFile.foreach { path =>
+      getFileSize(path).foreach { len =>
+        numBytes += len
+        numFiles += 1
+      }
+      curFile = None
     }
   }
 
@@ -156,8 +159,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   }
 
   override def getFinalStats(): WriteTaskStats = {
-    submittedFiles.foreach(updateFileStats)
-    submittedFiles.clear()
+    statCurrentFile()
 
     // Reports bytesWritten and recordsWritten to the Spark output metrics.
     Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
@@ -165,8 +167,8 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
       outputMetrics.setRecordsWritten(numRows)
     }
 
-    if (numSubmittedFiles != numFiles) {
-      logInfo(s"Expected $numSubmittedFiles files, but only saw $numFiles. " +
+    if (submittedFiles != numFiles) {
+      logInfo(s"Expected $submittedFiles files, but only saw $numFiles. " +
         "This could be due to the output format not writing empty files, " +
         "or files being not immediately visible in the filesystem.")
     }

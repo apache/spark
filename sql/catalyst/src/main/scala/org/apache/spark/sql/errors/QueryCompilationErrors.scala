@@ -1352,9 +1352,4 @@ private[spark] object QueryCompilationErrors {
       s"Expected udfs have the same evalType but got different evalTypes: " +
         s"${evalTypes.mkString(",")}")
   }
-
-  def ambiguousFieldNameError(fieldName: String, names: String): Throwable = {
-    new AnalysisException(
-      s"Ambiguous field name: $fieldName. Found multiple columns that can match: $names")
-  }
 }

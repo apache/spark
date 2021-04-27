@@ -21,11 +21,10 @@ from distutils.version import LooseVersion
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
-class SeriesConversionTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesConversionTest(ReusedSQLTestCase, SQLTestUtils):
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")

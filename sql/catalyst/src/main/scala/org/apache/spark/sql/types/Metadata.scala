@@ -23,7 +23,6 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.errors.QueryExecutionErrors
 
 
 /**
@@ -163,13 +162,13 @@ object Metadata {
               builder.putMetadataArray(
                 key, value.asInstanceOf[List[JObject]].map(fromJObject).toArray)
             case other =>
-              throw QueryExecutionErrors.unsupportedArrayTypeError(other.getClass)
+              throw new RuntimeException(s"Do not support array of type ${other.getClass}.")
           }
         }
       case (key, JNull) =>
         builder.putNull(key)
       case (key, other) =>
-        throw QueryExecutionErrors.unsupportedJavaTypeError(other.getClass)
+        throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
     builder.build()
   }
@@ -196,7 +195,7 @@ object Metadata {
       case x: Metadata =>
         toJsonValue(x.map)
       case other =>
-        throw QueryExecutionErrors.unsupportedJavaTypeError(other.getClass)
+        throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
   }
 
@@ -223,7 +222,7 @@ object Metadata {
       case null =>
         0
       case other =>
-        throw QueryExecutionErrors.unsupportedJavaTypeError(other.getClass)
+        throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
   }
 }

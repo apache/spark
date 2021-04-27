@@ -20,11 +20,10 @@ import numpy as np
 import re
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
-class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesStringTest(ReusedSQLTestCase, SQLTestUtils):
     @property
     def pser(self):
         return pd.Series(

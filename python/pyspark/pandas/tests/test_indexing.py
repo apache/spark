@@ -24,7 +24,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import SparkPandasIndexingError
-from pyspark.testing.pandasutils import ComparisonTestBase, PandasOnSparkTestCase, compare_both
+from pyspark.pandas.testing.utils import ComparisonTestBase, ReusedSQLTestCase, compare_both
 
 
 class BasicIndexingTest(ComparisonTestBase):
@@ -153,7 +153,7 @@ class BasicIndexingTest(ComparisonTestBase):
         )
 
 
-class IndexingTest(PandasOnSparkTestCase):
+class IndexingTest(ReusedSQLTestCase):
     @property
     def pdf(self):
         return pd.DataFrame(

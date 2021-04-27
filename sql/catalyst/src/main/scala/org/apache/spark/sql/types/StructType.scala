@@ -23,13 +23,14 @@ import scala.util.control.NonFatal
 
 import org.json4s.JsonDSL._
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -332,8 +333,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
         if (found.length > 1) {
           val names = found.map(f => prettyFieldName(normalizedPath :+ f.name))
             .mkString("[", ", ", " ]")
-          throw QueryCompilationErrors.ambiguousFieldNameError(
-            prettyFieldName(normalizedPath :+ searchName), names)
+          throw new AnalysisException(
+            s"Ambiguous field name: ${prettyFieldName(normalizedPath :+ searchName)}. Found " +
+              s"multiple columns that can match: $names")
         } else if (found.isEmpty) {
           None
         } else {
@@ -521,7 +523,7 @@ object StructType extends AbstractDataType {
   private[sql] def fromString(raw: String): StructType = {
     Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parseString(raw)) match {
       case t: StructType => t
-      case _ => throw QueryExecutionErrors.failedParsingStructTypeError(raw)
+      case _ => throw new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
     }
   }
 
@@ -584,7 +586,8 @@ object StructType extends AbstractDataType {
                     nullable = leftNullable || rightNullable)
                 } catch {
                   case NonFatal(e) =>
-                    throw QueryExecutionErrors.failedMergingFieldsError(leftName, rightName, e)
+                    throw new SparkException(s"Failed to merge fields '$leftName' and " +
+                      s"'$rightName'. " + e.getMessage)
                 }
               }
               .orElse {
@@ -607,14 +610,14 @@ object StructType extends AbstractDataType {
         if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
           DecimalType(leftPrecision, leftScale)
         } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
-            leftPrecision, rightPrecision, leftScale, rightScale)
+          throw new SparkException("Failed to merge decimal types with incompatible " +
+            s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
         } else if (leftPrecision != rightPrecision) {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionError(
-            leftPrecision, rightPrecision)
+          throw new SparkException("Failed to merge decimal types with incompatible " +
+            s"precision $leftPrecision and $rightPrecision")
         } else {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatibleScaleError(
-            leftScale, rightScale)
+          throw new SparkException("Failed to merge decimal types with incompatible " +
+            s"scala $leftScale and $rightScale")
         }
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
@@ -624,7 +627,8 @@ object StructType extends AbstractDataType {
         leftType
 
       case _ =>
-        throw QueryExecutionErrors.cannotMergeIncompatibleDataTypesError(left, right)
+        throw new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
+          s" and ${right.catalogString}")
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {

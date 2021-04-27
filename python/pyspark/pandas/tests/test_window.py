@@ -25,10 +25,10 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeRollingGroupby,
 )
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.pandas.testing.utils import ReusedSQLTestCase, TestUtils
 
 
-class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
+class ExpandingRollingTest(ReusedSQLTestCase, TestUtils):
     def test_missing(self):
         kdf = ps.DataFrame({"a": [1, 2, 3, 4, 5, 6, 7, 8, 9]})
 

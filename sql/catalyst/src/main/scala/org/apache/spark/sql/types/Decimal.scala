@@ -22,7 +22,6 @@ import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, Roundin
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -81,7 +80,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    */
   def set(unscaled: Long, precision: Int, scale: Int): Decimal = {
     if (setOrNull(unscaled, precision, scale) == null) {
-      throw QueryExecutionErrors.unscaledValueTooLargeForPrecisionError()
+      throw new ArithmeticException("Unscaled value too large for precision")
     }
     this
   }
@@ -119,8 +118,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     DecimalType.checkNegativeScale(scale)
     this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
     if (decimalVal.precision > precision) {
-      throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
-        decimalVal.precision, precision)
+      throw new ArithmeticException(
+        s"Decimal precision ${decimalVal.precision} exceeds max precision $precision")
     }
     this.longVal = 0L
     this._precision = precision
@@ -252,7 +251,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def toByte: Byte = toLong.toByte
 
   private def overflowException(dataType: String) =
-    throw QueryExecutionErrors.castingCauseOverflowError(this, dataType)
+    throw new ArithmeticException(s"Casting $this to $dataType causes overflow")
 
   /**
    * @return the Byte value that is equal to the rounded decimal.
@@ -264,14 +263,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == actualLongVal.toByte) {
         actualLongVal.toByte
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "byte")
+        overflowException("byte")
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= Byte.MaxValue && Math.ceil(doubleVal) >= Byte.MinValue) {
         doubleVal.toByte
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "byte")
+        overflowException("byte")
       }
     }
   }
@@ -286,14 +285,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == actualLongVal.toShort) {
         actualLongVal.toShort
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "short")
+        overflowException("short")
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= Short.MaxValue && Math.ceil(doubleVal) >= Short.MinValue) {
         doubleVal.toShort
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "short")
+        overflowException("short")
       }
     }
   }
@@ -308,14 +307,14 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (actualLongVal == actualLongVal.toInt) {
         actualLongVal.toInt
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "int")
+        overflowException("int")
       }
     } else {
       val doubleVal = decimalVal.toDouble
       if (Math.floor(doubleVal) <= Int.MaxValue && Math.ceil(doubleVal) >= Int.MinValue) {
         doubleVal.toInt
       } else {
-        throw QueryExecutionErrors.castingCauseOverflowError(this, "int")
+        overflowException("int")
       }
     }
   }
@@ -334,8 +333,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
         // `longValueExact` to make sure the range check is accurate.
         decimalVal.bigDecimal.toBigInteger.longValueExact()
       } catch {
-        case _: ArithmeticException =>
-          throw QueryExecutionErrors.castingCauseOverflowError(this, "long")
+        case _: ArithmeticException => overflowException("long")
       }
     }
   }
@@ -367,7 +365,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (nullOnOverflow) {
         null
       } else {
-        throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(this, precision, scale)
+        throw new ArithmeticException(
+          s"$toDebugString cannot be represented as Decimal($precision, $scale).")
       }
     }
   }
@@ -623,13 +622,13 @@ object Decimal {
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
       // For example: Decimal("6.0790316E+25569151")
       if (calculatePrecision(bigDecimal) > DecimalType.MAX_PRECISION) {
-        throw QueryExecutionErrors.outOfDecimalTypeRangeError(str)
+        throw new ArithmeticException(s"out of decimal type range: $str")
       } else {
         Decimal(bigDecimal)
       }
     } catch {
       case _: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(str)
+        throw new NumberFormatException(s"invalid input syntax for type numeric: $str")
     }
   }
 

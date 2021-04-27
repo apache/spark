@@ -42,8 +42,7 @@ case class ProjectionOverSchema(schema: StructType) {
         getProjection(a.child).map(p => (p, p.dataType)).map {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>
             // For case-sensitivity aware field resolution, we should take `ordinal` which
-            // points to correct struct field, because `ExtractValue` actually does column
-            // name resolving correctly.
+            // points to correct struct field.
             val selectedField = a.child.dataType.asInstanceOf[ArrayType]
               .elementType.asInstanceOf[StructType](a.ordinal)
             val prunedField = projSchema(selectedField.name)

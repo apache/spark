@@ -24,13 +24,8 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
+from pyspark.pandas.testing.utils import have_plotly, ReusedSQLTestCase, TestUtils
 from pyspark.pandas.utils import name_like_string
-from pyspark.testing.pandasutils import (
-    have_plotly,
-    plotly_requirement_message,
-    PandasOnSparkTestCase,
-    TestUtils,
-)
 
 if have_plotly:
     from plotly import express
@@ -39,10 +34,10 @@ if have_plotly:
 
 @unittest.skipIf(
     not have_plotly or LooseVersion(pd.__version__) < "1.0.0",
-    plotly_requirement_message + " Or pandas<1.0; pandas<1.0 does not support latest plotly "
+    "plotly is not installed or pandas<1.0. pandas<1.0 does not support latest plotly "
     "and/or 'plotting.backend' option.",
 )
-class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
+class SeriesPlotPlotlyTest(ReusedSQLTestCase, TestUtils):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

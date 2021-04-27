@@ -24,17 +24,17 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
+import pyspark
 from pyspark.ml.linalg import SparseVector
 from pyspark.sql import functions as F
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import (
+from pyspark.pandas.testing.utils import (
     have_tabulate,
-    PandasOnSparkTestCase,
+    ReusedSQLTestCase,
+    SQLTestUtils,
     SPARK_CONF_ARROW_ENABLED,
-    tabulate_requirement_message,
 )
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.typedef.typehints import (
@@ -45,7 +45,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesTest(ReusedSQLTestCase, SQLTestUtils):
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
@@ -146,7 +146,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(ps.from_pandas(pser_a), pser_a)
 
         kser_b = ps.from_pandas(pser_b)
-        self.assert_eq(kser_b, pser_b)
+        if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
+            self.assert_eq(kser_b, pser_b)
+        else:
+            with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+                self.assert_eq(kser_b, pser_b)
 
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             self.assert_eq(ps.from_pandas(pser_a), pser_a)
@@ -159,7 +163,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(ps.from_pandas(pser_a), pser_a)
 
         kser_b = ps.from_pandas(pser_b)
-        self.assert_eq(kser_b, pser_b)
+        if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
+            self.assert_eq(kser_b, pser_b)
+        else:
+            with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+                self.assert_eq(kser_b, pser_b)
 
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             self.assert_eq(ps.from_pandas(pser_a), pser_a)
@@ -620,7 +628,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertEqual(ps.Series(range(100)).nunique(approx=True), 103)
         self.assertEqual(ps.Series(range(100)).nunique(approx=True, rsd=0.01), 100)
 
-    def test_value_counts(self):
+    def _test_value_counts(self):
         # this is also containing test for Index & MultiIndex
         pser = pd.Series(
             [1, 2, 1, 3, 3, np.nan, 1, 4, 2, np.nan, 3, np.nan, 3, 1, 3],
@@ -847,6 +855,17 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
                 pser.index.value_counts(ascending=True, dropna=False),
                 almost=True,
             )
+
+    def test_value_counts(self):
+        if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
+            with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+                self._test_value_counts()
+            self.assertRaises(
+                RuntimeError,
+                lambda: ps.MultiIndex.from_tuples([("x", "a"), ("x", "b")]).value_counts(),
+            )
+        else:
+            self._test_value_counts()
 
     def test_nsmallest(self):
         sample_lst = [1, 2, 3, 4, np.nan, 6]
@@ -1872,8 +1891,14 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         sparse_values = {0: 0.1, 1: 1.1}
         sparse_vector = SparseVector(len(sparse_values), sparse_values)
         pser = pd.Series([sparse_vector])
-        kser = ps.from_pandas(pser)
-        self.assert_eq(kser, pser)
+
+        if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
+            with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+                kser = ps.from_pandas(pser)
+                self.assert_eq(kser, pser)
+        else:
+            kser = ps.from_pandas(pser)
+            self.assert_eq(kser, pser)
 
     def test_repeat(self):
         pser = pd.Series(["a", "b", "c"], name="0", index=np.random.rand(3))
@@ -1888,7 +1913,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pdf = pd.DataFrame({"a": ["a", "b", "c"], "rep": [10, 20, 30]}, index=np.random.rand(3))
         kdf = ps.from_pandas(pdf)
 
-        self.assert_eq(kdf.a.repeat(kdf.rep).sort_index(), pdf.a.repeat(pdf.rep).sort_index())
+        if LooseVersion(pyspark.__version__) < LooseVersion("2.4"):
+            self.assertRaises(ValueError, lambda: kdf.a.repeat(kdf.rep))
+        else:
+            self.assert_eq(kdf.a.repeat(kdf.rep).sort_index(), pdf.a.repeat(pdf.rep).sort_index())
 
     def test_take(self):
         pser = pd.Series([100, 200, 300, 400, 500], name="Koalas")
@@ -2181,7 +2209,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(pser.shape, kser.shape)
 
-    @unittest.skipIf(not have_tabulate, tabulate_requirement_message)
+    @unittest.skipIf(not have_tabulate, "tabulate not installed")
     def test_to_markdown(self):
         pser = pd.Series(["elk", "pig", "dog", "quetzal"], name="animal")
         kser = ps.from_pandas(pser)
@@ -2379,6 +2407,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq((kdf["b"] * 10).dot(kdf), (pdf["b"] * 10).dot(pdf))
         self.assert_eq((kdf["b"] * 10).dot(kdf + 1), (pdf["b"] * 10).dot(pdf + 1))
 
+    @unittest.skipIf(
+        LooseVersion(pyspark.__version__) < LooseVersion("3.0"),
+        "tail won't work properly with PySpark<3.0",
+    )
     def test_tail(self):
         pser = pd.Series(range(1000), name="Koalas")
         kser = ps.from_pandas(pser)
@@ -2476,6 +2508,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         kser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, kser.hasnans)
 
+    @unittest.skipIf(
+        LooseVersion(pyspark.__version__) < LooseVersion("3.0"),
+        "last_valid_index won't work properly with PySpark<3.0",
+    )
     def test_last_valid_index(self):
         pser = pd.Series([250, 1.5, 320, 1, 0.3, None, None, None, None])
         kser = ps.from_pandas(pser)

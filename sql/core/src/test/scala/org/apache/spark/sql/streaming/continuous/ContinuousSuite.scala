@@ -54,31 +54,27 @@ class ContinuousSuiteBase extends StreamTest {
 
   protected def waitForRateSourceCommittedValue(
       query: ContinuousExecution,
-      partitionIdToDesiredValue: Map[Int, Long],
+      desiredValue: Long,
       maxWaitTimeMs: Long): Unit = {
-    def readCommittedValues(c: ContinuousExecution): Option[Map[Int, Long]] = {
+    def readHighestCommittedValue(c: ContinuousExecution): Option[Long] = {
       c.committedOffsets.lastOption.map { case (_, offset) =>
         offset match {
           case o: RateStreamOffset =>
-            o.partitionToValueAndRunTimeMs.mapValues(_.value).toMap
+            o.partitionToValueAndRunTimeMs.map {
+              case (_, ValueRunTimeMsPair(value, _)) => value
+            }.max
         }
       }
     }
 
-    def reachDesiredValues: Boolean = {
-      val committedValues = readCommittedValues(query).getOrElse(Map.empty)
-      partitionIdToDesiredValue.forall { case (key, value) =>
-        committedValues.contains(key) && committedValues(key) > value
-      }
-    }
-
     val maxWait = System.currentTimeMillis() + maxWaitTimeMs
-    while (System.currentTimeMillis() < maxWait && !reachDesiredValues) {
+    while (System.currentTimeMillis() < maxWait &&
+      readHighestCommittedValue(query).getOrElse(Long.MinValue) < desiredValue) {
       Thread.sleep(100)
     }
     if (System.currentTimeMillis() > maxWait) {
       logWarning(s"Couldn't reach desired value in $maxWaitTimeMs milliseconds!" +
-        s"Current committed values is ${readCommittedValues(query)}")
+        s"Current highest committed value is ${readHighestCommittedValue(query)}")
     }
   }
 
@@ -268,7 +264,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
     val expected = Set(0, 1, 2, 3)
     val continuousExecution =
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.asInstanceOf[ContinuousExecution]
-    waitForRateSourceCommittedValue(continuousExecution, Map(0 -> 2, 1 -> 3), 20 * 1000)
+    waitForRateSourceCommittedValue(continuousExecution, expected.max, 20 * 1000)
     query.stop()
 
     val results = spark.read.table("noharness").collect()

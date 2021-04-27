@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
@@ -48,8 +47,6 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def second: Expression = trueValue
   override def third: Expression = falseValue
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
-
-  final override val nodePatterns : Seq[TreePattern] = Seq(IF)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
@@ -141,8 +138,6 @@ case class CaseWhen(
   extends ComplexTypeMergingExpression with Serializable {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
-
-  final override val nodePatterns : Seq[TreePattern] = Seq(CASE_WHEN)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     super.legacyWithNewChildren(newChildren)

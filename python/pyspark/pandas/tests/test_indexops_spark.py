@@ -20,11 +20,10 @@ from pyspark.sql.utils import AnalysisException
 from pyspark.sql import functions as F
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 
 
-class SparkIndexOpsMethodsTest(PandasOnSparkTestCase, SQLTestUtils):
+class SparkIndexOpsMethodsTest(ReusedSQLTestCase, SQLTestUtils):
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")

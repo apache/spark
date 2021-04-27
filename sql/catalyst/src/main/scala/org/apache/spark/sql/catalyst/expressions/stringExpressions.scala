@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -407,8 +406,6 @@ case class Upper(child: Expression)
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
   // scalastyle:on caselocale
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
   }
@@ -434,8 +431,6 @@ case class Lower(child: Expression)
   // scalastyle:off caselocale
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
   // scalastyle:on caselocale
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")

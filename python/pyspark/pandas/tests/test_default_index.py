@@ -18,10 +18,10 @@
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.testing.utils import ReusedSQLTestCase
 
 
-class DefaultIndexTest(PandasOnSparkTestCase):
+class DefaultIndexTest(ReusedSQLTestCase):
     def test_default_index_sequence(self):
         with ps.option_context("compute.default_index_type", "sequence"):
             sdf = self.spark.range(1000)
