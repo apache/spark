@@ -29,6 +29,8 @@ import java.io.Serializable;
  * and update the aggregation state. The JVM type of result values produced by
  * {@link #produceResult} must be the type used by Spark's
  * InternalRow API for the {@link DataType SQL data type} returned by {@link #resultType()}.
+ * Please refer to class documentation of {@link ScalarFunction} for the mapping between
+ * {@link DataType} and the JVM type.
  * <p>
  * All implementations must support partial aggregation by implementing merge so that Spark can
  * partially aggregate and shuffle intermediate results, instead of shuffling all rows for an

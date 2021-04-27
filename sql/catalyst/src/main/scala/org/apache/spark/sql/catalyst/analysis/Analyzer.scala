@@ -1975,9 +1975,6 @@ class Analyzer(override val catalogManager: CatalogManager)
                 ident.funcName)
             }
           }
-        case f: UnresolvedFunction =>
-          // v2 functions - do nothing for now
-          f
       }
     }
 
@@ -2130,56 +2127,78 @@ class Analyzer(override val catalogManager: CatalogManager)
 
                   bound match {
                     case scalarFunc: ScalarFunction[_] =>
-                      if (isDistinct) {
-                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                          scalarFunc.name(), "DISTINCT")
-                      } else if (filter.isDefined) {
-                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                          scalarFunc.name(), "FILTER clause")
-                      } else if (ignoreNulls) {
-                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                          scalarFunc.name(), "IGNORE NULLS")
-                      } else {
-                        // TODO: implement type coercion by looking at input type from the UDF. We
-                        //  may also want to check if the parameter types from the magic method
-                        //  match the input type through `BoundFunction.inputTypes`.
-                        val argClasses = inputType.fields.map(_.dataType)
-                        findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
-                          case Some(_) =>
-                            val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
-                            Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
-                              arguments, returnNullable = scalarFunc.isResultNullable)
-                          case _ =>
-                            // TODO: handle functions defined in Scala too - in Scala, even if a
-                            //  subclass do not override the default method in parent interface
-                            //  defined in Java, the method can still be found from
-                            //  `getDeclaredMethod`.
-                            // since `inputType` is a `StructType`, it is mapped to a `InternalRow`
-                            // which we can use to lookup the `produceResult` method.
-                            findMethod(scalarFunc, "produceResult", Seq(inputType)) match {
-                              case Some(_) =>
-                                ApplyFunctionExpression(scalarFunc, arguments)
-                              case None =>
-                                failAnalysis(s"ScalarFunction '${bound.name()}' neither implement" +
-                                  s" magic method nor override 'produceResult'")
-                            }
-                        }
-                      }
+                      processV2ScalarFunction(scalarFunc, inputType, arguments, isDistinct,
+                        filter, ignoreNulls)
                     case aggFunc: V2AggregateFunction[_, _] =>
-                      if (ignoreNulls) {
-                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                          aggFunc.name(), "IGNORE NULLS")
-                      }
-                      val aggregator = V2Aggregator(aggFunc, arguments)
-                      AggregateExpression(aggregator, Complete, isDistinct, filter)
+                      processV2AggregateFunction(aggFunc, arguments, isDistinct, filter,
+                        ignoreNulls)
                     case _ =>
                       failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction" +
                         s" or AggregateFunction")
                   }
+
                 case _ => u
               }
             }
         }
+    }
+
+    private def processV2ScalarFunction(
+        scalarFunc: ScalarFunction[_],
+        inputType: StructType,
+        arguments: Seq[Expression],
+        isDistinct: Boolean,
+        filter: Option[Expression],
+        ignoreNulls: Boolean): Expression = {
+      if (isDistinct) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          scalarFunc.name(), "DISTINCT")
+      } else if (filter.isDefined) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          scalarFunc.name(), "FILTER clause")
+      } else if (ignoreNulls) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          scalarFunc.name(), "IGNORE NULLS")
+      } else {
+        // TODO: implement type coercion by looking at input type from the UDF. We
+        //  may also want to check if the parameter types from the magic method
+        //  match the input type through `BoundFunction.inputTypes`.
+        val argClasses = inputType.fields.map(_.dataType)
+        findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
+          case Some(_) =>
+            val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
+            Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
+              arguments, returnNullable = scalarFunc.isResultNullable)
+          case _ =>
+            // TODO: handle functions defined in Scala too - in Scala, even if a
+            //  subclass do not override the default method in parent interface
+            //  defined in Java, the method can still be found from
+            //  `getDeclaredMethod`.
+            // since `inputType` is a `StructType`, it is mapped to a `InternalRow`
+            // which we can use to lookup the `produceResult` method.
+            findMethod(scalarFunc, "produceResult", Seq(inputType)) match {
+              case Some(_) =>
+                ApplyFunctionExpression(scalarFunc, arguments)
+              case None =>
+                failAnalysis(s"ScalarFunction '${scalarFunc.name()}' neither implement" +
+                  s" magic method nor override 'produceResult'")
+            }
+        }
+      }
+    }
+
+    private def processV2AggregateFunction(
+        aggFunc: V2AggregateFunction[_, _],
+        arguments: Seq[Expression],
+        isDistinct: Boolean,
+        filter: Option[Expression],
+        ignoreNulls: Boolean): Expression = {
+      if (ignoreNulls) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          aggFunc.name(), "IGNORE NULLS")
+      }
+      val aggregator = V2Aggregator(aggFunc, arguments)
+      AggregateExpression(aggregator, Complete, isDistinct, filter)
     }
 
     /**
