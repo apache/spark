@@ -126,39 +126,39 @@ object NestedColumnAliasing {
   def rewritePlanWithAliases(
       plan: LogicalPlan,
       attributeToExtractValues: Map[Attribute, Seq[ExtractValue]]): LogicalPlan = {
-      // Each expression can contain multiple nested fields.
-      // Note that we keep the original names to deliver to parquet in a case-sensitive way.
-      // A new alias is created for each nested field.
-      val nestedFieldToAlias = attributeToExtractValues.flatMap { case (_, nestedFields) =>
-        nestedFields.map { f =>
-          val exprId = NamedExpression.newExprId
-          f -> Alias(f, s"_gen_alias_${exprId.id}")(exprId, Seq.empty, None)
-        }
+    // Each expression can contain multiple nested fields.
+    // Note that we keep the original names to deliver to parquet in a case-sensitive way.
+    // A new alias is created for each nested field.
+    val nestedFieldToAlias = attributeToExtractValues.flatMap { case (_, nestedFields) =>
+      nestedFields.map { f =>
+        val exprId = NamedExpression.newExprId
+        f -> Alias(f, s"_gen_alias_${exprId.id}")(exprId, Seq.empty, None)
       }
+    }
 
-      // A reference attribute can have multiple aliases for nested fields.
-      val attrToAliases = attributeToExtractValues.map { case (attr, nestedFields) =>
-        attr.exprId -> nestedFields.map(nestedFieldToAlias)
-      }
+    // A reference attribute can have multiple aliases for nested fields.
+    val attrToAliases = attributeToExtractValues.map { case (attr, nestedFields) =>
+      attr.exprId -> nestedFields.map(nestedFieldToAlias)
+    }
 
-      plan match {
-        case Project(projectList, child) =>
-          Project(
-            getNewProjectList(projectList, nestedFieldToAlias),
-            replaceWithAliases(child, nestedFieldToAlias, attrToAliases))
+    plan match {
+      case Project(projectList, child) =>
+        Project(
+          getNewProjectList(projectList, nestedFieldToAlias),
+          replaceWithAliases(child, nestedFieldToAlias, attrToAliases))
 
-        // The operators reaching here are already guarded by [[canPruneOn]].
-        case other =>
-          replaceWithAliases(other, nestedFieldToAlias, attrToAliases)
-      }
+      // The operators reaching here are already guarded by [[canPruneOn]].
+      case other =>
+        replaceWithAliases(other, nestedFieldToAlias, attrToAliases)
+    }
   }
 
   /**
    * Replace the [[ExtractValue]]s in a project list with aliased attributes.
    */
   def getNewProjectList(
-    projectList: Seq[NamedExpression],
-    nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
+      projectList: Seq[NamedExpression],
+      nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
     projectList.map(_.transform {
       case f: ExtractValue if nestedFieldToAlias.contains(f) =>
         nestedFieldToAlias(f).toAttribute
