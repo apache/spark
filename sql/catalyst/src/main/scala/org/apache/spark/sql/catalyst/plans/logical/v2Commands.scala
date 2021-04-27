@@ -1012,7 +1012,18 @@ case class CacheTable(
     table: LogicalPlan,
     multipartIdentifier: Seq[String],
     isLazy: Boolean,
-    options: Map[String, String]) extends LeafCommand
+    options: Map[String, String],
+    isAnalyzed: Boolean = false) extends AnalysisOnlyCommand {
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): CacheTable = {
+    assert(!isAnalyzed)
+    copy(table = newChildren.head)
+  }
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
+
+  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+}
 
 /**
  * The logical plan of the CACHE TABLE ... AS SELECT command.
@@ -1041,7 +1052,17 @@ case class CacheTableAsSelect(
 case class UncacheTable(
     table: LogicalPlan,
     ifExists: Boolean,
-    isTempView: Boolean = false) extends LeafCommand
+    isAnalyzed: Boolean = false) extends AnalysisOnlyCommand {
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): UncacheTable = {
+    assert(!isAnalyzed)
+    copy(table = newChildren.head)
+  }
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
+
+  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+}
 
 /**
  * The logical plan of the ALTER TABLE ... SET LOCATION command.
