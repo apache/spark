@@ -1357,4 +1357,8 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"Ambiguous field name: $fieldName. Found multiple columns that can match: $names")
   }
+
+  def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
+    new AnalysisException("Cannot use interval type in the table schema.")
+  }
 }
