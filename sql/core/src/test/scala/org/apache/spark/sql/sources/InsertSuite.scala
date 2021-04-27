@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.File
+import java.io.{File, IOException}
 import java.sql.Date
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -950,6 +951,84 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       checkAnswer(spark.table("t2"), Nil)
     }
   }
+
+  test("SPARK-35106: insert overwrite with custom partition path") {
+    withTable("t") {
+      sql(
+        """
+          |create table t(i int, part1 int, part2 int) using parquet
+          |partitioned by (part1, part2)
+        """.stripMargin)
+
+      val path1 = Utils.createTempDir()
+      sql(s"alter table t add partition(part1=1, part2=1) location '$path1'")
+      sql(s"insert into t partition(part1=1, part2=1) select 1")
+      checkAnswer(spark.table("t"), Row(1, 1, 1))
+
+      sql("insert overwrite table t partition(part1=1, part2=1) select 2")
+      checkAnswer(spark.table("t"), Row(2, 1, 1))
+
+      sql("insert overwrite table t partition(part1=2, part2) select 2, 2")
+      checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Nil)
+
+      sql("insert overwrite table t partition(part1=1, part2=2) select 3")
+      checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+
+      sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
+      checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-35106: Throw exception when rename custom partition paths returns false") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[RenameFromSparkStagingToFinalDirAlwaysTurnsFalseFilesystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+
+      withTable("t") {
+        sql(
+          """
+            |create table t(i int, part1 int, part2 int) using parquet
+            |partitioned by (part1, part2)
+          """.stripMargin)
+
+        val path1 = Utils.createTempDir()
+        sql(s"alter table t add partition(part1=1, part2=1) location '$path1'")
+
+        val e = intercept[SparkException] {
+          sql(s"insert into t partition(part1=1, part2=1) select 1")
+        }.getCause
+        assert(e.isInstanceOf[IOException])
+        assert(e.getMessage.contains("Failed to rename"))
+        assert(e.getMessage.contains("when committing files staged for absolute location"))
+      }
+    }
+  }
+
+  test("SPARK-35106: Throw exception when rename dynamic partition paths returns false") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[RenameFromSparkStagingToFinalDirAlwaysTurnsFalseFilesystem].getName,
+      "fs.file.impl.disable.cache" -> "true",
+      SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString,
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+
+      withTable("t") {
+        sql(
+          """
+            |create table t(i int, part1 int, part2 int) using parquet
+            |partitioned by (part1, part2)
+          """.stripMargin)
+
+        val e = intercept[SparkException] {
+          sql(s"insert overwrite table t partition(part1, part2) values (1, 1, 1)")
+        }.getCause
+        assert(e.isInstanceOf[IOException])
+        assert(e.getMessage.contains("Failed to rename"))
+        assert(e.getMessage.contains(
+          "when committing files staged for overwriting dynamic partitions"))
+      }
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {
@@ -960,5 +1039,15 @@ class FileExistingTestFileSystem extends RawLocalFileSystem {
       replication: Short,
       blockSize: Long): FSDataOutputStream = {
     throw new FileAlreadyExistsException(s"${f.toString} already exists")
+  }
+}
+
+class RenameFromSparkStagingToFinalDirAlwaysTurnsFalseFilesystem extends RawLocalFileSystem {
+  override def rename(src: Path, dst: Path): Boolean = {
+    (!isSparkStagingDir(src) || isSparkStagingDir(dst)) && super.rename(src, dst)
+  }
+
+  private def isSparkStagingDir(path: Path): Boolean = {
+    path.toString.contains(".spark-staging-")
   }
 }
