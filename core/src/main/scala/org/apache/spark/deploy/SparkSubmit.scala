@@ -1083,7 +1083,7 @@ private[spark] object SparkSubmitUtils {
     val sp: IBiblioResolver = new IBiblioResolver
     sp.setM2compatible(true)
     sp.setUsepoms(true)
-    sp.setRoot("https://dl.bintray.com/spark-packages/maven")
+    sp.setRoot("https://repos.spark-packages.org/")
     sp.setName("spark-packages")
     cr.add(sp)
     cr
