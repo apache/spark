@@ -392,27 +392,27 @@ case class MultiplyDTInterval(
     copy(interval = newLeft, num = newRight)
 }
 
+trait IntervalDivide {
+  def checkDivideOverflow(value: Any, minValue: Any, num: Expression, numValue: Any): Unit = {
+    if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
+      if (numValue.asInstanceOf[Number].longValue() == -1) {
+        throw QueryExecutionErrors.overflowInIntegralDivideError()
+      }
+    }
+  }
+}
+
 // Divide an year-month interval by a numeric
 case class DivideYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
+    with NullIntolerant with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(YearMonthIntervalType, NumericType)
   override def dataType: DataType = YearMonthIntervalType
-
-  def checkDivideOverflow(month: Int, num: Any): Unit = {
-    if (month == Int.MinValue) {
-      num match {
-        case l: Long if l == -1L => throw QueryExecutionErrors.overflowInIntegralDivideError()
-        case integer: Integer if integer.intValue() == -1 =>
-          throw QueryExecutionErrors.overflowInIntegralDivideError()
-        case _ =>
-      }
-    }
-  }
 
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
@@ -430,7 +430,7 @@ case class DivideYMInterval(
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    checkDivideOverflow(interval.asInstanceOf[Int], num)
+    checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num)
     evalFunc(interval.asInstanceOf[Int], num)
   }
 
@@ -477,23 +477,13 @@ case class DivideYMInterval(
 case class DivideDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
+    with NullIntolerant with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DayTimeIntervalType, NumericType)
   override def dataType: DataType = DayTimeIntervalType
-
-  def checkDivideOverflow(month: Long, num: Any): Unit = {
-    if (month == Long.MinValue) {
-      num match {
-        case l: Long if l == -1L => throw QueryExecutionErrors.overflowInIntegralDivideError()
-        case integer: Integer if integer.intValue() == -1 =>
-          throw QueryExecutionErrors.overflowInIntegralDivideError()
-        case _ =>
-      }
-    }
-  }
 
   @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
@@ -507,7 +497,7 @@ case class DivideDTInterval(
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
-    checkDivideOverflow(interval.asInstanceOf[Long], num)
+    checkDivideOverflow(interval.asInstanceOf[Long], Long.MinValue, right, num)
     evalFunc(interval.asInstanceOf[Long], num)
   }
 
