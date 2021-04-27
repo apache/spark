@@ -79,40 +79,40 @@ case class ExtractIntervalSeconds(child: Expression)
     copy(child = newChild)
 }
 
-case class YearsOfYMInterval(child: Expression)
+case class ExtractANSIIntervalYears(child: Expression)
     extends ExtractIntervalPart[Int](IntegerType, getYears, "getYears") {
-  override protected def withNewChildInternal(newChild: Expression): YearsOfYMInterval =
+  override protected def withNewChildInternal(newChild: Expression): ExtractANSIIntervalYears =
     copy(child = newChild)
 }
 
-case class MonthsOfYMInterval(child: Expression)
+case class ExtractANSIIntervalMonths(child: Expression)
     extends ExtractIntervalPart[Int](ByteType, getMonths, "getMonths") {
-  override protected def withNewChildInternal(newChild: Expression): MonthsOfYMInterval =
+  override protected def withNewChildInternal(newChild: Expression): ExtractANSIIntervalMonths =
     copy(child = newChild)
 }
 
-case class DaysOfDTInterval(child: Expression)
+case class ExtractANSIIntervalDays(child: Expression)
     extends ExtractIntervalPart[Long](IntegerType, getDays, "getDays") {
-  override protected def withNewChildInternal(newChild: Expression): DaysOfDTInterval = {
+  override protected def withNewChildInternal(newChild: Expression): ExtractANSIIntervalDays = {
     copy(child = newChild)
   }
 }
 
-case class HoursOfDTInterval(child: Expression)
+case class ExtractANSIIntervalHours(child: Expression)
     extends ExtractIntervalPart[Long](ByteType, getHours, "getHours") {
-  override protected def withNewChildInternal(newChild: Expression): HoursOfDTInterval =
+  override protected def withNewChildInternal(newChild: Expression): ExtractANSIIntervalHours =
     copy(child = newChild)
 }
 
-case class MinutesOfDTInterval(child: Expression)
+case class ExtractANSIIntervalMinutes(child: Expression)
     extends ExtractIntervalPart[Long](ByteType, getMinutes, "getMinutes") {
-  override protected def withNewChildInternal(newChild: Expression): MinutesOfDTInterval =
+  override protected def withNewChildInternal(newChild: Expression): ExtractANSIIntervalMinutes =
     copy(child = newChild)
 }
 
-case class SecondsOfDTInterval(child: Expression)
+case class ExtractANSIIntervalSeconds(child: Expression)
     extends ExtractIntervalPart[Long](DecimalType(8, 6), getSeconds, "getSeconds") {
-  override protected def withNewChildInternal(newChild: Expression): SecondsOfDTInterval =
+  override protected def withNewChildInternal(newChild: Expression): ExtractANSIIntervalSeconds =
     copy(child = newChild)
 }
 
@@ -122,25 +122,18 @@ object ExtractIntervalPart {
       extractField: String,
       source: Expression,
       errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
+    case "YEAR" if source.dataType == YearMonthIntervalType => ExtractANSIIntervalYears(source)
+    case "MONTH" if source.dataType == YearMonthIntervalType => ExtractANSIIntervalMonths(source)
+    case "DAY" if source.dataType == DayTimeIntervalType => ExtractANSIIntervalDays(source)
+    case "HOUR" if source.dataType == DayTimeIntervalType => ExtractANSIIntervalHours(source)
+    case "MINUTE" if source.dataType == DayTimeIntervalType => ExtractANSIIntervalMinutes(source)
+    case "SECOND" if source.dataType == DayTimeIntervalType => ExtractANSIIntervalSeconds(source)
     case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => ExtractIntervalYears(source)
     case "MONTH" | "MON" | "MONS" | "MONTHS" => ExtractIntervalMonths(source)
     case "DAY" | "D" | "DAYS" => ExtractIntervalDays(source)
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => ExtractIntervalHours(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => ExtractIntervalMinutes(source)
     case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => ExtractIntervalSeconds(source)
-    case _ => errorHandleFunc
-  }
-
-  def parseExtractFieldANSI(
-      extractField: String,
-      source: Expression,
-      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
-    case "YEAR" if source.dataType == YearMonthIntervalType => YearsOfYMInterval(source)
-    case "MONTH" if source.dataType == YearMonthIntervalType => MonthsOfYMInterval(source)
-    case "DAY" if source.dataType == DayTimeIntervalType => DaysOfDTInterval(source)
-    case "HOUR" if source.dataType == DayTimeIntervalType => HoursOfDTInterval(source)
-    case "MINUTE" if source.dataType == DayTimeIntervalType => MinutesOfDTInterval(source)
-    case "SECOND" if source.dataType == DayTimeIntervalType => SecondsOfDTInterval(source)
     case _ => errorHandleFunc
   }
 }

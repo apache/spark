@@ -417,13 +417,13 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Period.ofMonths(-100),
       Period.ofYears(100),
       Period.ofYears(-100)).foreach { p =>
-      checkEvaluation(YearsOfYMInterval(Literal(p)),
+      checkEvaluation(ExtractANSIIntervalYears(Literal(p)),
         IntervalUtils.getYears(p.toTotalMonths.toInt))
-      checkEvaluation(MonthsOfYMInterval(Literal(p)),
+      checkEvaluation(ExtractANSIIntervalMonths(Literal(p)),
         IntervalUtils.getMonths(p.toTotalMonths.toInt))
     }
-    checkEvaluation(YearsOfYMInterval(Literal(null, YearMonthIntervalType)), null)
-    checkEvaluation(MonthsOfYMInterval(Literal(null, YearMonthIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType)), null)
   }
 
   test("ANSI: extract days, hours, minutes and seconds") {
@@ -434,15 +434,15 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Duration.ofDays(-100),
       Duration.ofHours(-100)).foreach { d =>
 
-      checkEvaluation(DaysOfDTInterval(Literal(d)), d.toDays.toInt)
-      checkEvaluation(HoursOfDTInterval(Literal(d)), (d.toHours % HOURS_PER_DAY).toByte)
-      checkEvaluation(MinutesOfDTInterval(Literal(d)), (d.toMinutes % MINUTES_PER_HOUR).toByte)
-      checkEvaluation(SecondsOfDTInterval(Literal(d)),
+      checkEvaluation(ExtractANSIIntervalDays(Literal(d)), d.toDays.toInt)
+      checkEvaluation(ExtractANSIIntervalHours(Literal(d)), (d.toHours % HOURS_PER_DAY).toByte)
+      checkEvaluation(ExtractANSIIntervalMinutes(Literal(d)), (d.toMinutes % MINUTES_PER_HOUR).toByte)
+      checkEvaluation(ExtractANSIIntervalSeconds(Literal(d)),
         IntervalUtils.getSeconds(IntervalUtils.durationToMicros(d)))
     }
-    checkEvaluation(DaysOfDTInterval(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(HoursOfDTInterval(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(MinutesOfDTInterval(Literal(null, DayTimeIntervalType)), null)
-    checkEvaluation(SecondsOfDTInterval(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalDays(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalHours(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalMinutes(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalSeconds(Literal(null, DayTimeIntervalType)), null)
   }
 }
