@@ -337,6 +337,17 @@
         <enabled>false</enabled>
       </snapshots>
     </pluginRepository>
+    <!-- THIS SHOULD NOT BE MERGED!!! THIS IS A TEMPORARY WORKAROUND!!! -->
+    <pluginRepository>
+      <id>sonatype-oss-snapshots</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </pluginRepository>
   </pluginRepositories>
   <dependencies>
     <!--
