@@ -70,6 +70,7 @@ private[spark] class DriverServiceFeatureStep(
       .withNewMetadata()
         .withName(resolvedServiceName)
         .addToAnnotations(kubernetesConf.serviceAnnotations.asJava)
+        .addToLabels(SPARK_APP_ID_LABEL, kubernetesConf.appId)
         .endMetadata()
       .withNewSpec()
         .withClusterIP("None")

@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Evolving;
 /**
  * A mix in interface for {@link Scan}. Data sources can implement this interface to
  * report statistics to Spark.
- *
+ * <p>
  * As of Spark 3.0, statistics are reported to the optimizer after operators are pushed to the
  * data source. Implementations may return more accurate statistics based on pushed operators
  * which may improve query performance by providing better information to the optimizer.

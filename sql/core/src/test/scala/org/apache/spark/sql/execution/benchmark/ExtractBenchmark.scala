@@ -39,7 +39,9 @@ object ExtractBenchmark extends SqlBasedBenchmark {
 
   private def doBenchmark(cardinality: Long, exprs: String*): Unit = {
     val sinceSecond = Instant.parse("2010-01-01T00:00:00Z").getEpochSecond
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       spark
         .range(sinceSecond, sinceSecond + cardinality, 1, 1)
         .selectExpr(exprs: _*)

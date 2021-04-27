@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -279,7 +280,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         case other => other
       }
     }
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+      _.containsPattern(PLAN_EXPRESSION), ruleId) {
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
@@ -400,7 +402,7 @@ object SimpleTestOptimizer extends SimpleTestOptimizer
 class SimpleTestOptimizer extends Optimizer(
   new CatalogManager(
     FakeV2SessionCatalog,
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)))
+    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry)))
 
 /**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
@@ -772,9 +774,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
-    case s @ ScriptTransformation(_, _, _, child, _)
-        if !child.outputSet.subsetOf(s.references) =>
-      s.copy(child = prunedChild(child, s.references))
 
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>

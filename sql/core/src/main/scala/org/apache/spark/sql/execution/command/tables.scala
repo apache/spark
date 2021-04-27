@@ -82,7 +82,7 @@ case class CreateTableLikeCommand(
     fileFormat: CatalogStorageFormat,
     provider: Option[String],
     properties: Map[String, String] = Map.empty,
-    ifNotExists: Boolean) extends RunnableCommand {
+    ifNotExists: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -161,7 +161,7 @@ case class CreateTableLikeCommand(
  */
 case class CreateTableCommand(
     table: CatalogTable,
-    ignoreIfExists: Boolean) extends RunnableCommand {
+    ignoreIfExists: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sessionState.catalog.createTable(table, ignoreIfExists)
@@ -183,7 +183,7 @@ case class AlterTableRenameCommand(
     oldName: TableIdentifier,
     newName: TableIdentifier,
     isView: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -224,7 +224,7 @@ case class AlterTableRenameCommand(
 */
 case class AlterTableAddColumnsCommand(
     table: TableIdentifier,
-    colsToAdd: Seq[StructField]) extends RunnableCommand {
+    colsToAdd: Seq[StructField]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
@@ -300,7 +300,7 @@ case class LoadDataCommand(
     path: String,
     isLocal: Boolean,
     isOverwrite: Boolean,
-    partition: Option[TablePartitionSpec]) extends RunnableCommand {
+    partition: Option[TablePartitionSpec]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -441,7 +441,7 @@ object LoadDataCommand {
  */
 case class TruncateTableCommand(
     tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec]) extends RunnableCommand {
+    partitionSpec: Option[TablePartitionSpec]) extends LeafRunnableCommand {
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
@@ -580,7 +580,7 @@ case class TruncateTableCommand(
   }
 }
 
-abstract class DescribeCommandBase extends RunnableCommand {
+abstract class DescribeCommandBase extends LeafRunnableCommand {
   protected def describeSchema(
       schema: StructType,
       buffer: ArrayBuffer[Row],
@@ -745,7 +745,7 @@ case class DescribeColumnCommand(
     colNameParts: Seq[String],
     isExtended: Boolean,
     override val output: Seq[Attribute])
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -828,7 +828,7 @@ case class ShowTablesCommand(
     tableIdentifierPattern: Option[String],
     override val output: Seq[Attribute],
     isExtended: Boolean = false,
-    partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
+    partitionSpec: Option[TablePartitionSpec] = None) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
@@ -888,7 +888,7 @@ case class ShowTablesCommand(
 case class ShowTablePropertiesCommand(
     table: TableIdentifier,
     propertyKey: Option[String],
-    override val output: Seq[Attribute]) extends RunnableCommand {
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -924,7 +924,7 @@ case class ShowTablePropertiesCommand(
 case class ShowColumnsCommand(
     databaseName: Option[String],
     tableName: TableIdentifier,
-    override val output: Seq[Attribute]) extends RunnableCommand {
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -955,7 +955,7 @@ case class ShowColumnsCommand(
 case class ShowPartitionsCommand(
     tableName: TableIdentifier,
     override val output: Seq[Attribute],
-    spec: Option[TablePartitionSpec]) extends RunnableCommand {
+    spec: Option[TablePartitionSpec]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -1080,7 +1080,7 @@ trait ShowCreateTableCommandBase {
 case class ShowCreateTableCommand(
     table: TableIdentifier,
     override val output: Seq[Attribute])
-    extends RunnableCommand with ShowCreateTableCommandBase {
+    extends LeafRunnableCommand with ShowCreateTableCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -1234,7 +1234,7 @@ case class ShowCreateTableCommand(
 case class ShowCreateTableAsSerdeCommand(
     table: TableIdentifier,
     override val output: Seq[Attribute])
-    extends RunnableCommand with ShowCreateTableCommandBase {
+    extends LeafRunnableCommand with ShowCreateTableCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -1354,7 +1354,7 @@ case class ShowCreateTableAsSerdeCommand(
  * }}}
  */
 case class RefreshTableCommand(tableIdent: TableIdentifier)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,

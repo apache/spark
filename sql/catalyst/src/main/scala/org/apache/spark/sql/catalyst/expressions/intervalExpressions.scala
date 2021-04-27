@@ -25,6 +25,7 @@ import com.google.common.math.{DoubleMath, IntMath, LongMath}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -49,22 +50,40 @@ abstract class ExtractIntervalPart(
 }
 
 case class ExtractIntervalYears(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getYears, "getYears")
+  extends ExtractIntervalPart(child, IntegerType, getYears, "getYears") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalYears =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalMonths(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths")
+  extends ExtractIntervalPart(child, ByteType, getMonths, "getMonths") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMonths =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalDays(child: Expression)
-  extends ExtractIntervalPart(child, IntegerType, getDays, "getDays")
+  extends ExtractIntervalPart(child, IntegerType, getDays, "getDays") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalDays =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalHours(child: Expression)
-  extends ExtractIntervalPart(child, LongType, getHours, "getHours")
+  extends ExtractIntervalPart(child, LongType, getHours, "getHours") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalHours =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalMinutes(child: Expression)
-  extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes")
+  extends ExtractIntervalPart(child, ByteType, getMinutes, "getMinutes") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalMinutes =
+    copy(child = newChild)
+}
 
 case class ExtractIntervalSeconds(child: Expression)
-  extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds")
+  extends ExtractIntervalPart(child, DecimalType(8, 6), getSeconds, "getSeconds") {
+  override protected def withNewChildInternal(newChild: Expression): ExtractIntervalSeconds =
+    copy(child = newChild)
+}
 
 object ExtractIntervalPart {
 
@@ -119,6 +138,10 @@ case class MultiplyInterval(
     if (failOnError) multiplyExact else multiply
 
   override protected def operationName: String = if (failOnError) "multiplyExact" else "multiply"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MultiplyInterval =
+    copy(interval = newLeft, num = newRight)
 }
 
 case class DivideInterval(
@@ -131,6 +154,10 @@ case class DivideInterval(
     if (failOnError) divideExact else divide
 
   override protected def operationName: String = if (failOnError) "divideExact" else "divide"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DivideInterval =
+    copy(interval = newLeft, num = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -251,6 +278,19 @@ case class MakeInterval(
   }
 
   override def prettyName: String = "make_interval"
+
+  // Seq(years, months, weeks, days, hours, mins, secs)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): MakeInterval =
+    copy(
+      years = newChildren(0),
+      months = newChildren(1),
+      weeks = newChildren(2),
+      days = newChildren(3),
+      hours = newChildren(4),
+      mins = newChildren(5),
+      secs = newChildren(6)
+    )
 }
 
 // Multiply an year-month interval by a numeric
@@ -298,6 +338,11 @@ case class MultiplyYMInterval(
   }
 
   override def toString: String = s"($left * $right)"
+  override def sql: String = s"(${left.sql} * ${right.sql})"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MultiplyYMInterval =
+    copy(interval = newLeft, num = newRight)
 }
 
 // Multiply a day-time interval by a numeric
@@ -340,13 +385,29 @@ case class MultiplyDTInterval(
   }
 
   override def toString: String = s"($left * $right)"
+  override def sql: String = s"(${left.sql} * ${right.sql})"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MultiplyDTInterval =
+    copy(interval = newLeft, num = newRight)
+}
+
+trait IntervalDivide {
+  def checkDivideOverflow(value: Any, minValue: Any, num: Expression, numValue: Any): Unit = {
+    if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
+      if (numValue.asInstanceOf[Number].longValue() == -1) {
+        throw QueryExecutionErrors.overflowInIntegralDivideError()
+      }
+    }
+  }
 }
 
 // Divide an year-month interval by a numeric
 case class DivideYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
+    with NullIntolerant with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -369,20 +430,31 @@ case class DivideYMInterval(
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
+    checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num)
     evalFunc(interval.asInstanceOf[Int], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
-    case LongType =>
-      val math = classOf[LongMath].getName
+    case t: IntegralType =>
+      val math = t match {
+        case LongType => classOf[LongMath].getName
+        case _ => classOf[IntMath].getName
+      }
       val javaType = CodeGenerator.javaType(dataType)
-      defineCodeGen(ctx, ev, (m, n) =>
+      val months = left.genCode(ctx)
+      val num = right.genCode(ctx)
+      val checkIntegralDivideOverflow =
+        s"""
+           |if (${months.value} == ${Int.MinValue} && ${num.value} == -1)
+           |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+           |""".stripMargin
+      nullSafeCodeGen(ctx, ev, (m, n) =>
         // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit to `Int`.
         // Casting to `Int` is safe here.
-        s"($javaType)($math.divide($m, $n, java.math.RoundingMode.HALF_UP))")
-    case _: IntegralType =>
-      val math = classOf[IntMath].getName
-      defineCodeGen(ctx, ev, (m, n) => s"$math.divide($m, $n, java.math.RoundingMode.HALF_UP)")
+        s"""
+           |$checkIntegralDivideOverflow
+           |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
+        """.stripMargin)
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
         s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
@@ -394,13 +466,19 @@ case class DivideYMInterval(
   }
 
   override def toString: String = s"($left / $right)"
+  override def sql: String = s"(${left.sql} / ${right.sql})"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DivideYMInterval =
+    copy(interval = newLeft, num = newRight)
 }
 
 // Divide a day-time interval by a numeric
 case class DivideDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
+    with NullIntolerant with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -419,13 +497,25 @@ case class DivideDTInterval(
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
+    checkDivideOverflow(interval.asInstanceOf[Long], Long.MinValue, right, num)
     evalFunc(interval.asInstanceOf[Long], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
     case _: IntegralType =>
       val math = classOf[LongMath].getName
-      defineCodeGen(ctx, ev, (m, n) => s"$math.divide($m, $n, java.math.RoundingMode.HALF_UP)")
+      val micros = left.genCode(ctx)
+      val num = right.genCode(ctx)
+      val checkIntegralDivideOverflow =
+        s"""
+           |if (${micros.value} == ${Long.MinValue}L && ${num.value} == -1L)
+           |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+           |""".stripMargin
+      nullSafeCodeGen(ctx, ev, (m, n) =>
+        s"""
+           |$checkIntegralDivideOverflow
+           |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
+        """.stripMargin)
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
         s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
@@ -437,4 +527,9 @@ case class DivideDTInterval(
   }
 
   override def toString: String = s"($left / $right)"
+  override def sql: String = s"(${left.sql} / ${right.sql})"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DivideDTInterval =
+    copy(interval = newLeft, num = newRight)
 }

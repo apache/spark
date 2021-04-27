@@ -34,7 +34,10 @@ abstract class LogicalPlan
   with QueryPlanConstraints
   with Logging {
 
-  /** Metadata fields that can be projected from this node */
+  /**
+   * Metadata fields that can be projected from this node.
+   * Should be overridden if the plan does not propagate its children's output.
+   */
   def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
 
   /** Returns true if this subtree has data from a streaming data source. */
