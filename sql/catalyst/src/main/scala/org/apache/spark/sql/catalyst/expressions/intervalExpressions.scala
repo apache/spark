@@ -441,11 +441,11 @@ case class DivideYMInterval(
         case _ => classOf[IntMath].getName
       }
       val javaType = CodeGenerator.javaType(dataType)
-      val micros = left.genCode(ctx)
+      val months = left.genCode(ctx)
       val num = right.genCode(ctx)
       val checkIntegralDivideOverflow =
         s"""
-           |if (${micros.value} == ${Int.MinValue}L && ${num.value} == -1)
+           |if (${months.value} == ${Int.MinValue} && ${num.value} == -1)
            |  throw QueryExecutionErrors.overflowInIntegralDivideError();
            |""".stripMargin
       nullSafeCodeGen(ctx, ev, (m, n) =>
