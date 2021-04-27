@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.plans.logical.{HintErrorHandler, HintInfo}
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.{HintErrorHandler, HintInfo, JoinHint}
 
 /**
  * The hint error handler that logs warnings for each hint error.
@@ -40,6 +43,17 @@ object HintErrorLogger extends HintErrorHandler with Logging {
 
   override def joinNotFoundForJoinHint(hint: HintInfo): Unit = {
     logWarning(s"A join hint $hint is specified but it is not part of a join relation.")
+  }
+
+  override def joinBuildSideNotSupported(joinType: JoinType, joinHint: JoinHint): Unit = {
+    assert(joinHint.leftHint.isDefined || joinHint.rightHint.isDefined)
+    val (hint, buildSide) = if (joinHint.leftHint.isDefined) {
+      (joinHint.leftHint.get, "left")
+    } else {
+      (joinHint.rightHint.get, "right")
+    }
+    logWarning(s"A join hint $hint is specified but it is not supported with build $buildSide " +
+      s"for ${joinType.sql.toLowerCase(Locale.ROOT)} join.")
   }
 
   override def hintOverridden(hint: HintInfo): Unit = {

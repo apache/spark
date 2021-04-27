@@ -139,6 +139,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object JoinSelection extends Strategy
     with PredicateHelper
     with JoinSelectionHelper {
+    private val hintErrorHandler = conf.hintErrorHandler
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
@@ -163,7 +164,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //      other choice.
       case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond, left, right, hint) =>
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
-          getBroadcastBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf).map {
+          val buildSide = getBroadcastBuildSide(
+            left, right, joinType, hint, onlyLookingAtHint, conf)
+          if (onlyLookingAtHint && buildSide.isEmpty &&
+            (hintToBroadcastLeft(hint) || hintToBroadcastRight(hint))) {
+            hintErrorHandler.joinBuildSideNotSupported(joinType, hint)
+          }
+          buildSide.map {
             buildSide =>
               Seq(joins.BroadcastHashJoinExec(
                 leftKeys,
@@ -177,7 +184,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createShuffleHashJoin(onlyLookingAtHint: Boolean) = {
-          getShuffleHashJoinBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf).map {
+          val buildSide = getShuffleHashJoinBuildSide(
+            left, right, joinType, hint, onlyLookingAtHint, conf)
+          if (onlyLookingAtHint && buildSide.isEmpty &&
+            (hintToShuffleHashJoinLeft(hint) || hintToShuffleHashJoinRight(hint))) {
+            hintErrorHandler.joinBuildSideNotSupported(joinType, hint)
+          }
+          buildSide.map {
             buildSide =>
               Seq(joins.ShuffledHashJoinExec(
                 leftKeys,

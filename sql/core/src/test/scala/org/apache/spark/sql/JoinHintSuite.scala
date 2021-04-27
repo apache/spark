@@ -597,4 +597,68 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
       assert(df9.collect().size == df10.collect().size)
     }
   }
+
+  test("SPARK-35221: Add join hint build side check") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+      Seq("left_outer", "left_semi", "left_anti").foreach { joinType =>
+        val hintAppender = new LogAppender(s"join hint build side check for $joinType")
+        withLogAppender(hintAppender, level = Some(Level.WARN)) {
+          assertShuffleMergeJoin(
+            df1.hint("BROADCAST").join(df2, $"a1" === $"b1", joinType))
+          assertBroadcastHashJoin(
+            df1.join(df2.hint("BROADCAST"), $"a1" === $"b1", joinType), BuildRight)
+
+          assertShuffleMergeJoin(
+            df1.hint("SHUFFLE_HASH").join(df2, $"a1" === $"b1", joinType))
+          assertShuffleHashJoin(
+            df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType), BuildRight)
+        }
+
+        val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+          .filter(_.startsWith("A join hint"))
+        assert(logs.length == 2)
+        logs.forall(_.contains(
+          s"it is not supported with build left for ${joinType.split("_").mkString(" ")} join."))
+      }
+
+      Seq("right_outer").foreach { joinType =>
+        val hintAppender = new LogAppender(s"join hint build side check for $joinType")
+        withLogAppender(hintAppender, level = Some(Level.WARN)) {
+          assertBroadcastHashJoin(
+            df1.hint("BROADCAST").join(df2, $"a1" === $"b1", joinType), BuildLeft)
+          assertShuffleMergeJoin(
+            df1.join(df2.hint("BROADCAST"), $"a1" === $"b1", joinType))
+
+          assertShuffleHashJoin(
+            df1.hint("SHUFFLE_HASH").join(df2, $"a1" === $"b1", joinType), BuildLeft)
+          assertShuffleMergeJoin(
+            df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType))
+        }
+        val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+          .filter(_.startsWith("A join hint"))
+        assert(logs.length == 2)
+        logs.forall(_.contains(
+          s"it is not supported with build right for ${joinType.split("_").mkString(" ")} join."))
+      }
+
+      Seq("inner", "cross").foreach { joinType =>
+        val hintAppender = new LogAppender(s"join hint build side check for $joinType")
+        withLogAppender(hintAppender, level = Some(Level.WARN)) {
+          assertBroadcastHashJoin(
+            df1.hint("BROADCAST").join(df2, $"a1" === $"b1", joinType), BuildLeft)
+          assertBroadcastHashJoin(
+            df1.join(df2.hint("BROADCAST"), $"a1" === $"b1", joinType), BuildRight)
+
+          assertShuffleHashJoin(
+            df1.hint("SHUFFLE_HASH").join(df2, $"a1" === $"b1", joinType), BuildLeft)
+          assertShuffleHashJoin(
+            df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType), BuildRight)
+        }
+        val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+          .filter(_.startsWith("A join hint"))
+        assert(logs.isEmpty)
+      }
+    }
+  }
 }
