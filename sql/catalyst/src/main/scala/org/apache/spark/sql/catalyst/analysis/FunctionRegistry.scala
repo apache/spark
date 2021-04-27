@@ -486,6 +486,7 @@ object FunctionRegistry {
     expression[XPathLong]("xpath_long"),
     expression[XPathShort]("xpath_short"),
     expression[XPathString]("xpath_string"),
+    expression[ToHiveString]("to_hive_string"),
 
     // datetime functions
     expression[AddMonths]("add_months"),

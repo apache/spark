@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -1017,6 +1022,35 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           checkEvaluation(expr, null)
         }
       }
+    }
+  }
+
+  test("SPARK-35228") {
+    Seq(
+      Literal.create(true, BooleanType) -> "true",
+      Literal.create(Date.valueOf("2020-01-01")) -> "2020-01-01",
+      Literal.create(Timestamp.valueOf("2020-01-01 00:00:00.000"), TimestampType) ->
+        "2020-01-01 00:00:00",
+      Literal.create("Spark SQL".getBytes, BinaryType) -> "Spark SQL",
+      Literal.create(123, IntegerType) -> "123",
+      Literal.create(123L, LongType) -> "123",
+      Literal.create(123.12f, FloatType) -> "123.12",
+      Literal.create(123.12D, DoubleType) -> "123.12",
+      Literal.create(Decimal(0, 8, 8)) -> "0.000000000000000000",
+      Literal.create("abcd", StringType) -> "abcd",
+      Literal.create(new CalendarInterval(0, 1, 10), CalendarIntervalType) ->
+        "1 days 0.00001 seconds",
+      Literal.create(Period.ofMonths(100), YearMonthIntervalType) -> "8-4",
+      Literal.create(Duration.ofDays(100), DayTimeIntervalType) -> "100 00:00:00.000000000",
+      Literal.create(Array(1, 2, null), ArrayType(IntegerType)) -> "[1,2,null]",
+      Literal.create(Map(1 -> 2, 2 -> 2), MapType(IntegerType, IntegerType)) -> "{1:2,2:2}",
+      Literal.create(Row(1, 2.0d, 3.0f),
+        StructType(StructField("c1", IntegerType) ::
+          StructField("c2", DoubleType) ::
+          StructField("c3", FloatType) :: Nil)) -> "{\"c1\":1,\"c2\":2.0,\"c3\":3.0}")
+      .foreach { case (literal: Literal, result: String) =>
+      val expr = ToHiveString(literal)
+      checkEvaluation(expr, result)
     }
   }
 }
