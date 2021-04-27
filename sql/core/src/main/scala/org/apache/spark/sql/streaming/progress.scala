@@ -33,6 +33,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDoubleToJValue, safeMapToJValue}
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
@@ -144,15 +145,14 @@ class StreamingQueryProgress private[sql](
     ("timestamp" -> JString(timestamp)) ~
     ("batchId" -> JInt(batchId)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
-    ("inputRowsPerSecond" -> SafeJsonSerializer.safeDoubleToJValue(inputRowsPerSecond)) ~
-    ("processedRowsPerSecond" -> SafeJsonSerializer.safeDoubleToJValue(processedRowsPerSecond)) ~
-    ("durationMs" -> SafeJsonSerializer.safeMapToJValue[JLong](durationMs, v => JInt(v.toLong))) ~
-    ("eventTime" -> SafeJsonSerializer.safeMapToJValue[String](eventTime, s => JString(s))) ~
+    ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
+    ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
+    ("durationMs" -> safeMapToJValue[JLong](durationMs, v => JInt(v.toLong))) ~
+    ("eventTime" -> safeMapToJValue[String](eventTime, s => JString(s))) ~
     ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
     ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
     ("sink" -> sink.jsonValue) ~
-    ("observedMetrics" ->
-      SafeJsonSerializer.safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
+    ("observedMetrics" -> safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
   }
 }
 
@@ -195,9 +195,9 @@ class SourceProgress protected[sql](
     ("endOffset" -> tryParse(endOffset)) ~
     ("latestOffset" -> tryParse(latestOffset)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
-    ("inputRowsPerSecond" -> SafeJsonSerializer.safeDoubleToJValue(inputRowsPerSecond)) ~
-    ("processedRowsPerSecond" -> SafeJsonSerializer.safeDoubleToJValue(processedRowsPerSecond)) ~
-    ("metrics" -> SafeJsonSerializer.safeMapToJValue[String](metrics, s => JString(s)))
+    ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
+    ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
+    ("metrics" -> safeMapToJValue[String](metrics, s => JString(s)))
   }
 
   private def tryParse(json: String) = try {
