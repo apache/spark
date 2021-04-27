@@ -258,7 +258,7 @@ try:
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=[
-            'py4j==0.10.9.2'
+            'py4j==0.10.9.2',
             'pandas>=0.23.2',
             'pyarrow>=0.10',
             'numpy>=1.14,<1.20.0',
