@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class TryCastSuite extends AnsiCastSuiteBase {
   override protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String]) = {
@@ -47,5 +47,9 @@ class TryCastSuite extends AnsiCastSuiteBase {
 
   override def checkCastToNumericError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
     checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
+  }
+
+  test("try_cast: to_string") {
+    assert(TryCast(Literal("1"), IntegerType).toString == "try_cast(1 as int)")
   }
 }

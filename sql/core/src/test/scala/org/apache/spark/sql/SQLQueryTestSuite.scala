@@ -368,12 +368,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         // vol used by boolean.sql and case.sql.
         localSparkSession.udf.register("vol", (s: String) => s)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+        localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
       case _: AnsiTest =>
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
       case _ =>
     }
-    // TODO(SPARK-34905): Enable ANSI intervals in SQLQueryTestSuite
-    localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
 
     if (configSet.nonEmpty) {
       // Execute the list of set operation in order to add the desired configs

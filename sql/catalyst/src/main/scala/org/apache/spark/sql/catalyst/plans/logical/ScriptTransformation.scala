@@ -17,24 +17,25 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 
 /**
  * Transforms the input by forking and running the specified script.
  *
- * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  * @param ioschema the input and output schema applied in the execution of the script.
  */
 case class ScriptTransformation(
-    input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
     child: LogicalPlan,
     ioschema: ScriptInputOutputSchema) extends UnaryNode {
   @transient
-  override lazy val references: AttributeSet = AttributeSet(input.flatMap(_.references))
+  override lazy val references: AttributeSet = AttributeSet(child.output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): ScriptTransformation =
+    copy(child = newChild)
 }
 
 /**

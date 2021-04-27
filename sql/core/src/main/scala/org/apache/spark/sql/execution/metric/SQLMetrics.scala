@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
@@ -104,6 +105,15 @@ object SQLMetrics {
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
     acc.register(sc, name = Some(name), countFailedValues = false)
+    acc
+  }
+
+  /**
+   * Create a metric to report data source v2 custom metric.
+   */
+  def createV2CustomMetric(sc: SparkContext, customMetric: CustomMetric): SQLMetric = {
+    val acc = new SQLMetric(CustomMetrics.buildV2CustomMetricTypeName(customMetric))
+    acc.register(sc, name = Some(customMetric.description()), countFailedValues = false)
     acc
   }
 
@@ -200,7 +210,7 @@ object SQLMetrics {
       } else if (metricsType == NS_TIMING_METRIC) {
         duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
-        throw new IllegalStateException("unexpected metrics type: " + metricsType)
+        throw new IllegalStateException(s"unexpected metrics type: $metricsType")
       }
 
       val validValues = values.filter(_ >= 0)

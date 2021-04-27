@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.DependencyUtils
+import org.apache.spark.util.{DependencyUtils, Utils}
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -172,7 +172,7 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * [[SessionState]].
    */
   def addJar(path: String): Unit = {
-    val uri = URI.create(path)
+    val uri = Utils.resolveURI(path)
     resolveJars(uri).foreach { p =>
       session.sparkContext.addJar(p)
       val uri = new Path(p).toUri

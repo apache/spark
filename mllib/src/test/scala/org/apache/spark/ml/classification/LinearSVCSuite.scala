@@ -23,9 +23,8 @@ import breeze.linalg.{DenseVector => BDV}
 import org.scalatest.Assertions._
 
 import org.apache.spark.ml.classification.LinearSVCSuite._
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.ml.optim.aggregator.HingeAggregator
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -176,28 +175,13 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     assert(model2.intercept !== 0.0)
   }
 
-  test("sparse coefficients in HingeAggregator") {
-    val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
-    val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val agg = new HingeAggregator(bcFeaturesStd, true)(bcCoefficients)
-    val thrown = withClue("LinearSVCAggregator cannot handle sparse coefficients") {
-      intercept[IllegalArgumentException] {
-        agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
-      }
-    }
-    assert(thrown.getMessage.contains("coefficients only supports dense"))
-
-    bcCoefficients.destroy()
-    bcFeaturesStd.destroy()
-  }
-
   test("linearSVC with sample weights") {
     def modelEquals(m1: LinearSVCModel, m2: LinearSVCModel): Unit = {
-      assert(m1.coefficients ~== m2.coefficients absTol 0.05)
+      assert(m1.coefficients ~== m2.coefficients relTol 0.05)
       assert(m1.intercept ~== m2.intercept absTol 0.05)
     }
 
-    val estimator = new LinearSVC().setRegParam(0.01).setTol(0.01)
+    val estimator = new LinearSVC().setRegParam(0.01).setTol(0.001)
     val dataset = smallBinaryDataset
     MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals)
@@ -237,7 +221,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     val model1 = trainer1.fit(binaryDataset)
 
     /*
-      Use the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using e1071 package.
 
       library(e1071)
       data <- read.csv("path/target/tmp/LinearSVC/binaryDataset/part-00000", header=FALSE)
@@ -257,8 +241,8 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
      */
     val coefficientsR = Vectors.dense(7.310338, 14.89741, 22.21005, 29.83508)
     val interceptR = 7.440177
-    assert(model1.intercept ~== interceptR relTol 1E-2)
-    assert(model1.coefficients ~== coefficientsR relTol 1E-2)
+    assert(model1.intercept ~== interceptR relTol 1E-3)
+    assert(model1.coefficients ~== coefficientsR relTol 5E-3)
 
     /*
       Use the following python code to load the data and train the model using scikit-learn package.
@@ -280,8 +264,8 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
 
     val coefficientsSK = Vectors.dense(7.24690165, 14.77029087, 21.99924004, 29.5575729)
     val interceptSK = 7.36947518
-    assert(model1.intercept ~== interceptSK relTol 1E-3)
-    assert(model1.coefficients ~== coefficientsSK relTol 4E-3)
+    assert(model1.intercept ~== interceptSK relTol 1E-2)
+    assert(model1.coefficients ~== coefficientsSK relTol 1E-2)
   }
 
   test("summary and training summary") {
@@ -379,8 +363,8 @@ object LinearSVCSuite {
   }
 
   def checkModels(model1: LinearSVCModel, model2: LinearSVCModel): Unit = {
-    assert(model1.intercept == model2.intercept)
-    assert(model1.coefficients.equals(model2.coefficients))
+    assert(model1.intercept ~== model2.intercept relTol 1e-9)
+    assert(model1.coefficients  ~==  model2.coefficients relTol 1e-9)
   }
 
 }

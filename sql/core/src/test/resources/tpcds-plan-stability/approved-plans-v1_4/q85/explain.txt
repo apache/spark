@@ -70,14 +70,14 @@ Condition : ((((isnotnull(ws_item_sk#1) AND isnotnull(ws_order_number#3)) AND is
 
 (4) BroadcastExchange
 Input [7]: [ws_item_sk#1, ws_web_page_sk#2, ws_order_number#3, ws_quantity#4, ws_sales_price#5, ws_net_profit#6, ws_sold_date_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint), cast(input[2, int, false] as bigint)),false), [id=#9]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[2, int, false] as bigint) & 4294967295))),false), [id=#9]
 
 (5) Scan parquet default.web_returns
 Output [9]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_order_number#15, wr_fee#16, wr_refunded_cash#17, wr_returned_date_sk#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
 PushedFilters: [IsNotNull(wr_item_sk), IsNotNull(wr_order_number), IsNotNull(wr_refunded_cdemo_sk), IsNotNull(wr_returning_cdemo_sk), IsNotNull(wr_refunded_addr_sk), IsNotNull(wr_reason_sk)]
-ReadSchema: struct<wr_item_sk:bigint,wr_refunded_cdemo_sk:bigint,wr_refunded_addr_sk:bigint,wr_returning_cdemo_sk:bigint,wr_reason_sk:bigint,wr_order_number:bigint,wr_fee:decimal(7,2),wr_refunded_cash:decimal(7,2)>
+ReadSchema: struct<wr_item_sk:int,wr_refunded_cdemo_sk:int,wr_refunded_addr_sk:int,wr_returning_cdemo_sk:int,wr_reason_sk:int,wr_order_number:int,wr_fee:decimal(7,2),wr_refunded_cash:decimal(7,2)>
 
 (6) ColumnarToRow
 Input [9]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_order_number#15, wr_fee#16, wr_refunded_cash#17, wr_returned_date_sk#18]
@@ -91,7 +91,7 @@ Output [8]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_
 Input [9]: [wr_item_sk#10, wr_refunded_cdemo_sk#11, wr_refunded_addr_sk#12, wr_returning_cdemo_sk#13, wr_reason_sk#14, wr_order_number#15, wr_fee#16, wr_refunded_cash#17, wr_returned_date_sk#18]
 
 (9) BroadcastHashJoin [codegen id : 8]
-Left keys [2]: [cast(ws_item_sk#1 as bigint), cast(ws_order_number#3 as bigint)]
+Left keys [2]: [ws_item_sk#1, ws_order_number#3]
 Right keys [2]: [wr_item_sk#10, wr_order_number#15]
 Join condition: None
 
@@ -146,7 +146,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 
 (21) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [wr_refunded_cdemo_sk#11]
-Right keys [1]: [cast(cd_demo_sk#21 as bigint)]
+Right keys [1]: [cd_demo_sk#21]
 Join condition: ((((((cd_marital_status#22 = M) AND (cd_education_status#23 = Advanced Degree     )) AND (ws_sales_price#5 >= 100.00)) AND (ws_sales_price#5 <= 150.00)) OR ((((cd_marital_status#22 = S) AND (cd_education_status#23 = College             )) AND (ws_sales_price#5 >= 50.00)) AND (ws_sales_price#5 <= 100.00))) OR ((((cd_marital_status#22 = W) AND (cd_education_status#23 = 2 yr Degree         )) AND (ws_sales_price#5 >= 150.00)) AND (ws_sales_price#5 <= 200.00)))
 
 (22) Project [codegen id : 8]
@@ -169,11 +169,11 @@ Condition : ((isnotnull(cd_demo_sk#25) AND isnotnull(cd_marital_status#26)) AND 
 
 (26) BroadcastExchange
 Input [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint), input[1, string, false], input[2, string, false]),false), [id=#28]
+Arguments: HashedRelationBroadcastMode(List(input[0, int, false], input[1, string, false], input[2, string, false]),false), [id=#28]
 
 (27) BroadcastHashJoin [codegen id : 8]
 Left keys [3]: [wr_returning_cdemo_sk#13, cd_marital_status#22, cd_education_status#23]
-Right keys [3]: [cast(cd_demo_sk#25 as bigint), cd_marital_status#26, cd_education_status#27]
+Right keys [3]: [cd_demo_sk#25, cd_marital_status#26, cd_education_status#27]
 Join condition: None
 
 (28) Project [codegen id : 8]
@@ -204,7 +204,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint))
 
 (34) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [wr_refunded_addr_sk#12]
-Right keys [1]: [cast(ca_address_sk#29 as bigint)]
+Right keys [1]: [ca_address_sk#29]
 Join condition: ((((ca_state#30 IN (IN,OH,NJ) AND (ws_net_profit#6 >= 100.00)) AND (ws_net_profit#6 <= 200.00)) OR ((ca_state#30 IN (WI,CT,KY) AND (ws_net_profit#6 >= 150.00)) AND (ws_net_profit#6 <= 300.00))) OR ((ca_state#30 IN (LA,IA,AR) AND (ws_net_profit#6 >= 50.00)) AND (ws_net_profit#6 <= 250.00)))
 
 (35) Project [codegen id : 8]
@@ -262,7 +262,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 
 (47) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [wr_reason_sk#14]
-Right keys [1]: [cast(r_reason_sk#36 as bigint)]
+Right keys [1]: [r_reason_sk#36]
 Join condition: None
 
 (48) Project [codegen id : 8]

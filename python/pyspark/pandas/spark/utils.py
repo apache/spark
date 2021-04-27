@@ -122,3 +122,22 @@ StructField(B,DecimalType(30,15),false)))
         return DecimalType(precision=precision, scale=scale)
     else:
         return dt
+
+
+def _test():
+    import doctest
+    import sys
+    import pyspark.pandas.spark.utils
+
+    globs = pyspark.pandas.spark.utils.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.spark.utils,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

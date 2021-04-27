@@ -30,7 +30,7 @@ case class DropNamespaceExec(
     namespace: Seq[String],
     ifExists: Boolean,
     cascade: Boolean)
-  extends V2CommandExec {
+  extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

@@ -118,6 +118,8 @@ case class First(child: Expression, ignoreNulls: Boolean)
   override lazy val evaluateExpression: AttributeReference = first
 
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
+
+  override protected def withNewChildInternal(newChild: Expression): First = copy(child = newChild)
 }
 
 object FirstLast {

@@ -31,7 +31,6 @@ import pandas as pd
 from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list_like
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pyspark
 from pyspark import sql as spark
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -50,7 +49,7 @@ from pyspark.sql.types import (
     StructType,
 )
 
-from pyspark import pandas as pp  # noqa: F401
+from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -104,7 +103,7 @@ __all__ = [
 
 
 def from_pandas(pobj: Union[pd.DataFrame, pd.Series, pd.Index]) -> Union[Series, DataFrame, Index]:
-    """Create a Koalas DataFrame, Series or Index from a pandas DataFrame, Series or Index.
+    """Create a pandas-on-Spark DataFrame, Series or Index from a pandas DataFrame, Series or Index.
 
     This is similar to Spark's `SparkSession.createDataFrame()` with pandas DataFrame,
     but this also works with pandas Series and picks the index.
@@ -117,8 +116,8 @@ def from_pandas(pobj: Union[pd.DataFrame, pd.Series, pd.Index]) -> Union[Series,
     Returns
     -------
     Series or DataFrame
-        If a pandas Series is passed in, this function returns a Koalas Series.
-        If a pandas DataFrame is passed in, this function returns a Koalas DataFrame.
+        If a pandas Series is passed in, this function returns a pandas-on-Spark Series.
+        If a pandas DataFrame is passed in, this function returns a pandas-on-Spark DataFrame.
     """
     if isinstance(pobj, pd.Series):
         return Series(pobj)
@@ -164,7 +163,7 @@ def range(
     --------
     When the first parameter is specified, we generate a range of values up till that number.
 
-    >>> pp.range(5)
+    >>> ps.range(5)
        id
     0   0
     1   1
@@ -174,7 +173,7 @@ def range(
 
     When start, end, and step are specified:
 
-    >>> pp.range(start = 100, end = 200, step = 20)
+    >>> ps.range(start = 100, end = 200, step = 20)
         id
     0  100
     1  120
@@ -266,7 +265,7 @@ def read_csv(
 
     Examples
     --------
-    >>> pp.read_csv('data.csv')  # doctest: +SKIP
+    >>> ps.read_csv('data.csv')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")  # type: ignore
@@ -432,11 +431,11 @@ def read_json(
 
     Examples
     --------
-    >>> df = pp.DataFrame([['a', 'b'], ['c', 'd']],
+    >>> df = ps.DataFrame([['a', 'b'], ['c', 'd']],
     ...                   columns=['col 1', 'col 2'])
 
     >>> df.to_json(path=r'%s/read_json/foo.json' % path, num_files=1)
-    >>> pp.read_json(
+    >>> ps.read_json(
     ...     path=r'%s/read_json/foo.json' % path
     ... ).sort_values(by="col 1")
       col 1 col 2
@@ -444,7 +443,7 @@ def read_json(
     1     c     d
 
     >>> df.to_json(path=r'%s/read_json/foo.json' % path, num_files=1, lineSep='___')
-    >>> pp.read_json(
+    >>> ps.read_json(
     ...     path=r'%s/read_json/foo.json' % path, lineSep='___'
     ... ).sort_values(by="col 1")
       col 1 col 2
@@ -454,7 +453,7 @@ def read_json(
     You can preserve the index in the roundtrip as below.
 
     >>> df.to_json(path=r'%s/read_json/bar.json' % path, num_files=1, index_col="index")
-    >>> pp.read_json(
+    >>> ps.read_json(
     ...     path=r'%s/read_json/bar.json' % path, index_col="index"
     ... ).sort_values(by="col 1")  # doctest: +NORMALIZE_WHITESPACE
           col 1 col 2
@@ -512,13 +511,14 @@ def read_delta(
 
     Examples
     --------
-    >>> pp.range(1).to_delta('%s/read_delta/foo' % path)
-    >>> pp.read_delta('%s/read_delta/foo' % path)
+    >>> ps.range(1).to_delta('%s/read_delta/foo' % path)  # doctest: +SKIP
+    >>> ps.read_delta('%s/read_delta/foo' % path)  # doctest: +SKIP
        id
     0   0
 
-    >>> pp.range(10, 15, num_partitions=1).to_delta('%s/read_delta/foo' % path, mode='overwrite')
-    >>> pp.read_delta('%s/read_delta/foo' % path)
+    >>> ps.range(10, 15, num_partitions=1).to_delta('%s/read_delta/foo' % path,
+    ...                                             mode='overwrite')  # doctest: +SKIP
+    >>> ps.read_delta('%s/read_delta/foo' % path)  # doctest: +SKIP
        id
     0  10
     1  11
@@ -526,16 +526,15 @@ def read_delta(
     3  13
     4  14
 
-    >>> pp.read_delta('%s/read_delta/foo' % path, version=0)
+    >>> ps.read_delta('%s/read_delta/foo' % path, version=0)  # doctest: +SKIP
        id
     0   0
 
     You can preserve the index in the roundtrip as below.
 
-    >>> pp.range(10, 15, num_partitions=1).to_delta(
-    ...     '%s/read_delta/bar' % path, index_col="index")
-    >>> pp.read_delta('%s/read_delta/bar' % path, index_col="index")
-    ... # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.range(10, 15, num_partitions=1).to_delta(
+    ...     '%s/read_delta/bar' % path, index_col="index")  # doctest: +SKIP
+    >>> ps.read_delta('%s/read_delta/bar' % path, index_col="index")  # doctest: +SKIP
            id
     index
     0      10
@@ -579,13 +578,13 @@ def read_table(name: str, index_col: Optional[Union[str, List[str]]] = None) -> 
 
     Examples
     --------
-    >>> pp.range(1).to_table('%s.my_table' % db)
-    >>> pp.read_table('%s.my_table' % db)
+    >>> ps.range(1).to_table('%s.my_table' % db)
+    >>> ps.read_table('%s.my_table' % db)
        id
     0   0
 
-    >>> pp.range(1).to_table('%s.my_table' % db, index_col="index")
-    >>> pp.read_table('%s.my_table' % db, index_col="index")  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.range(1).to_table('%s.my_table' % db, index_col="index")
+    >>> ps.read_table('%s.my_table' % db, index_col="index")  # doctest: +NORMALIZE_WHITESPACE
            id
     index
     0       0
@@ -639,15 +638,15 @@ def read_spark_io(
 
     Examples
     --------
-    >>> pp.range(1).to_spark_io('%s/read_spark_io/data.parquet' % path)
-    >>> pp.read_spark_io(
+    >>> ps.range(1).to_spark_io('%s/read_spark_io/data.parquet' % path)
+    >>> ps.read_spark_io(
     ...     '%s/read_spark_io/data.parquet' % path, format='parquet', schema='id long')
        id
     0   0
 
-    >>> pp.range(10, 15, num_partitions=1).to_spark_io('%s/read_spark_io/data.json' % path,
+    >>> ps.range(10, 15, num_partitions=1).to_spark_io('%s/read_spark_io/data.json' % path,
     ...                                                format='json', lineSep='__')
-    >>> pp.read_spark_io(
+    >>> ps.read_spark_io(
     ...     '%s/read_spark_io/data.json' % path, format='json', schema='id long', lineSep='__')
        id
     0  10
@@ -658,9 +657,9 @@ def read_spark_io(
 
     You can preserve the index in the roundtrip as below.
 
-    >>> pp.range(10, 15, num_partitions=1).to_spark_io('%s/read_spark_io/data.orc' % path,
+    >>> ps.range(10, 15, num_partitions=1).to_spark_io('%s/read_spark_io/data.orc' % path,
     ...                                                format='orc', index_col="index")
-    >>> pp.read_spark_io(
+    >>> ps.read_spark_io(
     ...     path=r'%s/read_spark_io/data.orc' % path, format="orc", index_col="index")
     ... # doctest: +NORMALIZE_WHITESPACE
            id
@@ -713,15 +712,15 @@ def read_parquet(path, columns=None, index_col=None, pandas_metadata=False, **op
 
     Examples
     --------
-    >>> pp.range(1).to_parquet('%s/read_spark_io/data.parquet' % path)
-    >>> pp.read_parquet('%s/read_spark_io/data.parquet' % path, columns=['id'])
+    >>> ps.range(1).to_parquet('%s/read_spark_io/data.parquet' % path)
+    >>> ps.read_parquet('%s/read_spark_io/data.parquet' % path, columns=['id'])
        id
     0   0
 
     You can preserve the index in the roundtrip as below.
 
-    >>> pp.range(1).to_parquet('%s/read_spark_io/data.parquet' % path, index_col="index")
-    >>> pp.read_parquet('%s/read_spark_io/data.parquet' % path, columns=['id'], index_col="index")
+    >>> ps.range(1).to_parquet('%s/read_spark_io/data.parquet' % path, index_col="index")
+    >>> ps.read_parquet('%s/read_spark_io/data.parquet' % path, columns=['id'], index_col="index")
     ... # doctest: +NORMALIZE_WHITESPACE
            id
     index
@@ -736,9 +735,6 @@ def read_parquet(path, columns=None, index_col=None, pandas_metadata=False, **op
     index_names = None
 
     if index_col is None and pandas_metadata:
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0.0"):
-            raise ValueError("pandas_metadata is not supported with Spark < 3.0.")
-
         # Try to read pandas metadata
 
         @pandas_udf("index_col array<string>, index_names array<string>", PandasUDFType.SCALAR)
@@ -844,7 +840,7 @@ def read_excel(
     **kwds
 ) -> Union[DataFrame, Series, OrderedDict]:
     """
-    Read an Excel file into a Koalas DataFrame or Series.
+    Read an Excel file into a pandas-on-Spark DataFrame or Series.
 
     Support both `xls` and `xlsx` file extensions from a local filesystem or URL.
     Support an option to read a single sheet or a list of sheets.
@@ -856,7 +852,7 @@ def read_excel(
 
         .. note::
             If the underlying Spark is below 3.0, the parameter as a string is not supported.
-            You can use `pp.from_pandas(pd.read_excel(...))` as a workaround.
+            You can use `ps.from_pandas(pd.read_excel(...))` as a workaround.
 
     sheet_name : str, int, list, or None, default 0
         Strings are used for sheet names. Integers are used in zero-indexed
@@ -947,7 +943,7 @@ def read_excel(
     date_parser : function, optional
         Function to use for converting a sequence of string columns to an array of
         datetime instances. The default uses ``dateutil.parser.parser`` to do the
-        conversion. Koalas will try to call `date_parser` in three different ways,
+        conversion. pandas-on-Spark will try to call `date_parser` in three different ways,
         advancing to the next if an exception occurs: 1) Pass one or more arrays
         (as defined by `parse_dates`) as arguments; 2) concatenate (row-wise) the
         string values from the columns defined by `parse_dates` into a single array
@@ -992,13 +988,13 @@ def read_excel(
     --------
     The file can be read using the file name as string or an open file object:
 
-    >>> pp.read_excel('tmp.xlsx', index_col=0)  # doctest: +SKIP
+    >>> ps.read_excel('tmp.xlsx', index_col=0)  # doctest: +SKIP
            Name  Value
     0   string1      1
     1   string2      2
     2  #Comment      3
 
-    >>> pp.read_excel(open('tmp.xlsx', 'rb'),
+    >>> ps.read_excel(open('tmp.xlsx', 'rb'),
     ...               sheet_name='Sheet3')  # doctest: +SKIP
        Unnamed: 0      Name  Value
     0           0   string1      1
@@ -1007,7 +1003,7 @@ def read_excel(
 
     Index and header can be specified via the `index_col` and `header` arguments
 
-    >>> pp.read_excel('tmp.xlsx', index_col=None, header=None)  # doctest: +SKIP
+    >>> ps.read_excel('tmp.xlsx', index_col=None, header=None)  # doctest: +SKIP
          0         1      2
     0  NaN      Name  Value
     1  0.0   string1      1
@@ -1016,7 +1012,7 @@ def read_excel(
 
     Column types are inferred but can be explicitly specified
 
-    >>> pp.read_excel('tmp.xlsx', index_col=0,
+    >>> ps.read_excel('tmp.xlsx', index_col=0,
     ...               dtype={'Name': str, 'Value': float})  # doctest: +SKIP
            Name  Value
     0   string1    1.0
@@ -1027,7 +1023,7 @@ def read_excel(
     but can be explicitly specified, too. Supply the values you would like
     as strings or lists of strings!
 
-    >>> pp.read_excel('tmp.xlsx', index_col=0,
+    >>> ps.read_excel('tmp.xlsx', index_col=0,
     ...               na_values=['string1', 'string2'])  # doctest: +SKIP
            Name  Value
     0      None      1
@@ -1036,7 +1032,7 @@ def read_excel(
 
     Comment lines in the excel input file can be skipped using the `comment` kwarg
 
-    >>> pp.read_excel('tmp.xlsx', index_col=0, comment='#')  # doctest: +SKIP
+    >>> ps.read_excel('tmp.xlsx', index_col=0, comment='#')  # doctest: +SKIP
           Name  Value
     0  string1    1.0
     1  string2    2.0
@@ -1073,11 +1069,6 @@ def read_excel(
         )
 
     if isinstance(io, str):
-        if LooseVersion(pyspark.__version__) < LooseVersion("3.0.0"):
-            raise ValueError(
-                "The `io` parameter as a string is not supported if the underlying Spark is "
-                "below 3.0. You can use `pp.from_pandas(pd.read_excel(...))` as a workaround"
-            )
         # 'binaryFile' format is available since Spark 3.0.0.
         binaries = default_session().read.format("binaryFile").load(io).select("content").head(2)
         io_or_bin = binaries[0][0]
@@ -1191,7 +1182,7 @@ def read_html(
         falls back on ``bs4`` + ``html5lib``.
 
     header : int or list-like or None, optional
-        The row (or list of rows for a :class:`~pp.MultiIndex`) to use to
+        The row (or list of rows for a :class:`~ps.MultiIndex`) to use to
         make the columns headers.
 
     index_col : int or list-like or None, optional
@@ -1226,7 +1217,7 @@ def read_html(
         latest information on table attributes for the modern web.
 
     parse_dates : bool, optional
-        See :func:`~pp.read_csv` for more details.
+        See :func:`~ps.read_csv` for more details.
 
     thousands : str, optional
         Separator to use to parse thousands. Defaults to ``','``.
@@ -1327,7 +1318,7 @@ def read_sql_table(
 
     Examples
     --------
-    >>> pp.read_sql_table('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
+    >>> ps.read_sql_table('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")  # type: ignore
@@ -1387,7 +1378,7 @@ def read_sql_query(sql, con, index_col=None, **options) -> DataFrame:
 
     Examples
     --------
-    >>> pp.read_sql_query('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
+    >>> ps.read_sql_query('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")  # type: ignore
@@ -1447,8 +1438,8 @@ def read_sql(sql, con, index_col=None, columns=None, **options) -> DataFrame:
 
     Examples
     --------
-    >>> pp.read_sql('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
-    >>> pp.read_sql('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
+    >>> ps.read_sql('table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
+    >>> ps.read_sql('SELECT * FROM table_name', 'jdbc:postgresql:db_name')  # doctest: +SKIP
     """
     if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
         options = options.get("options")  # type: ignore
@@ -1520,10 +1511,10 @@ def to_datetime(
     common abbreviations like ['year', 'month', 'day', 'minute', 'second',
     'ms', 'us', 'ns']) or plurals of the same
 
-    >>> df = pp.DataFrame({'year': [2015, 2016],
+    >>> df = ps.DataFrame({'year': [2015, 2016],
     ...                    'month': [2, 3],
     ...                    'day': [4, 5]})
-    >>> pp.to_datetime(df)
+    >>> ps.to_datetime(df)
     0   2015-02-04
     1   2016-03-05
     dtype: datetime64[ns]
@@ -1536,15 +1527,15 @@ def to_datetime(
     Passing errors='coerce' will force an out-of-bounds date to NaT,
     in addition to forcing non-dates (or non-parseable dates) to NaT.
 
-    >>> pp.to_datetime('13000101', format='%Y%m%d', errors='ignore')
+    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='ignore')
     datetime.datetime(1300, 1, 1, 0, 0)
-    >>> pp.to_datetime('13000101', format='%Y%m%d', errors='coerce')
+    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='coerce')
     NaT
 
     Passing infer_datetime_format=True can often-times speedup a parsing
     if its not an ISO8601 format exactly, but in a regular format.
 
-    >>> s = pp.Series(['3/11/2000', '3/12/2000', '3/13/2000'] * 1000)
+    >>> s = ps.Series(['3/11/2000', '3/12/2000', '3/13/2000'] * 1000)
     >>> s.head()
     0    3/11/2000
     1    3/12/2000
@@ -1555,25 +1546,25 @@ def to_datetime(
 
     >>> import timeit
     >>> timeit.timeit(
-    ...    lambda: repr(pp.to_datetime(s, infer_datetime_format=True)),
+    ...    lambda: repr(ps.to_datetime(s, infer_datetime_format=True)),
     ...    number = 1)  # doctest: +SKIP
     0.35832712500000063
 
     >>> timeit.timeit(
-    ...    lambda: repr(pp.to_datetime(s, infer_datetime_format=False)),
+    ...    lambda: repr(ps.to_datetime(s, infer_datetime_format=False)),
     ...    number = 1)  # doctest: +SKIP
     0.8895321660000004
 
     Using a unix epoch time
 
-    >>> pp.to_datetime(1490195805, unit='s')
+    >>> ps.to_datetime(1490195805, unit='s')
     Timestamp('2017-03-22 15:16:45')
-    >>> pp.to_datetime(1490195805433502912, unit='ns')
+    >>> ps.to_datetime(1490195805433502912, unit='ns')
     Timestamp('2017-03-22 15:16:45.433502912')
 
     Using a non-unix epoch origin
 
-    >>> pp.to_datetime([1, 2, 3], unit='D', origin=pd.Timestamp('1960-01-01'))
+    >>> ps.to_datetime([1, 2, 3], unit='D', origin=pd.Timestamp('1960-01-01'))
     DatetimeIndex(['1960-01-02', '1960-01-03', '1960-01-04'], dtype='datetime64[ns]', freq=None)
     """
 
@@ -1669,21 +1660,21 @@ def date_range(
 
     Specify `start` and `end`, with the default daily frequency.
 
-    >>> pp.date_range(start='1/1/2018', end='1/08/2018')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', end='1/08/2018')  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
                   dtype='datetime64[ns]', freq=None)
 
     Specify `start` and `periods`, the number of periods (days).
 
-    >>> pp.date_range(start='1/1/2018', periods=8)  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', periods=8)  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
                   dtype='datetime64[ns]', freq=None)
 
     Specify `end` and `periods`, the number of periods (days).
 
-    >>> pp.date_range(end='1/1/2018', periods=8)  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(end='1/1/2018', periods=8)  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-12-25', '2017-12-26', '2017-12-27', '2017-12-28',
                    '2017-12-29', '2017-12-30', '2017-12-31', '2018-01-01'],
                   dtype='datetime64[ns]', freq=None)
@@ -1691,7 +1682,7 @@ def date_range(
     Specify `start`, `end`, and `periods`; the frequency is generated
     automatically (linearly spaced).
 
-    >>> pp.date_range(
+    >>> ps.date_range(
     ...     start='2018-04-24', end='2018-04-27', periods=3
     ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2018-04-24 00:00:00', '2018-04-25 12:00:00',
@@ -1702,21 +1693,21 @@ def date_range(
 
     Changed the `freq` (frequency) to ``'M'`` (month end frequency).
 
-    >>> pp.date_range(start='1/1/2018', periods=5, freq='M')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='M')  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2018-01-31', '2018-02-28', '2018-03-31', '2018-04-30',
                    '2018-05-31'],
                   dtype='datetime64[ns]', freq=None)
 
     Multiples are allowed
 
-    >>> pp.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +NORMALIZE_WHITESPACE
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='3M')  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
 
     `freq` can also be specified as an Offset object.
 
-    >>> pp.date_range(
+    >>> ps.date_range(
     ...     start='1/1/2018', periods=5, freq=pd.offsets.MonthEnd(3)
     ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
@@ -1726,7 +1717,7 @@ def date_range(
     `closed` controls whether to include `start` and `end` that are on the
     boundary. The default includes boundary points on either end.
 
-    >>> pp.date_range(
+    >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', closed=None
     ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03', '2017-01-04'],
@@ -1734,14 +1725,14 @@ def date_range(
 
     Use ``closed='left'`` to exclude `end` if it falls on the boundary.
 
-    >>> pp.date_range(
+    >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', closed='left'
     ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03'], dtype='datetime64[ns]', freq=None)
 
     Use ``closed='right'`` to exclude `start` if it falls on the boundary.
 
-    >>> pp.date_range(
+    >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', closed='right'
     ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-02', '2017-01-03', '2017-01-04'], dtype='datetime64[ns]', freq=None)
@@ -1751,7 +1742,7 @@ def date_range(
 
     return cast(
         DatetimeIndex,
-        pp.from_pandas(
+        ps.from_pandas(
             pd.date_range(
                 start=start,
                 end=end,
@@ -1801,7 +1792,7 @@ def get_dummies(
     sparse : bool, default False
         Whether the dummy-encoded columns should be be backed by
         a :class:`SparseArray` (True) or a regular NumPy array (False).
-        In Koalas, this value must be "False".
+        In pandas-on-Spark, this value must be "False".
     drop_first : bool, default False
         Whether to get k-1 dummies out of k categorical levels by removing the
         first level.
@@ -1818,26 +1809,26 @@ def get_dummies(
 
     Examples
     --------
-    >>> s = pp.Series(list('abca'))
+    >>> s = ps.Series(list('abca'))
 
-    >>> pp.get_dummies(s)
+    >>> ps.get_dummies(s)
        a  b  c
     0  1  0  0
     1  0  1  0
     2  0  0  1
     3  1  0  0
 
-    >>> df = pp.DataFrame({'A': ['a', 'b', 'a'], 'B': ['b', 'a', 'c'],
+    >>> df = ps.DataFrame({'A': ['a', 'b', 'a'], 'B': ['b', 'a', 'c'],
     ...                    'C': [1, 2, 3]},
     ...                   columns=['A', 'B', 'C'])
 
-    >>> pp.get_dummies(df, prefix=['col1', 'col2'])
+    >>> ps.get_dummies(df, prefix=['col1', 'col2'])
        C  col1_a  col1_b  col2_a  col2_b  col2_c
     0  1       1       0       0       1       0
     1  2       0       1       1       0       0
     2  3       1       0       0       0       1
 
-    >>> pp.get_dummies(pp.Series(list('abcaa')))
+    >>> ps.get_dummies(ps.Series(list('abcaa')))
        a  b  c
     0  1  0  0
     1  0  1  0
@@ -1845,7 +1836,7 @@ def get_dummies(
     3  1  0  0
     4  1  0  0
 
-    >>> pp.get_dummies(pp.Series(list('abcaa')), drop_first=True)
+    >>> ps.get_dummies(ps.Series(list('abcaa')), drop_first=True)
        b  c
     0  0  0
     1  1  0
@@ -1853,7 +1844,7 @@ def get_dummies(
     3  0  0
     4  0  0
 
-    >>> pp.get_dummies(pp.Series(list('abc')), dtype=float)
+    >>> ps.get_dummies(ps.Series(list('abc')), dtype=float)
          a    b    c
     0  1.0  0.0  0.0
     1  0.0  1.0  0.0
@@ -1993,7 +1984,7 @@ def get_dummies(
 # TODO: there are many parameters to implement and support. See pandas's pd.concat.
 def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[Series, DataFrame]:
     """
-    Concatenate Koalas objects along a particular axis with optional set logic
+    Concatenate pandas-on-Spark objects along a particular axis with optional set logic
     along the other axes.
 
     Parameters
@@ -2035,9 +2026,9 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
 
     Combine two ``Series``.
 
-    >>> s1 = pp.Series(['a', 'b'])
-    >>> s2 = pp.Series(['c', 'd'])
-    >>> pp.concat([s1, s2])
+    >>> s1 = ps.Series(['a', 'b'])
+    >>> s2 = ps.Series(['c', 'd'])
+    >>> ps.concat([s1, s2])
     0    a
     1    b
     0    c
@@ -2047,7 +2038,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
     Clear the existing index and reset it in the result
     by setting the ``ignore_index`` option to ``True``.
 
-    >>> pp.concat([s1, s2], ignore_index=True)
+    >>> ps.concat([s1, s2], ignore_index=True)
     0    a
     1    b
     2    c
@@ -2056,20 +2047,20 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
 
     Combine two ``DataFrame`` objects with identical columns.
 
-    >>> df1 = pp.DataFrame([['a', 1], ['b', 2]],
+    >>> df1 = ps.DataFrame([['a', 1], ['b', 2]],
     ...                    columns=['letter', 'number'])
     >>> df1
       letter  number
     0      a       1
     1      b       2
-    >>> df2 = pp.DataFrame([['c', 3], ['d', 4]],
+    >>> df2 = ps.DataFrame([['c', 3], ['d', 4]],
     ...                    columns=['letter', 'number'])
     >>> df2
       letter  number
     0      c       3
     1      d       4
 
-    >>> pp.concat([df1, df2])
+    >>> ps.concat([df1, df2])
       letter  number
     0      a       1
     1      b       2
@@ -2078,7 +2069,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
 
     Combine ``DataFrame`` and ``Series`` objects with different columns.
 
-    >>> pp.concat([df2, s1])
+    >>> ps.concat([df2, s1])
       letter  number     0
     0      c     3.0  None
     1      d     4.0  None
@@ -2089,14 +2080,14 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
     and return everything. Columns outside the intersection will
     be filled with ``None`` values.
 
-    >>> df3 = pp.DataFrame([['c', 3, 'cat'], ['d', 4, 'dog']],
+    >>> df3 = ps.DataFrame([['c', 3, 'cat'], ['d', 4, 'dog']],
     ...                    columns=['letter', 'number', 'animal'])
     >>> df3
       letter  number animal
     0      c       3    cat
     1      d       4    dog
 
-    >>> pp.concat([df1, df3])
+    >>> ps.concat([df1, df3])
       letter  number animal
     0      a       1   None
     1      b       2   None
@@ -2105,7 +2096,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
 
     Sort the columns.
 
-    >>> pp.concat([df1, df3], sort=True)
+    >>> ps.concat([df1, df3], sort=True)
       animal letter  number
     0   None      a       1
     1   None      b       2
@@ -2116,19 +2107,19 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
     and return only those that are shared by passing ``inner`` to
     the ``join`` keyword argument.
 
-    >>> pp.concat([df1, df3], join="inner")
+    >>> ps.concat([df1, df3], join="inner")
       letter  number
     0      a       1
     1      b       2
     0      c       3
     1      d       4
 
-    >>> df4 = pp.DataFrame([['bird', 'polly'], ['monkey', 'george']],
+    >>> df4 = ps.DataFrame([['bird', 'polly'], ['monkey', 'george']],
     ...                    columns=['animal', 'name'])
 
     Combine with column axis.
 
-    >>> pp.concat([df1, df4], axis=1)
+    >>> ps.concat([df1, df4], axis=1)
       letter  number  animal    name
     0      a       1    bird   polly
     1      b       2  monkey  george
@@ -2139,7 +2130,7 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
         objs, Iterable
     ):  # TODO: support dict
         raise TypeError(
-            "first argument must be an iterable of Koalas "
+            "first argument must be an iterable of pandas-on-Spark "
             "objects, you passed an object of type "
             '"{name}"'.format(name=type(objs).__name__)
         )
@@ -2155,8 +2146,8 @@ def concat(objs, axis=0, join="outer", ignore_index=False, sort=False) -> Union[
             raise TypeError(
                 "cannot concatenate object of type "
                 "'{name}"
-                "; only pp.Series "
-                "and pp.DataFrame are valid".format(name=type(objs).__name__)
+                "; only ps.Series "
+                "and ps.DataFrame are valid".format(name=type(objs).__name__)
             )
 
     if join not in ["inner", "outer"]:
@@ -2416,10 +2407,10 @@ def isna(obj):
     --------
     Scalar arguments (including strings) result in a scalar boolean.
 
-    >>> pp.isna('dog')
+    >>> ps.isna('dog')
     False
 
-    >>> pp.isna(np.nan)
+    >>> ps.isna(np.nan)
     True
 
     ndarrays result in an ndarray of booleans.
@@ -2428,26 +2419,26 @@ def isna(obj):
     >>> array
     array([[ 1., nan,  3.],
            [ 4.,  5., nan]])
-    >>> pp.isna(array)
+    >>> ps.isna(array)
     array([[False,  True, False],
            [False, False,  True]])
 
     For Series and DataFrame, the same type is returned, containing booleans.
 
-    >>> df = pp.DataFrame({'a': ['ant', 'bee', 'cat'], 'b': ['dog', None, 'fly']})
+    >>> df = ps.DataFrame({'a': ['ant', 'bee', 'cat'], 'b': ['dog', None, 'fly']})
     >>> df
          a     b
     0  ant   dog
     1  bee  None
     2  cat   fly
 
-    >>> pp.isna(df)
+    >>> ps.isna(df)
            a      b
     0  False  False
     1  False   True
     2  False  False
 
-    >>> pp.isnull(df.b)
+    >>> ps.isnull(df.b)
     0    False
     1     True
     2    False
@@ -2491,7 +2482,7 @@ def notna(obj):
     --------
     Show which entries in a DataFrame are not NA.
 
-    >>> df = pp.DataFrame({'age': [5, 6, np.NaN],
+    >>> df = ps.DataFrame({'age': [5, 6, np.NaN],
     ...                    'born': [pd.NaT, pd.Timestamp('1939-05-27'),
     ...                             pd.Timestamp('1940-04-25')],
     ...                    'name': ['Alfred', 'Batman', ''],
@@ -2510,20 +2501,20 @@ def notna(obj):
 
     Show which entries in a Series are not NA.
 
-    >>> ser = pp.Series([5, 6, np.NaN])
+    >>> ser = ps.Series([5, 6, np.NaN])
     >>> ser
     0    5.0
     1    6.0
     2    NaN
     dtype: float64
 
-    >>> pp.notna(ser)
+    >>> ps.notna(ser)
     0     True
     1     True
     2    False
     dtype: bool
 
-    >>> pp.notna(ser.index)
+    >>> ps.notna(ser.index)
     True
     """
     # TODO: Add back:
@@ -2600,10 +2591,10 @@ def merge(
     Examples
     --------
 
-    >>> df1 = pp.DataFrame({'lkey': ['foo', 'bar', 'baz', 'foo'],
+    >>> df1 = ps.DataFrame({'lkey': ['foo', 'bar', 'baz', 'foo'],
     ...                     'value': [1, 2, 3, 5]},
     ...                    columns=['lkey', 'value'])
-    >>> df2 = pp.DataFrame({'rkey': ['foo', 'bar', 'baz', 'foo'],
+    >>> df2 = ps.DataFrame({'rkey': ['foo', 'bar', 'baz', 'foo'],
     ...                     'value': [5, 6, 7, 8]},
     ...                    columns=['rkey', 'value'])
     >>> df1
@@ -2622,7 +2613,7 @@ def merge(
     Merge df1 and df2 on the lkey and rkey columns. The value columns have
     the default suffixes, _x and _y, appended.
 
-    >>> merged = pp.merge(df1, df2, left_on='lkey', right_on='rkey')
+    >>> merged = ps.merge(df1, df2, left_on='lkey', right_on='rkey')
     >>> merged.sort_values(by=['lkey', 'value_x', 'rkey', 'value_y'])  # doctest: +ELLIPSIS
       lkey  value_x rkey  value_y
     ...bar        2  bar        6
@@ -2632,24 +2623,24 @@ def merge(
     ...foo        5  foo        5
     ...foo        5  foo        8
 
-    >>> left_kdf = pp.DataFrame({'A': [1, 2]})
-    >>> right_kdf = pp.DataFrame({'B': ['x', 'y']}, index=[1, 2])
+    >>> left_kdf = ps.DataFrame({'A': [1, 2]})
+    >>> right_kdf = ps.DataFrame({'B': ['x', 'y']}, index=[1, 2])
 
-    >>> pp.merge(left_kdf, right_kdf, left_index=True, right_index=True).sort_index()
+    >>> ps.merge(left_kdf, right_kdf, left_index=True, right_index=True).sort_index()
        A  B
     1  2  x
 
-    >>> pp.merge(left_kdf, right_kdf, left_index=True, right_index=True, how='left').sort_index()
+    >>> ps.merge(left_kdf, right_kdf, left_index=True, right_index=True, how='left').sort_index()
        A     B
     0  1  None
     1  2     x
 
-    >>> pp.merge(left_kdf, right_kdf, left_index=True, right_index=True, how='right').sort_index()
+    >>> ps.merge(left_kdf, right_kdf, left_index=True, right_index=True, how='right').sort_index()
          A  B
     1  2.0  x
     2  NaN  y
 
-    >>> pp.merge(left_kdf, right_kdf, left_index=True, right_index=True, how='outer').sort_index()
+    >>> ps.merge(left_kdf, right_kdf, left_index=True, right_index=True, how='outer').sort_index()
          A     B
     0  1.0  None
     1  2.0     x
@@ -2694,14 +2685,14 @@ def to_numeric(arg):
     Examples
     --------
 
-    >>> kser = pp.Series(['1.0', '2', '-3'])
+    >>> kser = ps.Series(['1.0', '2', '-3'])
     >>> kser
     0    1.0
     1      2
     2     -3
     dtype: object
 
-    >>> pp.to_numeric(kser)
+    >>> ps.to_numeric(kser)
     0    1.0
     1    2.0
     2   -3.0
@@ -2709,7 +2700,7 @@ def to_numeric(arg):
 
     If given Series contains invalid value to cast float, just cast it to `np.nan`
 
-    >>> kser = pp.Series(['apple', '1.0', '2', '-3'])
+    >>> kser = ps.Series(['apple', '1.0', '2', '-3'])
     >>> kser
     0    apple
     1      1.0
@@ -2717,7 +2708,7 @@ def to_numeric(arg):
     3       -3
     dtype: object
 
-    >>> pp.to_numeric(kser)
+    >>> ps.to_numeric(kser)
     0    NaN
     1    1.0
     2    2.0
@@ -2726,16 +2717,16 @@ def to_numeric(arg):
 
     Also support for list, tuple, np.array, or a scalar
 
-    >>> pp.to_numeric(['1.0', '2', '-3'])
+    >>> ps.to_numeric(['1.0', '2', '-3'])
     array([ 1.,  2., -3.])
 
-    >>> pp.to_numeric(('1.0', '2', '-3'))
+    >>> ps.to_numeric(('1.0', '2', '-3'))
     array([ 1.,  2., -3.])
 
-    >>> pp.to_numeric(np.array(['1.0', '2', '-3']))
+    >>> ps.to_numeric(np.array(['1.0', '2', '-3']))
     array([ 1.,  2., -3.])
 
-    >>> pp.to_numeric('1.0')
+    >>> ps.to_numeric('1.0')
     1.0
     """
     if isinstance(arg, Series):
@@ -2765,13 +2756,13 @@ def broadcast(obj) -> DataFrame:
 
     Examples
     --------
-    >>> df1 = pp.DataFrame({'lkey': ['foo', 'bar', 'baz', 'foo'],
+    >>> df1 = ps.DataFrame({'lkey': ['foo', 'bar', 'baz', 'foo'],
     ...                     'value': [1, 2, 3, 5]},
     ...                    columns=['lkey', 'value']).set_index('lkey')
-    >>> df2 = pp.DataFrame({'rkey': ['foo', 'bar', 'baz', 'foo'],
+    >>> df2 = ps.DataFrame({'rkey': ['foo', 'bar', 'baz', 'foo'],
     ...                     'value': [5, 6, 7, 8]},
     ...                    columns=['rkey', 'value']).set_index('rkey')
-    >>> merged = df1.merge(pp.broadcast(df2), left_index=True, right_index=True)
+    >>> merged = df1.merge(ps.broadcast(df2), left_index=True, right_index=True)
     >>> merged.spark.explain()  # doctest: +ELLIPSIS
     == Physical Plan ==
     ...
@@ -2811,15 +2802,15 @@ def read_orc(
 
     Examples
     --------
-    >>> pp.range(1).to_orc('%s/read_spark_io/data.orc' % path)
-    >>> pp.read_orc('%s/read_spark_io/data.orc' % path, columns=['id'])
+    >>> ps.range(1).to_orc('%s/read_spark_io/data.orc' % path)
+    >>> ps.read_orc('%s/read_spark_io/data.orc' % path, columns=['id'])
        id
     0   0
 
     You can preserve the index in the roundtrip as below.
 
-    >>> pp.range(1).to_orc('%s/read_spark_io/data.orc' % path, index_col="index")
-    >>> pp.read_orc('%s/read_spark_io/data.orc' % path, columns=['id'], index_col="index")
+    >>> ps.range(1).to_orc('%s/read_spark_io/data.orc' % path, index_col="index")
+    >>> ps.read_orc('%s/read_spark_io/data.orc' % path, columns=['id'], index_col="index")
     ... # doctest: +NORMALIZE_WHITESPACE
            id
     index
@@ -2875,3 +2866,47 @@ _get_dummies_acceptable_types = _get_dummies_default_accept_types + (
     BooleanType,
     TimestampType,
 )
+
+
+def _test():
+    import os
+    import doctest
+    import shutil
+    import sys
+    import tempfile
+    import uuid
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.namespace
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.namespace.__dict__.copy()
+    globs["ps"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.namespace tests")
+        .getOrCreate()
+    )
+
+    db_name = "db%s" % str(uuid.uuid4()).replace("-", "")
+    spark.sql("CREATE DATABASE %s" % db_name)
+    globs["db"] = db_name
+
+    path = tempfile.mkdtemp()
+    globs["path"] = path
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.namespace,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+
+    shutil.rmtree(path, ignore_errors=True)
+    spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db_name)
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

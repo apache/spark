@@ -16,7 +16,7 @@
 #
 
 """
-Exceptions/Errors used in Koalas.
+Exceptions/Errors used in pandas-on-Spark.
 """
 
 
@@ -79,7 +79,7 @@ class PandasNotImplementedError(NotImplementedError):
                 if deprecated:
                     msg = (
                         "The method `{0}.{1}()` is deprecated in pandas and will therefore "
-                        + "not be supported in Koalas. {2}"
+                        + "not be supported in pandas-on-Spark. {2}"
                     ).format(class_name, method_name, reason)
                 else:
                     if reason == "":
@@ -93,7 +93,7 @@ class PandasNotImplementedError(NotImplementedError):
             if deprecated:
                 msg = (
                     "The property `{0}.{1}()` is deprecated in pandas and will therefore "
-                    + "not be supported in Koalas. {2}"
+                    + "not be supported in pandas-on-Spark. {2}"
                 ).format(class_name, property_name, reason)
             else:
                 if reason == "":
@@ -104,3 +104,33 @@ class PandasNotImplementedError(NotImplementedError):
                     class_name, property_name, reason
                 )
         super().__init__(msg)
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.exceptions
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.exceptions.__dict__.copy()
+    globs["ps"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.exceptions tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.exceptions,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

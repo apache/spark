@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
  * can cause GC paused and eventually OutOfMemory Errors.
  */
 abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImperativeAggregate[T]
-    with UnaryLike[Expression] {
+  with UnaryLike[Expression] {
 
   val child: Expression
 
@@ -125,6 +125,9 @@ case class CollectList(
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     new GenericArrayData(buffer.toArray)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): CollectList =
+    copy(child = newChild)
 }
 
 /**
@@ -191,4 +194,7 @@ case class CollectSet(
   override def prettyName: String = "collect_set"
 
   override def createAggregationBuffer(): mutable.HashSet[Any] = mutable.HashSet.empty
+
+  override protected def withNewChildInternal(newChild: Expression): CollectSet =
+    copy(child = newChild)
 }
