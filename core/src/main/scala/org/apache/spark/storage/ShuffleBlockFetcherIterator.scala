@@ -32,9 +32,9 @@ import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NettyManagedBuffer}
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.util.TransportConf
+import org.apache.spark.network.util.{NettyUtils, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
@@ -149,6 +149,14 @@ final class ShuffleBlockFetcherIterator(
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
 
   /**
+   * The average size of the remote blocks. We'll only unset `isNettyOOMOnShuffle` when
+   * the free Netty memory is larger than this.
+   *
+   * Visible to [[BufferReleasingInputStream]]
+   */
+  var averageRemoteBlockSize = 0L
+
+  /**
    * The blocks that can't be decompressed successfully, it is used to guarantee that we retry
    * at most once for those corrupted blocks.
    */
@@ -247,8 +255,19 @@ final class ShuffleBlockFetcherIterator(
       case FetchBlockInfo(blockId, size, mapIndex) => (blockId.toString, (size, mapIndex))
     }.toMap
     val remainingBlocks = new HashSet[String]() ++= infoMap.keys
+    val deferredBlocks = new ArrayBuffer[String]()
     val blockIds = req.blocks.map(_.blockId.toString)
     val address = req.address
+
+    @inline def enqueueDeferredFetchRequestIfNecessary(): Unit = {
+      if (remainingBlocks.isEmpty && deferredBlocks.nonEmpty) {
+        val blocks = deferredBlocks.map { blockId =>
+          val (size, mapIndex) = infoMap(blockId)
+          FetchBlockInfo(BlockId(blockId), size, mapIndex)
+        }
+        results.put(DeferFetchRequestResult(FetchRequest(address, blocks)))
+      }
+    }
 
     val blockFetchingListener = new BlockFetchingListener {
       override def onBlockFetchSuccess(blockId: String, buf: ManagedBuffer): Unit = {
@@ -263,6 +282,7 @@ final class ShuffleBlockFetcherIterator(
             results.put(new SuccessFetchResult(BlockId(blockId), infoMap(blockId)._2,
               address, infoMap(blockId)._1, buf, remainingBlocks.isEmpty))
             logDebug("remainingBlocks: " + remainingBlocks)
+            enqueueDeferredFetchRequestIfNecessary()
           }
         }
         logTrace(s"Got remote block $blockId after ${Utils.getUsedTimeNs(startTimeNs)}")
@@ -272,7 +292,7 @@ final class ShuffleBlockFetcherIterator(
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
         remainingBlocks -= blockId
         val (size, mapIndex) = infoMap(blockId)
-        val fetchResult = e match {
+        e match {
           // Catching OOM and do something based on it is only a workaround for handling the
           // Netty OOM issue, which is not the best way towards memory management. We can
           // get rid of it when we find a way to manage Netty's memory precisely.
@@ -286,11 +306,12 @@ final class ShuffleBlockFetcherIterator(
               // log the warning once to avoid flooding the logs.
               logWarning(s"Netty OOM happens, will retry the failed blocks")
             }
-            DeferFetchResult(BlockId(blockId), mapIndex, address, size, remainingBlocks.isEmpty)
+            deferredBlocks += blockId
+            enqueueDeferredFetchRequestIfNecessary()
+
           case _ =>
-            FailureFetchResult(BlockId(blockId), mapIndex, address, e)
+            results.put(FailureFetchResult(BlockId(blockId), mapIndex, address, e))
         }
-        results.put(fetchResult)
       }
     }
 
@@ -344,6 +365,7 @@ final class ShuffleBlockFetcherIterator(
     }
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
     val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes
+    averageRemoteBlockSize = remoteBlockBytes / numRemoteBlocks
     assert(numBlocksToFetch == localBlocks.size + hostLocalBlocks.size + numRemoteBlocks,
       s"The number of non-empty blocks $numBlocksToFetch doesn't equal to the number of local " +
         s"blocks ${localBlocks.size} + the number of host-local blocks ${hostLocalBlocks.size} " +
@@ -635,7 +657,7 @@ final class ShuffleBlockFetcherIterator(
           }
           if (isNetworkReqDone) {
             reqsInFlight -= 1
-            if (!buf.isInstanceOf[NettyManagedBuffer]) {
+            if (isNettyOOMOnShuffle.get && NettyUtils.freeDirectMemory() > averageRemoteBlockSize) {
               // Non-`NettyManagedBuffer` doesn't occupy Netty's memory so we can unset the flag
               // directly once the request succeeds. But for the `NettyManagedBuffer`, we'll only
               // unset the flag when the data is fully consumed (see `BufferReleasingInputStream`).
@@ -714,19 +736,16 @@ final class ShuffleBlockFetcherIterator(
         case FailureFetchResult(blockId, mapIndex, address, e) =>
           throwFetchFailedException(blockId, mapIndex, address, e)
 
-        case DeferFetchResult(blockId, mapIndex, address, size, isNetworkReqDone) =>
-          assert(address != blockManager.blockManagerId &&
-            !hostLocalBlocks.contains(blockId -> mapIndex),
-            "Netty OOM error should only happen on the remote fetch request")
-          numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+        case DeferFetchRequestResult(request) =>
+          val address = request.address
+          numBlocksInFlightPerAddress(address) =
+            numBlocksInFlightPerAddress(address) - request.blocks.size
           bytesInFlight -= size
-          if (isNetworkReqDone) {
-            reqsInFlight -= 1
-            logDebug("Number of requests in flight " + reqsInFlight)
-          }
+          reqsInFlight -= 1
+          logDebug("Number of requests in flight " + reqsInFlight)
           val defReqQueue =
             deferredFetchRequests.getOrElseUpdate(address, new Queue[FetchRequest]())
-          defReqQueue.enqueue(FetchRequest(address, Array(FetchBlockInfo(blockId, size, mapIndex))))
+          defReqQueue.enqueue(request)
           result = null
       }
 
@@ -857,8 +876,9 @@ private class BufferReleasingInputStream(
         delegate.close()
         iterator.releaseCurrentResultBuffer()
       } finally {
-        // Unset the flag when a remote request finished.
-        if (isNetworkReqDone) {
+        // Unset the flag when a remote request finished and free memory is fairly enough.
+        if (ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.get &&
+            isNetworkReqDone && NettyUtils.freeDirectMemory() > iterator.averageRemoteBlockSize) {
           ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.compareAndSet(true, false)
         }
         closed = true
@@ -1035,10 +1055,7 @@ object ShuffleBlockFetcherIterator {
   /**
    * Result of a fetch from a remote block.
    */
-  private[storage] sealed trait FetchResult {
-    val blockId: BlockId
-    val address: BlockManagerId
-  }
+  private[storage] sealed trait FetchResult
 
   /**
    * Result of a fetch from a remote block successfully.
@@ -1077,19 +1094,8 @@ object ShuffleBlockFetcherIterator {
 
 
   /**
-   * Result of a block fetch that should be deferred for some reasons, e.g., Netty OOM
-   * @param blockId block id
-   * @param mapIndex the mapIndex for this block, which indicate the index in the map stage.
-   * @param address BlockManager that the block was trying fetched from.
-   * @param size estimated size of the block. Note that this is NOT the exact bytes.
-   *             Size of remote block is used to calculate bytesInFlight.
-   * @param isNetworkReqDone Is this the last network request for this host in this fetch request.
+   * Result of fetch request that should be deferred for some reasons, e.g., Netty OOM
    */
-  private[storage] case class DeferFetchResult(
-       blockId: BlockId,
-       mapIndex: Int,
-       address: BlockManagerId,
-       size: Long,
-       isNetworkReqDone: Boolean)
-    extends FetchResult
+  private[storage]
+  case class DeferFetchRequestResult(fetchRequest: FetchRequest) extends FetchResult
 }
