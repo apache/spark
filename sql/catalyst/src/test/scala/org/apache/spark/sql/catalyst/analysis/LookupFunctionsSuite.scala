@@ -71,7 +71,7 @@ class LookupFunctionsSuite extends PlanTest {
       table("TaBlE"))
     analyzer.LookupFunctions.apply(plan)
 
-    assert(customerFunctionReg.getIsRegisteredFunctionCalledTimes == 2)
+    assert(customerFunctionReg.getIsRegisteredFunctionCalledTimes == 4)
     assert(analyzer.LookupFunctions.normalizeFuncName
       (unresolvedRegisteredFunc.nameParts.asFunctionIdentifier).database == Some("default"))
   }
