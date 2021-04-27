@@ -25,6 +25,7 @@ import com.google.common.math.{DoubleMath, IntMath, LongMath}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -391,11 +392,22 @@ case class MultiplyDTInterval(
     copy(interval = newLeft, num = newRight)
 }
 
+trait IntervalDivide {
+  def checkDivideOverflow(value: Any, minValue: Any, num: Expression, numValue: Any): Unit = {
+    if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
+      if (numValue.asInstanceOf[Number].longValue() == -1) {
+        throw QueryExecutionErrors.overflowInIntegralDivideError()
+      }
+    }
+  }
+}
+
 // Divide an year-month interval by a numeric
 case class DivideYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
+    with NullIntolerant with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -418,20 +430,31 @@ case class DivideYMInterval(
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
+    checkDivideOverflow(interval.asInstanceOf[Int], Int.MinValue, right, num)
     evalFunc(interval.asInstanceOf[Int], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
-    case LongType =>
-      val math = classOf[LongMath].getName
+    case t: IntegralType =>
+      val math = t match {
+        case LongType => classOf[LongMath].getName
+        case _ => classOf[IntMath].getName
+      }
       val javaType = CodeGenerator.javaType(dataType)
-      defineCodeGen(ctx, ev, (m, n) =>
+      val months = left.genCode(ctx)
+      val num = right.genCode(ctx)
+      val checkIntegralDivideOverflow =
+        s"""
+           |if (${months.value} == ${Int.MinValue} && ${num.value} == -1)
+           |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+           |""".stripMargin
+      nullSafeCodeGen(ctx, ev, (m, n) =>
         // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit to `Int`.
         // Casting to `Int` is safe here.
-        s"($javaType)($math.divide($m, $n, java.math.RoundingMode.HALF_UP))")
-    case _: IntegralType =>
-      val math = classOf[IntMath].getName
-      defineCodeGen(ctx, ev, (m, n) => s"$math.divide($m, $n, java.math.RoundingMode.HALF_UP)")
+        s"""
+           |$checkIntegralDivideOverflow
+           |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
+        """.stripMargin)
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
         s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
@@ -454,7 +477,8 @@ case class DivideYMInterval(
 case class DivideDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
+    with NullIntolerant with Serializable {
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -473,13 +497,25 @@ case class DivideDTInterval(
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
+    checkDivideOverflow(interval.asInstanceOf[Long], Long.MinValue, right, num)
     evalFunc(interval.asInstanceOf[Long], num)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
     case _: IntegralType =>
       val math = classOf[LongMath].getName
-      defineCodeGen(ctx, ev, (m, n) => s"$math.divide($m, $n, java.math.RoundingMode.HALF_UP)")
+      val micros = left.genCode(ctx)
+      val num = right.genCode(ctx)
+      val checkIntegralDivideOverflow =
+        s"""
+           |if (${micros.value} == ${Long.MinValue}L && ${num.value} == -1L)
+           |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+           |""".stripMargin
+      nullSafeCodeGen(ctx, ev, (m, n) =>
+        s"""
+           |$checkIntegralDivideOverflow
+           |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
+        """.stripMargin)
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (m, n) =>
         s"((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()" +
