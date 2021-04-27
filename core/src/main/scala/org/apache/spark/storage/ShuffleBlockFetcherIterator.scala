@@ -301,30 +301,28 @@ final class ShuffleBlockFetcherIterator(
 
     val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
     for ((address, blockInfos) <- blocksByAddress) {
-      remoteBlockBytes += blockInfos.map(_._2).sum
-      collectFetchRequests(address, blockInfos, collectedRemoteRequests)
-//      if (Seq(blockManager.blockManagerId.executorId, fallback).contains(address.executorId)) {
-//        checkBlockSizes(blockInfos)
-//        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
-//          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
-//        numBlocksToFetch += mergedBlockInfos.size
-//        localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
-//        localBlockBytes += mergedBlockInfos.map(_.size).sum
-//      } else if (blockManager.hostLocalDirManager.isDefined &&
-//        address.host == blockManager.blockManagerId.host) {
-//        checkBlockSizes(blockInfos)
-//        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
-//          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
-//        numBlocksToFetch += mergedBlockInfos.size
-//        val blocksForAddress =
-//          mergedBlockInfos.map(info => (info.blockId, info.size, info.mapIndex))
-//        hostLocalBlocksByExecutor += address -> blocksForAddress
-//        hostLocalBlocks ++= blocksForAddress.map(info => (info._1, info._3))
-//        hostLocalBlockBytes += mergedBlockInfos.map(_.size).sum
-//      } else {
-//        remoteBlockBytes += blockInfos.map(_._2).sum
-//        collectFetchRequests(address, blockInfos, collectedRemoteRequests)
-//      }
+      if (Seq(blockManager.blockManagerId.executorId, fallback).contains(address.executorId)) {
+        checkBlockSizes(blockInfos)
+        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
+          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
+        numBlocksToFetch += mergedBlockInfos.size
+        localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
+        localBlockBytes += mergedBlockInfos.map(_.size).sum
+      } else if (blockManager.hostLocalDirManager.isDefined &&
+        address.host == blockManager.blockManagerId.host) {
+        checkBlockSizes(blockInfos)
+        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
+          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
+        numBlocksToFetch += mergedBlockInfos.size
+        val blocksForAddress =
+          mergedBlockInfos.map(info => (info.blockId, info.size, info.mapIndex))
+        hostLocalBlocksByExecutor += address -> blocksForAddress
+        hostLocalBlocks ++= blocksForAddress.map(info => (info._1, info._3))
+        hostLocalBlockBytes += mergedBlockInfos.map(_.size).sum
+      } else {
+        remoteBlockBytes += blockInfos.map(_._2).sum
+        collectFetchRequests(address, blockInfos, collectedRemoteRequests)
+      }
     }
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
     val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes
@@ -605,7 +603,7 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
-          if (true) {
+          if (address != blockManager.blockManagerId) {
             if (hostLocalBlocks.contains(blockId -> mapIndex)) {
               shuffleMetrics.incLocalBlocksFetched(1)
               shuffleMetrics.incLocalBytesRead(buf.size)
@@ -760,8 +758,6 @@ final class ShuffleBlockFetcherIterator(
     } catch {
       case e: IOException =>
         logWarning("IOException throws while consuming the rest stream of the corrupted block", e)
-        // scalastyle:off
-        println("NOT THIS UNKNOWN-1")
         return Cause.UNKNOWN
     }
     val checksum = checkedIn.getChecksum.getValue

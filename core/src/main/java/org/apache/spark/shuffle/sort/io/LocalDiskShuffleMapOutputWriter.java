@@ -126,20 +126,6 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     log.debug("Writing shuffle index file for mapId {} with length {}", mapId,
         partitionLengths.length);
     blockResolver.writeMetadataFileAndCommit(shuffleId, mapId, partitionLengths, partitionChecksums, resolvedTmp);
-    // test
-    FileOutputStream f = new FileOutputStream(blockResolver.getDataFile(shuffleId, mapId), true);
-    long sum = 0;
-    for (long partitionLength : partitionLengths) {
-      sum += partitionLength;
-    }
-    // scalastyle:off
-    System.out.println("write 12 sum=" + sum);
-    f.write(12);
-    byte[] ba = new byte[1];
-    ba[0] = 12;
-    ByteBuffer buffer = ByteBuffer.wrap(ba);
-    f.getChannel().write(buffer, sum - 1);
-    f.close();
     return MapOutputCommitMessage.of(partitionLengths, partitionChecksums);
   }
 

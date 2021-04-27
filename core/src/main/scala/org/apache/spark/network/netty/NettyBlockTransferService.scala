@@ -127,8 +127,6 @@ private[spark] class NettyBlockTransferService(
 
         override def onFailure(e: Throwable): Unit = {
           logger.warn("Failed to get the corruption cause.", e)
-          // scalastyle:off
-          println(s"NOT THIS UNKNOWN-2 ${e.getMessage}")
           result.success(Cause.UNKNOWN)
         }
     })
@@ -140,8 +138,6 @@ private[spark] class NettyBlockTransferService(
     } catch {
       case _: TimeoutException =>
         logger.warn("Failed to get the corruption cause due to timeout.")
-        // scalastyle:off
-        println("NOT THIS UNKNOWN-3")
         Cause.UNKNOWN
     }
   }

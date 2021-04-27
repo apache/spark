@@ -298,28 +298,21 @@ private[spark] class BlockManager(
         val buffer = new Array[Byte](8192)
         while (checksumIn.read(buffer, 0, 8192) != -1) {}
         val recalculatedChecksum = checksumIn.getChecksum.getValue
-        // scalastyle:off
-        println(s"golden=${goldenChecksum}")
-        println(s"Recal=${recalculatedChecksum}")
-        println(s"client=${clientChecksum}")
         if (goldenChecksum != recalculatedChecksum) {
           Cause.DISK
         } else if (goldenChecksum != clientChecksum) {
           Cause.NETWORK
         } else {
-          println("NOT THIS UNKNONW-4")
           Cause.UNKNOWN
         }
       } catch {
         case NonFatal(e) =>
           logWarning("Exception throws while diagnosing shuffle block corruption.", e)
-          println(s"NOT THIS UNKNONW-5 ${e}")
           Cause.UNKNOWN
       } finally {
         in.close()
       }
     } else {
-      println(s"NOT THIS UNKNONW-6")
       println(checksumFile.toString)
       // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
       Cause.UNKNOWN
