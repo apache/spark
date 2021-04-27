@@ -511,9 +511,8 @@ case class DivideDTInterval(
            |if (${micros.value} == ${Long.MinValue}L && ${num.value} == -1L)
            |  throw QueryExecutionErrors.overflowInIntegralDivideError();
            |""".stripMargin
-
       nullSafeCodeGen(ctx, ev, (m, n) =>
-      s"""
+        s"""
            |$checkIntegralDivideOverflow
            |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
         """.stripMargin)
