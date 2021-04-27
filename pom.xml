@@ -301,8 +301,14 @@
 
     <!-- THIS SHOULD NOT BE MERGED!!! THIS IS A TEMPORARY WORKAROUND!!! -->
     <repository>
-      <id>Sonatype OSS Snapshots</id>
+      <id>sonatype-oss-snapshots</id>
       <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
     </repository>
   </repositories>
   <pluginRepositories>
