@@ -295,27 +295,6 @@ object NestedColumnAliasing {
  * This prunes unnecessary nested columns from [[Generate]], or [[Project]] -> [[Generate]]
  */
 object GeneratorNestedColumnAliasing {
-  // Partitions `attrToAliases` based on whether the attribute is in Generator's output.
-  private def aliasesOnGeneratorOutput(
-      attrToAliases: Map[ExprId, Seq[Alias]],
-      generatorOutput: Seq[Attribute]) = {
-    val generatorOutputExprId = generatorOutput.map(_.exprId)
-    attrToAliases.partition { k =>
-      generatorOutputExprId.contains(k._1)
-    }
-  }
-
-  // Partitions `nestedFieldToAlias` based on whether the attribute of nested field extractor
-  // is in Generator's output.
-  private def nestedFieldOnGeneratorOutput(
-      nestedFieldToAlias: Map[ExtractValue, Alias],
-      generatorOutput: Seq[Attribute]) = {
-    val generatorOutputSet = AttributeSet(generatorOutput)
-    nestedFieldToAlias.partition { pair =>
-      pair._1.references.subsetOf(generatorOutputSet)
-    }
-  }
-
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
     // Either `nestedPruningOnExpressions` or `nestedSchemaPruningEnabled` is enabled, we
     // need to prune nested columns through Project and under Generate. The difference is
