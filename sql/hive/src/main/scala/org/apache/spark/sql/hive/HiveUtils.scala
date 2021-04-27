@@ -398,7 +398,7 @@ private[spark] object HiveUtils extends Logging {
         case childFirst: ChildFirstURLClassLoader =>
           childFirst.getURLs() ++ allJars(Utils.getSparkClassLoader)
         case urlClassLoader: URLClassLoader =>
-          urlClassLoader.getURLs ++ allJars(urlClassLoader.getParent)
+          allJars(urlClassLoader.getParent) ++ urlClassLoader.getURLs
         case other => allJars(other.getParent)
       }
 

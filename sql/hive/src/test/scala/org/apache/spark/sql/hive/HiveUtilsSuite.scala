@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
+import java.net.URLClassLoader
+
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{SparkHadoopUtil, SparkSubmitUtils}
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.util.ChildFirstURLClassLoader
+import org.apache.spark.util.{ChildFirstURLClassLoader, Utils}
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
@@ -59,6 +64,39 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
       val hiveConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
       assert(!hiveConf.contains("spark.hive.foo"))
       assert(hiveConf("hive.foo") === "bar")
+    }
+  }
+
+  test("IsolatedClientLoader shall use system classpath first") {
+    val conf = new SparkConf
+    val contextClassLoader = Thread.currentThread().getContextClassLoader
+
+    val classpaths = quietly {
+      SparkSubmitUtils.resolveMavenCoordinates(
+        "org.apache.thrift:libthrift:0.6.1",
+        SparkSubmitUtils.buildIvySettings(None, None),
+        transitive = false)
+    }
+    val allFiles = classpaths.map(new File(_)).toSet
+
+    val tempDir = Utils.createTempDir(namePrefix = s"spark-test")
+    allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
+    val files = tempDir.listFiles().map(_.toURI.toURL)
+
+    // Adding an incompatible jar in user jar
+    // Spark shall use parent classloader first
+    val loader = new URLClassLoader(files, contextClassLoader)
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      val hiveClient = HiveUtils.newClientForMetadata(
+        conf,
+        SparkHadoopUtil.newConfiguration(conf),
+        HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true))
+      hiveClient.getDatabase("default")
+    } catch {
+      case e: Exception => throw e
+    } finally {
+      Thread.currentThread().setContextClassLoader(contextClassLoader)
     }
   }
 
