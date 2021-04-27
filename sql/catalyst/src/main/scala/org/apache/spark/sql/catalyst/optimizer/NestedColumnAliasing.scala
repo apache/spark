@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
@@ -107,9 +109,9 @@ object NestedColumnAliasing {
    * Rewrites a plan with aliases if only a subset of the nested fields are used.
    */
   def rewritePlanIfSubsetFieldsUsed(
-    plan: LogicalPlan,
-    exprList: Seq[Expression],
-    exclusiveAttrs: Seq[Attribute]): Option[LogicalPlan] = {
+      plan: LogicalPlan,
+      exprList: Seq[Expression],
+      exclusiveAttrs: Seq[Attribute]): Option[LogicalPlan] = {
     val attrToExtractValues = getAttributeToExtractValues(exprList, exclusiveAttrs)
     if (attrToExtractValues.isEmpty) {
       None
@@ -204,34 +206,19 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Check [[SelectedField]] to see which expressions should be listed here.
+   * Returns two types of expressions:
+   * - Root references that are individually accessed
+   * - [[GetStructField]] or [[GetArrayStructFields]] on top of other [[ExtractValue]]s
+   *   or special expressions.
    */
-  private def isSelectedField(e: Expression): Boolean = e match {
-    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) => true
+  private def collectRootReferenceAndExtractValue(e: Expression): Seq[Expression] = e match {
+    case _: AttributeReference => Seq(e)
+    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) => Seq(e)
     case GetArrayStructFields(_: MapValues |
                               _: MapKeys |
                               _: ExtractValue |
-                              _: AttributeReference, _, _, _, _) => true
-    case _ => false
-  }
-
-  /**
-   * Return root references that are individually accessed.
-   */
-  private def collectAttributeReference(e: Expression): Seq[AttributeReference] = e match {
-    case a: AttributeReference => Seq(a)
-    case g if isSelectedField(g) => Seq.empty
-    case es if es.children.nonEmpty => es.children.flatMap(collectAttributeReference)
-    case _ => Seq.empty
-  }
-
-  /**
-   * Return [[GetStructField]] or [[GetArrayStructFields]] on top of other [[ExtractValue]]s
-   * or special expressions.
-   */
-  private def collectExtractValue(e: Expression): Seq[ExtractValue] = e match {
-    case g if isSelectedField(g) => Seq(g.asInstanceOf[ExtractValue])
-    case es if es.children.nonEmpty => es.children.flatMap(collectExtractValue)
+                              _: AttributeReference, _, _, _, _) => Seq(e)
+    case es if es.children.nonEmpty => es.children.flatMap(collectRootReferenceAndExtractValue)
     case _ => Seq.empty
   }
 
@@ -243,8 +230,14 @@ object NestedColumnAliasing {
       exprList: Seq[Expression],
       exclusiveAttrs: Seq[Attribute]): Map[Attribute, Seq[ExtractValue]] = {
 
-    val nestedFieldReferences = exprList.flatMap(collectExtractValue)
-    val otherRootReferences = exprList.flatMap(collectAttributeReference)
+    val nestedFieldReferences = new mutable.ArrayBuffer[ExtractValue]()
+    val otherRootReferences = new mutable.ArrayBuffer[AttributeReference]()
+    exprList.foreach { e =>
+      collectRootReferenceAndExtractValue(e).foreach {
+        case ev: ExtractValue => nestedFieldReferences.append(ev)
+        case ar: AttributeReference => otherRootReferences.append(ar)
+      }
+    }
     val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
 
     // Remove cosmetic variations when we group extractors by their references
@@ -254,6 +247,7 @@ object NestedColumnAliasing {
       .flatMap { case (attr: Attribute, nestedFields: Seq[ExtractValue]) =>
         // Remove redundant [[ExtractValue]]s if they share the same parent nest field.
         // For example, when `a.b` and `a.b.c` are in project list, we only need to alias `a.b`.
+        // Because `a.b` requires all of the inner fields of `b`, we cannot prune `a.b.c`.
         val dedupNestedFields = nestedFields.filter {
           // See [[collectExtractValue]]: we only need to deal with [[GetArrayStructFields]] and
           // [[GetStructField]]
@@ -305,7 +299,7 @@ object GeneratorNestedColumnAliasing {
       // On top on `Generate`, a `Project` that might have nested column accessors.
       // We try to get alias maps for both project list and generator's children expressions.
       val attrToExtractValues = NestedColumnAliasing.getAttributeToExtractValues(
-        projectList ++ g.generator.children)
+        projectList ++ g.generator.children, Seq.empty)
       if (attrToExtractValues.isEmpty) {
         return None
       }
