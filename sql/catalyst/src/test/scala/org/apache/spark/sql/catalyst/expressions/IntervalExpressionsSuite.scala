@@ -436,7 +436,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       checkEvaluation(ExtractANSIIntervalDays(Literal(d)), d.toDays.toInt)
       checkEvaluation(ExtractANSIIntervalHours(Literal(d)), (d.toHours % HOURS_PER_DAY).toByte)
-      checkEvaluation(ExtractANSIIntervalMinutes(Literal(d)), (d.toMinutes % MINUTES_PER_HOUR).toByte)
+      checkEvaluation(ExtractANSIIntervalMinutes(Literal(d)),
+        (d.toMinutes % MINUTES_PER_HOUR).toByte)
       checkEvaluation(ExtractANSIIntervalSeconds(Literal(d)),
         IntervalUtils.getSeconds(IntervalUtils.durationToMicros(d)))
     }
