@@ -18,7 +18,6 @@
 package org.apache.spark.network.util;
 
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -37,14 +36,6 @@ import io.netty.util.internal.PlatformDependent;
  * Utilities for creating various Netty constructs based on whether we're using EPOLL or NIO.
  */
 public class NettyUtils {
-
-  /**
-   * A flag which indicates whether the Netty OOM error has raised during shuffle.
-   * If true, unless there's no in-flight fetch requests, all the pending shuffle
-   * fetch requests will be deferred until the flag is unset (whenever there's a
-   * complete fetch request).
-   */
-  public static AtomicBoolean isNettyOOMOnShuffle = new AtomicBoolean(false);
 
   /**
    * Specifies an upper bound on the number of Netty threads that Spark requires by default.

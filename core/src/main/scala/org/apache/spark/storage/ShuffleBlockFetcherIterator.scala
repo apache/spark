@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{InputStream, IOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -33,7 +34,7 @@ import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NettyManagedBuffer}
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.util.{NettyUtils, TransportConf}
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
@@ -280,7 +281,7 @@ final class ShuffleBlockFetcherIterator(
           // the endless retry. And since the Netty memory is shared among shuffle, rpc, etc,
           // modules, we use "1.5" for the overhead concern.
           case _: OutOfDirectMemoryError if PlatformDependent.maxDirectMemory() > ( 1.5 * size) =>
-            if (NettyUtils.isNettyOOMOnShuffle.compareAndSet(false, true)) {
+            if (isNettyOOMOnShuffle.compareAndSet(false, true)) {
               // The fetcher can fail remaining blocks in batch for the same error. So we only
               // log the warning once to avoid flooding the logs.
               logWarning(s"Netty OOM happens, will retry the failed blocks")
@@ -638,7 +639,7 @@ final class ShuffleBlockFetcherIterator(
               // Non-`NettyManagedBuffer` doesn't occupy Netty's memory so we can unset the flag
               // directly once the request succeeds. But for the `NettyManagedBuffer`, we'll only
               // unset the flag when the data is fully consumed (see `BufferReleasingInputStream`).
-              NettyUtils.isNettyOOMOnShuffle.compareAndSet(true, false)
+              isNettyOOMOnShuffle.compareAndSet(true, false)
             }
             logDebug("Number of requests in flight " + reqsInFlight)
           }
@@ -751,12 +752,12 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private def fetchUpToMaxBytes(): Unit = {
-    if (NettyUtils.isNettyOOMOnShuffle.get()) {
+    if (isNettyOOMOnShuffle.get()) {
       if (reqsInFlight > 0) {
         // Return immediately if Netty is still OOMed and there're ongoing fetch requests
         return
       } else {
-        NettyUtils.isNettyOOMOnShuffle.compareAndSet(true, false)
+        isNettyOOMOnShuffle.compareAndSet(true, false)
       }
     }
 
@@ -857,7 +858,9 @@ private class BufferReleasingInputStream(
         iterator.releaseCurrentResultBuffer()
       } finally {
         // Unset the flag when a remote request finished.
-        if (isNetworkReqDone) NettyUtils.isNettyOOMOnShuffle.compareAndSet(true, false)
+        if (isNetworkReqDone) {
+          ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.compareAndSet(true, false)
+        }
         closed = true
       }
     }
@@ -919,6 +922,14 @@ private class ShuffleFetchCompletionListener(var data: ShuffleBlockFetcherIterat
 
 private[storage]
 object ShuffleBlockFetcherIterator {
+
+  /**
+   * A flag which indicates whether the Netty OOM error has raised during shuffle.
+   * If true, unless there's no in-flight fetch requests, all the pending shuffle
+   * fetch requests will be deferred until the flag is unset (whenever there's a
+   * complete fetch request).
+   */
+  val isNettyOOMOnShuffle = new AtomicBoolean(false);
 
   /**
    * This function is used to merged blocks when doBatchFetch is true. Blocks which have the
