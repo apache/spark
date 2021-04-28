@@ -902,7 +902,6 @@ private class BufferReleasingInputStream(
     } catch {
       case e: IOException if detectCorruption =>
         val message = checkedInOpt.map { checkedIn =>
-          println("diagnoseCorruption")
           val cause = iterator.diagnoseCorruption(checkedIn, address, blockId)
           s"Block $blockId is corrupted due to $cause"
         }.orNull
