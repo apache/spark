@@ -41,7 +41,7 @@ select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_stat
 
 While `select_statement` is defined as
 ```sql
-SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
+SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ named_expression [ , ... ] | TRANSFORM (...) ] }
     FROM { from_item [ , ... ] }
     [ PIVOT clause ]
     [ LATERAL VIEW clause ] [ ... ] 
@@ -152,6 +152,10 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
      Specifies aliases for one or more source window specifications. The source window specifications can
      be referenced in the widow definitions in the query.
 
+* **TRANSFORM**
+
+     Specifies a hive-style transform query specification to transform the input by forking and running user-specified command or script.
+
 ### Related Statements
 
 * [WHERE Clause](sql-ref-syntax-qry-select-where.html)
@@ -175,3 +179,4 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
+* [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
