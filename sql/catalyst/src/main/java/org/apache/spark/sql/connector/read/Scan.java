@@ -123,4 +123,12 @@ public interface Scan {
     throw new UnsupportedOperationException(description() +
         ": Push down Aggregation is not supported");
   }
+
+  /*
+   * Returns the aggregation that is pushed to the Scan
+   */
+  default Aggregation pushedAggregation() {
+    throw new UnsupportedOperationException(description() +
+            ": pushedAggregation is not supported");
+  }
 }

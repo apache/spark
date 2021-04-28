@@ -141,4 +141,5 @@ case class ParquetScan(
     pushedAggregations = aggregation
   }
 
+  override def pushedAggregation(): Aggregation = pushedAggregations
 }

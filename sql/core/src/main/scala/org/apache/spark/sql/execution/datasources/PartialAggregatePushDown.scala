@@ -60,11 +60,11 @@ object PartialAggregatePushDown extends Rule[LogicalPlan]  with AliasHelper {
           val scan = scanBuilder.build()
           val translatedAggregates = aggregates.map(DataSourceStrategy
             .translateAggregate(_, PushableColumn(false)))
-          if (translatedAggregates.exists(_.isEmpty)) {
+          val aggregation = Aggregation(translatedAggregates.flatten, Seq.empty)
+          scan.pushAggregation(aggregation)
+          if (scan.pushedAggregation().aggregateExpressions.isEmpty) {
             aggNode // return original plan node
           } else {
-            val aggregation = Aggregation(translatedAggregates.flatten, Seq.empty)
-            scan.pushAggregation(aggregation)
             // use the aggregate columns as the output columns
             // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
             // SELECT min(c1), max(c1) FROM t;
