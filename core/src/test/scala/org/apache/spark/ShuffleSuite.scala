@@ -17,7 +17,8 @@
 
 package org.apache.spark
 
-import java.io.File
+import java.io.{File, FileOutputStream}
+import java.nio.ByteBuffer
 import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService }
 
@@ -300,6 +301,38 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     // This count should retry the execution of the previous stage and rerun shuffle.
     rdd.count()
+  }
+
+  test("SPARK-18188: shuffle checksum detect disk corruption") {
+    conf.set(config.SHUFFLE_CHECKSUM, true)
+    sc = new SparkContext("local-cluster[2, 1, 2048]", "test", conf)
+    val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
+    // materialize the shuffle map outputs
+    rdd.count()
+
+    sc.parallelize(1 to 10, 2).barrier().mapPartitions { iter =>
+        var dataFile = SparkEnv.get.blockManager
+          .diskBlockManager.getFile(ShuffleDataBlockId(0, 0, 0))
+        if (!dataFile.exists()) {
+          dataFile = SparkEnv.get.blockManager
+            .diskBlockManager.getFile(ShuffleDataBlockId(0, 1, 0))
+        }
+
+        if (dataFile.exists()) {
+          val f = new FileOutputStream(dataFile, true)
+          val ch = f.getChannel
+          // corrupt the shuffle data files by writing some arbitrary bytes
+          ch.write(ByteBuffer.wrap(Array[Byte](12)), 0)
+          ch.close()
+        }
+        BarrierTaskContext.get().barrier()
+        iter
+    }.collect()
+
+    val e = intercept[SparkException] {
+      rdd.count()
+    }
+    assert(e.getMessage.contains("corrupted due to DISK issue"))
   }
 
   test("cannot find its local shuffle file if no execution of the stage and rerun shuffle") {
