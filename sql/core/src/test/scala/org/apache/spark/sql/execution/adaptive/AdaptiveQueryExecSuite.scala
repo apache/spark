@@ -692,7 +692,11 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-29544: adaptive skew join with different join types") {
     Seq("SHUFFLE_MERGE", "SHUFFLE_HASH").foreach { joinHint =>
-      val isSMJ = joinHint == "SHUFFLE_MERGE"
+      def getJoinNode(plan: SparkPlan): Seq[ShuffledJoin] = if (joinHint == "SHUFFLE_MERGE") {
+        findTopLevelSortMergeJoin(plan)
+      } else {
+        findTopLevelShuffledHashJoin(plan)
+      }
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
@@ -738,33 +742,21 @@ class AdaptiveQueryExecSuite
           val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
             s"SELECT /*+ $joinHint(skewData1) */ * FROM skewData1 " +
               "JOIN skewData2 ON key1 = key2")
-          val inner = if (isSMJ) {
-            findTopLevelSortMergeJoin(innerAdaptivePlan)
-          } else {
-            findTopLevelShuffledHashJoin(innerAdaptivePlan)
-          }
+          val inner = getJoinNode(innerAdaptivePlan)
           checkSkewJoin(inner, 2, 1)
 
           // skewed left outer join optimization
           val (_, leftAdaptivePlan) = runAdaptiveAndVerifyResult(
             s"SELECT /*+ $joinHint(skewData2) */ * FROM skewData1 " +
               "LEFT OUTER JOIN skewData2 ON key1 = key2")
-          val leftJoin = if (isSMJ) {
-            findTopLevelSortMergeJoin(leftAdaptivePlan)
-          } else {
-            findTopLevelShuffledHashJoin(leftAdaptivePlan)
-          }
+          val leftJoin = getJoinNode(leftAdaptivePlan)
           checkSkewJoin(leftJoin, 2, 0)
 
           // skewed right outer join optimization
           val (_, rightAdaptivePlan) = runAdaptiveAndVerifyResult(
             s"SELECT /*+ $joinHint(skewData1) */ * FROM skewData1 " +
               "RIGHT OUTER JOIN skewData2 ON key1 = key2")
-          val rightJoin = if (isSMJ) {
-            findTopLevelSortMergeJoin(rightAdaptivePlan)
-          } else {
-            findTopLevelShuffledHashJoin(rightAdaptivePlan)
-          }
+          val rightJoin = getJoinNode(rightAdaptivePlan)
           checkSkewJoin(rightJoin, 0, 1)
         }
       }

@@ -157,7 +157,7 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
    * 4. Wrap the join right child with a special shuffle reader that reads partition0 3 times by
    *    3 tasks separately.
    */
-  private def tryToOptimizedChildren(
+  private def tryOptimizeJoinChildren(
       left: ShuffleStageInfo,
       right: ShuffleStageInfo,
       joinType: JoinType): Option[(SparkPlan, SparkPlan)] = {
@@ -250,9 +250,9 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
     case smj @ SortMergeJoinExec(_, _, joinType, _,
         s1 @ SortExec(_, _, ShuffleStage(left: ShuffleStageInfo), _),
-        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleStageInfo), _), _)
-        if supportedJoinTypes.contains(joinType) =>
-      val newChildren = tryToOptimizedChildren(left, right, joinType)
+        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleStageInfo), _), isSkewJoin)
+        if !isSkewJoin && supportedJoinTypes.contains(joinType) =>
+      val newChildren = tryOptimizeJoinChildren(left, right, joinType)
       if (newChildren.isDefined) {
         val (newLeft, newRight) = newChildren.get
         smj.copy(
@@ -263,9 +263,9 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
 
     case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
         ShuffleStage(left: ShuffleStageInfo),
-        ShuffleStage(right: ShuffleStageInfo), _)
-        if supportedJoinTypes.contains(joinType) =>
-      val newChildren = tryToOptimizedChildren(left, right, joinType)
+        ShuffleStage(right: ShuffleStageInfo), isSkewJoin)
+        if !isSkewJoin && supportedJoinTypes.contains(joinType) =>
+      val newChildren = tryOptimizeJoinChildren(left, right, joinType)
       if (newChildren.isDefined) {
         val (newLeft, newRight) = newChildren.get
         shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
