@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -93,34 +94,29 @@ object IntervalUtils {
 
   private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
   private val yearMonthStringPattern =
-    "(INTERVAL )?([+|-])*?(')?([+|-])?(\\d+)-(\\d+)(')?( YEAR TO MONTH)?".r
+    "^(INTERVAL\\s+)([+|-])*?(')([+|-])?(\\d+)-(\\d+)(')(\\s+YEAR TO MONTH)$".r
 
   def castStringToYMInterval(input: UTF8String): CalendarInterval = {
-    // scalastyle:off caselocale .toUpperCase
-    input.trimAll().toUpperCase.toString match {
-      case yearMonthStringPattern(
-      "INTERVAL ", prefixSign, "'", suffixSign, year, month, "'", " YEAR TO MONTH") =>
+    input.trimAll().toString.toUpperCase(Locale.ROOT) match {
+      case yearMonthPattern("-", year, month) =>
+        fromYearMonthString(s"-$year-$month")
+      case yearMonthPattern(_, year, month) =>
+        fromYearMonthString(s"$year-$month")
+      case yearMonthStringPattern(_, prefixSign, _, suffixSign, year, month, _, _) =>
         (prefixSign, suffixSign) match {
           case ("-", "-") => fromYearMonthString(s"$year-$month")
           case ("-", _) => fromYearMonthString(s"-$year-$month")
           case (_, _) if suffixSign != null => fromYearMonthString(s"$suffixSign$year-$month")
           case (_, _) => fromYearMonthString(s"$year-$month")
         }
-      case yearMonthStringPattern(
-      "INTERVAL ", null, "'", "-", year, month, "'", " YEAR TO MONTH") =>
+      case yearMonthStringPattern(_, null, _, "-", year, month, _, _) =>
         fromYearMonthString(s"-$year-$month")
-      case yearMonthStringPattern(
-      "INTERVAL ", null, "'", _, year, month, "'", " YEAR TO MONTH") =>
+      case yearMonthStringPattern(_, null, _, _, year, month, _, _) =>
         fromYearMonthString(s"$year-$month")
-      case yearMonthStringPattern(null, null, null, "-", year, month, null, null) =>
-        fromYearMonthString(s"-$year-$month")
-      case yearMonthStringPattern(null, null, null, _, year, month, null, null) =>
-        fromYearMonthString(s"$year-$month")
-      case yearMonthStringPattern(a, b, c, d, e, f, g, h) =>
+      case yearMonthStringPattern(_, _, _, _, _, _, _, _) =>
         throw new IllegalArgumentException(
           s"Interval string does not match year-month format of 'y-m': ${input.toString}")
     }
-    // scalastyle:on
   }
 
   /**
