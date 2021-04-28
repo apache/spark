@@ -64,7 +64,11 @@ class YarnShuffleServiceMetrics implements MetricsSource {
     MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
 
     if (metric instanceof Timer) {
+      // Timer records both the operations count and delay
+      // Snapshot inside the Timer provides the information for the operation delay
       Timer t = (Timer) metric;
+      Snapshot snapshot = t.getSnapshot();
+      String timingName = name + "_nanos";
       metricsRecordBuilder
         .addCounter(new ShuffleServiceMetricsInfo(name + "_count", "Count of timer " + name),
           t.getCount())
@@ -78,7 +82,17 @@ class YarnShuffleServiceMetrics implements MetricsSource {
           new ShuffleServiceMetricsInfo(name + "_rate1", "1 minute rate of timer " + name),
           t.getOneMinuteRate())
         .addGauge(new ShuffleServiceMetricsInfo(name + "_rateMean", "Mean rate of timer " + name),
-          t.getMeanRate());
+          t.getMeanRate())
+        .addGauge(getMetricsInfoGenericValue(timingName, "max"), snapshot.getMax())
+        .addGauge(getMetricsInfoGenericValue(timingName, "min"), snapshot.getMin())
+        .addGauge(getMetricsInfoGenericValue(timingName, "mean"), snapshot.getMean())
+        .addGauge(getMetricsInfoGenericValue(timingName, "stdDev"), snapshot.getStdDev());
+      for (int percentile : new int[] { 1, 5, 25, 50, 75, 95, 99 }) {
+        String percentileStr =
+            String.format("%d%sPercentile", percentile, percentile == 1 ? "st" : "th");
+        metricsRecordBuilder.addGauge(getMetricsInfoGenericValue(timingName, percentileStr),
+            snapshot.getValue(percentile / 100.0));
+      }
     } else if (metric instanceof Meter) {
       Meter m = (Meter) metric;
       metricsRecordBuilder
@@ -126,6 +140,12 @@ class YarnShuffleServiceMetrics implements MetricsSource {
 
   private static ShuffleServiceMetricsInfo getShuffleServiceMetricsInfoForCounter(String name) {
     return new ShuffleServiceMetricsInfo(name, "Value of counter " + name);
+  }
+
+  private static ShuffleServiceMetricsInfo getMetricsInfoGenericValue(
+      String baseName, String valueName) {
+    return new ShuffleServiceMetricsInfo(String.format("%s_%s", baseName, valueName),
+        valueName + " value of " + baseName);
   }
 
   private static class ShuffleServiceMetricsInfo implements MetricsInfo {

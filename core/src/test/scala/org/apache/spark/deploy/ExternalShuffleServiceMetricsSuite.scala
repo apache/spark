@@ -53,7 +53,9 @@ class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
     val source = sourceRef.get(externalShuffleService).asInstanceOf[ExternalShuffleServiceSource]
     assert(source.metricRegistry.getMetrics.keySet().asScala ==
       Set(
+        "blockTransferRate",
         "blockTransferRateBytes",
+        "blockTransferAvgSize_1min",
         "numActiveConnections",
         "numCaughtExceptions",
         "numRegisteredConnections",

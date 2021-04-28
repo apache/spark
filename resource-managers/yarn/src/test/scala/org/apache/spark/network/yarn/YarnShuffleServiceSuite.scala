@@ -403,7 +403,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     val metrics = metricSetRef.get(metricsSource).asInstanceOf[MetricSet].getMetrics
 
     assert(metrics.keySet().asScala == Set(
+      "blockTransferRate",
       "blockTransferRateBytes",
+      "blockTransferAvgSize_1min",
       "numActiveConnections",
       "numCaughtExceptions",
       "numRegisteredConnections",

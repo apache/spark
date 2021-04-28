@@ -31,6 +31,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.RatioGauge;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.collect.Sets;
@@ -106,10 +107,10 @@ public class ExternalBlockHandler extends RpcHandler
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager,
       MergedShuffleFileManager mergeManager) {
-    this.metrics = new ShuffleMetrics();
     this.streamManager = streamManager;
     this.blockManager = blockManager;
     this.mergeManager = mergeManager;
+    this.metrics = new ShuffleMetrics();
   }
 
   @Override
@@ -305,6 +306,8 @@ public class ExternalBlockHandler extends RpcHandler
     private final Timer fetchMergedBlocksMetaLatencyMillis = new Timer();
     // Time latency for processing finalize shuffle merge request latency in ms
     private final Timer finalizeShuffleMergeLatencyMillis = new Timer();
+    // Block transfer rate in blocks per second
+    private final Meter blockTransferRate = new Meter();
     // Block transfer rate in byte per second
     private final Meter blockTransferRateBytes = new Meter();
     // Number of active connections to the shuffle service
@@ -318,9 +321,18 @@ public class ExternalBlockHandler extends RpcHandler
       allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
       allMetrics.put("fetchMergedBlocksMetaLatencyMillis", fetchMergedBlocksMetaLatencyMillis);
       allMetrics.put("finalizeShuffleMergeLatencyMillis", finalizeShuffleMergeLatencyMillis);
+      allMetrics.put("blockTransferRate", blockTransferRate);
       allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
+      allMetrics.put("blockTransferAvgSize_1min", new RatioGauge() {
+        @Override
+        protected Ratio getRatio() {
+          return Ratio.of(
+              blockTransferRateBytes.getOneMinuteRate(),
+              blockTransferRate.getOneMinuteRate());
+        }
+      });
       allMetrics.put("registeredExecutorsSize",
-                     (Gauge<Integer>) () -> blockManager.getRegisteredExecutorsSize());
+          (Gauge<Integer>) blockManager::getRegisteredExecutorsSize);
       allMetrics.put("numActiveConnections", activeConnections);
       allMetrics.put("numCaughtExceptions", caughtExceptions);
     }
@@ -411,6 +423,7 @@ public class ExternalBlockHandler extends RpcHandler
     public ManagedBuffer next() {
       final ManagedBuffer block = blockDataForIndexFn.apply(index);
       index += 2;
+      metrics.blockTransferRate.mark();
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;
     }
@@ -464,6 +477,7 @@ public class ExternalBlockHandler extends RpcHandler
           reduceIds[mapIdx][0], reduceIds[mapIdx][1]);
         mapIdx += 1;
       }
+      metrics.blockTransferRate.mark();
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;
     }

@@ -1377,7 +1377,9 @@ Note: applies when running in Spark standalone as worker
 ### Component instance = shuffleService
 Note: applies to the shuffle service
 
+- blockTransferRate (meter)
 - blockTransferRateBytes (meter)
+- blockTransferAvgTime_1min (gauge - 1 minute moving average)
 - numActiveConnections.count
 - numRegisteredConnections.count
 - numCaughtExceptions.count
