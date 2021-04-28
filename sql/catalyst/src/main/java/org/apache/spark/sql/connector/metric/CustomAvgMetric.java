@@ -14,33 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.text
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+package org.apache.spark.sql.connector.metric;
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.annotation.Evolving;
 
-class TextOutputWriter(
-    val path: String,
-    dataSchema: StructType,
-    lineSeparator: Array[Byte],
-    context: TaskAttemptContext)
-  extends OutputWriter {
+import java.util.Arrays;
+import java.text.DecimalFormat;
 
-  private val writer = CodecStreams.createOutputStream(context, new Path(path))
-
-  override def write(row: InternalRow): Unit = {
-    if (!row.isNullAt(0)) {
-      val utf8string = row.getUTF8String(0)
-      utf8string.writeTo(writer)
+/**
+ * Built-in `CustomMetric` that computes average of metric values. Note that please extend this
+ * class and override `name` and `description` to create your custom metric for real usage.
+ *
+ * @since 3.2.0
+ */
+@Evolving
+public abstract class CustomAvgMetric implements CustomMetric {
+  @Override
+  public String aggregateTaskMetrics(long[] taskMetrics) {
+    if (taskMetrics.length > 0) {
+      double average = ((double)Arrays.stream(taskMetrics).sum()) / taskMetrics.length;
+      return new DecimalFormat("#0.000").format(average);
+    } else {
+      return "0";
     }
-    writer.write(lineSeparator)
-  }
-
-  override def close(): Unit = {
-    writer.close()
   }
 }

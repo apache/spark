@@ -288,4 +288,4 @@ Here is the documentation on the standard connectors both from Apache and the cl
 * [The Azure Blob Filesystem driver (ABFS)](https://docs.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-abfs-driver)
 * IBM Cloud Object Storage connector for Apache Spark: [Stocator](https://github.com/CODAIT/stocator),
   [IBM Object Storage](https://www.ibm.com/cloud/object-storage). From IBM.
-
+* [Using JindoFS SDK to access Alibaba Cloud OSS](https://github.com/aliyun/alibabacloud-jindofs).

@@ -14,33 +14,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.text
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+package org.apache.spark.mllib.linalg
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter}
-import org.apache.spark.sql.types.StructType
+import dev.ludovic.netlib.{ARPACK => NetlibARPACK,
+                           JavaARPACK => NetlibJavaARPACK,
+                           NativeARPACK => NetlibNativeARPACK}
 
-class TextOutputWriter(
-    val path: String,
-    dataSchema: StructType,
-    lineSeparator: Array[Byte],
-    context: TaskAttemptContext)
-  extends OutputWriter {
+/**
+ * ARPACK routines for MLlib's vectors and matrices.
+ */
+private[spark] object ARPACK extends Serializable {
 
-  private val writer = CodecStreams.createOutputStream(context, new Path(path))
+  @transient private var _javaARPACK: NetlibARPACK = _
+  @transient private var _nativeARPACK: NetlibARPACK = _
 
-  override def write(row: InternalRow): Unit = {
-    if (!row.isNullAt(0)) {
-      val utf8string = row.getUTF8String(0)
-      utf8string.writeTo(writer)
+  private[spark] def javaARPACK: NetlibARPACK = {
+    if (_javaARPACK == null) {
+      _javaARPACK = NetlibJavaARPACK.getInstance
     }
-    writer.write(lineSeparator)
+    _javaARPACK
   }
 
-  override def close(): Unit = {
-    writer.close()
+  private[spark] def nativeARPACK: NetlibARPACK = {
+    if (_nativeARPACK == null) {
+      _nativeARPACK =
+        try { NetlibNativeARPACK.getInstance } catch { case _: Throwable => javaARPACK }
+    }
+    _nativeARPACK
   }
 }
