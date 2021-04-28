@@ -171,8 +171,8 @@ private[hive] class SparkGetColumnsOperation(
     case BooleanType => java.sql.Types.BOOLEAN
     case ByteType => java.sql.Types.TINYINT
     case ShortType => java.sql.Types.SMALLINT
-    case IntegerType | YearMonthIntervalType => java.sql.Types.INTEGER
-    case LongType | DayTimeIntervalType => java.sql.Types.BIGINT
+    case IntegerType => java.sql.Types.INTEGER
+    case LongType => java.sql.Types.BIGINT
     case FloatType => java.sql.Types.FLOAT
     case DoubleType => java.sql.Types.DOUBLE
     case _: DecimalType => java.sql.Types.DECIMAL
@@ -186,7 +186,8 @@ private[hive] class SparkGetColumnsOperation(
     case _: MapType => java.sql.Types.JAVA_OBJECT
     case _: StructType => java.sql.Types.STRUCT
     // Hive's year-month and day-time intervals are mapping to java.sql.Types.OTHER
-    case _: CalendarIntervalType => java.sql.Types.OTHER
+    case _: CalendarIntervalType | YearMonthIntervalType | DayTimeIntervalType =>
+      java.sql.Types.OTHER
     case _ => throw new IllegalArgumentException(s"Unrecognized type name: ${typ.sql}")
   }
 
