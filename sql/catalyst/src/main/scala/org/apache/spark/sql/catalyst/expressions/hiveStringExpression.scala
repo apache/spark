@@ -18,16 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
 import java.time._
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, JavaCode}
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -48,9 +46,7 @@ case class ToHiveString(expr: Expression)
   private val timeFormatters: TimeFormatters = getTimeFormatters
 
   override def nullSafeEval(input: Any): Any = {
-    UTF8String.fromString(toHiveString(
-      (CatalystTypeConverters.convertToScala(input, expr.dataType), expr.dataType),
-      false, timeFormatters))
+    UTF8String.fromString(toHiveString((input, expr.dataType), false, timeFormatters))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -87,30 +83,31 @@ object ToHiveString {
     formatters: TimeFormatters): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
-    case (d: Date, DateType) => formatters.date.format(d)
-    case (ld: LocalDate, DateType) => formatters.date.format(ld)
-    case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
-    case (i: Instant, TimestampType) => formatters.timestamp.format(i)
+    case (d: Int, DateType) => formatters.date.format(d)
+    case (t: Long, TimestampType) => formatters.timestamp.format(t)
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-    case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
+    case (decimal: Decimal, DecimalType()) => decimal.toJavaBigDecimal.toPlainString
     case (n, _: NumericType) => n.toString
-    case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
+    case (s: UTF8String, StringType) => if (nested) "\"" + s.toString + "\"" else s.toString
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
-    case (seq: scala.collection.Seq[_], ArrayType(typ, _)) =>
-      seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
-    case (m: Map[_, _], MapType(kType, vType, _)) =>
-      m.map { case (key, value) =>
-        toHiveString((key, kType), true, formatters) + ":" +
-          toHiveString((value, vType), true, formatters)
-      }.toSeq.sorted.mkString("{", ",", "}")
-    case (struct: Row, StructType(fields)) =>
-      struct.toSeq.zip(fields).map { case (v, t) =>
+    case (seq: ArrayData, ArrayType(typ, _)) =>
+      seq.toArray(typ).toSeq.asInstanceOf[scala.collection.Seq[_]].map(v => (v, typ))
+        .map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
+    case (m: MapData, MapType(kType, vType, _)) =>
+      m.keyArray().toArray[Any](kType)
+        .zip(m.valueArray().toArray[Any](vType)).toMap
+        .map { case (key, value) =>
+          toHiveString((key, kType), true, formatters) + ":" +
+            toHiveString((value, vType), true, formatters)
+        }.toSeq.sorted.mkString("{", ",", "}")
+    case (struct: InternalRow, s @ StructType(fields: Array[StructField])) =>
+      struct.toSeq(s).zip(fields).map { case (v, t) =>
         s""""${t.name}":${toHiveString((v, t.dataType), true, formatters)}"""
       }.mkString("{", ",", "}")
-    case (period: Period, YearMonthIntervalType) =>
-      toYearMonthIntervalString(periodToMonths(period), HIVE_STYLE)
-    case (duration: Duration, DayTimeIntervalType) =>
-      toDayTimeIntervalString(durationToMicros(duration), HIVE_STYLE)
+    case (months: Int, YearMonthIntervalType) =>
+      toYearMonthIntervalString(months, HIVE_STYLE)
+    case (micros: Long, DayTimeIntervalType) =>
+      toDayTimeIntervalString(micros, HIVE_STYLE)
     case (other, _: UserDefinedType[_]) => other.toString
   }
 
