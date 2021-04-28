@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 private[client] object HiveClientBuilder {
   // In order to speed up test execution during development or in Jenkins, you can specify the path
   // of an existing Ivy cache:
-  private val ivyPath: Option[String] = {
+  private[client] val ivyPath: Option[String] = {
     sys.env.get("SPARK_VERSIONS_SUITE_IVY_PATH").orElse(
       Some(new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath))
   }
