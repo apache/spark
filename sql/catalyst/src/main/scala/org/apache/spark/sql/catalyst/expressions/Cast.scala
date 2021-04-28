@@ -536,7 +536,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToDayTimeInterval(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => IntervalUtils.safeFromDayTimeString(s).orNull)
+      buildCast[UTF8String](_, s => IntervalUtils.castStringToDTInterval(s).microseconds)
   }
 
   // LongConverter
@@ -1369,7 +1369,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       val longOpt = ctx.freshVariable("intOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         code"""
-           scala.Option<Long> $longOpt = $util.safeFromDayTimeString($c);
+           scala.Option<Long> $longOpt = $util.castStringToDTInterval($c).microseconds;
            if ($longOpt.isDefined()) {
               $evPrim = ((Long) $longOpt.get()).longValue();
             } else {
