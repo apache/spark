@@ -18,21 +18,21 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.TestUtils
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with SharedSparkSession {
   import testImplicits._
 
+  override protected def defaultSerDe(): String = "row-format-delimited"
+
   override def createScriptTransformationExec(
-      input: Seq[Expression],
       script: String,
       output: Seq[Attribute],
       child: SparkPlan,
       ioschema: ScriptTransformationIOSchema): BaseScriptTransformationExec = {
     SparkScriptTransformationExec(
-      input = input,
       script = script,
       output = output,
       child = child,

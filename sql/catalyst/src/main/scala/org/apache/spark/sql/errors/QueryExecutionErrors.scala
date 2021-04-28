@@ -146,6 +146,10 @@ object QueryExecutionErrors {
     new ArithmeticException("Overflow in sum of decimals.")
   }
 
+  def overflowInIntegralDivideError(): ArithmeticException = {
+    new ArithmeticException("Overflow in integral divide.")
+  }
+
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
     new RuntimeException(s"Unsuccessful try to zip maps with $size " +
       "unique keys due to exceeding the array size limit " +
@@ -305,7 +309,7 @@ object QueryExecutionErrors {
     new IllegalStateException("table stats must be specified.")
   }
 
-  def unaryMinusCauseOverflowError(originValue: Short): ArithmeticException = {
+  def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
     new ArithmeticException(s"- $originValue caused overflow.")
   }
 
@@ -768,4 +772,55 @@ object QueryExecutionErrors {
     new IllegalArgumentException(s"Unexpected: $o")
   }
 
+  def unscaledValueTooLargeForPrecisionError(): Throwable = {
+    new ArithmeticException("Unscaled value too large for precision")
+  }
+
+  def decimalPrecisionExceedsMaxPrecisionError(precision: Int, maxPrecision: Int): Throwable = {
+    new ArithmeticException(
+      s"Decimal precision $precision exceeds max precision $maxPrecision")
+  }
+
+  def outOfDecimalTypeRangeError(str: UTF8String): Throwable = {
+    new ArithmeticException(s"out of decimal type range: $str")
+  }
+
+  def unsupportedArrayTypeError(clazz: Class[_]): Throwable = {
+    new RuntimeException(s"Do not support array of type $clazz.")
+  }
+
+  def unsupportedJavaTypeError(clazz: Class[_]): Throwable = {
+    new RuntimeException(s"Do not support type $clazz.")
+  }
+
+  def failedParsingStructTypeError(raw: String): Throwable = {
+    new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
+  }
+
+  def failedMergingFieldsError(leftName: String, rightName: String, e: Throwable): Throwable = {
+    new SparkException(s"Failed to merge fields '$leftName' and '$rightName'. ${e.getMessage}")
+  }
+
+  def cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
+      leftPrecision: Int, rightPrecision: Int, leftScale: Int, rightScale: Int): Throwable = {
+    new SparkException("Failed to merge decimal types with incompatible " +
+      s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
+  }
+
+  def cannotMergeDecimalTypesWithIncompatiblePrecisionError(
+      leftPrecision: Int, rightPrecision: Int): Throwable = {
+    new SparkException("Failed to merge decimal types with incompatible " +
+      s"precision $leftPrecision and $rightPrecision")
+  }
+
+  def cannotMergeDecimalTypesWithIncompatibleScaleError(
+      leftScale: Int, rightScale: Int): Throwable = {
+    new SparkException("Failed to merge decimal types with incompatible " +
+      s"scala $leftScale and $rightScale")
+  }
+
+  def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
+    new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
+      s" and ${right.catalogString}")
+  }
 }

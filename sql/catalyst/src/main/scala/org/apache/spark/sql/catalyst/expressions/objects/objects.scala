@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern.{NULL_CHECK, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -129,7 +130,12 @@ trait InvokeLike extends Expression with NonSQLExpression {
       // return null if one of arguments is null
       null
     } else {
-      val ret = method.invoke(obj, args: _*)
+      val ret = try {
+        method.invoke(obj, args: _*)
+      } catch {
+        // Re-throw the original exception.
+        case e: java.lang.reflect.InvocationTargetException => throw e.getCause
+      }
       val boxedClass = ScalaReflection.typeBoxedJavaMapping.get(dataType)
       if (boxedClass.isDefined) {
         boxedClass.get.cast(ret)
@@ -1704,6 +1710,8 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
   override def dataType: DataType = child.dataType
   override def foldable: Boolean = false
   override def nullable: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(NULL_CHECK)
 
   override def flatArguments: Iterator[Any] = Iterator(child)
 

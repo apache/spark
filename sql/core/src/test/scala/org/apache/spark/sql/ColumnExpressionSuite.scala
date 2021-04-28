@@ -1686,6 +1686,61 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("a", IntegerType, nullable = true))))
   }
 
+  test("SPARK-35213: chained withField operations should have correct schema for new columns") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Row(null) :: Nil),
+      StructType(Seq(StructField("data", NullType))))
+
+    checkAnswer(
+      df.withColumn("data", struct()
+        .withField("a", struct())
+        .withField("b", struct())
+        .withField("a.aa", lit("aa1"))
+        .withField("b.ba", lit("ba1"))
+        .withField("a.ab", lit("ab1"))),
+        Row(Row(Row("aa1", "ab1"), Row("ba1"))) :: Nil,
+        StructType(Seq(
+          StructField("data", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("aa", StringType, nullable = false),
+              StructField("ab", StringType, nullable = false)
+            )), nullable = false),
+            StructField("b", StructType(Seq(
+              StructField("ba", StringType, nullable = false)
+            )), nullable = false)
+          )), nullable = false)
+        ))
+    )
+  }
+
+  test("SPARK-35213: optimized withField operations should maintain correct nested struct " +
+    "ordering") {
+    val df = spark.createDataFrame(
+      sparkContext.parallelize(Row(null) :: Nil),
+      StructType(Seq(StructField("data", NullType))))
+
+    checkAnswer(
+      df.withColumn("data", struct()
+          .withField("a", struct().withField("aa", lit("aa1")))
+          .withField("b", struct().withField("ba", lit("ba1")))
+        )
+        .withColumn("data", col("data").withField("b.bb", lit("bb1")))
+        .withColumn("data", col("data").withField("a.ab", lit("ab1"))),
+        Row(Row(Row("aa1", "ab1"), Row("ba1", "bb1"))) :: Nil,
+        StructType(Seq(
+          StructField("data", StructType(Seq(
+            StructField("a", StructType(Seq(
+              StructField("aa", StringType, nullable = false),
+              StructField("ab", StringType, nullable = false)
+            )), nullable = false),
+            StructField("b", StructType(Seq(
+              StructField("ba", StringType, nullable = false),
+              StructField("bb", StringType, nullable = false)
+            )), nullable = false)
+          )), nullable = false)
+        ))
+    )
+  }
 
   test("dropFields should throw an exception if called on a non-StructType column") {
     intercept[AnalysisException] {
