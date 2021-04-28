@@ -67,7 +67,7 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     }
   }
 
-  test("IsolatedClientLoader shall use system classpath first") {
+  test("SPARK-35248: IsolatedClientLoader shall use system classpath first") {
     val conf = new SparkConf
     val contextClassLoader = Thread.currentThread().getContextClassLoader
 
