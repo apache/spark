@@ -38,7 +38,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
 
     @Override
     protected Type type() {
-        return Type.DIAGNOSE_CORRUPTION;
+      return Type.DIAGNOSE_CORRUPTION;
     }
 
     @Override
@@ -53,24 +53,24 @@ public class DiagnoseCorruption extends BlockTransferMessage {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
 
-        DiagnoseCorruption that = (DiagnoseCorruption) o;
+      DiagnoseCorruption that = (DiagnoseCorruption) o;
 
-        if (!appId.equals(that.appId)) return false;
-        if (!execId.equals(that.execId)) return false;
-        if (!blockId.equals(that.blockId)) return false;
-        return checksum == that.checksum;
+      if (!appId.equals(that.appId)) return false;
+      if (!execId.equals(that.execId)) return false;
+      if (!blockId.equals(that.blockId)) return false;
+      return checksum == that.checksum;
     }
 
     @Override
     public int hashCode() {
-        int result = appId.hashCode();
-        result = 31 * result + execId.hashCode();
-        result = 31 * result + blockId.hashCode();
-        result = 31 * result + (int) checksum;
-        return result;
+      int result = appId.hashCode();
+      result = 31 * result + execId.hashCode();
+      result = 31 * result + blockId.hashCode();
+      result = 31 * result + (int) checksum;
+      return result;
     }
 
     @Override
