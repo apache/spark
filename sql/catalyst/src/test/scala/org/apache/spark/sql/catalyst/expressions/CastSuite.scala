@@ -1797,14 +1797,11 @@ class CastSuite extends CastSuiteBase {
       YearMonthIntervalType), 121)
     checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType), null)
 
-    Seq("INTERVAL '0-0' YEAR TO MONTH" -> "INTERVAL '0-0' YEAR TO MONTH",
-      "INTERVAL '10-1' YEAR TO MONTH" -> "INTERVAL '10-1' YEAR TO MONTH",
-      "INTERVAL '-178956970-7' YEAR TO MONTH" -> "INTERVAL '-178956970-7' YEAR TO MONTH",
-      "INTERVAL '178956970-7' YEAR TO MONTH" -> "INTERVAL '178956970-7' YEAR TO MONTH",
-      "INTERVAL '-178956970-8' YEAR TO MONTH" -> "INTERVAL '-178956970-8' YEAR TO MONTH"
-    ).foreach { case (interval, result) =>
+    Seq("INTERVAL '0-0' YEAR TO MONTH", "INTERVAL '10-1' YEAR TO MONTH",
+      "INTERVAL '-178956970-7' YEAR TO MONTH", "INTERVAL '178956970-7' YEAR TO MONTH",
+      "INTERVAL '-178956970-8' YEAR TO MONTH").foreach { interval =>
       checkEvaluation(
-        cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), result)
+        cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), interval)
     }
 
     Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
