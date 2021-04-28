@@ -18,32 +18,31 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time._
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, JavaCode}
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{toDayTimeIntervalString, toYearMonthIntervalString}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-case class ToHiveString(expr: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
-
-  import ToHiveString._
+case class ToPrettyString(expr: Expression, timeZoneId: Option[String] = None)
+  extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression{
+  import ToPrettyString._
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
   override def child: Expression = expr
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  private val timeFormatters: TimeFormatters = getTimeFormatters
+  private val timeFormatters: TimeFormatters =
+    TimeFormatters(DateFormatter(zoneId), TimestampFormatter.getFractionFormatter(zoneId))
 
   override def nullSafeEval(input: Any): Any = {
     UTF8String.fromString(toHiveString((input, expr.dataType), false, timeFormatters))
@@ -51,8 +50,7 @@ case class ToHiveString(expr: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
-      val converters = CatalystTypeConverters.getClass.getName.stripSuffix("$")
-      val toHiveString = ToHiveString.getClass.getName.stripSuffix("$")
+      val toHiveString = ToPrettyString.getClass.getName.stripSuffix("$")
       val tuple2 = Tuple2.getClass.getName.stripSuffix("$")
       val dataType = JavaCode.global(
         ctx.addReferenceObj("dataType", expr.dataType),
@@ -60,23 +58,21 @@ case class ToHiveString(expr: Expression)
       val formatter = JavaCode.global(
         ctx.addReferenceObj("dateFormatter", timeFormatters),
         timeFormatters.getClass)
-      s"""${ev.value} = UTF8String.fromString(
-         |$toHiveString.toHiveString(
-         |$tuple2.apply($converters.convertToScala($eval, ${dataType}), ${dataType}),
-         |false, $formatter));""".stripMargin
+      s"""${ev.value} = UTF8String.fromString($toHiveString.toHiveString(
+         |$tuple2.apply($eval, ${dataType}), false, $formatter));""".stripMargin
     })
   }
 
   override def prettyName: String = getTagValue(
     FunctionRegistry.FUNC_ALIAS).getOrElse("to_hive_string")
 
-
   override protected def withNewChildInternal(newChild: Expression): Expression =
-    ToHiveString(newChild)
-
+    ToPrettyString(newChild)
 }
 
-object ToHiveString {
+object ToPrettyString {
+  case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
+
   def toHiveString(
     a: (Any, DataType),
     nested: Boolean,
@@ -110,21 +106,4 @@ object ToHiveString {
       toDayTimeIntervalString(micros, HIVE_STYLE)
     case (other, _: UserDefinedType[_]) => other.toString
   }
-
-  def getTimeFormatters: TimeFormatters = {
-    // The date formatter does not depend on Spark's session time zone controlled by
-    // the SQL config `spark.sql.session.timeZone`. The `zoneId` parameter is used only in
-    // parsing of special date values like `now`, `yesterday` and etc. but not in date formatting.
-    // While formatting of:
-    // - `java.time.LocalDate`, zone id is not used by `DateTimeFormatter` at all.
-    // - `java.sql.Date`, the date formatter delegates formatting to the legacy formatter
-    //   which uses the default system time zone `TimeZone.getDefault`. This works correctly
-    //   due to `DateTimeUtils.toJavaDate` which is based on the system time zone too.
-    val dateFormatter = DateFormatter(ZoneOffset.UTC)
-    val timestampFormatter = TimestampFormatter.getFractionFormatter(
-      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-    TimeFormatters(dateFormatter, timestampFormatter)
-  }
 }
-
-case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
