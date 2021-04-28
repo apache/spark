@@ -137,8 +137,8 @@ private[kafka010] class KafkaMicroBatchStream(
 
   override def toString(): String = s"KafkaV2[$kafkaOffsetReader]"
 
-  override def metrics(latestOffset: Optional[Offset]): ju.Map[String, String] = {
-    KafkaMicroBatchStream.metrics(latestOffset, latestPartitionOffsets)
+  override def metrics(latestConsumedOffset: Optional[Offset]): ju.Map[String, String] = {
+    KafkaMicroBatchStream.metrics(latestConsumedOffset, latestPartitionOffsets)
   }
 
   /**
@@ -231,7 +231,9 @@ object KafkaMicroBatchStream extends Logging {
 
   /**
    * Compute the difference of offset per partition between latestAvailablePartitionOffsets
-   * and latestConsumedPartitionOffsets.
+   * and partition offsets in the latestConsumedOffset.
+   * Report min/max/avg offsets behind the latest for all the partitions in the Kafka stream.
+   *
    * Because of rate limit, latest consumed offset per partition can be smaller than
    * the latest available offset per partition.
    * @param latestConsumedOffset latest consumed offset

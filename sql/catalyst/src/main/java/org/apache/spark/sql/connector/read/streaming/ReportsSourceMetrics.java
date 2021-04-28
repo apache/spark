@@ -29,9 +29,9 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public interface ReportsSourceMetrics extends SparkDataStream {
     /**
-     * Returns the metrics reported by the streaming source with respect to the latest offset.
+     * Returns the metrics reported by the streaming source with respect to the latest consumed offset.
      *
-     * @param latestOffset the end offset (exclusive) of the latest triggered batch.
+     * @param latestConsumedOffset the end offset (exclusive) consumed of the latest triggered batch.
      */
-    Map<String, String> metrics(Optional<Offset> latestOffset);
+    Map<String, String> metrics(Optional<Offset> latestConsumedOffset);
 }
