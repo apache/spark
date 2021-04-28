@@ -264,7 +264,7 @@ object NestedColumnAliasing {
         val numUsedNestedFields = dedupNestedFields.map(_.canonicalized).distinct
           .map { nestedField => totalFieldNum(nestedField.dataType) }.sum
         if (numUsedNestedFields < totalFieldNum(attr.dataType)) {
-          Some(attr, dedupNestedFields)
+          Some((attr, dedupNestedFields))
         } else {
           None
         }
