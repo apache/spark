@@ -2653,24 +2653,19 @@ case class Sentences(
 
 }
 
-case class ToPrettyString(expr: Expression, timeZoneId: Option[String] = None)
-  extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression{
+case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression {
   import ToPrettyString._
 
-  require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
-  override def child: Expression = expr
-  override def foldable: Boolean = child.foldable
-  override def nullable: Boolean = child.nullable
   override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   private val timeFormatters: TimeFormatters =
     TimeFormatters(DateFormatter(zoneId), TimestampFormatter.getFractionFormatter(zoneId))
 
   override def nullSafeEval(input: Any): Any = {
-    UTF8String.fromString(toHiveString((input, expr.dataType), false, timeFormatters))
+    UTF8String.fromString(toHiveString((input, child.dataType), false, timeFormatters))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2678,8 +2673,8 @@ case class ToPrettyString(expr: Expression, timeZoneId: Option[String] = None)
       val toHiveString = ToPrettyString.getClass.getName.stripSuffix("$")
       val tuple2 = Tuple2.getClass.getName.stripSuffix("$")
       val dataType = JavaCode.global(
-        ctx.addReferenceObj("dataType", expr.dataType),
-        expr.dataType.getClass)
+        ctx.addReferenceObj("dataType", child.dataType),
+        child.dataType.getClass)
       val formatter = JavaCode.global(
         ctx.addReferenceObj("dateFormatter", timeFormatters),
         timeFormatters.getClass)
@@ -2688,8 +2683,7 @@ case class ToPrettyString(expr: Expression, timeZoneId: Option[String] = None)
     })
   }
 
-  override def prettyName: String = getTagValue(
-    FunctionRegistry.FUNC_ALIAS).getOrElse("to_hive_string")
+  override def prettyName: String = "to_hive_string"
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     ToPrettyString(newChild)
@@ -2699,9 +2693,9 @@ object ToPrettyString {
   case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
 
   def toHiveString(
-    a: (Any, DataType),
-    nested: Boolean,
-    formatters: TimeFormatters): String = a match {
+      a: (Any, DataType),
+      nested: Boolean,
+      formatters: TimeFormatters): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (b, BooleanType) => b.toString
     case (d: Int, DateType) => formatters.date.format(d)
