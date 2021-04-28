@@ -34,7 +34,7 @@ case class CreateNamespaceExec(
     namespace: Seq[String],
     ifNotExists: Boolean,
     private var properties: Map[String, String])
-    extends V2CommandExec {
+    extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     import org.apache.spark.sql.connector.catalog.SupportsNamespaces._

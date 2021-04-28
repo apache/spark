@@ -61,7 +61,8 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
         s.sink,
         s.outputMode,
         deleteCheckpointOnStop,
-        s.inputQuery)
+        s.inputQuery,
+        s.catalogAndIdent)
   }
 
   def resolveCheckpointLocation(s: WriteToStreamStatement): (String, Boolean) = {

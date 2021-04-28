@@ -23,8 +23,8 @@ import java.time.temporal.ChronoUnit
 import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
@@ -76,17 +76,17 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("hours") {
-    checkEvaluation(ExtractIntervalHours("0 hours"), 0L)
-    checkEvaluation(ExtractIntervalHours("1 hour"), 1L)
-    checkEvaluation(ExtractIntervalHours("-1 hour"), -1L)
-    checkEvaluation(ExtractIntervalHours("23 hours"), 23L)
-    checkEvaluation(ExtractIntervalHours("-23 hours"), -23L)
+    checkEvaluation(ExtractIntervalHours("0 hours"), 0.toByte)
+    checkEvaluation(ExtractIntervalHours("1 hour"), 1.toByte)
+    checkEvaluation(ExtractIntervalHours("-1 hour"), -1.toByte)
+    checkEvaluation(ExtractIntervalHours("23 hours"), 23.toByte)
+    checkEvaluation(ExtractIntervalHours("-23 hours"), -23.toByte)
     // Years, months and days must not be taken into account
-    checkEvaluation(ExtractIntervalHours("100 year 10 months 10 days 10 hours"), 10L)
+    checkEvaluation(ExtractIntervalHours("100 year 10 months 10 days 10 hours"), 10.toByte)
     // Minutes should be taken into account
-    checkEvaluation(ExtractIntervalHours("10 hours 100 minutes"), 11L)
-    checkEvaluation(ExtractIntervalHours(largeInterval), 11L)
-    checkEvaluation(ExtractIntervalHours("25 hours"), 1L)
+    checkEvaluation(ExtractIntervalHours("10 hours 100 minutes"), 11.toByte)
+    checkEvaluation(ExtractIntervalHours(largeInterval), 11.toByte)
+    checkEvaluation(ExtractIntervalHours("25 hours"), 1.toByte)
 
   }
 
@@ -409,5 +409,41 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
         DayTimeIntervalType, numType)
     }
+  }
+
+  test("ANSI: extract years and months") {
+    Seq(Period.ZERO,
+      Period.ofMonths(100),
+      Period.ofMonths(-100),
+      Period.ofYears(100),
+      Period.ofYears(-100)).foreach { p =>
+      checkEvaluation(ExtractANSIIntervalYears(Literal(p)),
+        IntervalUtils.getYears(p.toTotalMonths.toInt))
+      checkEvaluation(ExtractANSIIntervalMonths(Literal(p)),
+        IntervalUtils.getMonths(p.toTotalMonths.toInt))
+    }
+    checkEvaluation(ExtractANSIIntervalYears(Literal(null, YearMonthIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalMonths(Literal(null, YearMonthIntervalType)), null)
+  }
+
+  test("ANSI: extract days, hours, minutes and seconds") {
+    Seq(Duration.ZERO,
+      Duration.ofMillis(1L * MILLIS_PER_DAY + 2 * MILLIS_PER_SECOND),
+      Duration.ofMillis(-1L * MILLIS_PER_DAY + 2 * MILLIS_PER_SECOND),
+      Duration.ofDays(100),
+      Duration.ofDays(-100),
+      Duration.ofHours(-100)).foreach { d =>
+
+      checkEvaluation(ExtractANSIIntervalDays(Literal(d)), d.toDays.toInt)
+      checkEvaluation(ExtractANSIIntervalHours(Literal(d)), (d.toHours % HOURS_PER_DAY).toByte)
+      checkEvaluation(ExtractANSIIntervalMinutes(Literal(d)),
+        (d.toMinutes % MINUTES_PER_HOUR).toByte)
+      checkEvaluation(ExtractANSIIntervalSeconds(Literal(d)),
+        IntervalUtils.getSeconds(IntervalUtils.durationToMicros(d)))
+    }
+    checkEvaluation(ExtractANSIIntervalDays(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalHours(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalMinutes(Literal(null, DayTimeIntervalType)), null)
+    checkEvaluation(ExtractANSIIntervalSeconds(Literal(null, DayTimeIntervalType)), null)
   }
 }

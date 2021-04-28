@@ -92,6 +92,16 @@ private[spark] class AppStatusStore(
     filtered.asScala.map(_.info).filter(_.id != FALLBACK_BLOCK_MANAGER_ID.executorId).toSeq
   }
 
+  def miscellaneousProcessList(activeOnly: Boolean): Seq[v1.ProcessSummary] = {
+    val base = store.view(classOf[ProcessSummaryWrapper])
+    val filtered = if (activeOnly) {
+      base.index("active").reverse().first(true).last(true)
+    } else {
+      base
+    }
+    filtered.asScala.map(_.info).toSeq
+  }
+
   def executorSummary(executorId: String): v1.ExecutorSummary = {
     store.read(classOf[ExecutorSummaryWrapper], executorId).info
   }
@@ -104,12 +114,22 @@ private[spark] class AppStatusStore(
     listener.map(_.activeStages()).getOrElse(Nil)
   }
 
-  def stageList(statuses: JList[v1.StageStatus]): Seq[v1.StageData] = {
+  def stageList(
+    statuses: JList[v1.StageStatus],
+    details: Boolean = false,
+    withSummaries: Boolean = false,
+    unsortedQuantiles: Array[Double] = Array.empty,
+    taskStatus: JList[v1.TaskStatus] = List().asJava): Seq[v1.StageData] = {
+    val quantiles = unsortedQuantiles.sorted
     val it = store.view(classOf[StageDataWrapper]).reverse().asScala.map(_.info)
-    if (statuses != null && !statuses.isEmpty()) {
+    val ret = if (statuses != null && !statuses.isEmpty()) {
       it.filter { s => statuses.contains(s.status) }.toSeq
     } else {
       it.toSeq
+    }
+    ret.map { s =>
+      newStageData(s, withDetail = details, taskStatus = taskStatus,
+        withSummaries = withSummaries, unsortedQuantiles = quantiles)
     }
   }
 
@@ -472,7 +492,7 @@ private[spark] class AppStatusStore(
   def newStageData(
     stage: v1.StageData,
     withDetail: Boolean = false,
-    taskStatus: JList[v1.TaskStatus],
+    taskStatus: JList[v1.TaskStatus] = List().asJava,
     withSummaries: Boolean = false,
     unsortedQuantiles: Array[Double] = Array.empty[Double]): v1.StageData = {
     if (!withDetail && !withSummaries) {

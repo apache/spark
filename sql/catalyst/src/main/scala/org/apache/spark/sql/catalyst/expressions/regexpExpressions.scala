@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, TreePattern}
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -129,6 +130,8 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
+
   override def toString: String = escapeChar match {
     case '\\' => s"$left LIKE $right"
     case c => s"$left LIKE $right ESCAPE '$c'"
@@ -180,6 +183,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
       })
     }
   }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Like =
+    copy(left = newLeft, right = newRight)
 }
 
 sealed abstract class MultiLikeBase
@@ -194,6 +200,8 @@ sealed abstract class MultiLikeBase
   override def dataType: DataType = BooleanType
 
   override def nullable: Boolean = true
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
   protected lazy val hasNull: Boolean = patterns.contains(null)
 
@@ -268,10 +276,14 @@ sealed abstract class LikeAllBase extends MultiLikeBase {
 
 case class LikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotSpecified: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): LikeAll =
+    copy(child = newChild)
 }
 
 case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotSpecified: Boolean = true
+  override protected def withNewChildInternal(newChild: Expression): NotLikeAll =
+    copy(child = newChild)
 }
 
 /**
@@ -324,10 +336,14 @@ sealed abstract class LikeAnyBase extends MultiLikeBase {
 
 case class LikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
   override def isNotSpecified: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): LikeAny =
+    copy(child = newChild)
 }
 
 case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
   override def isNotSpecified: Boolean = true
+  override protected def withNewChildInternal(newChild: Expression): NotLikeAny =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.contains.tab
@@ -409,6 +425,9 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       })
     }
   }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): RLike =
+    copy(left = newLeft, right = newRight)
 }
 
 
@@ -446,7 +465,9 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   override def dataType: DataType = ArrayType(StringType)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = str :: regex :: limit :: Nil
+  override def first: Expression = str
+  override def second: Expression = regex
+  override def third: Expression = limit
 
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1));
 
@@ -465,6 +486,10 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   }
 
   override def prettyName: String = "split"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringSplit =
+    copy(str = newFirst, regex = newSecond, limit = newThird)
 }
 
 
@@ -560,7 +585,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringType, StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = subject :: regexp :: rep :: pos :: Nil
   override def prettyName: String = "regexp_replace"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -616,6 +640,15 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     """
     })
   }
+
+  override def first: Expression = subject
+  override def second: Expression = regexp
+  override def third: Expression = rep
+  override def fourth: Expression = pos
+
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression, fourth: Expression): RegExpReplace =
+    copy(subject = first, regexp = second, rep = third, pos = fourth)
 }
 
 object RegExpReplace {
@@ -646,7 +679,9 @@ abstract class RegExpExtractBase
   @transient private var pattern: Pattern = _
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
+  override def first: Expression = subject
+  override def second: Expression = regexp
+  override def third: Expression = idx
 
   protected def getLastMatcher(s: Any, p: Any): Matcher = {
     if (p != lastRegex) {
@@ -757,6 +792,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       }"""
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpExtract =
+    copy(subject = newFirst, regexp = newSecond, idx = newThird)
 }
 
 /**
@@ -860,4 +899,8 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
          """
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): RegExpExtractAll =
+    copy(subject = newFirst, regexp = newSecond, idx = newThird)
 }

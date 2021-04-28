@@ -227,6 +227,16 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
+  public final void readShorts(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+
+    for (int i = 0; i < total; i += 1) {
+      c.putShort(rowId + i, (short) buffer.getInt());
+    }
+  }
+
+  @Override
   public final boolean readBoolean() {
     // TODO: vectorize decoding and keep boolean[] instead of currentByte
     if (bitOffset == 0) {
@@ -258,6 +268,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   @Override
   public final byte readByte() {
     return (byte) readInteger();
+  }
+
+  @Override
+  public short readShort() {
+    return (short) readInteger();
   }
 
   @Override

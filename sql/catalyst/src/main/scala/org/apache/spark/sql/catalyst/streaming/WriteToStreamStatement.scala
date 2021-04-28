@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.streaming
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -40,6 +40,7 @@ import org.apache.spark.sql.streaming.OutputMode
  * @param hadoopConf  The Hadoop Configuration to get a FileSystem instance
  * @param isContinuousTrigger  Whether the statement is triggered by a continuous query or not.
  * @param inputQuery  The analyzed query plan from the streaming DataFrame.
+ * @param catalogAndIdent Catalog and identifier for the sink, set when it is a V2 catalog table
  */
 case class WriteToStreamStatement(
     userSpecifiedName: Option[String],
@@ -50,12 +51,16 @@ case class WriteToStreamStatement(
     outputMode: OutputMode,
     hadoopConf: Configuration,
     isContinuousTrigger: Boolean,
-    inputQuery: LogicalPlan) extends LogicalPlan {
+    inputQuery: LogicalPlan,
+    catalogAndIdent: Option[(TableCatalog, Identifier)] = None) extends UnaryNode {
 
   override def isStreaming: Boolean = true
 
   override def output: Seq[Attribute] = Nil
 
-  override def children: Seq[LogicalPlan] = inputQuery :: Nil
+  override def child: LogicalPlan = inputQuery
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): WriteToStreamStatement =
+    copy(inputQuery = newChild)
 }
 

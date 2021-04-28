@@ -27,9 +27,11 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvable
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -298,7 +300,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
-  @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
+  @inline protected[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
   private lazy val dateFormatter = DateFormatter(zoneId)
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
@@ -406,6 +408,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
     case udt: UserDefinedType[_] =>
       buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
+    case YearMonthIntervalType =>
+      buildCast[Int](_, i => UTF8String.fromString(
+        IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE)))
+    case DayTimeIntervalType =>
+      buildCast[Long](_, i => UTF8String.fromString(
+        IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -810,7 +818,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     })
   }
 
-  private[this] def cast(from: DataType, to: DataType): Any => Any = {
+  protected[this] def cast(from: DataType, to: DataType): Any => Any = {
     // If the cast does not change the structure, then we don't really need to cast anything.
     // We can return what the children return. Same thing should happen in the codegen path.
     if (DataType.equalsStructurally(from, to)) {
@@ -849,7 +857,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  private[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
+  protected[this] lazy val cast: Any => Any = cast(child.dataType, dataType)
 
   protected override def nullSafeEval(input: Any): Any = cast(input)
 
@@ -873,7 +881,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
   // in parameter list, because the returned code will be put in null safe evaluation region.
-  private[this] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
+  protected[this] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
 
   private[this] def nullSafeCastFunction(
       from: DataType,
@@ -908,7 +916,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   // Since we need to cast input expressions recursively inside ComplexTypes, such as Map's
   // Key and Value, Struct's field, we need to name out all the variable names involved in a cast.
-  private[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
+  protected[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
     result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
     val javaType = JavaCode.javaType(resultType)
     code"""
@@ -1121,6 +1129,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) => {
           code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
         }
+      case i @ (YearMonthIntervalType | DayTimeIntervalType) =>
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
+        val subType = if (i.isInstanceOf[YearMonthIntervalType]) "YearMonth" else "DayTime"
+        val f = s"to${subType}IntervalString"
+        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
+        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.$f($c, $style));"""
       case _ =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -1786,6 +1801,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(CAST)
+
   override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
 
   override def canCast(from: DataType, to: DataType): Boolean = if (ansiEnabled) {
@@ -1795,10 +1812,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   override def typeCheckFailureMessage: String = if (ansiEnabled) {
-    AnsiCast.typeCheckFailureMessage(child.dataType, dataType, SQLConf.ANSI_ENABLED.key, "false")
+    AnsiCast.typeCheckFailureMessage(child.dataType, dataType,
+      Some(SQLConf.ANSI_ENABLED.key), Some("false"))
   } else {
     s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 }
 
 /**
@@ -1823,9 +1843,13 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
   // If there are more scenarios for this expression, we should update the error message on type
   // check failure.
   override def typeCheckFailureMessage: String =
-    AnsiCast.typeCheckFailureMessage(child.dataType, dataType,
-      SQLConf.STORE_ASSIGNMENT_POLICY.key, SQLConf.StoreAssignmentPolicy.LEGACY.toString)
+    AnsiCast.typeCheckFailureMessage(child.dataType,
+      dataType,
+      Some(SQLConf.STORE_ASSIGNMENT_POLICY.key),
+      Some(SQLConf.StoreAssignmentPolicy.LEGACY.toString))
 
+  override protected def withNewChildInternal(newChild: Expression): AnsiCast =
+    copy(child = newChild)
 }
 
 object AnsiCast {
@@ -1940,8 +1964,8 @@ object AnsiCast {
   def typeCheckFailureMessage(
       from: DataType,
       to: DataType,
-      fallbackConfKey: String,
-      fallbackConfValue: String): String =
+      fallbackConfKey: Option[String],
+      fallbackConfValue: Option[String]): String =
     (from, to) match {
       case (_: NumericType, TimestampType) =>
         suggestionOnConversionFunctions(from, to,
@@ -1957,20 +1981,14 @@ object AnsiCast {
         suggestionOnConversionFunctions(from, to, "function UNIX_DATE")
 
       // scalastyle:off line.size.limit
-      case (_: ArrayType, StringType) =>
+      case _ if fallbackConfKey.isDefined && fallbackConfValue.isDefined && Cast.canCast(from, to) =>
         s"""
            | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
-           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can use the function ARRAY_JOIN or set $fallbackConfKey as $fallbackConfValue.
+           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set ${fallbackConfKey.get} as ${fallbackConfValue.get}.
            |""".stripMargin
-
-      case _ if Cast.canCast(from, to) =>
-        s"""
-           | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
-           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set $fallbackConfKey as $fallbackConfValue.
-           |""".stripMargin
+      // scalastyle:on line.size.limit
 
       case _ => s"cannot cast ${from.catalogString} to ${to.catalogString}"
-      // scalastyle:on line.size.limit
     }
 }
 
@@ -1989,4 +2007,6 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
     case DecimalType => DecimalType.SYSTEM_DEFAULT
     case _ => target.asInstanceOf[DataType]
   }
+
+  override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
 }

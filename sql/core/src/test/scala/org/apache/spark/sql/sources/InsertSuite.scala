@@ -933,6 +933,23 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(msg.contains("cannot resolve 'c3' given input columns"))
     }
   }
+
+  test("SPARK-34926: PartitioningUtils.getPathFragment() should respect partition value is null") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(id INT) USING PARQUET")
+      sql(
+        """
+          |CREATE TABLE t2 (c1 INT, part STRING)
+          |  USING parquet
+          |PARTITIONED BY (part)
+          |""".stripMargin)
+      sql(
+        """
+          |INSERT INTO TABLE t2 PARTITION (part = null)
+          |SELECT * FROM t1 where 1=0""".stripMargin)
+      checkAnswer(spark.table("t2"), Nil)
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {

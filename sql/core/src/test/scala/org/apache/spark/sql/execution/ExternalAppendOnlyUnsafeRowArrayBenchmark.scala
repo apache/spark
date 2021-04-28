@@ -57,6 +57,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     TaskContext.setTaskContext(taskContext)
     f
     sc.stop()
+    TaskContext.unset()
   }
 
   private def testRows(numRows: Int): Seq[UnsafeRow] = {

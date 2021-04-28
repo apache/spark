@@ -29,7 +29,7 @@ case class RenamePartitionExec(
     table: SupportsPartitionManagement,
     from: ResolvedPartitionSpec,
     to: ResolvedPartitionSpec,
-    refreshCache: () => Unit) extends V2CommandExec {
+    refreshCache: () => Unit) extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 

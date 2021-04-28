@@ -34,7 +34,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
 
 /** A dummy command for testing unsupported operations. */
-case class DummyCommand() extends Command
+case class DummyCommand() extends LeafCommand
 
 class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
@@ -585,10 +585,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamStreamSupported = false,
     batchStreamSupported = false)
 
-  // Intersect: stream-stream not supported
+  // Intersect: not supported
   testBinaryOperationInStreamingPlan(
     "intersect",
     _.intersect(_, isAll = false),
+    batchStreamSupported = false,
+    streamBatchSupported = false,
     streamStreamSupported = false)
 
   // Sort: supported only on batch subplans and after aggregation on streaming plan + complete mode
@@ -998,6 +1000,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   case class StreamingPlanWrapper(child: LogicalPlan) extends UnaryNode {
     override def output: Seq[Attribute] = child.output
     override def isStreaming: Boolean = true
+    override protected def withNewChildInternal(newChild: LogicalPlan): StreamingPlanWrapper =
+      copy(child = newChild)
   }
 
   case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {
