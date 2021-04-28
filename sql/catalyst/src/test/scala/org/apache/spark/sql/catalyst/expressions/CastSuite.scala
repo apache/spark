@@ -1781,6 +1781,14 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast(Literal.create("0-0"), YearMonthIntervalType), 0)
     checkEvaluation(cast(Literal.create("INTERVAL '-1-0' YEAR TO MONTH"),
       YearMonthIntervalType), -12)
+    checkEvaluation(cast(Literal.create("INTERVAL -'-1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'-1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), -12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'+1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), 12)
+    checkEvaluation(cast(Literal.create("INTERVAL +'1-0' YEAR TO MONTH"),
+      YearMonthIntervalType), 12)
     checkEvaluation(cast(Literal.create("-1-0"), YearMonthIntervalType), -12)
     checkEvaluation(cast(Literal.create("INTERVAL '10-1' YEAR TO MONTH"),
       YearMonthIntervalType), 121)

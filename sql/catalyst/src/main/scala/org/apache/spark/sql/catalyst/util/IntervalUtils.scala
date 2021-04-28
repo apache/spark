@@ -94,13 +94,35 @@ object IntervalUtils {
   }
 
   private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
+  private val yearMonthStringPattern =
+    "(INTERVAL )?([+|-])*?(')?([+|-])?(\\d+)-(\\d+)(')?( YEAR TO MONTH)?".r
 
-  def fromYearMonthString(input: UTF8String): CalendarInterval = {
-    if (input == null || input.toString == null) {
-      throw new IllegalArgumentException("Interval year-month string must be not null")
-    } else {
-      fromYearMonthString(input.trimAll().toString)
+  def castStringToYMInterval(input: UTF8String): CalendarInterval = {
+    // scalastyle:off caselocale .toUpperCase
+    input.trimAll().toUpperCase.toString match {
+      case yearMonthStringPattern(
+      "INTERVAL ", prefixSign, "'", suffixSign, year, month, "'", " YEAR TO MONTH") =>
+        (prefixSign, suffixSign) match {
+          case ("-", "-") => fromYearMonthString(s"$year-$month")
+          case ("-", _) => fromYearMonthString(s"-$year-$month")
+          case (_, _) if suffixSign != null => fromYearMonthString(s"$suffixSign$year-$month")
+          case (_, _) => fromYearMonthString(s"$year-$month")
+        }
+      case yearMonthStringPattern(
+      "INTERVAL ", null, "'", "-", year, month, "'", " YEAR TO MONTH") =>
+        fromYearMonthString(s"-$year-$month")
+      case yearMonthStringPattern(
+      "INTERVAL ", null, "'", _, year, month, "'", " YEAR TO MONTH") =>
+        fromYearMonthString(s"$year-$month")
+      case yearMonthStringPattern(null, null, null, "-", year, month, null, null) =>
+        fromYearMonthString(s"-$year-$month")
+      case yearMonthStringPattern(null, null, null, _, year, month, null, null) =>
+        fromYearMonthString(s"$year-$month")
+      case yearMonthStringPattern(a, b, c, d, e, f, g, h) =>
+        throw new IllegalArgumentException(
+          s"Interval string does not match year-month format of 'y-m': ${input.toString}")
     }
+    // scalastyle:on
   }
 
   /**
@@ -122,29 +144,14 @@ object IntervalUtils {
             s"$errorPrefix: ${e.getMessage}", e)
       }
     }
-
     input.trim match {
       case yearMonthPattern("-", yearStr, monthStr) =>
         toInterval(yearStr, monthStr, -1)
       case yearMonthPattern(_, yearStr, monthStr) =>
         toInterval(yearStr, monthStr, 1)
       case _ =>
-        try {
-          CatalystSqlParser.parseExpression(input) match {
-            case Literal(value: Int, _: YearMonthIntervalType) => new CalendarInterval(value, 0, 0)
-            case Literal(value: CalendarInterval, _: CalendarIntervalType) => value
-            case _ => throw new IllegalArgumentException(
-              s"Interval string does not match year-month format of 'y-m': $input")
-          }
-        } catch {
-          case NonFatal(e) =>
-            if (e.getMessage.contains(errorPrefix)) {
-              throw new IllegalArgumentException(e.getMessage)
-            } else {
-              throw new IllegalArgumentException(
-                s"Interval string does not match year-month format of 'y-m': $input")
-            }
-        }
+        throw new IllegalArgumentException(
+          s"Interval string does not match year-month format of 'y-m': $input")
     }
   }
 

@@ -537,7 +537,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToYearMonthInterval(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => IntervalUtils.fromYearMonthString(s).months)
+      buildCast[UTF8String](_, s => IntervalUtils.castStringToYMInterval(s).months)
   }
 
   // LongConverter
@@ -1366,7 +1366,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, evNull) =>
-        code"""$evPrim = $util.fromYearMonthString($c).months;""".stripMargin
+        code"$evPrim = $util.castStringToYMInterval($c).months;"
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
