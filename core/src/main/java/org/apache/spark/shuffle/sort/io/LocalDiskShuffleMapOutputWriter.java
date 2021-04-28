@@ -150,7 +150,9 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     if (outputFileStream != null) {
       outputFileStream.close();
     }
-    checksumCal.reset();
+    if (checksumCal != null) {
+      checksumCal.reset();
+    }
   }
 
   private void initStream() throws IOException {
