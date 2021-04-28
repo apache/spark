@@ -2761,7 +2761,7 @@ case class Mask(
     configTransformer(upperMask, transformer.withMaskedUpperChar)
     configTransformer(lowerMask, transformer.withMaskedLowerChar)
     configTransformer(digitMask, transformer.withMaskedDigitChar)
-    configTransformer(otherMask, transformer.withMaskedDigitChar)
+    configTransformer(otherMask, transformer.withMaskedOtherChar)
 
     val ret = new StringBuilder
     maskTarget.chars().iterator().asScala.foreach(
