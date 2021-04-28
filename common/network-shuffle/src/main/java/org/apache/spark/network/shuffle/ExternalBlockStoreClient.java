@@ -90,7 +90,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       String execId,
       String blockId,
       long checksum) {
-    return null;
+    return Cause.UNKNOWN;
   }
 
   @Override
