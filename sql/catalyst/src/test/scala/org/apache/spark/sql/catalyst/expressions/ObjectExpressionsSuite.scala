@@ -608,6 +608,16 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[RuntimeException](
       serializer4, EmptyRow, "Cannot use null as map key!")
   }
+
+  test("SPARK-35244: invoke should throw the original exception") {
+    val strClsType = ObjectType(classOf[String])
+    checkExceptionInExpression[StringIndexOutOfBoundsException](
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(3))), "")
+
+    val mathCls = classOf[Math]
+    checkExceptionInExpression[ArithmeticException](
+      StaticInvoke(mathCls, IntegerType, "addExact", Seq(Literal(Int.MaxValue), Literal(1))), "")
+  }
 }
 
 class TestBean extends Serializable {
