@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.{Aggregation, Filter}
+import org.apache.spark.sql.sources.{Aggregation, Count, Filter, Max, Min}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -42,11 +42,11 @@ case class ParquetScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     pushedFilters: Array[Filter],
-    pushedAggregations: Aggregation = Aggregation.empty,
     options: CaseInsensitiveStringMap,
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = true
+  private var pushedAggregations = Aggregation.empty
 
   override def createReaderFactory(): PartitionReaderFactory = {
     val readDataSchemaAsJson = readDataSchema.json
@@ -120,4 +120,25 @@ case class ParquetScan(
     a.aggregateExpressions.sortBy(_.hashCode())
       .sameElements(b.aggregateExpressions.sortBy(_.hashCode()))
   }
+
+  override def pushAggregation(aggregation: Aggregation): Unit = {
+    if (!sparkSession.sessionState.conf.parquetAggregatePushDown ||
+      aggregation.groupByColumns.nonEmpty) {
+      Aggregation.empty
+      return
+    }
+
+    aggregation.aggregateExpressions.foreach { agg =>
+      if (!agg.isInstanceOf[Max] && !agg.isInstanceOf[Min] && !agg.isInstanceOf[Count]) {
+        Aggregation.empty
+        return
+      } else if (agg.isInstanceOf[Count] && agg.asInstanceOf[Count].isDistinct) {
+        // parquet's statistics doesn't have distinct count info
+        Aggregation.empty
+        return
+      }
+    }
+    pushedAggregations = aggregation
+  }
+
 }

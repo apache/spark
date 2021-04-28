@@ -24,6 +24,7 @@ import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
+import org.apache.spark.sql.sources.Aggregation;
 
 /**
  * A logical representation of a data source scan. This interface is used to provide logical
@@ -111,5 +112,15 @@ public interface Scan {
   default CustomMetric[] supportedCustomMetrics() {
     CustomMetric[] NO_METRICS = {};
     return NO_METRICS;
+  }
+
+  /**
+   * Pushes down Aggregation to scan.
+   * The Aggregation can be pushed down only if all the Aggregate Functions can
+   * be pushed down.
+   */
+  default void pushAggregation(Aggregation aggregation) {
+    throw new UnsupportedOperationException(description() +
+        ": Push down Aggregation is not supported");
   }
 }

@@ -20,14 +20,11 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.datasources.PushableColumn
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.sources.Aggregation
 import org.apache.spark.sql.types.StructType
 
 object PushDownUtils extends PredicateHelper {
@@ -70,31 +67,6 @@ object PushDownUtils extends PredicateHelper {
         (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
 
       case _ => (Nil, filters)
-    }
-  }
-
-  /**
-   * Pushes down aggregates to the data source reader
-   *
-   * @return pushed aggregation.
-   */
-  def pushAggregates(
-      scanBuilder: ScanBuilder,
-      aggregates: Seq[AggregateExpression],
-      groupBy: Seq[Expression]): Aggregation = {
-
-    scanBuilder match {
-      case r: SupportsPushDownAggregates =>
-        val translatedAggregates = aggregates.map(DataSourceStrategy
-          .translateAggregate(_, PushableColumn(false)))
-
-        if (translatedAggregates.exists(_.isEmpty)) {
-          Aggregation.empty
-        } else {
-          r.pushAggregation(Aggregation(translatedAggregates.flatten, Seq.empty))
-          r.pushedAggregation
-        }
-      case _ => Aggregation.empty
     }
   }
 
