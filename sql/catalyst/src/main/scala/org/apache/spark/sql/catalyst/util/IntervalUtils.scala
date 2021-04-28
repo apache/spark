@@ -94,7 +94,7 @@ object IntervalUtils {
 
   private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
   private val yearMonthStringPattern =
-    "^(INTERVAL\\s+)([+|-])*?(')([+|-])?(\\d+)-(\\d+)(')(\\s+YEAR TO MONTH)$".r
+    "^(INTERVAL\\s+)([+|-])?(')([+|-])?(\\d+)-(\\d+)(')(\\s+YEAR TO MONTH)$".r
 
   def castStringToYMInterval(input: UTF8String): CalendarInterval = {
     input.trimAll().toString.toUpperCase(Locale.ROOT) match {
