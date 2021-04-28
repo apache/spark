@@ -29,6 +29,7 @@ import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.config.SCHEDULER_MODE
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -39,6 +40,9 @@ import org.apache.spark.util.Utils
 private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("") {
 
   import ApiHelper._
+
+  private val MAX_TIMELINE_JOBS = parent.conf.get(UI_TIMELINE_JOBS_MAXIMUM)
+  private val MAX_TIMELINE_EXECUTORS = parent.conf.get(UI_TIMELINE_EXECUTORS_MAXIMUM)
 
   private val JOBS_LEGEND =
     <div class="legend-area"><svg width="150px" height="85px">
@@ -66,7 +70,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
   private def makeJobEvent(jobs: Seq[v1.JobData]): Seq[String] = {
     jobs.filter { job =>
       job.status != JobExecutionStatus.UNKNOWN && job.submissionTime.isDefined
-    }.map { job =>
+    }.sortBy { j =>
+      -math.max(j.submissionTime.get.getTime, j.completionTime.map(_.getTime).getOrElse(-1L))
+    }.take(MAX_TIMELINE_JOBS).map { job =>
       val jobId = job.jobId
       val status = job.status
       val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
@@ -118,7 +124,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
   private def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
       Seq[String] = {
     val events = ListBuffer[String]()
-    executors.foreach { e =>
+    executors.sortBy { e =>
+      -math.max(e.addTime.getTime, e.removeTime.map(_.getTime).getOrElse(-1L))
+    }.take(MAX_TIMELINE_EXECUTORS).foreach { e =>
       val addedEvent =
         s"""
            |{
@@ -192,6 +200,32 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       </a>
     </span> ++
     <div id="application-timeline" class="collapsed">
+      {
+        if (MAX_TIMELINE_JOBS < jobs.size) {
+          <div>
+            <strong>
+              This page has more than the maximum number of jobs that can be shown in the
+              visualization! Only the most recent {MAX_TIMELINE_JOBS} submitted/completed jobs
+              (of {jobs.size} total) are shown.
+            </strong>
+          </div>
+        } else {
+          Seq.empty
+        }
+      }
+      {
+        if (MAX_TIMELINE_EXECUTORS < executors.size) {
+          <div>
+            <strong>
+              This page has more than the maximum number of executors that can be shown in the
+              visualization! Only the most recent {MAX_TIMELINE_EXECUTORS} added/removed executors
+              (of {executors.size} total) are shown.
+            </strong>
+          </div>
+        } else {
+          Seq.empty
+        }
+      }
       <div class="control-panel">
         <div id="application-timeline-zoom-lock">
           <input type="checkbox"></input>
