@@ -411,13 +411,13 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       "numActiveConnections",
       "numCaughtExceptions",
       "numRegisteredConnections",
-      "openBlockRequestLatencyMillis",
+      "openBlockRequestLatency",
       "registeredExecutorsSize",
-      "registerExecutorRequestLatencyMillis",
-      "finalizeShuffleMergeLatencyMillis",
+      "registerExecutorRequestLatency",
+      "finalizeShuffleMergeLatency",
       "shuffle-server.usedDirectMemory",
       "shuffle-server.usedHeapMemory",
-      "fetchMergedBlocksMetaLatencyMillis"
+      "fetchMergedBlocksMetaLatency"
     ).sorted)
   }
 

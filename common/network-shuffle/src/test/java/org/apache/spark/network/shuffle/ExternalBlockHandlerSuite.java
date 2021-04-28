@@ -87,11 +87,11 @@ public class ExternalBlockHandlerSuite {
     verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
     // Verify register executor request latency metrics
-    Timer registerExecutorRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
+    Timer registerExecutorRequestLatency = (Timer) ((ExternalBlockHandler) handler)
         .getAllMetrics()
         .getMetrics()
-        .get("registerExecutorRequestLatencyMillis");
-    assertEquals(1, registerExecutorRequestLatencyMillis.getCount());
+        .get("registerExecutorRequestLatency");
+    assertEquals(1, registerExecutorRequestLatency.getCount());
   }
 
   @Test
@@ -203,8 +203,8 @@ public class ExternalBlockHandlerSuite {
     Map<String, Metric> metricMap = ((ExternalBlockHandler) handler)
         .getAllMetrics()
         .getMetrics();
-    Timer openBlockRequestLatencyMillis = (Timer) metricMap.get("openBlockRequestLatencyMillis");
-    assertEquals(1, openBlockRequestLatencyMillis.getCount());
+    Timer openBlockRequestLatency = (Timer) metricMap.get("openBlockRequestLatency");
+    assertEquals(1, openBlockRequestLatency.getCount());
     // Verify block transfer metrics
     Meter blockTransferRate = (Meter) metricMap.get("blockTransferRate");
     assertEquals(blockTransferCount, blockTransferRate.getCount());
@@ -260,11 +260,11 @@ public class ExternalBlockHandlerSuite {
       (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
     assertEquals(mergeStatuses, statuses);
 
-    Timer finalizeShuffleMergeLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
+    Timer finalizeShuffleMergeLatency = (Timer) ((ExternalBlockHandler) handler)
         .getAllMetrics()
         .getMetrics()
-        .get("finalizeShuffleMergeLatencyMillis");
-    assertEquals(1, finalizeShuffleMergeLatencyMillis.getCount());
+        .get("finalizeShuffleMergeLatency");
+    assertEquals(1, finalizeShuffleMergeLatency.getCount());
   }
 
   @Test
@@ -363,11 +363,11 @@ public class ExternalBlockHandlerSuite {
     verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 1);
 
     // Verify open block request latency metrics
-    Timer openBlockRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
+    Timer openBlockRequestLatency = (Timer) ((ExternalBlockHandler) handler)
       .getAllMetrics()
       .getMetrics()
-      .get("openBlockRequestLatencyMillis");
-    assertEquals(1, openBlockRequestLatencyMillis.getCount());
+      .get("openBlockRequestLatency");
+    assertEquals(1, openBlockRequestLatency.getCount());
     // Verify block transfer metrics
     Meter blockTransferRateBytes = (Meter) ((ExternalBlockHandler) handler)
       .getAllMetrics()

@@ -1385,8 +1385,8 @@ Note: applies to the shuffle service
 - numActiveConnections.count
 - numRegisteredConnections.count
 - numCaughtExceptions.count
-- openBlockRequestLatencyMillis (histogram)
-- registerExecutorRequestLatencyMillis (histogram)
+- openBlockRequestLatency (histogram)
+- registerExecutorRequestLatency (histogram)
 - registeredExecutorsSize
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory

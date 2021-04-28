@@ -139,7 +139,7 @@ public class ExternalBlockHandler extends RpcHandler
       TransportClient client,
       RpcResponseCallback callback) {
     if (msgObj instanceof AbstractFetchShuffleBlocks || msgObj instanceof OpenBlocks) {
-      final Timer.Context responseDelayContext = metrics.openBlockRequestLatencyMillis.time();
+      final Timer.Context responseDelayContext = metrics.openBlockRequestLatency.time();
       try {
         int numBlockIds;
         long streamId;
@@ -178,7 +178,7 @@ public class ExternalBlockHandler extends RpcHandler
 
     } else if (msgObj instanceof RegisterExecutor) {
       final Timer.Context responseDelayContext =
-        metrics.registerExecutorRequestLatencyMillis.time();
+        metrics.registerExecutorRequestLatency.time();
       try {
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
@@ -208,7 +208,7 @@ public class ExternalBlockHandler extends RpcHandler
       callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
     } else if (msgObj instanceof FinalizeShuffleMerge) {
       final Timer.Context responseDelayContext =
-          metrics.finalizeShuffleMergeLatencyMillis.time();
+          metrics.finalizeShuffleMergeLatency.time();
       FinalizeShuffleMerge msg = (FinalizeShuffleMerge) msgObj;
       try {
         checkAuth(client, msg.appId);
@@ -230,7 +230,7 @@ public class ExternalBlockHandler extends RpcHandler
       TransportClient client,
       MergedBlockMetaRequest metaRequest,
       MergedBlockMetaResponseCallback callback) {
-    final Timer.Context responseDelayContext = metrics.fetchMergedBlocksMetaLatencyMillis.time();
+    final Timer.Context responseDelayContext = metrics.fetchMergedBlocksMetaLatency.time();
     try {
       checkAuth(client, metaRequest.appId);
       MergedBlockMeta mergedMeta =
@@ -298,14 +298,14 @@ public class ExternalBlockHandler extends RpcHandler
   @VisibleForTesting
   public class ShuffleMetrics implements MetricSet {
     private final Map<String, Metric> allMetrics;
-    // Time latency for open block request in ms
-    private final Timer openBlockRequestLatencyMillis = new Timer();
-    // Time latency for executor registration latency in ms
-    private final Timer registerExecutorRequestLatencyMillis = new Timer();
-    // Time latency for processing fetch merged blocks meta request latency in ms
-    private final Timer fetchMergedBlocksMetaLatencyMillis = new Timer();
-    // Time latency for processing finalize shuffle merge request latency in ms
-    private final Timer finalizeShuffleMergeLatencyMillis = new Timer();
+    // Time latency for open block request in ns
+    private final Timer openBlockRequestLatency = new Timer();
+    // Time latency for executor registration latency in ns
+    private final Timer registerExecutorRequestLatency = new Timer();
+    // Time latency for processing fetch merged blocks meta request latency in ns
+    private final Timer fetchMergedBlocksMetaLatency = new Timer();
+    // Time latency for processing finalize shuffle merge request latency in ns
+    private final Timer finalizeShuffleMergeLatency = new Timer();
     // Block transfer rate in blocks per second
     private final Meter blockTransferRate = new Meter();
     // Block fetch message rate per second. When using non-batch fetches
@@ -323,10 +323,10 @@ public class ExternalBlockHandler extends RpcHandler
 
     public ShuffleMetrics() {
       allMetrics = new HashMap<>();
-      allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
-      allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
-      allMetrics.put("fetchMergedBlocksMetaLatencyMillis", fetchMergedBlocksMetaLatencyMillis);
-      allMetrics.put("finalizeShuffleMergeLatencyMillis", finalizeShuffleMergeLatencyMillis);
+      allMetrics.put("openBlockRequestLatency", openBlockRequestLatency);
+      allMetrics.put("registerExecutorRequestLatency", registerExecutorRequestLatency);
+      allMetrics.put("fetchMergedBlocksMetaLatency", fetchMergedBlocksMetaLatency);
+      allMetrics.put("finalizeShuffleMergeLatency", finalizeShuffleMergeLatency);
       allMetrics.put("blockTransferRate", blockTransferRate);
       allMetrics.put("blockTransferMessageRate", blockTransferMessageRate);
       allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
