@@ -903,7 +903,7 @@ private class BufferReleasingInputStream(
       case e: IOException if detectCorruption =>
         val message = checkedInOpt.map { checkedIn =>
           val cause = iterator.diagnoseCorruption(checkedIn, address, blockId)
-          s"Block $blockId is corrupted due to $cause"
+          s"Block $blockId is corrupted due to $cause issue"
         }.orNull
         IOUtils.closeQuietly(this)
         // We'd never retry the block whatever the cause is since the block has been
