@@ -132,7 +132,6 @@ object IntervalUtils {
    */
   def fromYearMonthString(input: String): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
-    val errorPrefix = "Error parsing interval year-month string"
     def toInterval(yearStr: String, monthStr: String, sign: Int): CalendarInterval = {
       try {
         val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
@@ -141,7 +140,7 @@ object IntervalUtils {
       } catch {
         case NonFatal(e) =>
           throw new IllegalArgumentException(
-            s"$errorPrefix: ${e.getMessage}", e)
+            s"Error parsing interval year-month string: ${e.getMessage}", e)
       }
     }
     input.trim match {
