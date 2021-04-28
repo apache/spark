@@ -42,11 +42,12 @@ def assert_python_version():
 
     if sys.version_info[:2] <= deprecated_version:
         warnings.warn(
-            "Koalas support for Python {dep_ver} is deprecated and will be dropped in "
+            "pandas-on-Spark support for Python {dep_ver} is deprecated and will be dropped in "
             "the future release. At that point, existing Python {dep_ver} workflows "
-            "that use Koalas will continue to work without modification, but Python {dep_ver} "
-            "users will no longer get access to the latest Koalas features and bugfixes. "
-            "We recommend that you upgrade to Python {min_ver} or newer.".format(
+            "that use pandas-on-Spark will continue to work without modification, but "
+            "Python {dep_ver} users will no longer get access to the latest pandas-on-Spark "
+            "features and bugfixes. We recommend that you upgrade to Python {min_ver} or "
+            "newer.".format(
                 dep_ver=".".join(map(str, deprecated_version)),
                 min_ver=".".join(map(str, min_supported_version)),
             ),
@@ -54,55 +55,9 @@ def assert_python_version():
         )
 
 
-def assert_pyspark_version():
-    import logging
-
-    try:
-        import pyspark
-    except ImportError:
-        raise ImportError(
-            "Unable to import pyspark - consider doing a pip install with [spark] "
-            "extra to install pyspark with pip"
-        )
-    else:
-        pyspark_ver = getattr(pyspark, "__version__")
-        if pyspark_ver is None or LooseVersion(pyspark_ver) < LooseVersion("2.4"):
-            logging.warning(
-                'Found pyspark version "{}" installed. pyspark>=2.4.0 is recommended.'.format(
-                    pyspark_ver if pyspark_ver is not None else "<unknown version>"
-                )
-            )
-
-
 assert_python_version()
-assert_pyspark_version()
 
-import pyspark
 import pyarrow
-
-if LooseVersion(pyspark.__version__) < LooseVersion("3.0"):
-    if (
-        LooseVersion(pyarrow.__version__) >= LooseVersion("0.15")
-        and "ARROW_PRE_0_15_IPC_FORMAT" not in os.environ
-    ):
-        import logging
-
-        logging.warning(
-            "'ARROW_PRE_0_15_IPC_FORMAT' environment variable was not set. It is required to "
-            "set this environment variable to '1' in both driver and executor sides if you use "
-            "pyarrow>=0.15 and pyspark<3.0. "
-            "Koalas will set it for you but it does not work if there is a Spark context already "
-            "launched."
-        )
-        # This is required to support PyArrow 0.15 in PySpark versions lower than 3.0.
-        # See SPARK-29367.
-        os.environ["ARROW_PRE_0_15_IPC_FORMAT"] = "1"
-elif "ARROW_PRE_0_15_IPC_FORMAT" in os.environ:
-    raise RuntimeError(
-        "Please explicitly unset 'ARROW_PRE_0_15_IPC_FORMAT' environment variable in both "
-        "driver and executor sides. It is required to set this environment variable only "
-        "when you use pyarrow>=0.15 and pyspark<3.0."
-    )
 
 if (
     LooseVersion(pyarrow.__version__) >= LooseVersion("2.0.0")
@@ -114,8 +69,8 @@ if (
         "'PYARROW_IGNORE_TIMEZONE' environment variable was not set. It is required to "
         "set this environment variable to '1' in both driver and executor sides if you use "
         "pyarrow>=2.0.0. "
-        "Koalas will set it for you but it does not work if there is a Spark context already "
-        "launched."
+        "pandas-on-Spark will set it for you but it does not work if there is a Spark context "
+        "already launched."
     )
     os.environ["PYARROW_IGNORE_TIMEZONE"] = "1"
 

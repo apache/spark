@@ -187,7 +187,9 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
+case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS") {
+  override protected def withNewChildInternal(newChild: Expression): Acos = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -203,7 +205,9 @@ case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS"
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
+case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN") {
+  override protected def withNewChildInternal(newChild: Expression): Asin = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -217,7 +221,9 @@ case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN"
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
+case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN") {
+  override protected def withNewChildInternal(newChild: Expression): Atan = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the cube root of `expr`.",
@@ -228,7 +234,9 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
+case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT") {
+  override protected def withNewChildInternal(newChild: Expression): Cbrt = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the smallest integer not smaller than `expr`.",
@@ -267,6 +275,8 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -285,7 +295,9 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
+case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS") {
+  override protected def withNewChildInternal(newChild: Expression): Cos = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -303,7 +315,9 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
+case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH") {
+  override protected def withNewChildInternal(newChild: Expression): Cosh = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -324,6 +338,7 @@ case class Acosh(child: Expression)
     defineCodeGen(ctx, ev,
       c => s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
   }
+  override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
 }
 
 /**
@@ -372,6 +387,10 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
        """
     )
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+    copy(numExpr = newFirst, fromBaseExpr = newSecond, toBaseExpr = newThird)
 }
 
 @ExpressionDescription(
@@ -387,6 +406,7 @@ case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "E
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.exp($c)")
   }
+  override protected def withNewChildInternal(newChild: Expression): Exp = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -402,6 +422,7 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.expm1($c)")
   }
+  override protected def withNewChildInternal(newChild: Expression): Expm1 = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -441,6 +462,8 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Floor = copy(child = newChild)
 }
 
 object Factorial {
@@ -514,6 +537,9 @@ case class Factorial(child: Expression)
       """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Factorial =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -527,6 +553,7 @@ case class Factorial(child: Expression)
   group = "math_funcs")
 case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG") {
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("ln")
+  override protected def withNewChildInternal(newChild: Expression): Log = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -551,6 +578,7 @@ case class Log2(child: Expression)
       """
     )
   }
+  override protected def withNewChildInternal(newChild: Expression): Log2 = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -562,7 +590,9 @@ case class Log2(child: Expression)
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10, "LOG10")
+case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10, "LOG10") {
+  override protected def withNewChildInternal(newChild: Expression): Log10 = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns log(1 + `expr`).",
@@ -575,6 +605,7 @@ case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10,
   group = "math_funcs")
 case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p, "LOG1P") {
   protected override val yAsymptote: Double = -1.0
+  override protected def withNewChildInternal(newChild: Expression): Log1p = copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -591,6 +622,7 @@ case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p,
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("rint")
+  override protected def withNewChildInternal(newChild: Expression): Rint = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -602,7 +634,9 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
+case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM") {
+  override protected def withNewChildInternal(newChild: Expression): Signum = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sine of `expr`, as if computed by `java.lang.Math._FUNC_`.",
@@ -617,7 +651,9 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
+case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN") {
+  override protected def withNewChildInternal(newChild: Expression): Sin = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -634,7 +670,9 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
+case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH") {
+  override protected def withNewChildInternal(newChild: Expression): Sinh = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -656,6 +694,7 @@ case class Asinh(child: Expression)
       s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
       s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
   }
+  override protected def withNewChildInternal(newChild: Expression): Asinh = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -667,7 +706,9 @@ case class Asinh(child: Expression)
   """,
   since = "1.1.1",
   group = "math_funcs")
-case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
+case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT") {
+  override protected def withNewChildInternal(newChild: Expression): Sqrt = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -684,7 +725,9 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
+case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN") {
+  override protected def withNewChildInternal(newChild: Expression): Tan = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -706,6 +749,7 @@ case class Cot(child: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.tan($c);")
   }
+  override protected def withNewChildInternal(newChild: Expression): Cot = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -724,7 +768,9 @@ case class Cot(child: Expression)
   """,
   since = "1.4.0",
   group = "math_funcs")
-case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
+case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH") {
+  override protected def withNewChildInternal(newChild: Expression): Tanh = copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = """
@@ -747,6 +793,7 @@ case class Atanh(child: Expression)
     defineCodeGen(ctx, ev,
       c => s"0.5 * (java.lang.StrictMath.log1p($c) - java.lang.StrictMath.log1p(- $c))")
   }
+  override protected def withNewChildInternal(newChild: Expression): Atanh = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -764,6 +811,8 @@ case class Atanh(child: Expression)
   group = "math_funcs")
 case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES") {
   override def funcName: String = "toDegrees"
+  override protected def withNewChildInternal(newChild: Expression): ToDegrees =
+    copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -781,6 +830,8 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
   group = "math_funcs")
 case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
   override def funcName: String = "toRadians"
+  override protected def withNewChildInternal(newChild: Expression): ToRadians =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -811,6 +862,8 @@ case class Bin(child: Expression)
     defineCodeGen(ctx, ev, (c) =>
       s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Bin = copy(child = newChild)
 }
 
 object Hex {
@@ -923,6 +976,8 @@ case class Hex(child: Expression)
       })
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Hex = copy(child = newChild)
 }
 
 /**
@@ -958,6 +1013,8 @@ case class Unhex(child: Expression)
        """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Unhex = copy(child = newChild)
 }
 
 
@@ -996,6 +1053,9 @@ case class Atan2(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -1012,6 +1072,8 @@ case class Pow(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.StrictMath.pow($c1, $c2)")
   }
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
 
 
@@ -1048,6 +1110,9 @@ case class ShiftLeft(left: Expression, right: Expression)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left << $right")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ShiftLeft = copy(left = newLeft, right = newRight)
 }
 
 
@@ -1084,6 +1149,9 @@ case class ShiftRight(left: Expression, right: Expression)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >> $right")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): ShiftRight = copy(left = newLeft, right = newRight)
 }
 
 
@@ -1120,6 +1188,10 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >>> $right")
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ShiftRightUnsigned =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
@@ -1132,7 +1204,10 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
   since = "1.4.0",
   group = "math_funcs")
 case class Hypot(left: Expression, right: Expression)
-  extends BinaryMathExpression(math.hypot, "HYPOT")
+  extends BinaryMathExpression(math.hypot, "HYPOT") {
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Hypot =
+    copy(left = newLeft, right = newRight)
+}
 
 
 /**
@@ -1190,6 +1265,9 @@ case class Logarithm(left: Expression, right: Expression)
         """)
     }
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Logarithm = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1387,6 +1465,8 @@ case class Round(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
+    copy(child = newLeft, scale = newRight)
 }
 
 /**
@@ -1409,6 +1489,8 @@ case class BRound(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
 }
 
 object WidthBucket {
@@ -1511,4 +1593,8 @@ case class WidthBucket(
   override def second: Expression = minValue
   override def third: Expression = maxValue
   override def fourth: Expression = numBucket
+
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression, fourth: Expression): WidthBucket =
+    copy(value = first, minValue = second, maxValue = third, numBucket = fourth)
 }

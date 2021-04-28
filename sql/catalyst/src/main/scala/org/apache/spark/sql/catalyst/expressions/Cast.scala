@@ -27,9 +27,11 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvable
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -407,9 +409,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case udt: UserDefinedType[_] =>
       buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
     case YearMonthIntervalType =>
-      buildCast[Int](_, i => UTF8String.fromString(IntervalUtils.toYearMonthIntervalString(i)))
+      buildCast[Int](_, i => UTF8String.fromString(
+        IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE)))
     case DayTimeIntervalType =>
-      buildCast[Long](_, i => UTF8String.fromString(IntervalUtils.toDayTimeIntervalString(i)))
+      buildCast[Long](_, i => UTF8String.fromString(
+        IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -1125,14 +1129,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) => {
           code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
         }
-      case YearMonthIntervalType =>
+      case i @ (YearMonthIntervalType | DayTimeIntervalType) =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        (c, evPrim, _) =>
-          code"""$evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c));"""
-      case DayTimeIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        (c, evPrim, _) =>
-          code"""$evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c));"""
+        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
+        val subType = if (i.isInstanceOf[YearMonthIntervalType]) "YearMonth" else "DayTime"
+        val f = s"to${subType}IntervalString"
+        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
+        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($iu.$f($c, $style));"""
       case _ =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -1798,6 +1801,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(CAST)
+
   override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
 
   override def canCast(from: DataType, to: DataType): Boolean = if (ansiEnabled) {
@@ -1812,6 +1817,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   } else {
     s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 }
 
 /**
@@ -1841,6 +1848,8 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
       Some(SQLConf.STORE_ASSIGNMENT_POLICY.key),
       Some(SQLConf.StoreAssignmentPolicy.LEGACY.toString))
 
+  override protected def withNewChildInternal(newChild: Expression): AnsiCast =
+    copy(child = newChild)
 }
 
 object AnsiCast {
@@ -1998,4 +2007,6 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
     case DecimalType => DecimalType.SYSTEM_DEFAULT
     case _ => target.asInstanceOf[DataType]
   }
+
+  override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
 }

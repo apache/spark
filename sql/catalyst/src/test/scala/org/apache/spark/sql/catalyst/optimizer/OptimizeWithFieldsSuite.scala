@@ -126,4 +126,25 @@ class OptimizeWithFieldsSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
     }
   }
+
+  test("SPARK-35213: ensure optimize WithFields maintains correct WithField ordering") {
+    val originalQuery = testRelation
+      .select(
+        Alias(UpdateFields('a,
+          WithField("a1", Literal(3)) ::
+          WithField("b1", Literal(4)) ::
+          WithField("a1", Literal(5)) ::
+          Nil), "out")())
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .select(
+        Alias(UpdateFields('a,
+          WithField("a1", Literal(5)) ::
+          WithField("b1", Literal(4)) ::
+          Nil), "out")())
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }

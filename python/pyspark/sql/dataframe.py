@@ -588,7 +588,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Parameters
         ----------
-        eventTime : str or :class:`Column`
+        eventTime : str
             the name of the column that contains the event time of the row.
         delayThreshold : str
             the minimum delay to wait to data to arrive late, relative to the

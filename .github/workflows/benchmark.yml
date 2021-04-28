@@ -47,6 +47,7 @@ jobs:
       SPARK_BENCHMARK_NUM_SPLITS: ${{ github.event.inputs.num-splits }}
       SPARK_BENCHMARK_CUR_SPLIT: ${{ matrix.split }}
       SPARK_GENERATE_BENCHMARK_FILES: 1
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2

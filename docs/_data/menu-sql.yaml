@@ -192,6 +192,8 @@
                   url: sql-ref-syntax-qry-select-lateral-view.html
                 - text: PIVOT Clause
                   url: sql-ref-syntax-qry-select-pivot.html
+                - text: TRANSFORM Clause
+                  url: sql-ref-syntax-qry-select-transform.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements

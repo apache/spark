@@ -21,10 +21,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, In, InSet, LambdaFunction, Literal, MapFilter, NamedExpression, Not, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, DeleteFromTable, InsertAction, InsertStarAction, LocalRelation, LogicalPlan, MergeIntoTable, UpdateAction, UpdateStarAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
@@ -434,6 +434,21 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     testMerge(allFalseCond, FalseLiteral)
   }
 
+  test("SPARK-34692: Support Not(Int) and Not(InSet) propagate null") {
+    Seq(
+      Not(In("i".attr, Seq(Literal(1), Literal(2), Literal(null)))),
+      Not(In(Literal(null), Seq(Literal(1), Literal(2)))),
+      Not(InSet("i".attr, Set(1, 2, null))),
+      Not(InSet(Literal(null), Set(1, 2)))
+    ).foreach { condition =>
+      testFilter(condition, FalseLiteral)
+      testJoin(condition, FalseLiteral)
+      testDelete(condition, FalseLiteral)
+      testUpdate(condition, FalseLiteral)
+      testMerge(condition, FalseLiteral)
+    }
+  }
+
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
     test((rel, exp) => rel.where(exp), originalCond, expectedCond)
   }
@@ -474,6 +489,22 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     val optimizedPlan = Optimize.execute(originalPlan)
     val expectedPlan = func(testRelation, anotherTestRelation, expectedCond).analyze
     comparePlans(optimizedPlan, expectedPlan)
+
+    // Test with star actions
+    def mergePlanWithStar(expr: Expression): MergeIntoTable = {
+      val matchedActions = UpdateStarAction(Some(expr)) :: Nil
+      val notMatchedActions = InsertStarAction(Some(expr)) :: Nil
+      // Between source and target only one should have i and b as those are used for
+      // test expressions and both, source and target, having those columns is ambiguous  .
+      // However, the source must have all the columns present in target for star resolution.
+      val source = LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType))
+      val target = LocalRelation('a.array(IntegerType))
+      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
+    }
+    val originalPlanWithStar = mergePlanWithStar(originalCond).analyze
+    val optimizedPlanWithStar = Optimize.execute(originalPlanWithStar)
+    val expectedPlanWithStar = mergePlanWithStar(expectedCond).analyze
+    comparePlans(optimizedPlanWithStar, expectedPlanWithStar)
   }
 
   private def testHigherOrderFunc(

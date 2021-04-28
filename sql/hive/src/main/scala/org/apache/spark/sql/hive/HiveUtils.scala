@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.util.Try
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
@@ -53,21 +54,29 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val builtinHiveVersion: String = HiveVersionInfo.getVersion
 
+  val BUILTIN_HIVE_VERSION = buildStaticConf("spark.sql.hive.version")
+    .doc("The compiled, a.k.a, builtin Hive version of the Spark distribution bundled with." +
+        " Note that, this a read-only conf and only used to report the built-in hive version." +
+        " If you want a different metastore client for Spark to call, please refer to" +
+        " spark.sql.hive.metastore.version.")
+    .version("1.1.1")
+    .stringConf
+    .checkValue(_ == builtinHiveVersion,
+      "The builtin Hive version is read-only, please use spark.sql.hive.metastore.version")
+    .createWithDefault(builtinHiveVersion)
+
+  private def isCompatibleHiveVersion(hiveVersionStr: String): Boolean = {
+    Try { IsolatedClientLoader.hiveVersion(hiveVersionStr) }.isSuccess
+  }
+
   val HIVE_METASTORE_VERSION = buildStaticConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
         "<code>0.12.0</code> through <code>2.3.8</code> and " +
         "<code>3.0.0</code> through <code>3.1.2</code>.")
     .version("1.4.0")
     .stringConf
+    .checkValue(isCompatibleHiveVersion, "Unsupported Hive Metastore version")
     .createWithDefault(builtinHiveVersion)
-
-  // A fake config which is only here for backward compatibility reasons. This config has no effect
-  // to Spark, just for reporting the builtin Hive version of Spark to existing applications that
-  // already rely on this config.
-  val FAKE_HIVE_VERSION = buildConf("spark.sql.hive.version")
-    .doc(s"deprecated, please use ${HIVE_METASTORE_VERSION.key} to get the Hive version in Spark.")
-    .version("1.1.1")
-    .fallbackConf(HIVE_METASTORE_VERSION)
 
   val HIVE_METASTORE_JARS = buildStaticConf("spark.sql.hive.metastore.jars")
     .doc(s"""

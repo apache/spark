@@ -43,7 +43,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.functions import PandasUDFType, pandas_udf, Column
 
-from pyspark import pandas as pp  # For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.internal import (
@@ -71,7 +71,6 @@ from pyspark.pandas.utils import (
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
 from pyspark.pandas.exceptions import DataError
-from pyspark.pandas.spark import functions as SF
 
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
@@ -148,7 +147,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 2],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 2],
         ...                    'B': [1, 2, 3, 4],
         ...                    'C': [0.362, 0.227, 1.267, -0.562]},
         ...                   columns=['A', 'B', 'C'])
@@ -192,11 +191,11 @@ class GroupBy(object, metaclass=ABCMeta):
         1    1    2  0.227  0.362
         2    3    4 -0.562  1.267
 
-        To control the output names with different aggregations per column, Koalas
+        To control the output names with different aggregations per column, pandas-on-Spark
         also supports 'named aggregation' or nested renaming in .agg. It can also be
         used when applying multiple aggregation functions to specific columns.
 
-        >>> aggregated = df.groupby('A').agg(b_max=pp.NamedAgg(column='B', aggfunc='max'))
+        >>> aggregated = df.groupby('A').agg(b_max=ps.NamedAgg(column='B', aggfunc='max'))
         >>> aggregated.sort_index()  # doctest: +NORMALIZE_WHITESPACE
              b_max
         A
@@ -217,8 +216,8 @@ class GroupBy(object, metaclass=ABCMeta):
         1        2   0.227
         2        4  -0.562
         """
-        # I think current implementation of func and arguments in Koalas for aggregate is different
-        # than pandas, later once arguments are added, this could be removed.
+        # I think current implementation of func and arguments in pandas-on-Spark for aggregate
+        # is different than pandas, later once arguments are added, this could be removed.
         if func_or_funcs is None and kwargs is None:
             raise ValueError("No aggregation argument or function specified.")
 
@@ -344,7 +343,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 1, 2],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 1, 2],
         ...                    'B': [np.nan, 2, 3, 4, 5],
         ...                    'C': [1, 2, 1, 1, 2]}, columns=['A', 'B', 'C'])
         >>> df.groupby('A').count().sort_index()  # doctest: +NORMALIZE_WHITESPACE
@@ -407,7 +406,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 1, 2],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 1, 2],
         ...                    'B': [np.nan, 2, 3, 4, 5],
         ...                    'C': [1, 2, 1, 1, 2]}, columns=['A', 'B', 'C'])
 
@@ -501,7 +500,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
         ...                    'B': [True, True, True, False, False,
         ...                          False, None, True, None, False]},
         ...                   columns=['A', 'B'])
@@ -543,7 +542,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+        >>> df = ps.DataFrame({'A': [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
         ...                    'B': [True, True, True, False, False,
         ...                          False, None, True, None, False]},
         ...                   columns=['A', 'B'])
@@ -585,7 +584,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'A': [1, 2, 2, 3, 3, 3],
         ...                    'B': [1, 1, 2, 3, 3, 3]},
         ...                   columns=['A', 'B'])
         >>> df
@@ -668,7 +667,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 2, 3, 4, 5, 6],
+        >>> df = ps.DataFrame({'a': [1, 2, 3, 4, 5, 6],
         ...                    'b': [1, 1, 2, 3, 5, 8],
         ...                    'c': [1, 4, 9, 16, 25, 36]}, columns=['a', 'b', 'c'])
         >>> df
@@ -727,7 +726,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame([['a'], ['a'], ['a'], ['b'], ['b'], ['a']],
+        >>> df = ps.DataFrame([['a'], ['a'], ['a'], ['b'], ['b'], ['a']],
         ...                   columns=['A'])
         >>> df
            A
@@ -779,7 +778,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     [[1, None, 4], [1, 0.1, 3], [1, 20.0, 2], [4, 10.0, 1]],
         ...     columns=list('ABC'))
         >>> df
@@ -828,7 +827,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     [[1, None, 4], [1, 0.1, 3], [1, 20.0, 2], [4, 10.0, 1]],
         ...     columns=list('ABC'))
         >>> df
@@ -877,7 +876,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     [[1, None, 4], [1, 0.1, 3], [1, 20.0, 2], [4, 10.0, 1]],
         ...     columns=list('ABC'))
         >>> df
@@ -926,7 +925,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame(
+        >>> df = ps.DataFrame(
         ...     [[1, None, 4], [1, 0.1, 3], [1, 20.0, 2], [4, 10.0, 1]],
         ...     columns=list('ABC'))
         >>> df
@@ -972,7 +971,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         While `apply` is a very flexible method, its downside is that
         using it can be quite a bit slower than using more specific methods
-        like `agg` or `transform`. Koalas offers a wide range of method that will
+        like `agg` or `transform`. pandas-on-Spark offers a wide range of method that will
         be much faster than using `apply` for their specific purposes, so try to
         use them before reaching for `apply`.
 
@@ -982,7 +981,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def pandas_div(x) -> pp.DataFrame[float, float]:
+            >>> def pandas_div(x) -> ps.DataFrame[float, float]:
             ...     return x[['B', 'C']] / x[['B', 'C']]
 
             If the return type is specified, the output column names become
@@ -991,11 +990,11 @@ class GroupBy(object, metaclass=ABCMeta):
 
             To specify the column names, you can assign them in a pandas friendly style as below:
 
-            >>> def pandas_div(x) -> pp.DataFrame["a": float, "b": float]:
+            >>> def pandas_div(x) -> ps.DataFrame["a": float, "b": float]:
             ...     return x[['B', 'C']] / x[['B', 'C']]
 
             >>> pdf = pd.DataFrame({'B': [1.], 'C': [3.]})
-            >>> def plus_one(x) -> pp.DataFrame[zip(pdf.columns, pdf.dtypes)]:
+            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]:
             ...     return x[['B', 'C']] / x[['B', 'C']]
 
             When the given function has the return type annotated, the original index of the
@@ -1028,7 +1027,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': 'a a b'.split(),
+        >>> df = ps.DataFrame({'A': 'a a b'.split(),
         ...                    'B': [1, 2, 3],
         ...                    'C': [4, 6, 5]}, columns=['A', 'B', 'C'])
         >>> g = df.groupby('A')
@@ -1062,7 +1061,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         You can specify the type hint and prevent schema inference for better performance.
 
-        >>> def pandas_div(x) -> pp.DataFrame[float, float]:
+        >>> def pandas_div(x) -> ps.DataFrame[float, float]:
         ...     return x[['B', 'C']] / x[['B', 'C']]
         >>> g.apply(pandas_div).sort_index()  # doctest: +NORMALIZE_WHITESPACE
             c0   c1
@@ -1072,9 +1071,9 @@ class GroupBy(object, metaclass=ABCMeta):
 
         In case of Series, it works as below.
 
-        >>> def plus_max(x) -> pp.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[np.int]:
         ...     return x + x.max()
-        >>> df.B.groupby(df.A).apply(plus_max).sort_index()
+        >>> df.B.groupby(df.A).apply(plus_max).sort_index()  # doctest: +SKIP
         0    6
         1    3
         2    4
@@ -1092,7 +1091,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         >>> def plus_length(x) -> np.int:
         ...     return len(x)
-        >>> df.B.groupby(df.A).apply(plus_length).sort_index()
+        >>> df.B.groupby(df.A).apply(plus_length).sort_index()  # doctest: +SKIP
         0    1
         1    2
         Name: B, dtype: int64
@@ -1101,7 +1100,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         >>> def calculation(x, y, z) -> np.int:
         ...     return len(x) + y * z
-        >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()
+        >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()  # doctest: +SKIP
         0    51
         1    52
         Name: B, dtype: int64
@@ -1155,10 +1154,10 @@ class GroupBy(object, metaclass=ABCMeta):
                 pser_or_pdf = pdf.groupby(groupkeys)[name].apply(pandas_apply, *args, **kwargs)
             else:
                 pser_or_pdf = pdf.groupby(groupkeys).apply(pandas_apply, *args, **kwargs)
-            kser_or_kdf = pp.from_pandas(pser_or_pdf)
+            kser_or_kdf = ps.from_pandas(pser_or_pdf)
 
             if len(pdf) <= limit:
-                if isinstance(kser_or_kdf, pp.Series) and is_series_groupby:
+                if isinstance(kser_or_kdf, ps.Series) and is_series_groupby:
                     kser_or_kdf = kser_or_kdf.rename(cast(SeriesGroupBy, self)._kser.name)
                 return cast(Union[Series, DataFrame], kser_or_kdf)
 
@@ -1276,7 +1275,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A' : ['foo', 'bar', 'foo', 'bar',
+        >>> df = ps.DataFrame({'A' : ['foo', 'bar', 'foo', 'bar',
         ...                           'foo', 'bar'],
         ...                    'B' : [1, 2, 3, 4, 5, 6],
         ...                    'C' : [2.0, 5., 8., 1., 2., 9.]}, columns=['A', 'B', 'C'])
@@ -1367,7 +1366,7 @@ class GroupBy(object, metaclass=ABCMeta):
     def _make_pandas_df_builder_func(kdf, func, return_schema, retain_index):
         """
         Creates a function that can be used inside the pandas UDF. This function can construct
-        the same pandas DataFrame as if the Koalas DataFrame is collected to driver side.
+        the same pandas DataFrame as if the pandas-on-Spark DataFrame is collected to driver side.
         The index, column labels, etc. are re-constructed within the function.
         """
         arguments_for_restore_index = kdf._internal.arguments_for_restore_index
@@ -1413,7 +1412,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...     'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
         >>> df
@@ -1478,7 +1477,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 2, 2, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 2, 2, 3],
         ...                    'b': [1, 2, 3, 4, 5],
         ...                    'c': [5, 4, 3, 2, 1]}, columns=['a', 'b', 'c'])
 
@@ -1557,7 +1556,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 2, 2, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 2, 2, 3],
         ...                    'b': [1, 2, 3, 4, 5],
         ...                    'c': [5, 4, 3, 2, 1]}, columns=['a', 'b', 'c'])
 
@@ -1648,7 +1647,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'A': [1, 1, 2, 2],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
@@ -1709,7 +1708,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'A': [1, 1, 2, 2],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
@@ -1760,7 +1759,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'A': [1, 1, 2, 2],
         ...     'B': [2, 4, None, 3],
         ...     'C': [None, None, None, 1],
@@ -1837,7 +1836,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [2, 3, 1, 4, 6, 9, 8, 10, 7, 5],
         ...                    'c': [3, 5, 2, 5, 1, 2, 6, 4, 3, 6]},
         ...                   columns=['a', 'b', 'c'],
@@ -1890,7 +1889,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [2, 3, 1, 4, 6, 9, 8, 10, 7, 5],
         ...                    'c': [3, 5, 2, 5, 1, 2, 6, 4, 3, 6]},
         ...                   columns=['a', 'b', 'c'],
@@ -1946,7 +1945,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({
+        >>> df = ps.DataFrame({
         ...     'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...     'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
         >>> df
@@ -2000,7 +1999,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         While `transform` is a very flexible method, its downside is that
         using it can be quite a bit slower than using more specific methods
-        like `agg` or `transform`. Koalas offers a wide range of method that will
+        like `agg` or `transform`. pandas-on-Spark offers a wide range of method that will
         be much faster than using `transform` for their specific purposes, so try to
         use them before reaching for `transform`.
 
@@ -2010,7 +2009,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
              To avoid this, specify return type in ``func``, for instance, as below:
 
-             >>> def convert_to_string(x) -> pp.Series[str]:
+             >>> def convert_to_string(x) -> ps.Series[str]:
              ...     return x.apply("a string {}".format)
 
             When the given function has the return type annotated, the original index of the
@@ -2044,7 +2043,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'A': [0, 0, 1],
+        >>> df = ps.DataFrame({'A': [0, 0, 1],
         ...                    'B': [1, 2, 3],
         ...                    'C': [4, 6, 5]}, columns=['A', 'B', 'C'])
 
@@ -2056,7 +2055,7 @@ class GroupBy(object, metaclass=ABCMeta):
         its argument and returns a Series. `transform` applies the function on each series
         in each grouped data, and combine them into a new DataFrame:
 
-        >>> def convert_to_string(x) -> pp.Series[str]:
+        >>> def convert_to_string(x) -> ps.Series[str]:
         ...     return x.apply("a string {}".format)
         >>> g.transform(convert_to_string)  # doctest: +NORMALIZE_WHITESPACE
                     B           C
@@ -2064,7 +2063,7 @@ class GroupBy(object, metaclass=ABCMeta):
         1  a string 2  a string 6
         2  a string 3  a string 5
 
-        >>> def plus_max(x) -> pp.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[np.int]:
         ...     return x + x.max()
         >>> g.transform(plus_max)  # doctest: +NORMALIZE_WHITESPACE
            B   C
@@ -2072,7 +2071,7 @@ class GroupBy(object, metaclass=ABCMeta):
         1  4  12
         2  6  10
 
-        You can omit the type hint and let Koalas infer its type.
+        You can omit the type hint and let pandas-on-Spark infer its type.
 
         >>> def plus_min(x):
         ...     return x + x.min()
@@ -2098,7 +2097,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         You can also specify extra arguments to pass to the function.
 
-        >>> def calculation(x, y, z) -> pp.Series[np.int]:
+        >>> def calculation(x, y, z) -> ps.Series[np.int]:
         ...     return x + x.min() + y + z
         >>> g.transform(calculation, 5, z=20)  # doctest: +NORMALIZE_WHITESPACE
             B   C
@@ -2192,7 +2191,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Examples
         --------
 
-        >>> df = pp.DataFrame({'id': ['spam', 'egg', 'egg', 'spam',
+        >>> df = ps.DataFrame({'id': ['spam', 'egg', 'egg', 'spam',
         ...                           'ham', 'ham'],
         ...                    'value1': [1, 5, 5, 2, 5, 5],
         ...                    'value2': list('abbaxy')}, columns=['id', 'value1', 'value2'])
@@ -2234,7 +2233,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Return an rolling grouper, providing rolling
         functionality per group.
 
-        .. note:: 'min_periods' in Koalas works as a fixed window size unlike pandas.
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
         Unlike pandas, NA is also counted as the period. This might be changed
         in the near future.
 
@@ -2261,7 +2260,7 @@ class GroupBy(object, metaclass=ABCMeta):
         Return an expanding grouper, providing expanding
         functionality per group.
 
-        .. note:: 'min_periods' in Koalas works as a fixed window size unlike pandas.
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
         Unlike pandas, NA is also counted as the period. This might be changed
         in the near future.
 
@@ -2293,7 +2292,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame([('falcon', 'bird', 389.0),
+        >>> kdf = ps.DataFrame([('falcon', 'bird', 389.0),
         ...                     ('parrot', 'bird', 24.0),
         ...                     ('lion', 'mammal', 80.5),
         ...                     ('monkey', 'mammal', np.nan)],
@@ -2363,7 +2362,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         For multiple groupings, the result index will be a MultiIndex
 
-        .. note:: Unlike pandas', the median in Koalas is an approximated median based upon
+        .. note:: Unlike pandas', the median in pandas-on-Spark is an approximated median based upon
             approximate percentile computation because computing median across a large dataset
             is extremely expensive.
 
@@ -2380,7 +2379,7 @@ class GroupBy(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> kdf = pp.DataFrame({'a': [1., 1., 1., 1., 2., 2., 2., 3., 3., 3.],
+        >>> kdf = ps.DataFrame({'a': [1., 1., 1., 1., 2., 2., 2., 3., 3., 3.],
         ...                     'b': [2., 3., 1., 4., 6., 9., 8., 10., 7., 5.],
         ...                     'c': [3., 5., 2., 5., 1., 2., 6., 4., 3., 6.]},
         ...                    columns=['a', 'b', 'c'],
@@ -2421,7 +2420,7 @@ class GroupBy(object, metaclass=ABCMeta):
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
-        stat_function = lambda col: SF.percentile_approx(col, 0.5, accuracy)
+        stat_function = lambda col: F.percentile_approx(col, 0.5, accuracy)
         return self._reduce_for_stat_function(stat_function, only_numeric=numeric_only)
 
     def _reduce_for_stat_function(self, sfun, only_numeric):
@@ -2696,7 +2695,7 @@ class DataFrameGroupBy(GroupBy):
         will vary depending on what is provided. Refer to the notes
         below for more detail.
 
-        .. note:: Unlike pandas, the percentiles in Koalas are based upon
+        .. note:: Unlike pandas, the percentiles in pandas-on-Spark are based upon
             approximate percentile computation because computing percentiles
             across a large dataset is extremely expensive.
 
@@ -2715,7 +2714,7 @@ class DataFrameGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
+        >>> df = ps.DataFrame({'a': [1, 1, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
         >>> df
            a  b  c
         0  1  4  7
@@ -2885,7 +2884,7 @@ class SeriesGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
 
         >>> df.groupby(['a'])['b'].nsmallest(1).sort_index()  # doctest: +NORMALIZE_WHITESPACE
@@ -2962,7 +2961,7 @@ class SeriesGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
 
         >>> df.groupby(['a'])['b'].nlargest(1).sort_index()  # doctest: +NORMALIZE_WHITESPACE
@@ -3040,7 +3039,7 @@ class SeriesGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'A': [1, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'A': [1, 2, 2, 3, 3, 3],
         ...                    'B': [1, 1, 2, 3, 3, 3]},
         ...                   columns=['A', 'B'])
         >>> df
@@ -3097,7 +3096,7 @@ class SeriesGroupBy(GroupBy):
 
         Examples
         --------
-        >>> df = pp.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
+        >>> df = ps.DataFrame({'a': [1, 1, 1, 2, 2, 2, 3, 3, 3],
         ...                    'b': [1, 2, 2, 2, 3, 3, 3, 4, 4]}, columns=['a', 'b'])
 
         >>> df.groupby(['a'])['b'].unique().sort_index()  # doctest: +SKIP
@@ -3162,7 +3161,7 @@ def normalize_keyword_aggregation(kwargs):
     >>> normalize_keyword_aggregation({'output': ('input', 'sum')})
     (OrderedDict([('input', ['sum'])]), ('output',), [('input', 'sum')])
     """
-    # this is due to python version issue, not sure the impact on koalas
+    # this is due to python version issue, not sure the impact on pandas-on-Spark
     PY36 = sys.version_info >= (3, 6)
     if not PY36:
         kwargs = OrderedDict(sorted(kwargs.items()))
@@ -3198,7 +3197,7 @@ def _test():
 
     globs = pyspark.pandas.groupby.__dict__.copy()
     globs["np"] = numpy
-    globs["pp"] = pyspark.pandas
+    globs["ps"] = pyspark.pandas
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.groupby tests")

@@ -852,6 +852,9 @@ private[spark] class SparkSubmit extends Logging {
     }
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
+    if (args.verbose) {
+      childArgs ++= Seq("--verbose")
+    }
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
@@ -952,6 +955,15 @@ private[spark] class SparkSubmit extends Logging {
     } catch {
       case t: Throwable =>
         throw findCause(t)
+    } finally {
+      if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass) &&
+        !isThriftServer(args.mainClass)) {
+        try {
+          SparkContext.getActive.foreach(_.stop())
+        } catch {
+          case e: Throwable => logError(s"Failed to close SparkContext: $e")
+        }
+      }
     }
   }
 
@@ -1186,7 +1198,7 @@ private[spark] object SparkSubmitUtils extends Logging {
     sp.setM2compatible(true)
     sp.setUsepoms(true)
     sp.setRoot(sys.env.getOrElse(
-      "DEFAULT_ARTIFACT_REPOSITORY", "https://dl.bintray.com/spark-packages/maven"))
+      "DEFAULT_ARTIFACT_REPOSITORY", "https://repos.spark-packages.org/"))
     sp.setName("spark-packages")
     cr.add(sp)
     cr
@@ -1283,7 +1295,12 @@ private[spark] object SparkSubmitUtils extends Logging {
       settingsFile: String,
       remoteRepos: Option[String],
       ivyPath: Option[String]): IvySettings = {
-    val file = new File(settingsFile)
+    val uri = new URI(settingsFile)
+    val file = Option(uri.getScheme).getOrElse("file") match {
+      case "file" => new File(uri.getPath)
+      case scheme => throw new IllegalArgumentException(s"Scheme $scheme not supported in " +
+        "spark.jars.ivySettings")
+    }
     require(file.exists(), s"Ivy settings file $file does not exist")
     require(file.isFile(), s"Ivy settings file $file is not a normal file")
     val ivySettings: IvySettings = new IvySettings

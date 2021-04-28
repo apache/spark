@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -227,6 +228,9 @@ case class ConcatWs(children: Seq[Expression])
       """)
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ConcatWs =
+    copy(children = newChildren)
 }
 
 /**
@@ -366,6 +370,9 @@ case class Elt(
          |final boolean ${ev.isNull} = ${ev.value} == null;
        """.stripMargin)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Elt =
+    copy(children = newChildren)
 }
 
 
@@ -400,9 +407,13 @@ case class Upper(child: Expression)
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
   // scalastyle:on caselocale
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Upper = copy(child = newChild)
 }
 
 /**
@@ -424,12 +435,16 @@ case class Lower(child: Expression)
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
   // scalastyle:on caselocale
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
   }
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("lower")
+
+  override protected def withNewChildInternal(newChild: Expression): Lower = copy(child = newChild)
 }
 
 /** A base trait for functions that compare two strings, returning a boolean. */
@@ -454,6 +469,8 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -464,6 +481,8 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -474,6 +493,8 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -522,6 +543,10 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   override def third: Expression = replaceExpr
 
   override def prettyName: String = "replace"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringReplace =
+    copy(srcExpr = newFirst, searchExpr = newSecond, replaceExpr = newThird)
 }
 
 object Overlay {
@@ -634,6 +659,10 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   override def second: Expression = replace
   override def third: Expression = pos
   override def fourth: Expression = len
+
+  override protected def withNewChildrenInternal(
+      first: Expression, second: Expression, third: Expression, fourth: Expression): Overlay =
+    copy(input = first, replace = second, pos = third, len = fourth)
 }
 
 object StringTranslate {
@@ -731,6 +760,10 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   override def second: Expression = matchingExpr
   override def third: Expression = replaceExpr
   override def prettyName: String = "translate"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringTranslate =
+    copy(srcExpr = newFirst, matchingExpr = newSecond, replaceExpr = newThird)
 }
 
 /**
@@ -769,6 +802,9 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override def dataType: DataType = IntegerType
 
   override def prettyName: String = "find_in_set"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): FindInSet = copy(left = newLeft, right = newRight)
 }
 
 trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
@@ -926,6 +962,11 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
     srcString.trim(trimString)
 
   override val trimMethod: String = "trim"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(
+      srcStr = newChildren.head,
+      trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
 }
 
 /**
@@ -974,6 +1015,9 @@ case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], child
   override def flatArguments: Iterator[Any] = Iterator(srcStr, trimStr)
 
   override def prettyName: String = "btrim"
+
+  override protected def withNewChildInternal(newChild: Expression): StringTrimBoth =
+    copy(child = newChild)
 }
 
 object StringTrimLeft {
@@ -1027,6 +1071,12 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
     srcString.trimLeft(trimString)
 
   override val trimMethod: String = "trimLeft"
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): StringTrimLeft =
+    copy(
+      srcStr = newChildren.head,
+      trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
 }
 
 object StringTrimRight {
@@ -1082,6 +1132,12 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
     srcString.trimRight(trimString)
 
   override val trimMethod: String = "trimRight"
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): StringTrimRight =
+    copy(
+      srcStr = newChildren.head,
+      trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
 }
 
 /**
@@ -1120,6 +1176,9 @@ case class StringInstr(str: Expression, substr: Expression)
     defineCodeGen(ctx, ev, (l, r) =>
       s"($l).indexOf($r, 0) + 1")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): StringInstr = copy(str = newLeft, substr = newRight)
 }
 
 /**
@@ -1164,6 +1223,10 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): SubstringIndex =
+    copy(strExpr = newFirst, delimExpr = newSecond, countExpr = newThird)
 }
 
 /**
@@ -1258,6 +1321,11 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("locate")
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringLocate =
+    copy(substr = newFirst, str = newSecond, start = newThird)
+
 }
 
 /**
@@ -1302,6 +1370,10 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
   }
 
   override def prettyName: String = "lpad"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringLPad =
+    copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
 /**
@@ -1347,6 +1419,10 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   }
 
   override def prettyName: String = "rpad"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): StringRPad =
+    copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
 object ParseUrl {
@@ -1519,6 +1595,9 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
       }
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ParseUrl =
+    copy(children = newChildren)
 }
 
 /**
@@ -1606,6 +1685,9 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def prettyName: String = getTagValue(
     FunctionRegistry.FUNC_ALIAS).getOrElse("format_string")
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): FormatString = FormatString(newChildren: _*)
 }
 
 /**
@@ -1638,6 +1720,9 @@ case class InitCap(child: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): InitCap =
+    copy(child = newChild)
 }
 
 /**
@@ -1669,6 +1754,9 @@ case class StringRepeat(str: Expression, times: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): StringRepeat = copy(str = newLeft, times = newRight)
 }
 
 /**
@@ -1700,6 +1788,9 @@ case class StringSpace(child: Expression)
   }
 
   override def prettyName: String = "space"
+
+  override protected def withNewChildInternal(newChild: Expression): StringSpace =
+    copy(child = newChild)
 }
 
 /**
@@ -1767,6 +1858,11 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
       }
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Substring =
+    copy(str = newFirst, pos = newSecond, len = newThird)
+
 }
 
 /**
@@ -1791,6 +1887,8 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
   override def exprsReplaced: Seq[Expression] = Seq(str, len)
+
+  override protected def withNewChildInternal(newChild: Expression): Right = copy(child = newChild)
 }
 
 /**
@@ -1814,6 +1912,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
 
   override def flatArguments: Iterator[Any] = Iterator(str, len)
   override def exprsReplaced: Seq[Expression] = Seq(str, len)
+  override protected def withNewChildInternal(newChild: Expression): Left = copy(child = newChild)
 }
 
 /**
@@ -1851,6 +1950,8 @@ case class Length(child: Expression)
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
     }
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Length = copy(child = newChild)
 }
 
 /**
@@ -1883,6 +1984,9 @@ case class BitLength(child: Expression)
   }
 
   override def prettyName: String = "bit_length"
+
+  override protected def withNewChildInternal(newChild: Expression): BitLength =
+    copy(child = newChild)
 }
 
 /**
@@ -1916,6 +2020,9 @@ case class OctetLength(child: Expression)
   }
 
   override def prettyName: String = "octet_length"
+
+  override protected def withNewChildInternal(newChild: Expression): OctetLength =
+    copy(child = newChild)
 }
 
 /**
@@ -1943,6 +2050,9 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
     nullSafeCodeGen(ctx, ev, (left, right) =>
       s"${ev.value} = $left.levenshteinDistance($right);")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Levenshtein = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1969,6 +2079,9 @@ case class SoundEx(child: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"$c.soundex()")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): SoundEx =
+    copy(child = newChild)
 }
 
 /**
@@ -2012,6 +2125,8 @@ case class Ascii(child: Expression)
         }
        """})
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Ascii = copy(child = newChild)
 }
 
 /**
@@ -2060,6 +2175,8 @@ case class Chr(child: Expression)
       """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Chr = copy(child = newChild)
 }
 
 /**
@@ -2090,6 +2207,8 @@ case class Base64(child: Expression)
             ${classOf[CommonsBase64].getName}.encodeBase64($child));
        """})
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Base64 = copy(child = newChild)
 }
 
 /**
@@ -2119,6 +2238,9 @@ case class UnBase64(child: Expression)
          ${ev.value} = ${classOf[CommonsBase64].getName}.decodeBase64($child.toString());
        """})
   }
+
+  override protected def withNewChildInternal(newChild: Expression): UnBase64 =
+    copy(child = newChild)
 }
 
 object Decode {
@@ -2178,6 +2300,8 @@ case class Decode(params: Seq[Expression], child: Expression) extends RuntimeRep
 
   override def flatArguments: Iterator[Any] = Iterator(params)
   override def exprsReplaced: Seq[Expression] = params
+
+  override protected def withNewChildInternal(newChild: Expression): Decode = copy(child = newChild)
 }
 
 /**
@@ -2219,6 +2343,10 @@ case class StringDecode(bin: Expression, charset: Expression)
         }
       """)
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): StringDecode =
+    copy(bin = newLeft, charset = newRight)
 }
 
 /**
@@ -2259,6 +2387,9 @@ case class Encode(value: Expression, charset: Expression)
           org.apache.spark.unsafe.Platform.throwException(e);
         }""")
   }
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Encode = copy(value = newLeft, charset = newRight)
 }
 
 /**
@@ -2439,6 +2570,9 @@ case class FormatNumber(x: Expression, d: Expression)
   }
 
   override def prettyName: String = "format_number"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): FormatNumber = copy(x = newLeft, d = newRight)
 }
 
 /**
@@ -2509,4 +2643,9 @@ case class Sentences(
     }
     new GenericArrayData(result.toSeq)
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
+    copy(str = newFirst, language = newSecond, country = newThird)
+
 }

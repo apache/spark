@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector;
+package org.apache.spark.sql.connector.metric;
 
 import org.apache.spark.annotation.Evolving;
 
@@ -29,23 +29,23 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface CustomMetric {
-    /**
-     * Returns the name of custom metric.
-     */
-    String name();
+  /**
+   * Returns the name of custom metric.
+   */
+  String name();
 
-    /**
-     * Returns the description of custom metric.
-     */
-    String description();
+  /**
+   * Returns the description of custom metric.
+   */
+  String description();
 
-    /**
-     * The initial value of this metric.
-     */
-    long initialValue = 0L;
+  /**
+   * The initial value of this metric.
+   */
+  long initialValue = 0L;
 
-    /**
-     * Given an array of task metric values, returns aggregated final metric value.
-     */
-    String aggregateTaskMetrics(long[] taskMetrics);
+  /**
+   * Given an array of task metric values, returns aggregated final metric value.
+   */
+  String aggregateTaskMetrics(long[] taskMetrics);
 }
