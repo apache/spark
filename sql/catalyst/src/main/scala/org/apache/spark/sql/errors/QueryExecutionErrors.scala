@@ -848,12 +848,9 @@ object QueryExecutionErrors {
   }
 
   def failedParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
-    new SparkUpgradeException("3.0",
-      s"""
-         |Fail to parse '$s' in the new parser. You can set
-         |${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before
-         |Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
-       """.stripMargin.replaceAll("\n", " "), e)
+    new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
+      s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
+      s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
   }
 
   def failedFormatDateTimeInNewFormatterError(
@@ -868,13 +865,11 @@ object QueryExecutionErrors {
 
   def failedRecognizePatternInDateTimeFormatterError(
       pattern: String, e: Throwable): Throwable = {
-    new SparkUpgradeException("3.0",
-      s"""
-         |Fail to recognize '$pattern' pattern in the DateTimeFormatter. 1) You can set
-         |${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior before
-         |Spark 3.0. 2) You can form a valid datetime pattern with the guide from
-         |https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
-       """.stripMargin.replaceAll("\n", " "), e)
+    new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
+      s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +
+      s" to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern" +
+      s" with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html",
+      e)
   }
 
   def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
