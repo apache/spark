@@ -592,7 +592,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
       true
     case _: CastBase => true
     case _: GetDateField | _: LastDay => true
-    case _: ExtractIntervalPart => true
+    case _: ExtractIntervalPart[_] => true
     case _: ArraySetLike => true
     case _: ExtractValue => true
     case _ => false

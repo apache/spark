@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.connector.metric.{CustomAvgMetric, CustomSumMetric}
 
 class CustomMetricsSuite extends SparkFunSuite {
 

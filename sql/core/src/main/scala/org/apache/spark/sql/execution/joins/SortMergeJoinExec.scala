@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
@@ -45,22 +44,6 @@ case class SortMergeJoinExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
-
-  override def nodeName: String = {
-    if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
-  }
-
-  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    if (isSkewJoin) {
-      // We re-arrange the shuffle partitions to deal with skew join, and the new children
-      // partitioning doesn't satisfy `HashClusteredDistribution`.
-      UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
-    } else {
-      super.requiredChildDistribution
-    }
-  }
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.
