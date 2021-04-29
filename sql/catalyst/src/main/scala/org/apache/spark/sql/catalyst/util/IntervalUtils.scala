@@ -96,21 +96,17 @@ object IntervalUtils {
   private val yearMonthStringPattern =
     "^(INTERVAL\\s+)([+|-])?(')([+|-])?(\\d+)-(\\d+)(')(\\s+YEAR\\s+TO\\s+MONTH)$".r
 
-  def castStringToYMInterval(input: UTF8String): CalendarInterval = {
+  def castStringToYMInterval(input: UTF8String): Int = {
     input.trimAll().toString.toUpperCase(Locale.ROOT) match {
       case yearMonthPattern("-", year, month) => toYMInterval(year, month, -1)
       case yearMonthPattern(_, year, month) => toYMInterval(year, month, 1)
-      case yearMonthStringPattern(_, prefixSign, _, suffixSign, year, month, _, _) =>
-        (prefixSign, suffixSign) match {
+      case yearMonthStringPattern(_, firstSign, _, secondSign, year, month, _, _) =>
+        (firstSign, secondSign) match {
           case ("-", "-") => toYMInterval(year, month, 1)
           case ("-", _) => toYMInterval(year, month, -1)
           case (_, "-") => toYMInterval(year, month, -1)
           case (_, _) => toYMInterval(year, month, 1)
         }
-      case yearMonthStringPattern(_, null, _, "-", year, month, _, _) =>
-        toYMInterval(year, month, -1)
-      case yearMonthStringPattern(_, null, _, _, year, month, _, _) =>
-        toYMInterval(year, month, 1)
       case yearMonthStringPattern(_, _, _, _, _, _, _, _) =>
         throw new IllegalArgumentException(
           s"Interval string does not match year-month format of `[+|-]y-m` " +
@@ -127,20 +123,21 @@ object IntervalUtils {
     require(input != null, "Interval year-month string must be not null")
     input.trim match {
       case yearMonthPattern("-", yearStr, monthStr) =>
-        toYMInterval(yearStr, monthStr, -1)
+        new CalendarInterval(toYMInterval(yearStr, monthStr, -1), 0, 0)
       case yearMonthPattern(_, yearStr, monthStr) =>
-        toYMInterval(yearStr, monthStr, 1)
+        new CalendarInterval(toYMInterval(yearStr, monthStr, 1), 0, 0)
       case _ =>
         throw new IllegalArgumentException(
           s"Interval string does not match year-month format of 'y-m': $input")
     }
   }
 
-  def toYMInterval(yearStr: String, monthStr: String, sign: Int): CalendarInterval = {
+  def toYMInterval(yearStr: String, monthStr: String, sign: Int): Int = {
     try {
       val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
       val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
-      new CalendarInterval(Math.toIntExact(totalMonths), 0, 0)
+//      new CalendarInterval(Math.toIntExact(totalMonths), 0, 0)
+      Math.toIntExact(totalMonths)
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(
