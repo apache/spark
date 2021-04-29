@@ -112,7 +112,6 @@ if (in_spark):
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst.
 _minimum_pandas_version = "0.23.2"
-_minimum_pyarrow_version = "1.0.0"
 
 
 class InstallCommand(install):
@@ -257,22 +256,19 @@ try:
         license='http://www.apache.org/licenses/LICENSE-2.0',
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=[
-            'py4j==0.10.9.2',
-            'pandas>=0.23.2',
-            'pyarrow>=0.10',
-            'numpy>=1.14,<1.20.0',
-        ],
+        install_requires=['py4j==0.10.9.2'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
             'sql': [
                 'pandas>=%s' % _minimum_pandas_version,
-                'pyarrow>=%s' % _minimum_pyarrow_version,
+                'pyarrow>=1.0.0',
             ],
-            'pandas.mlflow': ['mlflow>=1.0'],
-            'pandas.plotly': ['plotly>=4.8'],
-            'pandas.matplotlib': ['matplotlib>=3.0.0,<3.3.0'],
+            'pandas_on_spark': [
+                'pandas>=%s' % _minimum_pandas_version,
+                'pyarrow>=0.10',
+                'numpy>=1.14,<1.20.0',
+            ],
         },
         python_requires='>=3.6',
         classifiers=[
