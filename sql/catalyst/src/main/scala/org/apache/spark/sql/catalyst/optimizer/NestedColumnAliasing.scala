@@ -132,7 +132,11 @@ object NestedColumnAliasing {
     val nestedFieldToAlias = attributeToExtractValues.flatMap { case (_, nestedFields) =>
       nestedFields.map { f =>
         val exprId = NamedExpression.newExprId
-        f -> Alias(f, s"_gen_alias_${exprId.id}")(exprId, Seq.empty, None)
+        val fieldName = f match {
+          case g: GetStructField => g.extractFieldName
+          case g: GetArrayStructFields => g.field.name
+        }
+        f -> Alias(f, s"_extract_${fieldName}")(exprId, Seq.empty, None)
       }
     }
 
