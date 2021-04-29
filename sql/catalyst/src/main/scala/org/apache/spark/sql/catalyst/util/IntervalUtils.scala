@@ -107,10 +107,9 @@ object IntervalUtils {
           case (_, "-") => toYMInterval(year, month, -1)
           case (_, _) => toYMInterval(year, month, 1)
         }
-      case yearMonthStringPattern(_, _, _, _, _, _, _, _) =>
-        throw new IllegalArgumentException(
-          s"Interval string does not match year-month format of `[+|-]y-m` " +
-            s"or `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`: ${input.toString}")
+      case _ => throw new IllegalArgumentException(
+        s"Interval string does not match year-month format of `[+|-]y-m` " +
+          s"or `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`: ${input.toString}")
     }
   }
 
