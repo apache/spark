@@ -575,7 +575,8 @@ public class VectorizedColumnReader {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.IntegerType ||
-        canReadAsIntDecimal(column.dataType())) {
+        canReadAsIntDecimal(column.dataType()) ||
+        column.dataType() == DataTypes.YearMonthIntervalType) {
       defColumn.readIntegers(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else if (column.dataType() == DataTypes.LongType) {
@@ -607,7 +608,8 @@ public class VectorizedColumnReader {
   private void readLongBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     if (column.dataType() == DataTypes.LongType ||
-        canReadAsLongDecimal(column.dataType())) {
+        canReadAsLongDecimal(column.dataType()) ||
+        column.dataType() == DataTypes.DayTimeIntervalType) {
       defColumn.readLongs(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn,
         DecimalType.is32BitDecimalType(column.dataType()));

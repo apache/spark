@@ -102,6 +102,12 @@ private[columnar] class DoubleColumnAccessor(buffer: ByteBuffer)
 private[columnar] class StringColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, STRING)
 
+private[columnar] class YearMonthIntervalColumnAccessor(buffer: ByteBuffer)
+  extends NativeColumnAccessor(buffer, YEAR_MONTH_INTERVAL)
+
+private[columnar] class DayTimeIntervalColumnAccessor(buffer: ByteBuffer)
+  extends NativeColumnAccessor(buffer, DAY_TIME_INTERVAL)
+
 private[columnar] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
   with NullableColumnAccessor
@@ -145,6 +151,8 @@ private[sql] object ColumnAccessor {
       case DoubleType => new DoubleColumnAccessor(buf)
       case StringType => new StringColumnAccessor(buf)
       case BinaryType => new BinaryColumnAccessor(buf)
+      case YearMonthIntervalType => new YearMonthIntervalColumnAccessor(buf)
+      case DayTimeIntervalType => new DayTimeIntervalColumnAccessor(buf)
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnAccessor(buf, dt)
       case dt: DecimalType => new DecimalColumnAccessor(buf, dt)

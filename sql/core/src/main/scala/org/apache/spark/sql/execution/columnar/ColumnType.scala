@@ -823,6 +823,8 @@ private[columnar] object ColumnType {
       case DoubleType => DOUBLE
       case StringType => STRING
       case BinaryType => BINARY
+      case YearMonthIntervalType => YEAR_MONTH_INTERVAL
+      case DayTimeIntervalType => DAY_TIME_INTERVAL
       case i: CalendarIntervalType => CALENDAR_INTERVAL
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => COMPACT_DECIMAL(dt)
       case dt: DecimalType => LARGE_DECIMAL(dt)

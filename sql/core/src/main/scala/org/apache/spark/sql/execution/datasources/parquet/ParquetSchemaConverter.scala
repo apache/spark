@@ -363,6 +363,12 @@ class SparkToParquetSchemaConverter(
       case DateType =>
         Types.primitive(INT32, repetition).as(DATE).named(field.name)
 
+      case YearMonthIntervalType =>
+        Types.primitive(INT32, repetition).named(field.name)
+
+      case DayTimeIntervalType =>
+        Types.primitive(INT64, repetition).named(field.name)
+
       // NOTE: Spark SQL can write timestamp values to Parquet using INT96, TIMESTAMP_MICROS or
       // TIMESTAMP_MILLIS. TIMESTAMP_MICROS is recommended but INT96 is the default to keep the
       // behavior same as before.
