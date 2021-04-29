@@ -125,25 +125,24 @@ object IntervalUtils {
   }
 
   private val daySecondStringPattern = ("^(INTERVAL\\s+)([+|-])?(')" +
-    "([+|-])?(\\d+ )?(\\d+:)?(\\d+):(\\d+)(\\.\\d+)?(')(\\s+DAY TO SECOND)$").r
-  private val daySecondNumPattern = "([+|-])?(\\d+ )?(\\d+:)?(\\d+):(\\d+)(\\.\\d+)?".r
+    "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?(')(\\s+DAY\\s+TO\\s+SECOND)$").r
+  private val daySecondPattern = "^([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?$".r
 
   def castStringToDTInterval(input: UTF8String): CalendarInterval = {
     val intervalStr = input.trimAll().toString.toUpperCase(Locale.ROOT)
+    val ansiDaySecondPattern =
+      "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?".r
     intervalStr match {
-      case daySecondNumPattern(_, _, _, _, _, _) =>
-        fromDayTimeString(intervalStr, DAY, SECOND)
-      case daySecondNumPattern(_, prefixSign, _, suffixSign, _, _, _, _, _, _, _) =>
+      case daySecondPattern(_, _, _, _, _, _) => fromDayTimeString(intervalStr, DAY, SECOND)
+      case daySecondStringPattern(_, prefixSign, _, suffixSign, _, _, _, _, _, _, _) =>
         val dtStr =
-          "^([+|-])".r.replaceAllIn(daySecondNumPattern.findFirstIn(intervalStr).get, "")
+          "^([+|-])".r.replaceAllIn(ansiDaySecondPattern.findFirstIn(intervalStr).get, "")
         (prefixSign, suffixSign) match {
           case ("-", "-") => fromDayTimeString(dtStr, DAY, SECOND)
           case ("-", _) => fromDayTimeString(s"-$dtStr", DAY, SECOND)
+          case (_, "-") => fromDayTimeString(s"-$dtStr", DAY, SECOND)
           case (_, _) => fromDayTimeString(dtStr, DAY, SECOND)
         }
-      case daySecondStringPattern(_, null, _, _, _, _, _, _, _, _, _) =>
-        val dtStr = daySecondNumPattern.findFirstIn(intervalStr).get
-        fromDayTimeString(dtStr, DAY, SECOND)
       case _ =>
         throw new IllegalArgumentException(
           s"Interval string must match day-time format of 'd h:m:s.n': ${input.toString}, " +
