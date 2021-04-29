@@ -743,7 +743,7 @@ final class ShuffleBlockFetcherIterator(
           val address = request.address
           numBlocksInFlightPerAddress(address) =
             numBlocksInFlightPerAddress(address) - request.blocks.size
-          bytesInFlight -= size
+          bytesInFlight -= request.size
           reqsInFlight -= 1
           logDebug("Number of requests in flight " + reqsInFlight)
           val defReqQueue =
