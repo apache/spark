@@ -148,6 +148,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
+      PullOutGroupingExpressions,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -524,22 +525,18 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   }
 
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoAggregateExpressions = !upper.aggregateExpressions.exists(isAggregate)
+    val upperHasNoAggregateExpressions =
+      !upper.aggregateExpressions.exists(AggregateExpression.containsAggregate)
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower
         .aggregateExpressions
         .filter(_.deterministic)
-        .filter(!isAggregate(_))
+        .filterNot(AggregateExpression.containsAggregate)
         .map(_.toAttribute)
     ))
 
     upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
-  }
-
-  private def isAggregate(expr: Expression): Boolean = {
-    expr.find(e => e.isInstanceOf[AggregateExpression] ||
-      PythonUDF.isGroupedAggPandasUDF(e)).isDefined
   }
 }
 
