@@ -40,7 +40,6 @@ import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporte
 import org.apache.spark.storage.ShuffleBlockFetcherIterator.FetchBlockInfo
 import org.apache.spark.util.Utils
 
-
 class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodTester {
 
   private var transfer: BlockTransferService = _
