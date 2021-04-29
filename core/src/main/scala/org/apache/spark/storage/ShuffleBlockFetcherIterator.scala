@@ -307,9 +307,11 @@ final class ShuffleBlockFetcherIterator(
               logWarning(s"Netty OOM happens, will retry the failed blocks")
             }
             ShuffleBlockFetcherIterator.this.synchronized {
-              remainingBlocks -= blockId
-              deferredBlocks += blockId
-              enqueueDeferredFetchRequestIfNecessary()
+              if (!isZombie) {
+                remainingBlocks -= blockId
+                deferredBlocks += blockId
+                enqueueDeferredFetchRequestIfNecessary()
+              }
             }
 
           case _ =>
