@@ -954,7 +954,7 @@ object ShuffleBlockFetcherIterator {
    * fetch requests will be deferred until the flag is unset (whenever there's a
    * complete fetch request).
    */
-  val isNettyOOMOnShuffle = new AtomicBoolean(false);
+  val isNettyOOMOnShuffle = new AtomicBoolean(false)
 
   /**
    * This function is used to merged blocks when doBatchFetch is true. Blocks which have the
