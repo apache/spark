@@ -266,6 +266,7 @@ final class ShuffleBlockFetcherIterator(
           FetchBlockInfo(BlockId(blockId), size, mapIndex)
         }
         results.put(DeferFetchRequestResult(FetchRequest(address, blocks)))
+        deferredBlocks.clear()
       }
     }
 
@@ -290,7 +291,6 @@ final class ShuffleBlockFetcherIterator(
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-        remainingBlocks -= blockId
         val (size, mapIndex) = infoMap(blockId)
         e match {
           // Catching OOM and do something based on it is only a workaround for handling the
@@ -306,8 +306,11 @@ final class ShuffleBlockFetcherIterator(
               // log the warning once to avoid flooding the logs.
               logWarning(s"Netty OOM happens, will retry the failed blocks")
             }
-            deferredBlocks += blockId
-            enqueueDeferredFetchRequestIfNecessary()
+            ShuffleBlockFetcherIterator.this.synchronized {
+              remainingBlocks -= blockId
+              deferredBlocks += blockId
+              enqueueDeferredFetchRequestIfNecessary()
+            }
 
           case _ =>
             results.put(FailureFetchResult(BlockId(blockId), mapIndex, address, e))
