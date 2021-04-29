@@ -667,8 +667,7 @@ class DataStreamReader(OptionUtils):
         else:
             raise TypeError("path can be only a single string")
 
-    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
-                datetimeRebaseMode=None, int96RebaseMode=None):
+    def parquet(self, path, datetimeRebaseMode=None, int96RebaseMode=None):
         """
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
@@ -676,19 +675,6 @@ class DataStreamReader(OptionUtils):
 
         Parameters
         ----------
-        mergeSchema : str or bool, optional
-            sets whether we should merge schemas collected from all
-            Parquet part-files. This will override
-            ``spark.sql.parquet.mergeSchema``. The default value is specified in
-            ``spark.sql.parquet.mergeSchema``.
-        pathGlobFilter : str or bool, optional
-            an optional glob pattern to only include files with paths matching
-            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-            It does not change the behavior of `partition discovery`_.
-        recursiveFileLookup : str or bool, optional
-            recursively scan a directory for files. Using this option
-            disables
-            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
         datetimeRebaseMode : str, optional
             the rebasing mode for the values of the ``DATE``, ``TIMESTAMP_MICROS``,
             ``TIMESTAMP_MILLIS`` logical types from the Julian to Proleptic Gregorian calendar.
@@ -716,7 +702,7 @@ class DataStreamReader(OptionUtils):
 
         Other Parameters
         ----------------
-        Extra options (keyword argument)
+        Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
             in the version you use.

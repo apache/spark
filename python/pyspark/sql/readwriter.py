@@ -1197,7 +1197,7 @@ class DataFrameWriter(OptionUtils):
             lineSep=lineSep, encoding=encoding, ignoreNullFields=ignoreNullFields)
         self._jwrite.json(path)
 
-    def parquet(self, path, mode=None, partitionBy=None, compression=None):
+    def parquet(self, path, mode=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
         .. versionadded:: 1.4.0
@@ -1214,18 +1214,10 @@ class DataFrameWriter(OptionUtils):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
-        partitionBy : str or list, optional
-            names of partitioning columns
-        compression : str, optional
-            compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, uncompressed, snappy, gzip,
-            lzo, brotli, lz4, and zstd). This will override
-            ``spark.sql.parquet.compression.codec``. If None is set, it uses the
-            value specified in ``spark.sql.parquet.compression.codec``.
 
         Other Parameters
         ----------------
-        Extra options (keyword argument)
+        Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_  # noqa
             in the version you use.
