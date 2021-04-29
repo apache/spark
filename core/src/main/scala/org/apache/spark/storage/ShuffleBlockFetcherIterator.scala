@@ -293,13 +293,27 @@ final class ShuffleBlockFetcherIterator(
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
         val (size, mapIndex) = infoMap(blockId)
         e match {
-          // Catching OOM and do something based on it is only a workaround for handling the
-          // Netty OOM issue, which is not the best way towards memory management. We can
-          // get rid of it when we find a way to manage Netty's memory precisely.
+          // SPARK-27991: Catch the Netty OOM and set the flag `isNettyOOMOnShuffle` (shared among
+          // tasks) to true as early as possible. Unless there's no in-flight requests, the pending
+          // fetch requests won't be raised afterwards until the flag is set to false on:
+          // 1) the Netty free memory >= average remote block size - we'll check this whenever
+          //    there's a fetch request succeeds.
+          // 2) the number of in-flight requests becomes 0 - we'll check this in `fetchUpToMaxBytes`
+          //    whenever it's invoked.
+          // Although Netty memory is shared across multiple modules, e.g., shuffle, rpc, the flag
+          // only takes effect for the shuffle due to the implementation simplicity concern.
+          // And we'll buffer the consecutive block failures caused by the OOM error until there's
+          // no remaining blocks in the current request. Then, we'll package these blocks into
+          // a same fetch request for the retry later. In this way, instead of creating the fetch
+          // request per block, it would help reduce the concurrent connections and data loads
+          // pressure at remote server.
+          // Note that catching OOM and do something based on it is only a workaround for
+          // handling the Netty OOM issue, which is not the best way towards memory management.
+          // We can get rid of it when we find a way to manage Netty's memory precisely.
 
           // Ensure the Netty memory is at least enough for serving only one block to avoid
-          // the endless retry. And since the Netty memory is shared among shuffle, rpc, etc,
-          // modules, we use "1.5" for the overhead concern.
+          // the endless retry. And since the Netty memory is shared among multiple modules,
+          // we use the factor "1.5" for the overhead concern.
           case _: OutOfDirectMemoryError if PlatformDependent.maxDirectMemory() > ( 1.5 * size) =>
             if (isNettyOOMOnShuffle.compareAndSet(false, true)) {
               // The fetcher can fail remaining blocks in batch for the same error. So we only
