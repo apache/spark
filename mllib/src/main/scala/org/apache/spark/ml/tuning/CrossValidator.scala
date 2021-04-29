@@ -168,9 +168,16 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val validationDataset = sparkSession.createDataFrame(validation, schemaWithoutFold).cache()
       instr.logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
+      var subTaskFailed = false
+
       // Fit models in a Future for training in parallel
       val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
         Future[Double] {
+          if (subTaskFailed) {
+            throw new RuntimeException(
+              "Terminate this task because one of other task failed."
+            )
+          }
           val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
           if (collectSubModelsParam) {
             subModels.get(splitIndex)(paramIndex) = model
@@ -183,7 +190,16 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       }
 
       // Wait for metrics to be calculated
-      val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+      val foldMetrics = try {
+        foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+      } finally {
+        subTaskFailed = true
+        Thread.sleep(1000)
+        val sparkContext = sparkSession.sparkContext
+        sparkContext.cancelJobGroup(
+          sparkContext.getLocalProperty(sparkContext.SPARK_JOB_GROUP_ID)
+        )
+      }
 
       // Unpersist training & validation set once all metrics have been produced
       trainingDataset.unpersist()
