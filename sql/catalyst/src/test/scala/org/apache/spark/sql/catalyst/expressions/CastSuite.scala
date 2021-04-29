@@ -1781,6 +1781,16 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType), 0L)
     checkEvaluation(cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
       DayTimeIntervalType), 7384000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '2:03:04' DAY TO SECOND"),
+      DayTimeIntervalType), 7384000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '03:04' DAY TO SECOND"),
+      DayTimeIntervalType), 7384000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '03:04.0000' DAY TO SECOND"),
+      DayTimeIntervalType), 7384000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '01:03:04.0000' DAY TO SECOND"),
+      DayTimeIntervalType), 7384000000L)
+    checkEvaluation(cast(Literal.create("INTERVAL '1 1:03:04.0000' DAY TO SECOND"),
+      DayTimeIntervalType), 7384000000L)
     checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType), 7384000000L)
     checkEvaluation(cast(Literal.create("INTERVAL '-10 2:03:04' DAY TO SECOND"),
       DayTimeIntervalType), -7384000000L)

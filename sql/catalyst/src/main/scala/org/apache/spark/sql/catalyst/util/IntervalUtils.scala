@@ -124,39 +124,31 @@ object IntervalUtils {
     }
   }
 
-  private val daySecondStringPattern =
-    ("(INTERVAL )?([+|-])*?(')?" +
-      "([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?(')?( DAY TO SECOND)?").r
+  private val daySecondStringPattern = ("^(INTERVAL\\s+)([+|-])?(')" +
+    "([+|-])?(\\d+ )?(\\d+:)?(\\d+):(\\d+)(\\.\\d+)?(')(\\s+DAY TO SECOND)$").r
+  private val daySecondNumPattern = "([+|-])?(\\d+ )?(\\d+:)?(\\d+):(\\d+)(\\.\\d+)?".r
 
   def castStringToDTInterval(input: UTF8String): CalendarInterval = {
-    // scalastyle:off caselocale .toUpperCase
-    input.trimAll().toString.toUpperCase(Locale.ROOT) match {
-      case daySecondStringPattern("INTERVAL ", prefixSign, "'",
-      suffixSign, day, hour, minute, second, micro, "'", " DAY TO SECOND") =>
+    val intervalStr = input.trimAll().toString.toUpperCase(Locale.ROOT)
+    intervalStr match {
+      case dayTimePatternLegacy(_, _, _, _, _, _) =>
+        fromDayTimeString(intervalStr)
+      case daySecondStringPattern(_, prefixSign, _, suffixSign, _, _, _, _, _, _, _) =>
+        val dtStr =
+          "^([+|-])".r.replaceAllIn(daySecondNumPattern.findFirstIn(intervalStr).get, "")
         (prefixSign, suffixSign) match {
-          case ("-", "-") => fromYearMonthString(s"$day $hour:$minute:$second.$micro")
-          case ("-", _) => fromYearMonthString(s"-$day $hour:$minute:$second.$micro")
-          case (_, _) if suffixSign != null =>
-            fromYearMonthString(s"$suffixSign$day $hour:$minute:$second.$micro")
-          case (_, _) => fromYearMonthString(s"$day $hour:$minute:$second.$micro")
+          case ("-", "-") => fromDayTimeString(dtStr)
+          case ("-", _) => fromDayTimeString(s"-$dtStr")
+          case (_, _) => fromDayTimeString(dtStr)
         }
-      case daySecondStringPattern(
-      "INTERVAL ", null, "'", "-", day, hour, minute, second, micro, "'", " DAY TO SECOND") =>
-        fromYearMonthString(s"-$day $hour:$minute:$second.$micro")
-      case daySecondStringPattern(
-      "INTERVAL ", null, "'", _, day, hour, minute, second, micro, "'", " DAY TO SECOND") =>
-        fromYearMonthString(s"$day $hour:$minute:$second.$micro")
-      case daySecondStringPattern(
-      null, null, null, "-", day, hour, minute, second, micro, null, null) =>
-        fromYearMonthString(s"-$day $hour:$minute:$second.$micro")
-      case daySecondStringPattern(
-      null, null, null, _, day, hour, minute, second, micro, null, null) =>
-        fromYearMonthString(s"$day $hour:$minute:$second.$micro")
+      case daySecondStringPattern(_, null, _, _, _, _, _, _, _, _, _) =>
+        val dtStr = daySecondNumPattern.findFirstIn(intervalStr).get
+        fromDayTimeString(dtStr)
       case daySecondStringPattern(_, _, _, _, _, _, _, _, _, _, _) =>
         throw new IllegalArgumentException(
-          s"Interval string does not match year-month format of 'y-m': ${input.toString}")
+          s"Interval string must match day-time format of 'd h:m:s.n': ${input.toString}, " +
+            s"$fallbackNotice")
     }
-    // scalastyle:on
   }
 
   /**
