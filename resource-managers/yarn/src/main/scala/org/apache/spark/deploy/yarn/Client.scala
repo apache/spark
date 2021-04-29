@@ -22,7 +22,7 @@ import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.util.{Locale, Properties, UUID}
+import java.util.{Locale, Objects, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
@@ -30,7 +30,6 @@ import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
 
-import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -1567,7 +1566,7 @@ private object Client extends Logging {
       }
     }
 
-    Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
+    Objects.equals(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
 
   }
 

@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encoders;
 
@@ -46,14 +49,14 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, shuffleId);
+    return Objects.hash(appId, shuffleId);
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("appId", appId)
-      .add("shuffleId", shuffleId)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("appId", appId)
+      .append("shuffleId", shuffleId)
       .toString();
   }
 
@@ -61,7 +64,7 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof FinalizeShuffleMerge) {
       FinalizeShuffleMerge o = (FinalizeShuffleMerge) other;
-      return Objects.equal(appId, o.appId)
+      return Objects.equals(appId, o.appId)
         && shuffleId == o.shuffleId;
     }
     return false;

@@ -18,9 +18,11 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
+import java.util.Objects;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 import org.roaringbitmap.RoaringBitmap;
 
 import org.apache.spark.network.protocol.Encoders;
@@ -69,16 +71,16 @@ public class MergeStatuses extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    int objectHashCode = Objects.hashCode(shuffleId);
+    int objectHashCode = Objects.hash(shuffleId);
     return (objectHashCode * 41 + Arrays.hashCode(reduceIds) * 41
       + Arrays.hashCode(bitmaps) * 41 + Arrays.hashCode(sizes));
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("shuffleId", shuffleId)
-      .add("reduceId size", reduceIds.length)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("shuffleId", shuffleId)
+      .append("reduceId size", reduceIds.length)
       .toString();
   }
 
@@ -86,7 +88,7 @@ public class MergeStatuses extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof MergeStatuses) {
       MergeStatuses o = (MergeStatuses) other;
-      return Objects.equal(shuffleId, o.shuffleId)
+      return Objects.equals(shuffleId, o.shuffleId)
         && Arrays.equals(bitmaps, o.bitmaps)
         && Arrays.equals(reduceIds, o.reduceIds)
         && Arrays.equals(sizes, o.sizes);
