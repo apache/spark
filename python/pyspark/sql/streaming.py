@@ -667,7 +667,7 @@ class DataStreamReader(OptionUtils):
         else:
             raise TypeError("path can be only a single string")
 
-    def parquet(self, path, datetimeRebaseMode=None, int96RebaseMode=None):
+    def parquet(self, path):
         """
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
@@ -675,30 +675,8 @@ class DataStreamReader(OptionUtils):
 
         Parameters
         ----------
-        datetimeRebaseMode : str, optional
-            the rebasing mode for the values of the ``DATE``, ``TIMESTAMP_MICROS``,
-            ``TIMESTAMP_MILLIS`` logical types from the Julian to Proleptic Gregorian calendar.
-
-                * ``EXCEPTION``: Spark fails in reads of ancient dates/timestamps
-                                 that are ambiguous between the two calendars.
-                *  ``CORRECTED``: loading of dates/timestamps without rebasing.
-                *  ``LEGACY``: perform rebasing of ancient dates/timestamps from the Julian
-                               to Proleptic Gregorian calendar.
-
-            If None is set, the value of the SQL config
-            ``spark.sql.parquet.datetimeRebaseModeInRead`` is used by default.
-        int96RebaseMode : str, optional
-            the rebasing mode for ``INT96`` timestamps from the Julian to
-            Proleptic Gregorian calendar.
-
-                * ``EXCEPTION``: Spark fails in reads of ancient ``INT96`` timestamps
-                                 that are ambiguous between the two calendars.
-                *  ``CORRECTED``: loading of ``INT96`` timestamps without rebasing.
-                *  ``LEGACY``: perform rebasing of ancient ``INT96`` timestamps from the Julian
-                               to Proleptic Gregorian calendar.
-
-            If None is set, the value of the SQL config
-            ``spark.sql.parquet.int96RebaseModeInRead`` is used by default.
+        path : str
+            the path in any Hadoop supported file system
 
         Other Parameters
         ----------------
