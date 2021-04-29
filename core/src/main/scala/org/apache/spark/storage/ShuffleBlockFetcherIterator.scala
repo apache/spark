@@ -368,7 +368,7 @@ final class ShuffleBlockFetcherIterator(
     }
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
     val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes
-    averageRemoteBlockSize = remoteBlockBytes / numRemoteBlocks
+    averageRemoteBlockSize = if (numRemoteBlocks > 0) remoteBlockBytes / numRemoteBlocks else 0L
     assert(numBlocksToFetch == localBlocks.size + hostLocalBlocks.size + numRemoteBlocks,
       s"The number of non-empty blocks $numBlocksToFetch doesn't equal to the number of local " +
         s"blocks ${localBlocks.size} + the number of host-local blocks ${hostLocalBlocks.size} " +
