@@ -23,39 +23,76 @@ import org.apache.spark.sql.types.DataType;
 /**
  * Interface for a function that produces a result value for each input row.
  * <p>
- * To evaluate each input row, Spark will first try to lookup and use a "magic method" (described
- * below) through Java reflection. If the method is not found, Spark will call
- * {@link #produceResult(InternalRow)} as a fallback approach.
+ * To evaluate each input row, Spark will first try to lookup and use either a static or
+ * non-static "magic method" (described below) through Java reflection. If neither of the
+ * magic methods is not found, Spark will call {@link #produceResult(InternalRow)} as a fallback
+ * approach. In other words, the precedence is as follow:
+ * <ul>
+ *   <li>static magic method</li>
+ *   <li>non-static magic method</li>
+ *   <li>{@link #produceResult(InternalRow)}</li>
+ * </ul>
  * <p>
  * The JVM type of result values produced by this function must be the type used by Spark's
  * InternalRow API for the {@link DataType SQL data type} returned by {@link #resultType()}.
+ * The mapping between {@link DataType} and the corresponding JVM type is defined below.
  * <p>
  * <b>IMPORTANT</b>: the default implementation of {@link #produceResult} throws
  * {@link UnsupportedOperationException}. Users can choose to override this method, or implement
- * a "magic method" with name {@link #MAGIC_METHOD_NAME} which takes individual parameters
- * instead of a {@link InternalRow}. The magic method will be loaded by Spark through Java
- * reflection and will also provide better performance in general, due to optimizations such as
- * codegen, removal of Java boxing, etc.
- *
- * For example, a scalar UDF for adding two integers can be defined as follow with the magic
+ * a static magic method with name {@link #STATIC_MAGIC_METHOD_NAME}, or non-static magic
+ * method with name {@link #MAGIC_METHOD_NAME}, both of which take individual parameters
+ * instead of a {@link InternalRow}. <b>The static magic method is recommended if the function is
+ * stateless</b> (i.e., don't need to maintain any intermediate state between the calls), as it
+ * provides better performance over the non-static version due to avoidance of certain costs such
+ * as Java dynamic method dispatch. Either of the magic method approach should provide better
+ * performance over the default {@link #produceResult}, due to optimizations such as codegen,
+ * removal of Java boxing, etc.
+ * <p>
+ * For example, a scalar UDF for adding two integers can be defined as follow with the static magic
  * method approach:
  *
  * <pre>
  *   public class IntegerAdd implements{@code ScalarFunction<Integer>} {
- *     public int invoke(int left, int right) {
+ *     public DataType[] inputTypes() {
+ *       return new DataType[] { DataTypes.IntegerType, DataTypes.IntegerType };
+ *     }
+ *     public static int staticInvoke(int left, int right) {
  *       return left + right;
  *     }
  *   }
  * </pre>
- * In this case, since {@link #MAGIC_METHOD_NAME} is defined, Spark will use it over
- * {@link #produceResult} to evalaute the inputs. In general Spark looks up the magic method by
- * first converting the actual input SQL data types to their corresponding Java types following
- * the mapping defined below, and then checking if there is a matching method from all the
- * declared methods in the UDF class, using method name (i.e., {@link #MAGIC_METHOD_NAME}) and
- * the Java types. If no magic method is found, Spark will falls back to use {@link #produceResult}.
+ * In the above, since {@link #STATIC_MAGIC_METHOD_NAME} is defined, and also that it has
+ * matching parameter types and return type, Spark will use it to evaluate inputs.
  * <p>
- * The following are the mapping from {@link DataType SQL data type} to Java type through
- * the magic method approach:
+ * As another example, in the following:
+ * <pre>
+ *   public class IntegerAdd implements{@code ScalarFunction<Integer>} {
+ *     public DataType[] inputTypes() {
+ *       return new DataType[] { DataTypes.IntegerType, DataTypes.IntegerType };
+ *     }
+ *     public static int staticInvoke(int left, int right) {
+ *       return left + right;
+ *     }
+ *     public int invoke(int left, int right) {
+ *       return left + right;
+ *     }
+ *     public Integer produceResult(InternalRow input) {
+ *       return input.getInt(0) + input.getInt(1);
+ *     }
+ *   }
+ * </pre>
+ *
+ * Even though the class define both magic methods and the {@link #produceResult}, Spark will use
+ * {@link #STATIC_MAGIC_METHOD_NAME} over the others as it takes higher precedence.
+ * <p>
+ * The magic method resolution is done during query analysis, where Spark looks up the magic
+ * method by first converting the actual input SQL data types to their corresponding Java types
+ * following the mapping defined below, and then checking if there is a matching method from all the
+ * declared methods in the UDF class, using method name and the Java types.
+ * <p>
+ * The following are the mapping from {@link DataType SQL data type} to Java type which is used 
+ * by Spark to infer parameter types for the magic methods as well as return value type for
+ * {@link #produceResult}:
  * <ul>
  *   <li>{@link org.apache.spark.sql.types.BooleanType}: {@code boolean}</li>
  *   <li>{@link org.apache.spark.sql.types.ByteType}: {@code byte}</li>
@@ -80,10 +117,12 @@ import org.apache.spark.sql.types.DataType;
  *       {@link org.apache.spark.sql.catalyst.util.MapData}</li>
  * </ul>
  *
- * @param <R> the JVM type of result values
+ * @param <R> the JVM type of result values, MUST be consistent with the {@link DataType}
+ *          returned via {@link #resultType()}, according to the mapping above.
  */
 public interface ScalarFunction<R> extends BoundFunction {
   String MAGIC_METHOD_NAME = "invoke";
+  String STATIC_MAGIC_METHOD_NAME = "staticInvoke";
 
   /**
    * Applies the function to an input row to produce a value.

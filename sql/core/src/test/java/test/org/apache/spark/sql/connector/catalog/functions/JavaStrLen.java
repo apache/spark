@@ -58,7 +58,7 @@ public class JavaStrLen implements UnboundFunction {
         " strlen(string) -> int";
   }
 
-  public static class JavaStrLenDefault implements ScalarFunction<Integer> {
+  private static abstract class JavaStrLenBase implements ScalarFunction<Integer> {
     @Override
     public DataType[] inputTypes() {
       return new DataType[] { DataTypes.StringType };
@@ -73,7 +73,9 @@ public class JavaStrLen implements UnboundFunction {
     public String name() {
       return "strlen";
     }
+  }
 
+  public static class JavaStrLenDefault extends JavaStrLenBase {
     @Override
     public Integer produceResult(InternalRow input) {
       String str = input.getString(0);
@@ -81,20 +83,15 @@ public class JavaStrLen implements UnboundFunction {
     }
   }
 
-  public static class JavaStrLenMagic implements ScalarFunction<Integer> {
-    @Override
-    public DataType[] inputTypes() {
-      return new DataType[] { DataTypes.StringType };
+  public static class JavaStrLenStaticMagic extends JavaStrLenBase {
+    public static int staticInvoke(UTF8String str) {
+      return str.toString().length();
     }
+  }
 
-    @Override
-    public DataType resultType() {
-      return DataTypes.IntegerType;
-    }
-
-    @Override
-    public String name() {
-      return "strlen";
+  public static class JavaStrLenBothMagic extends JavaStrLenBase {
+    public static int staticInvoke(UTF8String str) {
+      return str.toString().length() + 100;
     }
 
     public int invoke(UTF8String str) {
@@ -102,21 +99,23 @@ public class JavaStrLen implements UnboundFunction {
     }
   }
 
-  public static class JavaStrLenNoImpl implements ScalarFunction<Integer> {
-    @Override
-    public DataType[] inputTypes() {
-      return new DataType[] { DataTypes.StringType };
+  public static class JavaStrLenBadStaticMagic extends JavaStrLenBase {
+    public static int staticInvoke(String str) {
+      return str.length() + 100;
     }
 
-    @Override
-    public DataType resultType() {
-      return DataTypes.IntegerType;
+    public int invoke(UTF8String str) {
+      return str.toString().length();
     }
+  }
 
-    @Override
-    public String name() {
-      return "strlen";
+  public static class JavaStrLenMagic extends JavaStrLenBase {
+    public int invoke(UTF8String str) {
+      return str.toString().length();
     }
+  }
+
+  public static class JavaStrLenNoImpl extends JavaStrLenBase {
   }
 }
 
