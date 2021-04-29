@@ -143,9 +143,8 @@ object IntervalUtils {
         }
       case daySecondStringPattern(_, null, _, _, _, _, _, _, _, _, _) =>
         val dtStr = daySecondNumPattern.findFirstIn(intervalStr).get
-        println(dtStr)
         fromDayTimeString(dtStr, DAY, SECOND)
-      case daySecondStringPattern(_, _, _, _, _, _, _, _, _, _, _) =>
+      case _ =>
         throw new IllegalArgumentException(
           s"Interval string must match day-time format of 'd h:m:s.n': ${input.toString}, " +
             s"$fallbackNotice")
