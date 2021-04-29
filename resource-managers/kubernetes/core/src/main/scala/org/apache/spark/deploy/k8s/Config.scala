@@ -292,6 +292,14 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Allocation batch size should be a positive integer")
       .createWithDefault(5)
 
+  val KUBERNETES_MAX_PENDING_PODS =
+    ConfigBuilder("spark.kubernetes.allocation.max.pendingPods")
+      .doc("Maximum number of pending pods allowed during executor alloction for this application.")
+      .version("3.2.0")
+      .intConf
+      .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
+      .createWithDefault(150)
+
   val KUBERNETES_ALLOCATION_BATCH_DELAY =
     ConfigBuilder("spark.kubernetes.allocation.batch.delay")
       .doc("Time to wait between each round of executor allocation.")

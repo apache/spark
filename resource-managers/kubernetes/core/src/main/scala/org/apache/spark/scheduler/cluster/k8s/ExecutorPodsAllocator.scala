@@ -58,6 +58,8 @@ private[spark] class ExecutorPodsAllocator(
 
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
+  private val maxPendingPods = conf.get(KUBERNETES_MAX_PENDING_PODS)
+
   private val podCreationTimeout = math.max(
     podAllocationDelay * 5,
     conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
@@ -93,6 +95,10 @@ private[spark] class ExecutorPodsAllocator(
 
   // visible for tests
   private[k8s] val numNewlyCreatedUnknownPods = new AtomicInteger()
+
+  // visible for tests
+  // number of pending PODs: including the known and unknown ones
+  private[k8s] val numPendingPods = new AtomicInteger()
 
   private var lastSnapshot = ExecutorPodsSnapshot()
 
@@ -215,7 +221,7 @@ private[spark] class ExecutorPodsAllocator(
         execPods(execId) = execPodState
       }
     }
-
+    var sumPendingPods = 0
     // The order we request executors for each ResourceProfile is not guaranteed.
     val knownPodsPerTargetForRpId = totalExpectedExecutorsPerResourceProfileId
       .asScala
@@ -235,9 +241,8 @@ private[spark] class ExecutorPodsAllocator(
       }.partition { case (k, _) =>
         schedulerKnownExecs.contains(k)
       }
-      // This variable is used later to print some debug logs. It's updated when cleaning up
-      // excess pod requests, since currentPendingExecutorsForRpId is immutable.
-      var knownPendingCount = currentPendingExecutorsForRpId.size
+      sumPendingPods += currentPendingExecutorsForRpId.size
+      sumPendingPods += schedulerKnownPendingExecsForRpId.size
 
       val newlyCreatedExecutorsForRpId =
         newlyCreatedExecutors.filter { case (_, (waitingRpId, _)) =>
@@ -295,28 +300,43 @@ private[spark] class ExecutorPodsAllocator(
               .withLabelIn(SPARK_EXECUTOR_ID_LABEL, toDelete.sorted.map(_.toString): _*)
               .delete()
             newlyCreatedExecutors --= newlyCreatedToDelete
-            knownPendingCount -= knownPendingToDelete.size
+            sumPendingPods -= knownPendingToDelete.size
           }
         }
       }
       (rpId -> (knownPodCount, targetNum))
     }
 
+    numPendingPods.set(sumPendingPods)
     // after the downscale is triggered for all the resource profiles the size of
     // newlyCreatedExecutors can be used for calculating the remaining batch size for upscaling
     knownPodsPerTargetForRpId.foreach { case (rpId, (knownPodCount, targetNum)) =>
-      if (knownPodCount < targetNum) {
-        val remainingBatchAllocSize = podAllocationSize - newlyCreatedExecutors.size
-        if (remainingBatchAllocSize > 0) {
-          requestNewExecutors(targetNum, knownPodCount, applicationId, rpId,
-            remainingBatchAllocSize, k8sKnownPVCNames)
-        } else if (snapshots.nonEmpty) {
-          logDebug("Still waiting for executors for ResourceProfile " +
+      val allMissingExecutors = targetNum - knownPodCount
+      val remainingBatchAllocSize = podAllocationSize - newlyCreatedExecutors.size
+      val remainingPendingPods = maxPendingPods -sumPendingPods
+      if (allMissingExecutors <= 0) {
+        if (allMissingExecutors == 0 && !dynamicAllocationEnabled && snapshots.nonEmpty) {
+          logDebug(s"Current number of running executors for ResourceProfile Id $rpId is " +
+            "equal to the number of requested executors. Not scaling up further.")
+        }
+      } else if (remainingBatchAllocSize <= 0) {
+        if (snapshots.nonEmpty) {
+          logDebug("Batch size limit is reached for ResourceProfile " +
             s"Id $rpId before requesting more.")
         }
-      } else if (knownPodCount == targetNum && !dynamicAllocationEnabled && snapshots.nonEmpty) {
-        logDebug(s"Current number of running executors for ResourceProfile Id $rpId is " +
-          "equal to the number of requested executors. Not scaling up further.")
+      } else if (remainingPendingPods <= 0) {
+        if (snapshots.nonEmpty) {
+          logDebug("Max number of pending pod limit is reached for ResourceProfile " +
+            s"Id $rpId waiting for pods to become running.")
+        }
+      } else {
+        val numExecutorsToAllocate =
+          math.min(math.min(allMissingExecutors, remainingBatchAllocSize), remainingPendingPods)
+          logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes for " +
+            s"ResourceProfile Id: $rpId, target: $targetNum, running: $knownPodCount, " +
+            s"remainingBatchAllocSize: $remainingBatchAllocSize," +
+            s"remainingPendingPods: $remainingPendingPods.")
+        requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
       }
     }
     deletedExecutorIds = _deletedExecutorIds
@@ -346,24 +366,12 @@ private[spark] class ExecutorPodsAllocator(
   }
 
   private def requestNewExecutors(
-      expected: Int,
-      running: Int,
+      numExecutorsToAllocate: Int, 
       applicationId: String,
       resourceProfileId: Int,
-<<<<<<< HEAD
       pvcsInUse: Seq[String]): Unit = {
-    val numExecutorsToAllocate = math.min(expected - running, podAllocationSize)
-    logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes for " +
-      s"ResourceProfile Id: $resourceProfileId, target: $expected running: $running.")
     // Check reusable PVCs for this executor allocation batch
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
-=======
-      remainingBatchAllocSize: Int): Unit = {
-    val numExecutorsToAllocate = math.min(expected - running, remainingBatchAllocSize)
-    logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes for " +
-      s"ResourceProfile Id: $resourceProfileId, target: $expected, running: $running, " +
-      s"remainingBatchAllocSize: $remainingBatchAllocSize.")
->>>>>>> Initial upload
     for ( _ <- 0 until numExecutorsToAllocate) {
       val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
       val executorConf = KubernetesConf.createExecutorConf(
