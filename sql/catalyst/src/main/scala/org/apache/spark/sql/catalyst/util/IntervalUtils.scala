@@ -131,19 +131,20 @@ object IntervalUtils {
   def castStringToDTInterval(input: UTF8String): CalendarInterval = {
     val intervalStr = input.trimAll().toString.toUpperCase(Locale.ROOT)
     intervalStr match {
-      case dayTimePatternLegacy(_, _, _, _, _, _) =>
-        fromDayTimeString(intervalStr)
-      case daySecondStringPattern(_, prefixSign, _, suffixSign, _, _, _, _, _, _, _) =>
+      case daySecondNumPattern(_, _, _, _, _, _) =>
+        fromDayTimeString(intervalStr, DAY, SECOND)
+      case daySecondNumPattern(_, prefixSign, _, suffixSign, _, _, _, _, _, _, _) =>
         val dtStr =
           "^([+|-])".r.replaceAllIn(daySecondNumPattern.findFirstIn(intervalStr).get, "")
         (prefixSign, suffixSign) match {
-          case ("-", "-") => fromDayTimeString(dtStr)
-          case ("-", _) => fromDayTimeString(s"-$dtStr")
-          case (_, _) => fromDayTimeString(dtStr)
+          case ("-", "-") => fromDayTimeString(dtStr, DAY, SECOND)
+          case ("-", _) => fromDayTimeString(s"-$dtStr", DAY, SECOND)
+          case (_, _) => fromDayTimeString(dtStr, DAY, SECOND)
         }
       case daySecondStringPattern(_, null, _, _, _, _, _, _, _, _, _) =>
         val dtStr = daySecondNumPattern.findFirstIn(intervalStr).get
-        fromDayTimeString(dtStr)
+        println(dtStr)
+        fromDayTimeString(dtStr, DAY, SECOND)
       case daySecondStringPattern(_, _, _, _, _, _, _, _, _, _, _) =>
         throw new IllegalArgumentException(
           s"Interval string must match day-time format of 'd h:m:s.n': ${input.toString}, " +

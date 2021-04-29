@@ -902,7 +902,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
-    case DayTimeIntervalType => castToDayTimeIntervalCode(from, ctx)
+    case DayTimeIntervalType => castToDayTimeIntervalCode(from)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
@@ -1361,21 +1361,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   }
 
-  private[this] def castToDayTimeIntervalCode(
-      from: DataType,
-      ctx: CodegenContext): CastFunction = from match {
+  private[this] def castToDayTimeIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
-      val longOpt = ctx.freshVariable("intOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
-        code"""
-           scala.Option<Long> $longOpt = $util.castStringToDTInterval($c).microseconds;
-           if ($longOpt.isDefined()) {
-              $evPrim = ((Long) $longOpt.get()).longValue();
-            } else {
-              $evNull = true;
-            }
-         """.stripMargin
+        code"$evPrim = $util.castStringToDTInterval($c).microseconds;"
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
