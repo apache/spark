@@ -136,7 +136,6 @@ object IntervalUtils {
     try {
       val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
       val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
-//      new CalendarInterval(Math.toIntExact(totalMonths), 0, 0)
       Math.toIntExact(totalMonths)
     } catch {
       case NonFatal(e) =>

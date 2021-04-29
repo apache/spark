@@ -1778,7 +1778,6 @@ class CastSuite extends CastSuiteBase {
   test("SPARK-35111: Cast string to year-month interval") {
     checkEvaluation(cast(Literal.create("INTERVAL '1-0' YEAR TO MONTH"),
       YearMonthIntervalType), 12)
-    checkEvaluation(cast(Literal.create("0-0"), YearMonthIntervalType), 0)
     checkEvaluation(cast(Literal.create("INTERVAL '-1-0' YEAR TO MONTH"),
       YearMonthIntervalType), -12)
     checkEvaluation(cast(Literal.create("INTERVAL -'-1-0' YEAR TO MONTH"),
@@ -1790,11 +1789,6 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast(Literal.create("INTERVAL +'1-0' YEAR TO MONTH"),
       YearMonthIntervalType), 12)
     checkEvaluation(cast(Literal.create("-1-0"), YearMonthIntervalType), -12)
-    checkEvaluation(cast(Literal.create("INTERVAL '10-1' YEAR TO MONTH"),
-      YearMonthIntervalType), 121)
-    checkEvaluation(cast(Literal.create("10-1"), YearMonthIntervalType), 121)
-    checkEvaluation(cast(Literal.create("interval '10-1' year TO MONTH"),
-      YearMonthIntervalType), 121)
     checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType), null)
 
     Seq("0-0", "10-1", "-178956970-7", "178956970-7", "-178956970-8").foreach { interval =>
