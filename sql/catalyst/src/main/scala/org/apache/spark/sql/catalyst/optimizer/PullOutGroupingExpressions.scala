@@ -52,7 +52,6 @@ object PullOutGroupingExpressions extends Rule[LogicalPlan] {
         val newGroupingExpressions = a.groupingExpressions
           .filterNot(AggregateExpression.containsAggregate)
           .map {
-            case e if AggregateExpression.isAggregate(e) => e
             case e if !e.foldable && e.children.nonEmpty =>
               complexGroupingExpressionMap
                 .getOrElseUpdate(e.canonicalized, Alias(e, s"_groupingexpression")())
@@ -62,7 +61,7 @@ object PullOutGroupingExpressions extends Rule[LogicalPlan] {
         if (complexGroupingExpressionMap.nonEmpty) {
           def replaceComplexGroupingExpressions(e: Expression): Expression = {
             e match {
-              case _ if AggregateExpression.isAggregate(e) => e
+              case _ if e.foldable => e
               case _ if complexGroupingExpressionMap.contains(e.canonicalized) =>
                 complexGroupingExpressionMap.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
               case _ => e.mapChildren(replaceComplexGroupingExpressions)
