@@ -116,8 +116,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   def getMergerLocs: Seq[BlockManagerId] = mergerLocs
 
-  def setShuffleMergeFinalized(mergeFinalized: Boolean): Unit = {
-    this.shuffleMergedFinalized = mergeFinalized
+  def markShuffleMergeFinalized: Unit = {
+    shuffleMergedFinalized = true
   }
 
   def shuffleMergeFinalized : Boolean = shuffleMergedFinalized

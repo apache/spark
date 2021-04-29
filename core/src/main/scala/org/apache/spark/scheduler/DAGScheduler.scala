@@ -2138,7 +2138,7 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler] def handleShuffleMergeFinalized(stage: ShuffleMapStage): Unit = {
-    stage.shuffleDep.setShuffleMergeFinalized(true)
+    stage.shuffleDep.markShuffleMergeFinalized
     processShuffleMapStageCompletion(stage)
   }
 

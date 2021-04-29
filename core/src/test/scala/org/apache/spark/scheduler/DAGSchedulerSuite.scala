@@ -338,7 +338,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
           mapOutputTracker.registerMergeResult(shuffleMapStage.shuffleDep.shuffleId, part,
             makeMergeStatus(""))
         }
-        shuffleMapStage.shuffleDep.setShuffleMergeFinalized(true)
+        shuffleMapStage.shuffleDep.markShuffleMergeFinalized
         handleShuffleMergeFinalized(shuffleMapStage)
       }
     }
