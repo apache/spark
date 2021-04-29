@@ -90,8 +90,7 @@ private[sql] object CatalogV2Implicits {
       case functionCatalog: FunctionCatalog =>
         functionCatalog
       case _ =>
-        throw new AnalysisException(
-          s"Cannot use catalog '${plugin.name}': not a FunctionCatalog")
+        throw QueryCompilationErrors.cannotUseCatalogError(plugin, "not a FunctionCatalog")
     }
   }
 
@@ -157,8 +156,8 @@ private[sql] object CatalogV2Implicits {
       case Seq(funcName) => FunctionIdentifier(funcName)
       case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
       case _ =>
-        throw new AnalysisException(
-          s"$quoted is not a valid FunctionIdentifier as it has more than 2 name parts.")
+        throw QueryCompilationErrors.invalidIdentifierAsItHasMoreThanTwoNamePartsError(
+          quoted, "FunctionIdentifier")
     }
 
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")
