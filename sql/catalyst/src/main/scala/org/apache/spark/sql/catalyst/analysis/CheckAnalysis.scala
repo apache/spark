@@ -751,6 +751,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       expressions.exists(_.find(_.semanticEquals(expr)).isDefined)
     }
 
+    // Make sure the subquery plan does not contain lateral joins.
+    def checkLateralJoinInSubquery(p: LogicalPlan): Unit = {
+      p foreach {
+        case j @ Join(_, _, LateralJoin(_), _, _) =>
+          j.failAnalysis(s"Lateral join is not allowed in a subquery:\n$j")
+        case _ =>
+      }
+    }
+
     // Validate the subquery plan.
     checkAnalysis(expr.plan)
 
@@ -796,6 +805,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 s" Filter/Join and a few commands: $plan")
         }
     }
+
+    // Validate no lateral join is in the subquery plan.
+    checkLateralJoinInSubquery(expr.plan)
 
     // Validate to make sure the correlations appearing in the query are valid and
     // allowed by spark.
@@ -1049,9 +1061,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failOnInvalidOuterReference(j)
             failOnOuterReferenceInSubTree(left)
 
-          // Lateral join is not supported inside a correlated subquery.
-          case LateralJoin(_) =>
-            failOnOuterReferenceInSubTree(j)
+          // A lateral join can be on a correlation path if it is inside another lateral join.
+          case LateralJoin(_) if isLateral =>
+            failOnInvalidOuterReference(j)
 
           // Any other join types not explicitly listed above,
           // including Full outer join, are treated as Category 4.

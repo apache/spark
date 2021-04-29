@@ -2468,33 +2468,46 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     /**
-     * Resolve the right sub-tree by first using the right query plan itself, and then try
-     * resolving the unresolved attributes and star expressions using the left query plan.
+     * Recursively resolve the plan by first using columns from its children, and then try
+     * resolving the unresolved attributes and star expressions using the outer query plan.
+     * Note for a nested lateral join, only its left subtree can be resolved using the outer
+     * query plan.
      */
-    private def resolveRightChild(right: LogicalPlan, left: LogicalPlan): LogicalPlan = {
-      right.resolveOperators {
-        case p: LogicalPlan if !p.childrenResolved => p
-        case p: Project if containsStar(p.projectList) =>
-          p.copy(projectList = expandOuterReference(p.projectList, p.child, left))
-        case a: Aggregate if containsStar(a.aggregateExpressions) =>
-          a.copy(aggregateExpressions =
-            expandOuterReference(a.aggregateExpressions, a.child, left))
-        case p: LogicalPlan if !p.resolved =>
-          p transformExpressions {
-            case u @ UnresolvedAttribute(nameParts) =>
-              withPosition(u) {
-                p.resolveChildren(nameParts, resolver)
-                  .orElse(resolveLiteralFunction(nameParts))
-                  .orElse(resolveOuterReference(nameParts, left))
-                  .getOrElse(u)
-              }
-          }
-      }
+    private def resolveWithOuter(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = plan match {
+      case p: LogicalPlan if p.resolved => p
+      case j @ Join(left, _, LateralJoin(_), _, _) if !left.resolved =>
+        // The outer query plan can only be used to resolve the left subtree of a nested
+        // lateral join.
+        j.copy(left = resolveWithOuter(left, outer))
+      case j @ Join(left, right, LateralJoin(_), _, _) if left.resolved && !right.resolved =>
+        // Leave the lateral join unchanged if its left subtree is already resolved. The right
+        // subtree of a nested lateral join can only be resolved using output columns from its
+        // left subtree. Deep correlation is currently not supported. For example:
+        // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))
+        // `t1.c1` cannot be resolved using t2.
+        j
+      case p: LogicalPlan if !p.childrenResolved =>
+        p.mapChildren(resolveWithOuter(_, outer))
+      case p: Project if containsStar(p.projectList) =>
+        p.copy(projectList = expandOuterReference(p.projectList, p.child, outer))
+      case a: Aggregate if containsStar(a.aggregateExpressions) =>
+        a.copy(aggregateExpressions =
+          expandOuterReference(a.aggregateExpressions, a.child, outer))
+      case p: LogicalPlan =>
+        p transformExpressions {
+          case u @ UnresolvedAttribute(nameParts) =>
+            withPosition(u) {
+              p.resolveChildren(nameParts, resolver)
+                .orElse(resolveLiteralFunction(nameParts))
+                .orElse(resolveOuterReference(nameParts, outer))
+                .getOrElse(u)
+            }
+        }
     }
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case j @ Join(left, right, LateralJoin(_), _, _) if left.resolved && !right.resolved =>
-        val newRight = resolveRightChild(right, left)
+        val newRight = resolveWithOuter(right, left)
         j.copy(right = newRight)
     }
   }

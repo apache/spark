@@ -66,14 +66,40 @@ class ResolveLateralJoinSuite extends AnalysisTest {
     )
   }
 
+  test("resolve nested lateral joins") {
+    // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, c))
+    val plan = t1.join(
+      t2.join(t0.select('a, 'c), LateralJoin(Inner)),
+      LateralJoin(Inner))
+    val expected =
+      t1.join(
+        t2.join(
+          Project(Seq(OuterReference(a).as(a.name), OuterReference(c).as(c.name)), t0),
+          LateralJoin(Inner)),
+      LateralJoin(Inner))
+    checkAnalysis(plan, expected)
+  }
+
   test("lateral join with unresolvable attributes") {
+    // SELECT * FROM t1, LATERAL (SELECT a, c))
     assertAnalysisError(
       t1.join(t0.select('a, 'c), LateralJoin(Inner)),
       Seq("cannot resolve 'c' given input columns: []")
     )
+    // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
     assertAnalysisError(
       t1.join(t2.select('a, 'b, 'c, 'd), LateralJoin(Inner)),
       Seq("cannot resolve 'd' given input columns: [a, c]")
+    )
+    // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
+    assertAnalysisError(
+      t1.join(t2.join(t0.select('a, 'b), LateralJoin(Inner)), LateralJoin(Inner)),
+      Seq("cannot resolve 'b' given input columns: []")
+    )
+    // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
+    assertAnalysisError(
+      t1.join(t2.join(t0.select($"t1.a"), LateralJoin(Inner)), LateralJoin(Inner)),
+      Seq("cannot resolve 't1.a' given input columns: []")
     )
   }
 

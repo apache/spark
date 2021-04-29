@@ -54,21 +54,25 @@ SELECT * FROM t1
 LEFT OUTER JOIN LATERAL (SELECT c2 FROM t2 WHERE t1.c1 = t2.c1) s
 LEFT OUTER JOIN t1 t3 ON s.c2 = t3.c2;
 
--- nested lateral join
+-- nested lateral joins
 SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT c1));
+SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1 + 1 AS c1), LATERAL (SELECT c1));
+-- expect error
+SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1));
+SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c2));
+SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c3));
 
 -- uncorrelated scalar subquery inside lateral join
 SELECT * FROM t1, LATERAL (SELECT c2, (SELECT MIN(c2) FROM t2));
 
--- correlated scalar subquery inside lateral join
+-- correlated scalar subquery inside lateral join: expect error
 SELECT * FROM t1, LATERAL (SELECT c1, (SELECT SUM(c2) FROM t2 WHERE c1 = t1.c1));
 
--- lateral join inside subquery
-SELECT * FROM t1 WHERE c1 = (
-  SELECT SUM(c2)
-  FROM (SELECT c1 FROM t1) s,
-  LATERAL (SELECT * FROM t2 WHERE s.c1 = t2.c1)
-);
+-- lateral join inside uncorrelated subquery: expect error
+SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a));
+
+-- lateral join inside correlated subquery: expect error
+SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a) WHERE c1 = t1.c1);
 
 -- lateral join with COUNT aggregate
 -- TODO: the expected result should be (1, 2, 0)

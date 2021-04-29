@@ -244,7 +244,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
             case _ => Join(child, domain, Inner, None, JoinHint.NONE)
           }
         } else {
-          throw QueryExecutionErrors.cannotRewriteDomainJoinWithConditionsError(conditions, d)
+          // The domain join does not belong to the current outer plan. Leave it unchanged.
+          d
         }
     }
   }
