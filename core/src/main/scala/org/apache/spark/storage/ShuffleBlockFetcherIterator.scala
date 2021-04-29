@@ -265,7 +265,7 @@ final class ShuffleBlockFetcherIterator(
           val (size, mapIndex) = infoMap(blockId)
           FetchBlockInfo(BlockId(blockId), size, mapIndex)
         }
-        results.put(DeferFetchRequestResult(FetchRequest(address, blocks)))
+        results.put(DeferFetchRequestResult(FetchRequest(address, blocks.toSeq)))
         deferredBlocks.clear()
       }
     }
