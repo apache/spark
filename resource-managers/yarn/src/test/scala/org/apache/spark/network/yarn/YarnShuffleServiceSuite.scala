@@ -402,7 +402,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     metricSetRef.setAccessible(true)
     val metrics = metricSetRef.get(metricsSource).asInstanceOf[MetricSet].getMetrics
 
-    assert(metrics.keySet().asScala == Set(
+    // Use sorted Seq instead of Set for easier comparison when there is a mismatch
+    assert(metrics.keySet().asScala.toSeq.sorted == Seq(
       "blockTransferRate",
       "blockTransferRateBytes",
       "blockTransferAvgSize_1min",
@@ -416,7 +417,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       "shuffle-server.usedDirectMemory",
       "shuffle-server.usedHeapMemory",
       "fetchMergedBlocksMetaLatencyMillis"
-    ))
+    ).sorted)
   }
 
   test("SPARK-34828: metrics should be registered with configured name") {
