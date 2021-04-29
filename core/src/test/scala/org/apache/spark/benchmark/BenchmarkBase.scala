@@ -49,7 +49,11 @@ abstract class BenchmarkBase {
       val resultFileName =
         s"${this.getClass.getSimpleName.replace("$", "")}$jdkString$suffix-results.txt"
       val prefix = Benchmarks.currentProjectRoot.map(_ + "/").getOrElse("")
-      val file = new File(s"${prefix}benchmarks/$resultFileName")
+      val dir = new File(s"${prefix}benchmarks/")
+      if (!dir.exists()) {
+        dir.mkdirs()
+      }
+      val file = new File(s"${dir}$resultFileName")
       if (!file.exists()) {
         file.createNewFile()
       }
