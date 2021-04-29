@@ -139,7 +139,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
               .stripMargin)
         }
       }
-      val checkpointDir = fileManager.makeQualified(checkpointPath)
+      val checkpointDir = fileManager.getQualifiedCheckpointPath()
       fileManager.mkdirs(checkpointDir)
       checkpointDir.toString
     }

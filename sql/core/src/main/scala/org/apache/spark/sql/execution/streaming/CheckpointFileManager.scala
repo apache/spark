@@ -84,8 +84,8 @@ trait CheckpointFileManager {
   /** Is the default file system this implementation is operating on the local file system. */
   def isLocal: Boolean
 
-  /** Returns a qualified path object for the file system's working directory. */
-  def makeQualified(path: Path): Path
+  /** Returns the qualified path of the checkpoint path. */
+  def getQualifiedCheckpointPath(): Path
 }
 
 object CheckpointFileManager extends Logging {
@@ -289,7 +289,7 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
     case _ => false
   }
 
-  override def makeQualified(path: Path): Path = {
+  override def getQualifiedCheckpointPath(): Path = {
     fs.makeQualified(path)
   }
 }
@@ -358,7 +358,7 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
     case _ => false
   }
 
-  override def makeQualified(path: Path): Path = {
+  override def getQualifiedCheckpointPath(): Path = {
     fc.makeQualified(path)
   }
 
