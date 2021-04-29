@@ -80,10 +80,34 @@ private[sql] object CatalogV2Implicits {
       case _ =>
         throw QueryCompilationErrors.cannotUseCatalogError(plugin, "does not support namespaces")
     }
+
+    def isFunctionCatalog: Boolean = plugin match {
+      case _: FunctionCatalog => true
+      case _ => false
+    }
+
+    def asFunctionCatalog: FunctionCatalog = plugin match {
+      case functionCatalog: FunctionCatalog =>
+        functionCatalog
+      case _ =>
+        throw new AnalysisException(
+          s"Cannot use catalog '${plugin.name}': not a FunctionCatalog")
+    }
   }
 
   implicit class NamespaceHelper(namespace: Array[String]) {
     def quoted: String = namespace.map(quoteIfNeeded).mkString(".")
+  }
+
+  implicit class FunctionIdentifierHelper(ident: FunctionIdentifier) {
+    def asMultipart: Seq[String] = {
+      ident.database match {
+        case Some(db) =>
+          Seq(db, ident.funcName)
+        case _ =>
+          Seq(ident.funcName)
+      }
+    }
   }
 
   implicit class IdentifierHelper(ident: Identifier) {
@@ -127,6 +151,14 @@ private[sql] object CatalogV2Implicits {
       case _ =>
         throw QueryCompilationErrors.invalidIdentifierAsItHasMoreThanTwoNamePartsError(
           quoted, "TableIdentifier")
+    }
+
+    def asFunctionIdentifier: FunctionIdentifier = parts match {
+      case Seq(funcName) => FunctionIdentifier(funcName)
+      case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
+      case _ =>
+        throw new AnalysisException(
+          s"$quoted is not a valid FunctionIdentifier as it has more than 2 name parts.")
     }
 
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")
