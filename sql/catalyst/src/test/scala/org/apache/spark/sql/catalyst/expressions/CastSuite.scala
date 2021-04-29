@@ -1797,11 +1797,12 @@ class CastSuite extends CastSuiteBase {
       YearMonthIntervalType), 121)
     checkEvaluation(cast(Literal.create(null, StringType), YearMonthIntervalType), null)
 
-    Seq("INTERVAL '0-0' YEAR TO MONTH", "INTERVAL '10-1' YEAR TO MONTH",
-      "INTERVAL '-178956970-7' YEAR TO MONTH", "INTERVAL '178956970-7' YEAR TO MONTH",
-      "INTERVAL '-178956970-8' YEAR TO MONTH").foreach { interval =>
+    Seq("0-0", "10-1", "-178956970-7", "178956970-7", "-178956970-8").foreach { interval =>
+      val ansiInterval = s"INTERVAL '$interval' YEAR TO MONTH"
       checkEvaluation(
-        cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), interval)
+        cast(cast(Literal.create(interval), YearMonthIntervalType), StringType), ansiInterval)
+      checkEvaluation(cast(cast(Literal.create(ansiInterval),
+        YearMonthIntervalType), StringType), ansiInterval)
     }
 
     Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
