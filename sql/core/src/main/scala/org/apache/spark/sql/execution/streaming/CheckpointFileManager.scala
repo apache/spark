@@ -84,8 +84,11 @@ trait CheckpointFileManager {
   /** Is the default file system this implementation is operating on the local file system. */
   def isLocal: Boolean
 
-  /** Returns the qualified path of the checkpoint path. */
-  def getQualifiedCheckpointPath(): Path
+  /**
+   * Creates the checkpoint path if it does not exist, and returns the qualified
+   * checkpoint path.
+   */
+  def createCheckpointDirectory(): Path
 }
 
 object CheckpointFileManager extends Logging {
@@ -289,7 +292,8 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
     case _ => false
   }
 
-  override def getQualifiedCheckpointPath(): Path = {
+  override def createCheckpointDirectory(): Path = {
+    fs.mkdirs(path, FsPermission.getDirDefault)
     fs.makeQualified(path)
   }
 }
@@ -358,7 +362,8 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
     case _ => false
   }
 
-  override def getQualifiedCheckpointPath(): Path = {
+  override def createCheckpointDirectory(): Path = {
+    fc.mkdir(path, FsPermission.getDirDefault, true)
     fc.makeQualified(path)
   }
 
