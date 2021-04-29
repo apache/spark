@@ -662,12 +662,7 @@ final class ShuffleBlockFetcherIterator(
           }
           if (isNetworkReqDone) {
             reqsInFlight -= 1
-            if (isNettyOOMOnShuffle.get && NettyUtils.freeDirectMemory() > averageRemoteBlockSize) {
-              // Non-`NettyManagedBuffer` doesn't occupy Netty's memory so we can unset the flag
-              // directly once the request succeeds. But for the `NettyManagedBuffer`, we'll only
-              // unset the flag when the data is fully consumed (see `BufferReleasingInputStream`).
-              isNettyOOMOnShuffle.compareAndSet(true, false)
-            }
+            ShuffleBlockFetcherIterator.resetNettyOOMFlagIfPossible(averageRemoteBlockSize)
             logDebug("Number of requests in flight " + reqsInFlight)
           }
 
@@ -781,7 +776,7 @@ final class ShuffleBlockFetcherIterator(
         // Return immediately if Netty is still OOMed and there're ongoing fetch requests
         return
       } else {
-        isNettyOOMOnShuffle.compareAndSet(true, false)
+        ShuffleBlockFetcherIterator.resetNettyOOMFlagIfPossible(0)
       }
     }
 
@@ -882,9 +877,8 @@ private class BufferReleasingInputStream(
         iterator.releaseCurrentResultBuffer()
       } finally {
         // Unset the flag when a remote request finished and free memory is fairly enough.
-        if (ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.get &&
-            isNetworkReqDone && NettyUtils.freeDirectMemory() > iterator.averageRemoteBlockSize) {
-          ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.compareAndSet(true, false)
+        if (isNetworkReqDone) {
+          ShuffleBlockFetcherIterator.resetNettyOOMFlagIfPossible(iterator.averageRemoteBlockSize)
         }
         closed = true
       }
@@ -955,6 +949,12 @@ object ShuffleBlockFetcherIterator {
    * complete fetch request).
    */
   val isNettyOOMOnShuffle = new AtomicBoolean(false)
+
+  def resetNettyOOMFlagIfPossible(freeMemoryLowerBound: Long): Unit = {
+    if (isNettyOOMOnShuffle.get() && NettyUtils.freeDirectMemory() >= freeMemoryLowerBound) {
+      isNettyOOMOnShuffle.compareAndSet(true, false)
+    }
+  }
 
   /**
    * This function is used to merged blocks when doBatchFetch is true. Blocks which have the
