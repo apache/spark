@@ -21,7 +21,7 @@ To run tests with Hadoop 2.7 instead of Hadoop 3.2, use `--hadoop-profile`.
 
     ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2.7
 
-The minimum tested version of Minikube is 0.23.0. The kube-dns addon must be enabled. Minikube should
+The minimum tested version of Minikube is 1.7.3. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
 
     minikube start --cpus 4 --memory 6144
