@@ -98,10 +98,8 @@ object IntervalUtils {
 
   def castStringToYMInterval(input: UTF8String): CalendarInterval = {
     input.trimAll().toString.toUpperCase(Locale.ROOT) match {
-      case yearMonthPattern("-", year, month) =>
-        toYMInterval(year, month, -1)
-      case yearMonthPattern(_, year, month) =>
-        toYMInterval(year, month, 1)
+      case yearMonthPattern("-", year, month) => toYMInterval(year, month, -1)
+      case yearMonthPattern(_, year, month) => toYMInterval(year, month, 1)
       case yearMonthStringPattern(_, prefixSign, _, suffixSign, year, month, _, _) =>
         (prefixSign, suffixSign) match {
           case ("-", "-") => toYMInterval(year, month, 1)
