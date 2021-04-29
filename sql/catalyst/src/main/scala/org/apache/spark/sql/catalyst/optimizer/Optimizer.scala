@@ -1618,7 +1618,7 @@ object EliminateLimits extends Rule[LogicalPlan] {
   private def canEliminate(limitExpr: Expression, child: LogicalPlan): Boolean = {
     limitExpr.foldable && child.maxRows.exists { _ <= limitExpr.eval().asInstanceOf[Int] }
   }
-  private def canEliminateLocal(localLimitExpr: Expression, child: LogicalPlan): Boolean = {
+  private def canEliminateLocalLimit(localLimitExpr: Expression, child: LogicalPlan): Boolean = {
     localLimitExpr.foldable &&
       child.maxRowsPerPartition.exists { _ <= localLimitExpr.eval().asInstanceOf[Int] }
   }
@@ -1628,7 +1628,7 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
-    case LocalLimit(l, child) if canEliminateLocal(l, child) =>
+    case LocalLimit(l, child) if !plan.isStreaming && canEliminateLocalLimit(l, child) =>
       child
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
