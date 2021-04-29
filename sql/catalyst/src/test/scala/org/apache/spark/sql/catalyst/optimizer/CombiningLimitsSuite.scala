@@ -150,6 +150,14 @@ class CombiningLimitsSuite extends PlanTest {
     )
   }
 
+  test("SPARK-35231: Eliminate LocalLimit if Range maxRowsPerPartition not larger than Limit") {
+    checkPlanAndMaxRowsPerPartition(
+      Range(0, 100, 1, 3).select().localLimit(34),
+      Range(0, 100, 1, 3).select(),
+      34
+    )
+  }
+
   test("SPARK-33497: Eliminate Limit if Sample max rows not larger than Limit") {
     checkPlanAndMaxRow(
       testRelation.select().sample(0, 0.2, false, 1).limit(10),
@@ -239,6 +247,12 @@ class CombiningLimitsSuite extends PlanTest {
       optimized: LogicalPlan, expected: LogicalPlan, expectedMaxRow: Long): Unit = {
     comparePlans(Optimize.execute(optimized.analyze), expected.analyze)
     assert(expected.maxRows.get == expectedMaxRow)
+  }
+
+  private def checkPlanAndMaxRowsPerPartition(
+      optimized: LogicalPlan, expected: LogicalPlan, expectedMaxRowsPerPartition: Long): Unit = {
+    comparePlans(Optimize.execute(optimized.analyze), expected.analyze)
+    assert(expected.maxRowsPerPartition.get == expectedMaxRowsPerPartition)
   }
 }
 
