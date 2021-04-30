@@ -108,7 +108,7 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
 }
 
 class HiveOutputWriter(
-    path: String,
+    val path: String,
     fileSinkConf: FileSinkDesc,
     jobConf: JobConf,
     dataSchema: StructType) extends OutputWriter with HiveInspectors {

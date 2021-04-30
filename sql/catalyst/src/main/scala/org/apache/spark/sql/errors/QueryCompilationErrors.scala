@@ -617,12 +617,6 @@ private[spark] object QueryCompilationErrors {
       s"the function '$func', please make sure it is on the classpath")
   }
 
-  def v2CatalogNotSupportFunctionError(
-      catalog: String, namespace: Seq[String]): Throwable = {
-    new AnalysisException("V2 catalog does not support functions yet. " +
-      s"catalog: $catalog, namespace: '${namespace.quoted}'")
-  }
-
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
     new AnalysisException(s"Resource Type '$resourceType' is not supported.")
   }
@@ -1351,5 +1345,10 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"Expected udfs have the same evalType but got different evalTypes: " +
         s"${evalTypes.mkString(",")}")
+  }
+
+  def ambiguousFieldNameError(fieldName: String, names: String): Throwable = {
+    new AnalysisException(
+      s"Ambiguous field name: $fieldName. Found multiple columns that can match: $names")
   }
 }
