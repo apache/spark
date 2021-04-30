@@ -536,7 +536,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToDayTimeInterval(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => IntervalUtils.castStringToDTInterval(s).microseconds)
+      buildCast[UTF8String](_, s => IntervalUtils.castStringToDTInterval(s))
   }
 
   // LongConverter
@@ -1365,7 +1365,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, evNull) =>
-        code"$evPrim = $util.castStringToDTInterval($c).microseconds;"
+        code"$evPrim = $util.castStringToDTInterval($c);"
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {

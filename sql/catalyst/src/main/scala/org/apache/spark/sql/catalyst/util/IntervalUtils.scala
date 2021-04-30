@@ -127,11 +127,14 @@ object IntervalUtils {
     "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?(')(\\s+DAY\\s+TO\\s+SECOND)$").r
   private val daySecondPattern = "^([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?$".r
 
-  def castStringToDTInterval(input: UTF8String): CalendarInterval = {
+  def castStringToDTInterval(input: UTF8String): Long = {
+    def calendarToMicros(calendar: CalendarInterval): Long = {
+      getDuration(calendar, TimeUnit.MICROSECONDS)
+    }
     val intervalStr = input.trimAll().toString
     val ansiDaySecondPattern =
       "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?".r
-    intervalStr match {
+    val calendar = intervalStr match {
       case daySecondPattern(_, _, _, _, _, _) => fromDayTimeString(intervalStr, DAY, SECOND)
       case daySecondStringPattern(_, prefixSign, _, suffixSign, _, _, _, _, _, _, _) =>
         val dtStr =
@@ -148,6 +151,7 @@ object IntervalUtils {
             s"or `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND`: ${input.toString}, " +
             s"$fallbackNotice")
     }
+    calendarToMicros(calendar)
   }
 
   /**

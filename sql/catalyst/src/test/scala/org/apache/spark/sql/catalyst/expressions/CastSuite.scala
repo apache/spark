@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
@@ -1776,28 +1776,45 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-35112: Cast string to day-time interval") {
+    val interval = IntervalUtils.fromDayTimeString("106751991 04:00:54.775807")
     checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType), 0L)
     checkEvaluation(cast(Literal.create("INTERVAL '0 0:0:0' DAY TO SECOND"),
       DayTimeIntervalType), 0L)
     checkEvaluation(cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
-      DayTimeIntervalType), 7384000000L)
+      DayTimeIntervalType), 93784000000L)
     checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00' DAY TO SECOND"),
-      DayTimeIntervalType), 11040000000L)
+      DayTimeIntervalType), 97440000000L)
     checkEvaluation(cast(Literal.create("INTERVAL '1 03:04:00.0000' DAY TO SECOND"),
-      DayTimeIntervalType), 11040000000L)
-    checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType), 7384000000L)
+      DayTimeIntervalType), 97440000000L)
+    checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType), 93784000000L)
     checkEvaluation(cast(Literal.create("INTERVAL '-10 2:03:04' DAY TO SECOND"),
-      DayTimeIntervalType), -7384000000L)
-    checkEvaluation(cast(Literal.create("-10 2:03:04"), DayTimeIntervalType), -7384000000L)
+      DayTimeIntervalType), -871384000000L)
+    checkEvaluation(cast(Literal.create("-10 2:03:04"), DayTimeIntervalType), -871384000000L)
     checkEvaluation(cast(Literal.create("-106751991 04:00:54.775808"), DayTimeIntervalType),
-      -14454775808L)
+      Long.MinValue)
     checkEvaluation(cast(Literal.create("106751991 04:00:54.775807"), DayTimeIntervalType),
-      14454775807L)
+      Long.MaxValue)
+
+    Seq("-106751991 04:00:54.775808", "106751991 04:00:54.775807").foreach { interval =>
+      val ansiInterval = s"INTERVAL '$interval' DAY TO SECOND"
+      checkEvaluation(
+        cast(cast(Literal.create(interval), DayTimeIntervalType), StringType), ansiInterval)
+      checkEvaluation(cast(cast(Literal.create(ansiInterval),
+        DayTimeIntervalType), StringType), ansiInterval)
+    }
+
+    Seq("INTERVAL '-106751991 04:00:54.775809' YEAR TO MONTH",
+      "INTERVAL '106751991 04:00:54.775808' YEAR TO MONTH").foreach { interval =>
+        val e = intercept[IllegalArgumentException] {
+          cast(Literal.create(interval), DayTimeIntervalType).eval()
+        }.getMessage
+        assert(e.contains("Interval string must match day-time format of"))
+      }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
-      Long.MinValue).foreach { period =>
-        val interval = Literal.create(Duration.of(period, ChronoUnit.MICROS), DayTimeIntervalType)
-        checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType), period)
+      Long.MinValue).foreach { duration =>
+        val interval = Literal.create(Duration.of(duration, ChronoUnit.MICROS), DayTimeIntervalType)
+        checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType), duration)
       }
   }
 }
