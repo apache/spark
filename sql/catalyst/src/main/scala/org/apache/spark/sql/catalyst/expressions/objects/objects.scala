@@ -331,15 +331,21 @@ case class Invoke(
       } catch {
         case _: NoSuchMethodException =>
           // For some cases, e.g. arg class is Object, `getMethod` cannot find the method.
-          // We look at function name + argument length.
+          // We look at function name + argument length
           val m = cls.getMethods.filter { m =>
             m.getName == encodedFunctionName && m.getParameterCount == arguments.length
           }
           if (m.isEmpty) {
             sys.error(s"Couldn't find $encodedFunctionName on $cls")
           } else if (m.length > 1) {
-            // Ambiguous case, we don't know which method to choose, just fail it.
-            sys.error(s"Found ${m.length} $encodedFunctionName on $cls")
+            // More than one matched method signature. Exclude synthetic one, e.g. generic one.
+            val realMethods = m.filter(!_.isSynthetic)
+            if (realMethods.length > 1) {
+              // Ambiguous case, we don't know which method to choose, just fail it.
+              sys.error(s"Found ${realMethods.length} $encodedFunctionName on $cls")
+            } else {
+              Some(realMethods.head)
+            }
           } else {
             Some(m.head)
           }
