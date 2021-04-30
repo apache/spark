@@ -100,6 +100,25 @@ object IntervalUtils {
   }
 
   private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
+  private val yearMonthStringPattern =
+    "(?i)^(INTERVAL\\s+)([+|-])?(')([+|-])?(\\d+)-(\\d+)(')(\\s+YEAR\\s+TO\\s+MONTH)$".r
+
+  def castStringToYMInterval(input: UTF8String): Int = {
+    input.trimAll().toString match {
+      case yearMonthPattern("-", year, month) => toYMInterval(year, month, -1)
+      case yearMonthPattern(_, year, month) => toYMInterval(year, month, 1)
+      case yearMonthStringPattern(_, firstSign, _, secondSign, year, month, _, _) =>
+        (firstSign, secondSign) match {
+          case ("-", "-") => toYMInterval(year, month, 1)
+          case ("-", _) => toYMInterval(year, month, -1)
+          case (_, "-") => toYMInterval(year, month, -1)
+          case (_, _) => toYMInterval(year, month, 1)
+        }
+      case _ => throw new IllegalArgumentException(
+        s"Interval string does not match year-month format of `[+|-]y-m` " +
+          s"or `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`: ${input.toString}")
+    }
+  }
 
   /**
    * Parse YearMonth string in form: [+|-]YYYY-MM
@@ -108,25 +127,26 @@ object IntervalUtils {
    */
   def fromYearMonthString(input: String): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
-    def toInterval(yearStr: String, monthStr: String, sign: Int): CalendarInterval = {
-      try {
-        val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
-        val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
-        new CalendarInterval(Math.toIntExact(totalMonths), 0, 0)
-      } catch {
-        case NonFatal(e) =>
-          throw new IllegalArgumentException(
-            s"Error parsing interval year-month string: ${e.getMessage}", e)
-      }
-    }
     input.trim match {
       case yearMonthPattern("-", yearStr, monthStr) =>
-        toInterval(yearStr, monthStr, -1)
+        new CalendarInterval(toYMInterval(yearStr, monthStr, -1), 0, 0)
       case yearMonthPattern(_, yearStr, monthStr) =>
-        toInterval(yearStr, monthStr, 1)
+        new CalendarInterval(toYMInterval(yearStr, monthStr, 1), 0, 0)
       case _ =>
         throw new IllegalArgumentException(
           s"Interval string does not match year-month format of 'y-m': $input")
+    }
+  }
+
+  def toYMInterval(yearStr: String, monthStr: String, sign: Int): Int = {
+    try {
+      val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
+      val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
+      Math.toIntExact(totalMonths)
+    } catch {
+      case NonFatal(e) =>
+        throw new IllegalArgumentException(
+          s"Error parsing interval year-month string: ${e.getMessage}", e)
     }
   }
 
