@@ -279,7 +279,7 @@ trait JoinSelectionHelper {
    */
   def canBroadcastBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
     plan.stats.sizeInBytes >= 0 &&
-      plan.stats.sizeInBytes <= autoBroadcastJoinThreshold(plan.stats.isAdaptive, conf)
+      plan.stats.sizeInBytes <= autoBroadcastJoinThreshold(plan.stats.isRuntime, conf)
   }
 
   def canBuildBroadcastLeft(joinType: JoinType): Boolean = {
@@ -377,8 +377,7 @@ trait JoinSelectionHelper {
    * dynamic.
    */
   private def canBuildLocalHashMapBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
-    plan.stats.sizeInBytes <
-      autoBroadcastJoinThreshold(plan.stats.isAdaptive, conf) * conf.numShufflePartitions
+    plan.stats.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
   }
 
   /**

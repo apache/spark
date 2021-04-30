@@ -1608,7 +1608,7 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-35264: Support AQE side broadcastJoin threshold") {
-    withTable("t1", "t2") {
+    withTempView("t1", "t2") {
       def checkJoinStrategy(adaptiveJoinStrategy: String): Unit = {
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
           val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
@@ -1651,18 +1651,6 @@ class AdaptiveQueryExecSuite
 
       withSQLConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "160") {
         checkJoinStrategy("BHJ")
-      }
-
-      Seq(true, false).foreach { preferSMJ =>
-        withSQLConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "159",
-          SQLConf.PREFER_SORTMERGEJOIN.key -> preferSMJ.toString,
-          SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
-          if (preferSMJ) {
-            checkJoinStrategy("SMJ")
-          } else {
-            checkJoinStrategy("SHJ")
-          }
-        }
       }
     }
   }
