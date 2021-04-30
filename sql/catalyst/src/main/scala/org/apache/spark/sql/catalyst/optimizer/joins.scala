@@ -278,8 +278,13 @@ trait JoinSelectionHelper {
    * Matches a plan whose output should be small enough to be used in broadcast join.
    */
   def canBroadcastBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
-    plan.stats.sizeInBytes >= 0 &&
-      plan.stats.sizeInBytes <= autoBroadcastJoinThreshold(plan.stats.isRuntime, conf)
+    val autoBroadcastJoinThreshold = if (plan.stats.isRuntime) {
+      conf.getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD)
+        .getOrElse(conf.autoBroadcastJoinThreshold)
+    } else {
+      conf.autoBroadcastJoinThreshold
+    }
+    plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= autoBroadcastJoinThreshold
   }
 
   def canBuildBroadcastLeft(joinType: JoinType): Boolean = {
@@ -389,15 +394,6 @@ trait JoinSelectionHelper {
    */
   private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
     a.stats.sizeInBytes * 3 <= b.stats.sizeInBytes
-  }
-
-  private def autoBroadcastJoinThreshold(isAdaptive: Boolean, conf: SQLConf): Long = {
-   if (isAdaptive) {
-      conf.getConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD)
-        .getOrElse(conf.autoBroadcastJoinThreshold)
-    } else {
-      conf.autoBroadcastJoinThreshold
-    }
   }
 }
 
