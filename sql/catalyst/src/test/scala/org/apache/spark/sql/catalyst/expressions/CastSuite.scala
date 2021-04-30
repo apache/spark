@@ -1788,8 +1788,17 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast(Literal.create("1 2:03:04"), DayTimeIntervalType), 7384000000L)
     checkEvaluation(cast(Literal.create("INTERVAL '-10 2:03:04' DAY TO SECOND"),
       DayTimeIntervalType), -7384000000L)
-
     checkEvaluation(cast(Literal.create("-10 2:03:04"), DayTimeIntervalType), -7384000000L)
+    checkEvaluation(cast(Literal.create("-106751991 04:00:54.775808"), DayTimeIntervalType),
+      -14454775808L)
+    checkEvaluation(cast(Literal.create("106751991 04:00:54.775807"), DayTimeIntervalType),
+      14454775807L)
+
+    Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
+      Long.MinValue).foreach { period =>
+        val interval = Literal.create(Duration.of(period, ChronoUnit.MICROS), DayTimeIntervalType)
+        checkEvaluation(cast(cast(interval, StringType), DayTimeIntervalType), period)
+      }
   }
 }
 

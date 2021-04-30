@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -124,12 +123,12 @@ object IntervalUtils {
     }
   }
 
-  private val daySecondStringPattern = ("^(INTERVAL\\s+)([+|-])?(')" +
+  private val daySecondStringPattern = ("(?i)^(INTERVAL\\s+)([+|-])?(')" +
     "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?(')(\\s+DAY\\s+TO\\s+SECOND)$").r
   private val daySecondPattern = "^([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?$".r
 
   def castStringToDTInterval(input: UTF8String): CalendarInterval = {
-    val intervalStr = input.trimAll().toString.toUpperCase(Locale.ROOT)
+    val intervalStr = input.trimAll().toString
     val ansiDaySecondPattern =
       "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?".r
     intervalStr match {
@@ -145,7 +144,8 @@ object IntervalUtils {
         }
       case _ =>
         throw new IllegalArgumentException(
-          s"Interval string must match day-time format of 'd h:m:s.n': ${input.toString}, " +
+          s"Interval string must match day-time format of `d h:m:s.n` " +
+            s"or `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND`: ${input.toString}, " +
             s"$fallbackNotice")
     }
   }
