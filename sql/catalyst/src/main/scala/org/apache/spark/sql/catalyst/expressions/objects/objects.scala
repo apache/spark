@@ -325,7 +325,9 @@ case class Invoke(
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      val m = cls.getMethods.find(_.getName == encodedFunctionName)
+      val m = cls.getMethods.find { m =>
+        m.getName == encodedFunctionName && m.getParameterCount == arguments.length
+      }
       if (m.isEmpty) {
         sys.error(s"Couldn't find $encodedFunctionName on $cls")
       } else {

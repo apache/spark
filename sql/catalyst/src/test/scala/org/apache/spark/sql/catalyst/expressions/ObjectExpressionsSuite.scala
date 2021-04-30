@@ -618,6 +618,21 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[ArithmeticException](
       StaticInvoke(mathCls, IntegerType, "addExact", Seq(Literal(Int.MaxValue), Literal(1))), "")
   }
+
+  test("SPARK-35278: invoke should find method with correct number of parameters") {
+    val strClsType = ObjectType(classOf[String])
+    checkExceptionInExpression[StringIndexOutOfBoundsException](
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(3))), "")
+
+    checkObjectExprEvaluation(
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0))), "a")
+
+    checkExceptionInExpression[StringIndexOutOfBoundsException](
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(3))), "")
+
+    checkObjectExprEvaluation(
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(1))), "a")
+  }
 }
 
 class TestBean extends Serializable {
