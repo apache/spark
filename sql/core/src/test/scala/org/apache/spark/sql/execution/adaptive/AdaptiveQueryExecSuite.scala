@@ -1611,13 +1611,13 @@ class AdaptiveQueryExecSuite
     withTempView("t1", "t2") {
       def checkJoinStrategy(shouldBroadcast: Boolean): Unit = {
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-          val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
+          val (origin, adaptive) = runAdaptiveAndVerifyResult(
             "SELECT t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
-          assert(findTopLevelSortMergeJoin(origin1).size == 1)
+          assert(findTopLevelSortMergeJoin(origin).size == 1)
           if (shouldBroadcast) {
-            assert(findTopLevelBroadcastHashJoin(adaptive1).size == 1)
+            assert(findTopLevelBroadcastHashJoin(adaptive).size == 1)
           } else {
-            assert(findTopLevelSortMergeJoin(adaptive1).size == 1)
+            assert(findTopLevelSortMergeJoin(adaptive).size == 1)
           }
         }
       }
