@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
@@ -641,6 +641,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkObjectExprEvaluation(
       Invoke(Literal(obj, clsType), "testFunc", IntegerType, Seq(Literal(1))), 0)
   }
+
+  test("SPARK-35281: StaticInvoke shouldn't box primitive when result is nullable") {
+    val ctx = new CodegenContext
+    val arguments = Seq(Literal(0), Literal(1))
+    val genCode = StaticInvoke(TestFun.getClass, IntegerType, "foo", arguments).genCode(ctx)
+    assert(!genCode.code.toString.contains("boxedResult"))
+  }
 }
 
 class TestBean extends Serializable {
@@ -659,3 +666,8 @@ abstract class BaseClass[T] {
 class ConcreteClass extends BaseClass[Int] with Serializable {
   override def testFunc(param: Int): Int = param - 1
 }
+
+case object TestFun {
+  def foo(left: Int, right: Int): Int = left + right
+}
+

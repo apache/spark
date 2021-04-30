@@ -263,14 +263,18 @@ case class StaticInvoke(
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
-        val boxedResult = ctx.freshName("boxedResult")
-        s"""
-          ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
-          ${ev.isNull} = $boxedResult == null;
-          if (!${ev.isNull}) {
-            ${ev.value} = $boxedResult;
-          }
-        """
+        if (method.getReturnType.isPrimitive) {
+          s"${ev.value} = $callFunc;"
+        } else {
+          val boxedResult = ctx.freshName("boxedResult")
+          s"""
+            ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
+            ${ev.isNull} = $boxedResult == null;
+            if (!${ev.isNull}) {
+              ${ev.value} = $boxedResult;
+            }
+          """
+        }
       }
     } else {
       s"${ev.value} = $callFunc;"
