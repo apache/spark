@@ -825,7 +825,7 @@ object QueryExecutionErrors {
       s" and ${right.catalogString}")
   }
 
-  def exceedMapSizeWhenBuildMapError(size: Int): Throwable = {
+  def exceedMapSizeLimitError(size: Int): Throwable = {
     new RuntimeException(s"Unsuccessful attempt to build maps with $size elements " +
       s"due to exceeding the map size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
   }
@@ -837,23 +837,23 @@ object QueryExecutionErrors {
       "the key inserted at last takes precedence.")
   }
 
-  def differentLengthOfKeyArrayAndValueArrayOfMapDataError(): Throwable = {
+  def mapDataKeyArrayLengthDiffersFromValueArrayLengthError(): Throwable = {
     new RuntimeException("The key array and value array of MapData must have the same length.")
   }
 
-  def fieldDiffersFromDerivedOneError(
+  def fieldDiffersFromDerivedLocalDateError(
       field: ChronoField, actual: Int, expected: Int, candidate: LocalDate): Throwable = {
     new DateTimeException(s"Conflict found: Field $field $actual differs from" +
       s" $field $expected derived from $candidate")
   }
 
-  def failedParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
+  def failToParseDateTimeInNewParserError(s: String, e: Throwable): Throwable = {
     new SparkUpgradeException("3.0", s"Fail to parse '$s' in the new parser. You can " +
       s"set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY to restore the behavior " +
       s"before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.", e)
   }
 
-  def failedFormatDateTimeInNewFormatterError(
+  def failToFormatDateTimeInNewFormatterError(
       resultCandidate: String, e: Throwable): Throwable = {
     new SparkUpgradeException("3.0",
       s"""
@@ -863,7 +863,7 @@ object QueryExecutionErrors {
        """.stripMargin.replaceAll("\n", " "), e)
   }
 
-  def failedRecognizePatternInDateTimeFormatterError(
+  def failToRecognizePatternInDateTimeFormatterError(
       pattern: String, e: Throwable): Throwable = {
     new SparkUpgradeException("3.0", s"Fail to recognize '$pattern' pattern in the" +
       s" DateTimeFormatter. 1) You can set ${SQLConf.LEGACY_TIME_PARSER_POLICY.key} to LEGACY" +

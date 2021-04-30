@@ -45,7 +45,7 @@ trait DateTimeFormatterHelper {
       val actual = accessor.get(field)
       val expected = candidate.get(field)
       if (actual != expected) {
-        throw QueryExecutionErrors.fieldDiffersFromDerivedOneError(
+        throw QueryExecutionErrors.fieldDiffersFromDerivedLocalDateError(
           field, actual, expected, candidate)
       }
     }
@@ -145,7 +145,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failedParseDateTimeInNewParserError(s, e)
+      throw QueryExecutionErrors.failToParseDateTimeInNewParserError(s, e)
   }
 
   // When legacy time parser policy set to EXCEPTION, check whether we will get different results
@@ -161,7 +161,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failedFormatDateTimeInNewFormatterError(resultCandidate, e)
+      throw QueryExecutionErrors.failToFormatDateTimeInNewFormatterError(resultCandidate, e)
   }
 
   /**
@@ -184,7 +184,7 @@ trait DateTimeFormatterHelper {
       } catch {
         case _: Throwable => throw e
       }
-      throw QueryExecutionErrors.failedRecognizePatternInDateTimeFormatterError(pattern, e)
+      throw QueryExecutionErrors.failToRecognizePatternInDateTimeFormatterError(pattern, e)
   }
 }
 

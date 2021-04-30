@@ -59,7 +59,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
     val index = keyToIndex.getOrDefault(key, -1)
     if (index == -1) {
       if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.exceedMapSizeWhenBuildMapError(size)
+        throw QueryExecutionErrors.exceedMapSizeLimitError(size)
       }
       keyToIndex.put(key, values.length)
       keys.append(key)
@@ -86,7 +86,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
   def putAll(keyArray: ArrayData, valueArray: ArrayData): Unit = {
     if (keyArray.numElements() != valueArray.numElements()) {
-      throw QueryExecutionErrors.differentLengthOfKeyArrayAndValueArrayOfMapDataError()
+      throw QueryExecutionErrors.mapDataKeyArrayLengthDiffersFromValueArrayLengthError()
     }
 
     var i = 0
