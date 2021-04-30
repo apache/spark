@@ -588,6 +588,16 @@ object SQLConf {
       .stringConf
       .createOptional
 
+  val ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD =
+    buildConf("spark.sql.adaptive.autoBroadcastJoinThreshold")
+      .doc("Configures the maximum size in bytes for a table that will be broadcast to all " +
+        "worker nodes when performing a join. By setting this value to -1 broadcasting can be " +
+        s"disabled. The default value is same with ${AUTO_BROADCASTJOIN_THRESHOLD.key}. " +
+        "Note that, this config is used only in adaptive framework.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createOptional
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()

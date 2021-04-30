@@ -1606,4 +1606,64 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-35264: Support AQE side broadcastJoin threshold") {
+    withTable("t1", "t2") {
+      def checkJoinStrategy(adaptiveJoinStrategy: String): Unit = {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
+            "SELECT t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
+          assert(findTopLevelSortMergeJoin(origin1).size == 1)
+          adaptiveJoinStrategy match {
+            case "BHJ" =>
+              assert(findTopLevelBroadcastHashJoin(adaptive1).size == 1)
+            case "SHJ" =>
+              assert(findTopLevelShuffledHashJoin(adaptive1).size == 1)
+            case "SMJ" =>
+              assert(findTopLevelSortMergeJoin(adaptive1).size == 1)
+            case _ =>
+              throw new IllegalArgumentException(s"Not support strategy: $adaptiveJoinStrategy")
+          }
+
+          // respect user specified join hint
+          val (origin2, adaptive2) = runAdaptiveAndVerifyResult(
+            "SELECT /*+ MERGE(t1) */ t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
+          assert(findTopLevelSortMergeJoin(origin2).size == 1)
+          assert(findTopLevelSortMergeJoin(adaptive2).size == 1)
+        }
+      }
+
+      // t1: 1600 bytes
+      // t2: 160 bytes
+      spark.sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString)), 10)
+        .toDF("c1", "c2").createOrReplaceTempView("t1")
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 5)
+        .toDF("c1", "c2").createOrReplaceTempView("t2")
+
+      Seq("" -> "", SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1")
+        .foreach { adaptiveThreshold =>
+          withSQLConf(adaptiveThreshold) {
+            checkJoinStrategy("SMJ")
+          }
+        }
+
+      withSQLConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "160") {
+        checkJoinStrategy("BHJ")
+      }
+
+      Seq(true, false).foreach { preferSMJ =>
+        withSQLConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "159",
+          SQLConf.PREFER_SORTMERGEJOIN.key -> preferSMJ.toString,
+          SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+          if (preferSMJ) {
+            checkJoinStrategy("SMJ")
+          } else {
+            checkJoinStrategy("SHJ")
+          }
+        }
+      }
+    }
+  }
 }

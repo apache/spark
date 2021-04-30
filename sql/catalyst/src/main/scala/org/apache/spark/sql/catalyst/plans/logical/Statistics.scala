@@ -47,11 +47,13 @@ object Statistics {
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
  * @param attributeStats Statistics for Attributes.
+ * @param isAdaptive Statistics from AQE.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil)) {
+    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
+    isAdaptive: Boolean = false) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
 
