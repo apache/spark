@@ -290,7 +290,7 @@ object KubernetesUtils extends Logging {
       isLocalDependency(Utils.resolveURI(resource))
   }
 
-  @Since("3.1.0")
+  @Since("3.1.1")
   def renameMainAppResource(
       resource: String,
       conf: Option[SparkConf] = None,
@@ -365,7 +365,7 @@ object KubernetesUtils extends Logging {
 
   // Add a OwnerReference to the given resources making the pod an owner of them so when
   // the pod is deleted, the resources are garbage collected.
-  @Since("3.1.0")
+  @Since("3.1.1")
   def addOwnerReference(pod: Pod, resources: Seq[HasMetadata]): Unit = {
     if (pod != null) {
       val reference = new OwnerReferenceBuilder()
