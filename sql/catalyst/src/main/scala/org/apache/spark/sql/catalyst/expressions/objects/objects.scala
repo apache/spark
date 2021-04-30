@@ -325,13 +325,24 @@ case class Invoke(
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      val m = cls.getMethods.find { m =>
-        m.getName == encodedFunctionName && m.getParameterCount == arguments.length
-      }
-      if (m.isEmpty) {
-        sys.error(s"Couldn't find $encodedFunctionName on $cls")
-      } else {
-        m
+      // Looking with function name + argument classes first.
+      try {
+        Some(cls.getMethod(encodedFunctionName, argClasses: _*))
+      } catch {
+        case _: NoSuchMethodException =>
+          // For some cases, e.g. arg class is Object, `getMethod` cannot find the method.
+          // We look at function name + argument length.
+          val m = cls.getMethods.filter { m =>
+            m.getName == encodedFunctionName && m.getParameterCount == arguments.length
+          }
+          if (m.isEmpty) {
+            sys.error(s"Couldn't find $encodedFunctionName on $cls")
+          } else if (m.length > 1) {
+            // Ambiguous case, we don't know which method to choose, just fail it.
+            sys.error(s"Found ${m.length} $encodedFunctionName on $cls")
+          } else {
+            Some(m.head)
+          }
       }
     case _ => None
   }
