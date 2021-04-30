@@ -134,7 +134,8 @@ trait InvokeLike extends Expression with NonSQLExpression {
         method.invoke(obj, args: _*)
       } catch {
         // Re-throw the original exception.
-        case e: java.lang.reflect.InvocationTargetException => throw e.getCause
+        case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
+          throw e.getCause
       }
       val boxedClass = ScalaReflection.typeBoxedJavaMapping.get(dataType)
       if (boxedClass.isDefined) {

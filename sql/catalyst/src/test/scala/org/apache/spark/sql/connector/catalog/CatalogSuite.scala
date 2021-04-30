@@ -24,14 +24,15 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TableCatalogSuite extends SparkFunSuite {
+class CatalogSuite extends SparkFunSuite {
   import CatalogV2Implicits._
 
   private val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
@@ -39,8 +40,8 @@ class TableCatalogSuite extends SparkFunSuite {
       .add("id", IntegerType)
       .add("data", StringType)
 
-  private def newCatalog(): TableCatalog with SupportsNamespaces = {
-    val newCatalog = new InMemoryTableCatalog
+  private def newCatalog(): InMemoryCatalog = {
+    val newCatalog = new InMemoryCatalog
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
@@ -926,5 +927,44 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(partTable.truncateTable())
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
     assert(partTable.rows.isEmpty)
+  }
+
+  val function: UnboundFunction = new UnboundFunction {
+    override def bind(inputType: StructType): BoundFunction = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "my_bound_function"
+    }
+    override def description(): String = "my_function"
+    override def name(): String = "my_function"
+  }
+
+  test("list functions") {
+    val catalog = newCatalog()
+    val ident1 = Identifier.of(Array("ns1", "ns2"), "func1")
+    val ident2 = Identifier.of(Array("ns1", "ns2"), "func2")
+    val ident3 = Identifier.of(Array("ns1", "ns3"), "func3")
+
+    catalog.createNamespace(Array("ns1", "ns2"), emptyProps)
+    catalog.createNamespace(Array("ns1", "ns3"), emptyProps)
+    catalog.createFunction(ident1, function)
+    catalog.createFunction(ident2, function)
+    catalog.createFunction(ident3, function)
+
+    assert(catalog.listFunctions(Array("ns1", "ns2")).toSet === Set(ident1, ident2))
+    assert(catalog.listFunctions(Array("ns1", "ns3")).toSet === Set(ident3))
+    assert(catalog.listFunctions(Array("ns1")).toSet == Set())
+    intercept[NoSuchNamespaceException](catalog.listFunctions(Array("ns2")))
+  }
+
+  test("lookup function") {
+    val catalog = newCatalog()
+    val ident = Identifier.of(Array("ns"), "func")
+    catalog.createNamespace(Array("ns"), emptyProps)
+    catalog.createFunction(ident, function)
+
+    assert(catalog.loadFunction(ident) == function)
+    intercept[NoSuchFunctionException](catalog.loadFunction(Identifier.of(Array("ns"), "func1")))
+    intercept[NoSuchFunctionException](catalog.loadFunction(Identifier.of(Array("ns1"), "func")))
   }
 }
