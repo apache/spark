@@ -228,7 +228,7 @@ object QueryParsingErrors {
     new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
   }
 
-  def fromOrInNotAllowedInShowDatabasesError(ctx: ShowNamespacesContext): Throwable = {
+  def fromOrInNotAllowedInShowDatabasesError(ctx: ShowNamespacesActionContext): Throwable = {
     new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
   }
 

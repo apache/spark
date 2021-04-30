@@ -193,11 +193,32 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * This is only used for Common Table Expressions.
    */
   override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
-    val subQuery: LogicalPlan = plan(ctx.query).optionalMap(ctx.columnAliases)(
+    val logicalPlan = Option(ctx.query).map(plan).orElse(
+      Option(ctx.ddlStatementForQuery).map(visitDdlStatementForQuery)).get
+    val subQuery: LogicalPlan = logicalPlan.optionalMap(ctx.columnAliases)(
       (columnAliases, plan) =>
         UnresolvedSubqueryColumnAliases(visitIdentifierList(columnAliases), plan)
     )
     SubqueryAlias(ctx.name.getText, subQuery)
+  }
+
+  override def visitDdlStatementForQuery(
+      ctx: DdlStatementForQueryContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.showNamespacesAction() != null) {
+      visitShowNamespaceAction(ctx.showNamespacesAction())
+    } else if (ctx.showNamespacesAction() != null) {
+      visitShowTablesAction(ctx.showTablesAction())
+    } else if (ctx.showTblPropertiesAction() != null) {
+      visitShowTblPropertiesAction(ctx.showTblPropertiesAction())
+    } else if (ctx.showPartitionsAction() != null) {
+      visitShowPartitionsAction(ctx.showPartitionsAction())
+    } else if (ctx.showColumnsAction() != null) {
+      visitShowColumnsAction(ctx.showColumnsAction())
+    } else if (ctx.showViewsAction() != null) {
+      visitShowViewsAction(ctx.showViewsAction())
+    } else {
+      visitShowFunctionsAction(ctx.showFunctionsAction())
+    }
   }
 
   /**
@@ -2949,6 +2970,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a [[ShowNamespaces]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
+    visitShowNamespaceAction(ctx.showNamespacesAction)
+  }
+
+  private def visitShowNamespaceAction(
+      ctx: ShowNamespacesActionContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
       throw QueryParsingErrors.fromOrInNotAllowedInShowDatabasesError(ctx)
     }
@@ -3408,6 +3434,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a [[ShowTables]] command.
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
+    visitShowTablesAction(ctx.showTablesAction)
+  }
+
+  override def visitShowTablesAction(ctx: ShowTablesActionContext): LogicalPlan = withOrigin(ctx) {
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     ShowTables(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
@@ -3433,6 +3463,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a [[ShowViews]] command.
    */
   override def visitShowViews(ctx: ShowViewsContext): LogicalPlan = withOrigin(ctx) {
+    visitShowViewsAction(ctx.showViewsAction)
+  }
+
+  override def visitShowViewsAction(ctx: ShowViewsActionContext): LogicalPlan = withOrigin(ctx) {
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     ShowViews(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
@@ -3939,6 +3973,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    visitShowPartitionsAction(ctx.showPartitionsAction)
+  }
+
+  override def visitShowPartitionsAction(
+      ctx: ShowPartitionsActionContext): LogicalPlan = withOrigin(ctx) {
     val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
     }
@@ -3973,6 +4012,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
+    visitShowColumnsAction(ctx.showColumnsAction)
+  }
+
+  override def visitShowColumnsAction(
+      ctx: ShowColumnsActionContext): LogicalPlan = withOrigin(ctx) {
     val table = createUnresolvedTableOrView(ctx.table, "SHOW COLUMNS")
     val namespace = Option(ctx.ns).map(visitMultipartIdentifier)
     // Use namespace only if table name doesn't specify it. If namespace is already specified
@@ -4207,6 +4251,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitShowTblProperties(
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
+    visitShowTblPropertiesAction(ctx.showTblPropertiesAction)
+  }
+
+  override def visitShowTblPropertiesAction(
+      ctx: ShowTblPropertiesActionContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
       createUnresolvedTableOrView(ctx.table, "SHOW TBLPROPERTIES"),
       Option(ctx.key).map(visitTablePropertyKey))
@@ -4232,12 +4281,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a plan for a SHOW FUNCTIONS command.
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
+    visitShowFunctionsAction(ctx.showFunctionsAction)
+  }
+
+  override def visitShowFunctionsAction(
+      ctx: ShowFunctionsActionContext): LogicalPlan = withOrigin(ctx) {
     val (userScope, systemScope) = Option(ctx.identifier)
       .map(_.getText.toLowerCase(Locale.ROOT)) match {
-        case None | Some("all") => (true, true)
-        case Some("system") => (false, true)
-        case Some("user") => (true, false)
-        case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
+      case None | Some("all") => (true, true)
+      case Some("system") => (false, true)
+      case Some("user") => (true, false)
+      case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
     }
     val pattern = Option(ctx.pattern).map(string(_))
     val unresolvedFuncOpt = Option(ctx.multipartIdentifier)
