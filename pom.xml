@@ -3159,7 +3159,7 @@
       <plugin>
         <groupId>org.antipathy</groupId>
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
-        <version>1.0.3</version>
+        <version>1.0.4</version>
         <configuration>
           <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
           <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
