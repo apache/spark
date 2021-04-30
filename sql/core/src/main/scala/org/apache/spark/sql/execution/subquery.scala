@@ -107,6 +107,9 @@ case class ScalarSubquery(
   }
 }
 
+/**
+ * A subquery that is capable to return multiple scalar values.
+ */
 case class MultiScalarSubqueryExec(
     plan: BaseSubqueryExec,
     exprId: ExprId)

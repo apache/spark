@@ -268,6 +268,9 @@ object ScalarSubquery {
   }
 }
 
+/**
+ * A subquery that is capable to return multiple scalar values.
+ */
 case class MultiScalarSubquery(
     plan: LogicalPlan,
     exprId: ExprId = NamedExpression.newExprId)

@@ -25,9 +25,19 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{MULTI_SCALAR_SUBQUERY, SCALAR_SUBQUERY}
 
 /**
- * This rule tries to merge non-correlated [[ScalarSubquery]]s into [[MultiScalarSubquery]]s.
- * Mergeable [[ScalarSubquery]]s are then replaced to their corresponding [[MultiScalarSubquery]]
- * and the [[ReuseSubquery]] rule makes sure that merged subqueries are computed once.
+ * This rule tries to merge multiple non-correlated [[ScalarSubquery]]s into a
+ * [[MultiScalarSubquery]] to compute multiple scalar values once.
+ *
+ * The process is the following:
+ * - While traversing through the plan each [[ScalarSubquery]] plan is tried to merge into the cache
+ *   of already seen subquery plans. If merge is possible then cache is updated with the merged
+ *   subquery plan, if not then the new subquery plan is added to the cache.
+ * - The original [[ScalarSubquery]] expression is replaced to a reference pointing to its cached
+ *   version in this form: `GetStructField(MultiScalarSubquery(SubqueryReference(...)))`.
+ * - A second traversal checks if a [[SubqueryReference]] is pointing to a subquery plan that
+ *   returns multiple values and either replaces only [[SubqueryReference]] to the cached plan or
+ *   restores the whole expression to its original [[ScalarSubquery]] form.
+ * - [[ReuseSubquery]] rule makes sure that merged subqueries are computed once.
  *
  * Eg. the following query:
  *

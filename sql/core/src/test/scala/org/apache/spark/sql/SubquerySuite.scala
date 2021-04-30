@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, MultiScalarSubqueryExec, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
@@ -1834,6 +1834,57 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(
         sql("select c1, c2, (select count(*) from l where c1 = c2) from t"),
         Row(0, 1, 0) :: Row(1, 1, 8) :: Nil)
+    }
+  }
+
+  test("Multi-column scalar subquery reuse test",
+    DisableAdaptiveExecution("reuse is dynamic in AQE")) {
+    Seq(true, false).foreach { reuse =>
+      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) FROM testData) +
+            |  (SELECT sum(key) FROM testData) +
+            |  (SELECT count(distinct key) FROM testData)
+            |FROM testData
+            |LIMIT 1
+          """.stripMargin)
+
+        df.explain(true)
+
+        var countSubqueryExec = 0
+        var countReuseSubqueryExec = 0
+        var multiSubqueryExec = 0
+        var countReuseMultiSubqueryExec = 0
+        df.queryExecution.executedPlan.transformAllExpressions {
+          case s @ ScalarSubquery(_: SubqueryExec, _) =>
+            countSubqueryExec += 1
+            s
+          case s @ ScalarSubquery(_: ReusedSubqueryExec, _) =>
+            countReuseSubqueryExec += 1
+            s
+          case s @ MultiScalarSubqueryExec(_: SubqueryExec, _) =>
+            multiSubqueryExec += 1
+            s
+          case s @ MultiScalarSubqueryExec(_: ReusedSubqueryExec, _) =>
+            countReuseMultiSubqueryExec += 1
+            s
+        }
+
+        if (reuse) {
+          assert(countSubqueryExec == 0 && countReuseSubqueryExec == 0,
+            "Unexpected ScalarSubquery in the plan")
+          assert(multiSubqueryExec == 1, "Missing or unexpected MultiScalarSubquery in the plan")
+          assert(countReuseMultiSubqueryExec == 2,
+            "Missing or unexpected reused MultiScalarSubquery in the plan")
+        } else {
+          assert(countSubqueryExec == 3, "Missing or unexpected ScalarSubquery in the plan")
+          assert(countReuseSubqueryExec == 0, "Unexpected reused ScalarSubquery in the plan")
+          assert(multiSubqueryExec == 0 && countReuseMultiSubqueryExec == 0,
+            "Unexpected reused MultiScalarSubquery in the plan")
+        }
+      }
     }
   }
 }
