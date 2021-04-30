@@ -292,9 +292,9 @@ final class ShuffleBlockFetcherIterator(
         val (size, mapIndex) = infoMap(blockId)
         e match {
           // SPARK-27991: Catch the Netty OOM and set the flag `isNettyOOMOnShuffle` (shared among
-          // tasks) to true as early as possible. Unless there's no in-flight requests, the pending
-          // fetch requests won't be raised afterwards until the flag is set to false on:
-          // 1) the Netty free memory >= average remote block size - we'll check this whenever
+          // tasks) to true as early as possible. The pending fetch requests won't be sent
+          // afterwards until the flag is set to false on:
+          // 1) the Netty free memory >= maxReqSizeShuffleToMem - we'll check this whenever
           //    there's a fetch request succeeds.
           // 2) the number of in-flight requests becomes 0 - we'll check this in `fetchUpToMaxBytes`
           //    whenever it's invoked.
@@ -308,10 +308,6 @@ final class ShuffleBlockFetcherIterator(
           // Note that catching OOM and do something based on it is only a workaround for
           // handling the Netty OOM issue, which is not the best way towards memory management.
           // We can get rid of it when we find a way to manage Netty's memory precisely.
-
-          // Ensure the Netty memory is at least enough for serving only one block to avoid
-          // the endless retry. And since the Netty memory is shared among multiple modules,
-          // we use the factor "1.5" for the overhead concern.
           case _: OutOfDirectMemoryError
               if blockOOMRetryTimes.getOrElseUpdate(blockId, 0) < maxAttemptsOnNettyOOM =>
             ShuffleBlockFetcherIterator.this.synchronized {
