@@ -1,6 +1,6 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributors license agreements. See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
@@ -53,7 +53,7 @@ public interface SupportsDelete {
 
   /**
    * Delete data from a data source table that matches filter expressions. Note that this method
-   * will be invoked iff {@link #canDeleteWhere(Filter[])} returns true.
+   * will be invoked only if {@link #canDeleteWhere(Filter[])} returns true.
    * <p>
    * Rows are deleted from the data source iff all of the filter expressions match. That is, the
    * expressions must be interpreted as a set of filters that are ANDed together.
@@ -65,7 +65,7 @@ public interface SupportsDelete {
    * error message that identifies which expression was rejected.
    *
    * @param filters filter expressions, used to select rows to delete when all expressions match
-   * @throws IllegalArgumentException If the delete is rejected due to unavailability of required effort
+   * @throws IllegalArgumentException If the delete is rejected due to requirement of significant effort
    */
   void deleteWhere(Filter[] filters);
 }
