@@ -27,7 +27,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, LinkedHashMap, Queue}
 import scala.util.{Failure, Success}
 
-import io.netty.util.internal.OutOfDirectMemoryError
+import io.netty.util.internal.{OutOfDirectMemoryError, PlatformDependent}
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -381,6 +381,17 @@ final class ShuffleBlockFetcherIterator(
         hostLocalBlockBytes += mergedBlockInfos.map(_.size).sum
       } else {
         remoteBlockBytes += blockInfos.map(_._2).sum
+        val inMemoryBlocks = blockInfos.filter(_._2 <= maxReqSizeShuffleToMem).map(_._2)
+        val maxInMemoryBlock = if (inMemoryBlocks.isEmpty) 0L else inMemoryBlocks.max
+        // scalastyle:off
+        println(PlatformDependent.maxDirectMemory())
+        println(maxInMemoryBlock)
+        if (PlatformDependent.directBufferPreferred() &&
+            PlatformDependent.maxDirectMemory() < maxInMemoryBlock) {
+          throw new SparkException(
+            s"Netty memory (${PlatformDependent.maxDirectMemory()} bytes) is too small to " +
+              s"serve the max in-memory shuffle block ($maxInMemoryBlock bytes).")
+        }
         collectFetchRequests(address, blockInfos, collectedRemoteRequests)
       }
     }
