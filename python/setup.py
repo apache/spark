@@ -112,6 +112,7 @@ if (in_spark):
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst.
 _minimum_pandas_version = "0.23.2"
+_minimum_pyarrow_version = "1.0.0"
 
 
 class InstallCommand(install):
@@ -262,11 +263,11 @@ try:
             'mllib': ['numpy>=1.7'],
             'sql': [
                 'pandas>=%s' % _minimum_pandas_version,
-                'pyarrow>=1.0.0',
+                'pyarrow>=%s' % _minimum_pyarrow_version,
             ],
             'pandas_on_spark': [
                 'pandas>=%s' % _minimum_pandas_version,
-                'pyarrow>=0.10',
+                'pyarrow>=%s' % _minimum_pyarrow_version,
                 'numpy>=1.14,<1.20.0',
             ],
         },
