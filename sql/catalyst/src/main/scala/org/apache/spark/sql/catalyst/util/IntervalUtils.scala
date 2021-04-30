@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -94,10 +93,10 @@ object IntervalUtils {
 
   private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
   private val yearMonthStringPattern =
-    "^(INTERVAL\\s+)([+|-])?(')([+|-])?(\\d+)-(\\d+)(')(\\s+YEAR\\s+TO\\s+MONTH)$".r
+    "(?i)^(INTERVAL\\s+)([+|-])?(')([+|-])?(\\d+)-(\\d+)(')(\\s+YEAR\\s+TO\\s+MONTH)$".r
 
   def castStringToYMInterval(input: UTF8String): Int = {
-    input.trimAll().toString.toUpperCase(Locale.ROOT) match {
+    input.trimAll().toString match {
       case yearMonthPattern("-", year, month) => toYMInterval(year, month, -1)
       case yearMonthPattern(_, year, month) => toYMInterval(year, month, 1)
       case yearMonthStringPattern(_, firstSign, _, secondSign, year, month, _, _) =>
