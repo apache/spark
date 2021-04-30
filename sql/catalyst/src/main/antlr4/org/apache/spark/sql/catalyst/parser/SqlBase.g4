@@ -1079,6 +1079,7 @@ ansiNonReserved
     | DATA
     | DATABASE
     | DATABASES
+    | DAY
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1137,6 +1138,7 @@ ansiNonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MONTH
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1183,6 +1185,7 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SECOND
     | SEMI
     | SEPARATED
     | SERDE
@@ -1227,6 +1230,7 @@ ansiNonReserved
     | VIEW
     | VIEWS
     | WINDOW
+    | YEAR
     | ZONE
 //--ANSI-NON-RESERVED-END
     ;
@@ -1310,6 +1314,7 @@ nonReserved
     | DATA
     | DATABASE
     | DATABASES
+    | DAY
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1385,6 +1390,7 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MONTH
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1440,6 +1446,7 @@ nonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SECOND
     | SELECT
     | SEPARATED
     | SERDE
@@ -1496,6 +1503,7 @@ nonReserved
     | WHERE
     | WINDOW
     | WITH
+    | YEAR
     | ZONE
 //--DEFAULT-NON-RESERVED-END
     ;
