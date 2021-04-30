@@ -195,3 +195,25 @@ function createRESTEndPointForExecutorsPage(appId) {
     }
     return uiRoot + "/api/v1/applications/" + appId + "/allexecutors";
 }
+
+function createRESTEndPointForMiscellaneousProcess(appId) {
+    var words = document.baseURI.split('/');
+    var ind = words.indexOf("proxy");
+    if (ind > 0) {
+        var appId = words[ind + 1];
+        var newBaseURI = words.slice(0, ind + 2).join('/');
+        return newBaseURI + "/api/v1/applications/" + appId + "/allmiscellaneousprocess";
+    }
+    ind = words.indexOf("history");
+    if (ind > 0) {
+        var appId = words[ind + 1];
+        var attemptId = words[ind + 2];
+        var newBaseURI = words.slice(0, ind).join('/');
+        if (isNaN(attemptId)) {
+            return newBaseURI + "/api/v1/applications/" + appId + "/allmiscellaneousprocess";
+        } else {
+            return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allmiscellaneousprocess";
+        }
+    }
+    return uiRoot + "/api/v1/applications/" + appId + "/allmiscellaneousprocess";
+}

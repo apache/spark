@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{BaseGroupingSets, Expression, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
@@ -27,13 +27,20 @@ import org.apache.spark.sql.types.IntegerType
  * Replaces ordinal in 'order by' or 'group by' with UnresolvedOrdinal expression.
  */
 object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
-  private def isIntLiteral(e: Expression) = e match {
+  private def containIntLiteral(e: Expression): Boolean = e match {
     case Literal(_, IntegerType) => true
+    case gs: BaseGroupingSets => gs.children.exists(containIntLiteral)
     case _ => false
   }
 
+  private def substituteUnresolvedOrdinal(expression: Expression): Expression = expression match {
+    case ordinal @ Literal(index: Int, IntegerType) =>
+      withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
+    case e => e
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case s: Sort if conf.orderByOrdinal && s.order.exists(o => isIntLiteral(o.child)) =>
+    case s: Sort if conf.orderByOrdinal && s.order.exists(o => containIntLiteral(o.child)) =>
       val newOrders = s.order.map {
         case order @ SortOrder(ordinal @ Literal(index: Int, IntegerType), _, _, _) =>
           val newOrdinal = withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
@@ -42,10 +49,12 @@ object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
       }
       withOrigin(s.origin)(s.copy(order = newOrders))
 
-    case a: Aggregate if conf.groupByOrdinal && a.groupingExpressions.exists(isIntLiteral) =>
+    case a: Aggregate if conf.groupByOrdinal && a.groupingExpressions.exists(containIntLiteral) =>
       val newGroups = a.groupingExpressions.map {
         case ordinal @ Literal(index: Int, IntegerType) =>
           withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
+        case gs: BaseGroupingSets =>
+          withOrigin(gs.origin)(gs.withNewChildren(gs.children.map(substituteUnresolvedOrdinal)))
         case other => other
       }
       withOrigin(a.origin)(a.copy(groupingExpressions = newGroups))

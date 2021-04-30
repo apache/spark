@@ -233,8 +233,7 @@ object TypedImperativeAggregateSuite {
       nullable: Boolean = false,
       mutableAggBufferOffset: Int = 0,
       inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[MaxValue]
-    with ImplicitCastInputTypes
+    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes
     with UnaryLike[Expression] {
 
     override def createAggregationBuffer(): MaxValue = {
@@ -297,6 +296,9 @@ object TypedImperativeAggregateSuite {
       val value = stream.readInt()
       new MaxValue(value, isValueSet)
     }
+
+    override protected def withNewChildInternal(newChild: Expression): TypedMax =
+      copy(child = newChild)
   }
 
   private class MaxValue(var value: Int, var isValueSet: Boolean = false)

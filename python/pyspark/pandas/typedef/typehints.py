@@ -64,7 +64,7 @@ try:
 except ImportError:
     from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
 
-from pyspark import pandas as pp  # For running doctests and reference resolution in PyCharm.
+from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.typedef.string_typehints import resolve_string_type_hint
 
 T = TypeVar("T")
@@ -266,7 +266,7 @@ def spark_type_to_pandas_dtype(
         return np.dtype(to_arrow_type(spark_type).to_pandas_dtype())
 
 
-def koalas_dtype(tpe) -> Tuple[Dtype, types.DataType]:
+def pandas_on_spark_type(tpe) -> Tuple[Dtype, types.DataType]:
     """
     Convert input into a pandas only dtype object or a numpy dtype object,
     and its corresponding Spark DataType.
@@ -285,15 +285,15 @@ def koalas_dtype(tpe) -> Tuple[Dtype, types.DataType]:
 
     Examples
     --------
-    >>> koalas_dtype(int)
+    >>> pandas_on_spark_type(int)
     (dtype('int64'), LongType)
-    >>> koalas_dtype(str)
+    >>> pandas_on_spark_type(str)
     (dtype('<U'), StringType)
-    >>> koalas_dtype(datetime.date)
+    >>> pandas_on_spark_type(datetime.date)
     (dtype('O'), DateType)
-    >>> koalas_dtype(datetime.datetime)
+    >>> pandas_on_spark_type(datetime.datetime)
     (dtype('<M8[ns]'), TimestampType)
-    >>> koalas_dtype(List[bool])
+    >>> pandas_on_spark_type(List[bool])
     (dtype('O'), ArrayType(BooleanType,true))
     """
     try:
@@ -341,7 +341,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     LongType
 
-    >>> def func() -> pp.Series[int]:
+    >>> def func() -> ps.Series[int]:
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtype
@@ -349,7 +349,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     LongType
 
-    >>> def func() -> pp.DataFrame[np.float, str]:
+    >>> def func() -> ps.DataFrame[np.float, str]:
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -357,7 +357,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     StructType(List(StructField(c0,DoubleType,true),StructField(c1,StringType,true)))
 
-    >>> def func() -> pp.DataFrame[np.float]:
+    >>> def func() -> ps.DataFrame[np.float]:
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -373,7 +373,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     LongType
 
-    >>> def func() -> 'pp.Series[int]':
+    >>> def func() -> 'ps.Series[int]':
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtype
@@ -381,7 +381,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     LongType
 
-    >>> def func() -> 'pp.DataFrame[np.float, str]':
+    >>> def func() -> 'ps.DataFrame[np.float, str]':
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -389,7 +389,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     StructType(List(StructField(c0,DoubleType,true),StructField(c1,StringType,true)))
 
-    >>> def func() -> 'pp.DataFrame[np.float]':
+    >>> def func() -> 'ps.DataFrame[np.float]':
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -397,7 +397,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     StructType(List(StructField(c0,DoubleType,true)))
 
-    >>> def func() -> pp.DataFrame['a': np.float, 'b': int]:
+    >>> def func() -> ps.DataFrame['a': np.float, 'b': int]:
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -405,7 +405,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     StructType(List(StructField(a,DoubleType,true),StructField(b,LongType,true)))
 
-    >>> def func() -> "pp.DataFrame['a': np.float, 'b': int]":
+    >>> def func() -> "ps.DataFrame['a': np.float, 'b': int]":
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -414,7 +414,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     StructType(List(StructField(a,DoubleType,true),StructField(b,LongType,true)))
 
     >>> pdf = pd.DataFrame({"a": [1, 2, 3], "b": [3, 4, 5]})
-    >>> def func() -> pp.DataFrame[pdf.dtypes]:
+    >>> def func() -> ps.DataFrame[pdf.dtypes]:
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -423,7 +423,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     StructType(List(StructField(c0,LongType,true),StructField(c1,LongType,true)))
 
     >>> pdf = pd.DataFrame({"a": [1, 2, 3], "b": [3, 4, 5]})
-    >>> def func() -> pp.DataFrame[zip(pdf.columns, pdf.dtypes)]:
+    >>> def func() -> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]:
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -432,7 +432,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     StructType(List(StructField(a,LongType,true),StructField(b,LongType,true)))
 
     >>> pdf = pd.DataFrame({("x", "a"): [1, 2, 3], ("y", "b"): [3, 4, 5]})
-    >>> def func() -> pp.DataFrame[zip(pdf.columns, pdf.dtypes)]:
+    >>> def func() -> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]:
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -441,7 +441,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     StructType(List(StructField((x, a),LongType,true),StructField((y, b),LongType,true)))
 
     >>> pdf = pd.DataFrame({"a": [1, 2, 3], "b": pd.Categorical([3, 4, 5])})
-    >>> def func() -> pp.DataFrame[pdf.dtypes]:
+    >>> def func() -> ps.DataFrame[pdf.dtypes]:
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -449,7 +449,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     StructType(List(StructField(c0,LongType,true),StructField(c1,LongType,true)))
 
-    >>> def func() -> pp.DataFrame[zip(pdf.columns, pdf.dtypes)]:
+    >>> def func() -> ps.DataFrame[zip(pdf.columns, pdf.dtypes)]:
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -457,7 +457,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
     >>> inferred.spark_type
     StructType(List(StructField(a,LongType,true),StructField(b,LongType,true)))
 
-    >>> def func() -> pp.Series[pdf.b.dtype]:
+    >>> def func() -> ps.Series[pdf.b.dtype]:
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtype
@@ -477,7 +477,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
         tpe = resolve_string_type_hint(tpe)
 
     if hasattr(tpe, "__origin__") and (
-        tpe.__origin__ == pp.DataFrame or tpe.__origin__ == pp.Series
+        tpe.__origin__ == ps.DataFrame or tpe.__origin__ == ps.Series
     ):
         # When Python version is lower then 3.7. Unwrap it to a Tuple/SeriesType type hints.
         tpe = tpe.__args__[0]
@@ -486,7 +486,7 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
         tpe = tpe.__args__[0]
         if issubclass(tpe, NameTypeHolder):
             tpe = tpe.tpe
-        dtype, spark_type = koalas_dtype(tpe)
+        dtype, spark_type = pandas_on_spark_type(tpe)
         return SeriesType(dtype, spark_type)
 
     # Note that, DataFrame type hints will create a Tuple.
@@ -503,9 +503,9 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
             parameters = getattr(tuple_type, "__args__")
         dtypes, spark_types = zip(
             *(
-                koalas_dtype(p.tpe)
+                pandas_on_spark_type(p.tpe)
                 if isclass(p) and issubclass(p, NameTypeHolder)
-                else koalas_dtype(p)
+                else pandas_on_spark_type(p)
                 for p in parameters
             )
         )
@@ -514,8 +514,27 @@ def infer_return_type(f) -> Union[SeriesType, DataFrameType, ScalarType, Unknown
         ]
         return DataFrameType(list(dtypes), list(spark_types), names)
 
-    types = koalas_dtype(tpe)
+    types = pandas_on_spark_type(tpe)
     if types is None:
         return UnknownType(tpe)
     else:
         return ScalarType(*types)
+
+
+def _test():
+    import doctest
+    import sys
+    import pyspark.pandas.typedef.typehints
+
+    globs = pyspark.pandas.typedef.typehints.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.typedef.typehints,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

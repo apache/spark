@@ -17,10 +17,9 @@
 
 package org.apache.spark.mllib.stat
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.rdd.RDD
 
 /**
@@ -99,10 +98,10 @@ class KernelDensity extends Serializable {
         (x._1, x._2 + 1)
       },
       (x, y) => {
-        blas.daxpy(n, 1.0, y._1, 1, x._1, 1)
+        BLAS.nativeBLAS.daxpy(n, 1.0, y._1, 1, x._1, 1)
         (x._1, x._2 + y._2)
       })
-    blas.dscal(n, 1.0 / count, densities, 1)
+    BLAS.nativeBLAS.dscal(n, 1.0 / count, densities, 1)
     densities
   }
 }

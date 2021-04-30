@@ -16,7 +16,7 @@
 #
 
 """
-A loc indexer for Koalas DataFrame/Series.
+A loc indexer for pandas-on-Spark DataFrame/Series.
 """
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
@@ -31,7 +31,7 @@ from pyspark.sql.types import BooleanType, LongType
 from pyspark.sql.utils import AnalysisException
 import numpy as np
 
-from pyspark import pandas as pp  # noqa: F401
+from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas.internal import (
     InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
@@ -101,7 +101,8 @@ class AtIndexer(IndexerLike):
     Similar to ``loc``, in that both provide label-based lookups. Use ``at`` if you only need to
     get a single value in a DataFrame or Series.
 
-    .. note:: Unlike pandas, Koalas only allows using ``at`` to get values but not to set them.
+    .. note:: Unlike pandas, pandas-on-Spark only allows using ``at`` to get values but not to
+        set them.
 
     .. note:: Warning: If ``row_index`` matches a lot of rows, large amounts of data will be
         fetched, potentially causing your machine to run out of memory.
@@ -113,7 +114,7 @@ class AtIndexer(IndexerLike):
 
     Examples
     --------
-    >>> kdf = pp.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
+    >>> kdf = ps.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
     ...                    index=[4, 5, 5], columns=['A', 'B', 'C'])
     >>> kdf
         A   B   C
@@ -193,7 +194,7 @@ class iAtIndexer(IndexerLike):
 
     Examples
     --------
-    >>> df = pp.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
+    >>> df = ps.DataFrame([[0, 2, 3], [0, 4, 1], [10, 20, 30]],
     ...                   columns=['A', 'B', 'C'])
     >>> df
         A   B   C
@@ -208,7 +209,7 @@ class iAtIndexer(IndexerLike):
 
     Get value within a series
 
-    >>> kser = pp.Series([1, 2, 3], index=[10, 20, 30])
+    >>> kser = ps.Series([1, 2, 3], index=[10, 20, 30])
     >>> kser
     10    1
     20    2
@@ -779,7 +780,7 @@ class LocIndexer(LocIndexerLike):
         start and the stop are included, and the step of the slice is not allowed.
 
     .. note:: With a list or array of labels for row selection,
-        Koalas behaves as a filter without reordering by the labels.
+        pandas-on-Spark behaves as a filter without reordering by the labels.
 
     See Also
     --------
@@ -789,7 +790,7 @@ class LocIndexer(LocIndexerLike):
     --------
     **Getting values**
 
-    >>> df = pp.DataFrame([[1, 2], [4, 5], [7, 8]],
+    >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
     ...                   index=['cobra', 'viper', 'sidewinder'],
     ...                   columns=['max_speed', 'shield'])
     >>> df
@@ -806,7 +807,7 @@ class LocIndexer(LocIndexerLike):
     Name: viper, dtype: int64
 
     List of labels. Note using ``[[]]`` returns a DataFrame.
-    Also note that Koalas behaves just a filter without reordering by the labels.
+    Also note that pandas-on-Spark behaves just a filter without reordering by the labels.
 
     >>> df.loc[['viper', 'sidewinder']]
                 max_speed  shield
@@ -928,7 +929,7 @@ class LocIndexer(LocIndexerLike):
 
     Another example using integers for the index
 
-    >>> df = pp.DataFrame([[1, 2], [4, 5], [7, 8]],
+    >>> df = ps.DataFrame([[1, 2], [4, 5], [7, 8]],
     ...                   index=[7, 8, 9],
     ...                   columns=['max_speed', 'shield'])
     >>> df
@@ -1349,7 +1350,7 @@ class iLocIndexer(LocIndexerLike):
     >>> mydict = [{'a': 1, 'b': 2, 'c': 3, 'd': 4},
     ...           {'a': 100, 'b': 200, 'c': 300, 'd': 400},
     ...           {'a': 1000, 'b': 2000, 'c': 3000, 'd': 4000 }]
-    >>> df = pp.DataFrame(mydict, columns=['a', 'b', 'c', 'd'])
+    >>> df = ps.DataFrame(mydict, columns=['a', 'b', 'c', 'd'])
     >>> df
           a     b     c     d
     0     1     2     3     4
@@ -1697,6 +1698,25 @@ class iLocIndexer(LocIndexerLike):
             )
 
     def __setitem__(self, key, value):
+        if is_list_like(value) and not isinstance(value, spark.Column):
+            iloc_item = self[key]
+            if not is_list_like(key) or not is_list_like(iloc_item):
+                raise ValueError("setting an array element with a sequence.")
+            else:
+                shape_iloc_item = iloc_item.shape
+                len_iloc_item = shape_iloc_item[0]
+                len_value = len(value)
+                if len_iloc_item != len_value:
+                    if self._is_series:
+                        raise ValueError(
+                            "cannot set using a list-like indexer with a different length than "
+                            "the value"
+                        )
+                    else:
+                        raise ValueError(
+                            "shape mismatch: value array of shape ({},) could not be broadcast "
+                            "to indexing result of shape {}".format(len_value, shape_iloc_item)
+                        )
         super().__setitem__(key, value)
         # Update again with resolved_copy to drop extra columns.
         self._kdf._update_internal_frame(
@@ -1706,3 +1726,33 @@ class iLocIndexer(LocIndexerLike):
         # Clean up implicitly cached properties to be able to reuse the indexer.
         del self._internal
         del self._sequence_col
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.indexing
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.indexing.__dict__.copy()
+    globs["ps"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.indexing tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.indexing,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

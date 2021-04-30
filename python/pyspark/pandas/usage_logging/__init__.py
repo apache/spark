@@ -25,8 +25,8 @@ from typing import Union
 
 import pandas as pd
 
-from pyspark.pandas import config, namespace, sql
-from pyspark.pandas.accessors import KoalasFrameMethods
+from pyspark.pandas import config, namespace, sql_processor
+from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.datetimes import DatetimeMethods
 from pyspark.pandas.groupby import DataFrameGroupBy, SeriesGroupBy
@@ -103,7 +103,7 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         CachedSparkFrameMethods,
         SparkFrameMethods,
         SparkIndexOpsMethods,
-        KoalasFrameMethods,
+        PandasOnSparkFrameMethods,
     ]
 
     try:
@@ -114,8 +114,8 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
     except ImportError:
         pass
 
-    sql._CAPTURE_SCOPES = 3  # type: ignore
-    modules.append(sql)  # type: ignore
+    sql_processor._CAPTURE_SCOPES = 3  # type: ignore
+    modules.append(sql_processor)  # type: ignore
 
     # Modules
     for target_module in modules:

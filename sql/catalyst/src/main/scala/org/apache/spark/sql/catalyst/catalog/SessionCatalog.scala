@@ -1576,6 +1576,8 @@ class SessionCatalog(
       name: FunctionIdentifier,
       children: Seq[Expression],
       registry: FunctionRegistryBase[T]): T = synchronized {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
@@ -1598,7 +1600,8 @@ class SessionCatalog(
       case Seq() => getCurrentDatabase
       case Seq(_, db) => db
       case Seq(catalog, namespace @ _*) =>
-        throw QueryCompilationErrors.v2CatalogNotSupportFunctionError(catalog, namespace)
+        throw new IllegalStateException(s"[BUG] unexpected v2 catalog: $catalog, and " +
+          s"namespace: ${namespace.quoted} in v1 function lookup")
     }
 
     // If the name itself is not qualified, add the current database to it.

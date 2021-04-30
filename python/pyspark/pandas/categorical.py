@@ -20,7 +20,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 if TYPE_CHECKING:
-    import pyspark.pandas as pp  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
 
 
 class CategoricalAccessor(object):
@@ -29,7 +29,7 @@ class CategoricalAccessor(object):
 
     Examples
     --------
-    >>> s = pp.Series(list("abbccc"), dtype="category")
+    >>> s = ps.Series(list("abbccc"), dtype="category")
     >>> s  # doctest: +SKIP
     0    a
     1    b
@@ -53,7 +53,7 @@ class CategoricalAccessor(object):
     dtype: int8
     """
 
-    def __init__(self, series: "pp.Series"):
+    def __init__(self, series: "ps.Series"):
         if not isinstance(series.dtype, CategoricalDtype):
             raise ValueError("Cannot call CategoricalAccessor on type {}".format(series.dtype))
         self._data = series
@@ -65,7 +65,7 @@ class CategoricalAccessor(object):
 
         Examples
         --------
-        >>> s = pp.Series(list("abbccc"), dtype="category")
+        >>> s = ps.Series(list("abbccc"), dtype="category")
         >>> s  # doctest: +SKIP
         0    a
         1    b
@@ -92,7 +92,7 @@ class CategoricalAccessor(object):
 
         Examples
         --------
-        >>> s = pp.Series(list("abbccc"), dtype="category")
+        >>> s = ps.Series(list("abbccc"), dtype="category")
         >>> s  # doctest: +SKIP
         0    a
         1    b
@@ -109,13 +109,13 @@ class CategoricalAccessor(object):
         return self._data.dtype.ordered
 
     @property
-    def codes(self) -> "pp.Series":
+    def codes(self) -> "ps.Series":
         """
         Return Series of codes as well as the index.
 
         Examples
         --------
-        >>> s = pp.Series(list("abbccc"), dtype="category")
+        >>> s = ps.Series(list("abbccc"), dtype="category")
         >>> s  # doctest: +SKIP
         0    a
         1    b
@@ -162,3 +162,33 @@ class CategoricalAccessor(object):
         self, new_categories, ordered: bool = None, rename: bool = False, inplace: bool = False
     ):
         raise NotImplementedError()
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.categorical
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.categorical.__dict__.copy()
+    globs["ps"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.categorical tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.categorical,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

@@ -42,7 +42,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
 
   test("rollupExprs") {
     val testRollup = (exprs: Seq[Expression], rollup: Seq[Seq[Expression]]) => {
-      val result = GroupingSet.rollupExprs(exprs.map(Seq(_)))
+      val result = BaseGroupingSets.rollupExprs(exprs.map(Seq(_)))
       assert(result.sortBy(_.hashCode) == rollup.sortBy(_.hashCode))
     }
 
@@ -54,7 +54,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
 
   test("cubeExprs") {
     val testCube = (exprs: Seq[Expression], cube: Seq[Seq[Expression]]) => {
-      val result = GroupingSet.cubeExprs(exprs.map(Seq(_)))
+      val result = BaseGroupingSets.cubeExprs(exprs.map(Seq(_)))
       assert(result.sortBy(_.hashCode) == cube.sortBy(_.hashCode))
     }
 

@@ -26,24 +26,15 @@ import org.apache.spark.sql.types._
 /**
  * A placeholder expression for cube/rollup, which will be replaced by analyzer
  */
-trait GroupingSet extends Expression with CodegenFallback {
+trait BaseGroupingSets extends Expression with CodegenFallback {
 
   def groupingSets: Seq[Seq[Expression]]
   def selectedGroupByExprs: Seq[Seq[Expression]]
 
   def groupByExprs: Seq[Expression] = {
     assert(children.forall(_.resolved),
-      "Cannot call GroupingSet.groupByExprs before the children expressions are all resolved.")
-    children.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
-      // Only unique expressions are included in the group by expressions and is determined
-      // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
-      // in grouping expression (a * b)
-      if (result.exists(_.semanticEquals(currentExpr))) {
-        result
-      } else {
-        result :+ currentExpr
-      }
-    }
+      "Cannot call BaseGroupingSets.groupByExprs before the children expressions are all resolved.")
+    BaseGroupingSets.distinctGroupByExprs(children)
   }
 
   // this should be replaced first
@@ -55,7 +46,7 @@ trait GroupingSet extends Expression with CodegenFallback {
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 }
 
-object GroupingSet {
+object BaseGroupingSets {
   /**
    * 'GROUP BY a, b, c WITH ROLLUP'
    * is equivalent to
@@ -104,48 +95,71 @@ object GroupingSet {
       case (gs, startOffset) => gs.indices.map(_ + startOffset)
     }
   }
+
+  def distinctGroupByExprs(exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.foldLeft(Seq.empty[Expression]) { (result, currentExpr) =>
+      // Only unique expressions are included in the group by expressions and is determined
+      // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
+      // in grouping expression (a * b)
+      if (result.exists(_.semanticEquals(currentExpr))) {
+        result
+      } else {
+        result :+ currentExpr
+      }
+    }
+  }
 }
 
-case class Cube(groupingSetIndexes: Seq[Seq[Int]], children: Seq[Expression]) extends GroupingSet {
+case class Cube(
+    groupingSetIndexes: Seq[Seq[Int]],
+    children: Seq[Expression]) extends BaseGroupingSets {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.cubeExprs(groupingSets)
+  override def selectedGroupByExprs: Seq[Seq[Expression]] = BaseGroupingSets.cubeExprs(groupingSets)
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Cube =
+    copy(children = newChildren)
 }
 
 object Cube {
   def apply(groupingSets: Seq[Seq[Expression]]): Cube = {
-    Cube(GroupingSet.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
+    Cube(BaseGroupingSets.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
   }
 }
 
 case class Rollup(
     groupingSetIndexes: Seq[Seq[Int]],
-    children: Seq[Expression]) extends GroupingSet {
+    children: Seq[Expression]) extends BaseGroupingSets {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(children))
-  override def selectedGroupByExprs: Seq[Seq[Expression]] = GroupingSet.rollupExprs(groupingSets)
+  override def selectedGroupByExprs: Seq[Seq[Expression]] =
+    BaseGroupingSets.rollupExprs(groupingSets)
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Rollup =
+    copy(children = newChildren)
 }
 
 object Rollup {
   def apply(groupingSets: Seq[Seq[Expression]]): Rollup = {
-    Rollup(GroupingSet.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
+    Rollup(BaseGroupingSets.computeGroupingSetIndexes(groupingSets), groupingSets.flatten)
   }
 }
 
 case class GroupingSets(
     groupingSetIndexes: Seq[Seq[Int]],
     flatGroupingSets: Seq[Expression],
-    userGivenGroupByExprs: Seq[Expression]) extends GroupingSet {
+    userGivenGroupByExprs: Seq[Expression]) extends BaseGroupingSets {
   override def groupingSets: Seq[Seq[Expression]] = groupingSetIndexes.map(_.map(flatGroupingSets))
   override def selectedGroupByExprs: Seq[Seq[Expression]] = groupingSets
   // Includes the `userGivenGroupByExprs` in the children, which will be included in the final
   // GROUP BY expressions, so that `SELECT c ... GROUP BY (a, b, c) GROUPING SETS (a, b)` works.
   override def children: Seq[Expression] = flatGroupingSets ++ userGivenGroupByExprs
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): GroupingSets =
+    super.legacyWithNewChildren(newChildren).asInstanceOf[GroupingSets]
 }
 
 object GroupingSets {
   def apply(
       groupingSets: Seq[Seq[Expression]],
       userGivenGroupByExprs: Seq[Expression]): GroupingSets = {
-    val groupingSetIndexes = GroupingSet.computeGroupingSetIndexes(groupingSets)
+    val groupingSetIndexes = BaseGroupingSets.computeGroupingSetIndexes(groupingSets)
     GroupingSets(groupingSetIndexes, groupingSets.flatten, userGivenGroupByExprs)
   }
 
@@ -181,6 +195,8 @@ case class Grouping(child: Expression) extends Expression with Unevaluable
     AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
   override def dataType: DataType = ByteType
   override def nullable: Boolean = false
+  override protected def withNewChildInternal(newChild: Expression): Grouping =
+    copy(child = newChild)
 }
 
 /**
@@ -198,9 +214,9 @@ case class Grouping(child: Expression) extends Expression with Unevaluable
     Examples:
       > SELECT name, _FUNC_(), sum(age), avg(height) FROM VALUES (2, 'Alice', 165), (5, 'Bob', 180) people(age, name, height) GROUP BY cube(name, height);
         Alice	0	2	165.0
+        Bob	0	5	180.0
         Alice	1	2	165.0
         NULL	3	7	172.5
-        Bob	0	5	180.0
         Bob	1	5	180.0
         NULL	2	2	165.0
         NULL	2	5	180.0
@@ -220,11 +236,44 @@ case class GroupingID(groupByExprs: Seq[Expression]) extends Expression with Une
   override def dataType: DataType = GroupingID.dataType
   override def nullable: Boolean = false
   override def prettyName: String = "grouping_id"
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): GroupingID =
+    copy(groupByExprs = newChildren)
 }
 
 object GroupingID {
 
   def dataType: DataType = {
     if (SQLConf.get.integerGroupingIdEnabled) IntegerType else LongType
+  }
+}
+
+object GroupingAnalytics {
+  def unapply(exprs: Seq[Expression])
+  : Option[(Seq[Seq[Expression]], Seq[Expression])] = {
+    if (!exprs.exists(_.isInstanceOf[BaseGroupingSets])) {
+      None
+    } else {
+      val resolved = exprs.forall {
+        case gs: BaseGroupingSets => gs.childrenResolved
+        case other => other.resolved
+      }
+      if (!resolved) {
+        None
+      } else {
+        val groups = exprs.flatMap {
+          case gs: BaseGroupingSets => gs.groupByExprs
+          case other: Expression => other :: Nil
+        }
+        val unmergedSelectedGroupByExprs = exprs.map {
+          case gs: BaseGroupingSets => gs.selectedGroupByExprs
+          case other: Expression => Seq(Seq(other))
+        }
+        val selectedGroupByExprs = unmergedSelectedGroupByExprs.tail
+          .foldLeft(unmergedSelectedGroupByExprs.head) { (x, y) =>
+            for (a <- x; b <- y) yield a ++ b
+          }
+        Some(selectedGroupByExprs, BaseGroupingSets.distinctGroupByExprs(groups))
+      }
+    }
   }
 }

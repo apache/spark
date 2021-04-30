@@ -3,15 +3,8 @@ name: Build and test
 on:
   push:
     branches:
-    - master
-  pull_request:
-    branches:
-    - master
-  workflow_dispatch:
-    inputs:
-      target:
-        description: 'Target branch to run'
-        required: true
+    - '**'
+    - '!branch-*.*'
 
 jobs:
   # Build: build Spark and run the tests for specified modules.
@@ -82,16 +75,24 @@ jobs:
       # GitHub Actions' default miniconda to use in pip packaging test.
       CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
       # In order to fetch changed files
       with:
         fetch-depth: 0
-    - name: Merge dispatched input branch
-      if: ${{ github.event.inputs.target != '' }}
-      run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        apache_spark_ref=`git rev-parse HEAD`
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF##*/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -132,6 +133,7 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
+        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
@@ -161,6 +163,8 @@ jobs:
             pyspark-sql, pyspark-mllib, pyspark-resource
           - >-
             pyspark-core, pyspark-streaming, pyspark-ml
+          - >-
+            pyspark-pandas
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: hadoop3.2
@@ -168,16 +172,24 @@ jobs:
       # GitHub Actions' default miniconda to use in pip packaging test.
       CONDA_PREFIX: /usr/share/miniconda
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
       # In order to fetch changed files
       with:
         fetch-depth: 0
-    - name: Merge dispatched input branch
-      if: ${{ github.event.inputs.target != '' }}
-      run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        apache_spark_ref=`git rev-parse HEAD`
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF##*/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -212,6 +224,7 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
+        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST"
     - name: Upload test results to report
       if: always()
@@ -235,16 +248,24 @@ jobs:
       HADOOP_PROFILE: hadoop3.2
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
       # In order to fetch changed files
       with:
         fetch-depth: 0
-    - name: Merge dispatched input branch
-      if: ${{ github.event.inputs.target != '' }}
-      run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
+        repository: apache/spark
+        ref: master
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      id: sync-branch
+      run: |
+        apache_spark_ref=`git rev-parse HEAD`
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF##*/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
+        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -270,6 +291,7 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
+        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         ./dev/run-tests --parallelism 2 --modules sparkr
     - name: Upload test results to report
       if: always()
@@ -466,6 +488,8 @@ jobs:
   tpcds-1g:
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
+    env:
+      SPARK_LOCAL_IP: localhost
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -474,15 +498,13 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ./tpcds-sf-1
-        key: tpcds-${{ hashFiles('tpcds-sf-1/.spark-tpcds-sf-1.md5') }}
-        restore-keys: |
-          tpcds-
+        key: tpcds-556111e35d400f56cb0625dc16e9063d54628320
     - name: Checkout TPC-DS (SF=1) generated data repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       uses: actions/checkout@v2
       with:
         repository: maropu/spark-tpcds-sf-1
-        ref: 6b660a53091bd6d23cbe58b0f09aae08e71cc667
+        ref: 556111e35d400f56cb0625dc16e9063d54628320
         path: ./tpcds-sf-1
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2

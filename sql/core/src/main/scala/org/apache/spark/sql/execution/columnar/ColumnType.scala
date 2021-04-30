@@ -25,6 +25,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -252,6 +253,71 @@ private[columnar] object LONG extends NativeColumnType(LongType, 8) {
 
   override def copyField(from: InternalRow, fromOrdinal: Int,
       to: InternalRow, toOrdinal: Int): Unit = {
+    to.setLong(toOrdinal, from.getLong(fromOrdinal))
+  }
+}
+
+private[columnar] object YEAR_MONTH_INTERVAL extends NativeColumnType(YearMonthIntervalType, 4) {
+  override def append(v: Int, buffer: ByteBuffer): Unit = {
+    buffer.putInt(v)
+  }
+
+  override def append(row: InternalRow, ordinal: Int, buffer: ByteBuffer): Unit = {
+    buffer.putInt(row.getInt(ordinal))
+  }
+
+  override def extract(buffer: ByteBuffer): Int = {
+    ByteBufferHelper.getInt(buffer)
+  }
+
+  override def extract(buffer: ByteBuffer, row: InternalRow, ordinal: Int): Unit = {
+    row.setInt(ordinal, ByteBufferHelper.getInt(buffer))
+  }
+
+  override def setField(row: InternalRow, ordinal: Int, value: Int): Unit = {
+    row.setInt(ordinal, value)
+  }
+
+  override def getField(row: InternalRow, ordinal: Int): Int = row.getInt(ordinal)
+
+
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
+    to.setInt(toOrdinal, from.getInt(fromOrdinal))
+  }
+}
+
+private[columnar] object DAY_TIME_INTERVAL extends NativeColumnType(DayTimeIntervalType, 8) {
+  override def append(v: Long, buffer: ByteBuffer): Unit = {
+    buffer.putLong(v)
+  }
+
+  override def append(row: InternalRow, ordinal: Int, buffer: ByteBuffer): Unit = {
+    buffer.putLong(row.getLong(ordinal))
+  }
+
+  override def extract(buffer: ByteBuffer): Long = {
+    ByteBufferHelper.getLong(buffer)
+  }
+
+  override def extract(buffer: ByteBuffer, row: InternalRow, ordinal: Int): Unit = {
+    row.setLong(ordinal, ByteBufferHelper.getLong(buffer))
+  }
+
+  override def setField(row: InternalRow, ordinal: Int, value: Long): Unit = {
+    row.setLong(ordinal, value)
+  }
+
+  override def getField(row: InternalRow, ordinal: Int): Long = row.getLong(ordinal)
+
+  override def copyField(
+      from: InternalRow,
+      fromOrdinal: Int,
+      to: InternalRow,
+      toOrdinal: Int): Unit = {
     to.setLong(toOrdinal, from.getLong(fromOrdinal))
   }
 }
@@ -764,8 +830,7 @@ private[columnar] object ColumnType {
       case map: MapType => MAP(map)
       case struct: StructType => STRUCT(struct)
       case udt: UserDefinedType[_] => apply(udt.sqlType)
-      case other =>
-        throw new Exception(s"Unsupported type: ${other.catalogString}")
+      case other => throw QueryExecutionErrors.unsupportedTypeError(other)
     }
   }
 }

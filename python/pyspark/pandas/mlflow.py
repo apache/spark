@@ -16,9 +16,8 @@
 #
 
 """
-MLflow-related functions to load models and apply them to Koalas dataframes.
+MLflow-related functions to load models and apply them to pandas-on-Spark dataframes.
 """
-from mlflow import pyfunc
 from pyspark.sql.types import DataType
 import pandas as pd
 import numpy as np
@@ -36,7 +35,7 @@ class PythonModelWrapper(object):
     """
     A wrapper around MLflow's Python object model.
 
-    This wrapper acts as a predictor on koalas
+    This wrapper acts as a predictor on pandas-on-Spark
 
     """
 
@@ -62,10 +61,14 @@ class PythonModelWrapper(object):
         """
         The return object has to follow the API of mlflow.pyfunc.PythonModel.
         """
+        from mlflow import pyfunc
+
         return pyfunc.load_model(model_uri=self._model_uri)
 
     @lazy_property
     def _model_udf(self):
+        from mlflow import pyfunc
+
         spark = default_session()
         return pyfunc.spark_udf(spark, model_uri=self._model_uri, result_type=self._return_type)
 
@@ -79,7 +82,7 @@ class PythonModelWrapper(object):
         """
         Returns a prediction on the data.
 
-        If the data is a koalas DataFrame, the return is a Koalas Series.
+        If the data is a pandas-on-Spark DataFrame, the return is a pandas-on-Spark Series.
 
         If the data is a pandas Dataframe, the return is the expected output of the underlying
         pyfunc object (typically a pandas Series or a numpy array).
@@ -103,7 +106,8 @@ class PythonModelWrapper(object):
 
 def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     """
-    Loads an MLflow model into an wrapper that can be used both for pandas and Koalas DataFrame.
+    Loads an MLflow model into an wrapper that can be used both for pandas and pandas-on-Spark
+    DataFrame.
 
     Parameters
     ----------
@@ -123,7 +127,7 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     Examples
     --------
     Here is a full example that creates a model with scikit-learn and saves the model with
-     MLflow. The model is then loaded as a predictor that can be applied on a Koalas
+     MLflow. The model is then loaded as a predictor that can be applied on a pandas-on-Spark
      Dataframe.
 
     We first initialize our MLflow environment:
@@ -131,7 +135,7 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     >>> from mlflow.tracking import MlflowClient, set_tracking_uri
     >>> import mlflow.sklearn
     >>> from tempfile import mkdtemp
-    >>> d = mkdtemp("koalas_mlflow")
+    >>> d = mkdtemp("pandas_on_spark_mlflow")
     >>> set_tracking_uri("file:%s"%d)
     >>> client = MlflowClient()
     >>> exp = mlflow.create_experiment("my_experiment")
@@ -150,12 +154,13 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     ...     mlflow.sklearn.log_model(lr, "model")
     LinearRegression(...)
 
-    Now that our model is logged using MLflow, we load it back and apply it on a Koalas dataframe:
+    Now that our model is logged using MLflow, we load it back and apply it on a pandas-on-Spark
+    dataframe:
 
     >>> from pyspark.pandas.mlflow import load_model
     >>> run_info = client.list_run_infos(exp)[-1]
     >>> model = load_model("runs:/{run_id}/model".format(run_id=run_info.run_uuid))
-    >>> prediction_df = pp.DataFrame({"x1": [2.0], "x2": [4.0]})
+    >>> prediction_df = ps.DataFrame({"x1": [2.0], "x2": [4.0]})
     >>> prediction_df["prediction"] = model.predict(prediction_df)
     >>> prediction_df
         x1   x2  prediction
@@ -172,7 +177,7 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     Other columns have to be manually joined.
     For example, this code will not work:
 
-    >>> df = pp.DataFrame({"x1": [2.0], "x2": [3.0], "z": [-1]})
+    >>> df = ps.DataFrame({"x1": [2.0], "x2": [3.0], "z": [-1]})
     >>> features = df[["x1", "x2"]]
     >>> y = model.predict(features)
     >>> # Works:
@@ -190,3 +195,37 @@ def load_model(model_uri, predict_type="infer") -> PythonModelWrapper:
     0  2.0  3.0 -1  1.376932
     """
     return PythonModelWrapper(model_uri, predict_type)
+
+
+def _test():
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.mlflow
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.pandas.mlflow.__dict__.copy()
+    globs["ps"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]").appName("pyspark.pandas.mlflow tests").getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.mlflow,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    try:
+        import mlflow  # noqa: F401
+        import sklearn  # noqa: F401
+
+        _test()
+    except ImportError:
+        pass

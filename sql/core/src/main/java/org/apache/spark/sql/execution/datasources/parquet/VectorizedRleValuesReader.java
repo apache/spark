@@ -359,9 +359,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       switch (mode) {
         case RLE:
           if (currentValue == level) {
-            for (int i = 0; i < n; i++) {
-              c.putShort(rowId + i, (short)data.readInteger());
-            }
+            data.readShorts(n, c, rowId);
           } else {
             c.putNulls(rowId, n);
           }
@@ -369,7 +367,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         case PACKED:
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
-              c.putShort(rowId + i, (short)data.readInteger());
+              c.putShort(rowId + i, data.readShort());
             } else {
               c.putNull(rowId + i);
             }
@@ -695,7 +693,17 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
+  public short readShort() {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
   public void readBytes(int total, WritableColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readShorts(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
