@@ -33,14 +33,6 @@ SELECT TRANSFORM ( expression [ , ... ] )
     USING command_or_script [ AS ( [ col_name [ col_type ] ] [ , ... ] ) ]
     [ ROW FORMAT row_format ]
     [ RECORDREADER record_reader_class ]
-
-row_format:    
-    SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ]
-    | DELIMITED [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escaped_char ] ] 
-        [ COLLECTION ITEMS TERMINATED BY collection_items_terminated_char ] 
-        [ MAP KEYS TERMINATED BY map_key_terminated_char ]
-        [ LINES TERMINATED BY row_terminated_char ]
-        [ NULL DEFINED AS null_char ]
 ```
 
 ### Parameters
@@ -49,45 +41,9 @@ row_format:
     
     Specifies a combination of one or more values, operators and SQL functions that results in a value.
 
-* **row_format**    
+* **row_format** 
 
-    Otherwise, uses the `DELIMITED` clause to specify the native SerDe and state the delimiter, escape character, null character and so on.
-
-* **SERDE**
-
-    Specifies a custom SerDe for one table.
-
-* **serde_class**
-
-    Specifies a fully-qualified class name of a custom SerDe.
-
-* **DELIMITED**
-
-    The `DELIMITED` clause can be used to specify the native SerDe and state the delimiter, escape character, null character and so on.
-
-* **FIELDS TERMINATED BY**
-
-    Used to define a column separator.
-    
-* **COLLECTION ITEMS TERMINATED BY**
-
-    Used to define a collection item separator.
-   
-* **MAP KEYS TERMINATED BY**
-
-    Used to define a map key separator.
-    
-* **LINES TERMINATED BY**
-
-    Used to define a row separator.
-    
-* **NULL DEFINED AS**
-
-    Used to define the specific value for NULL.
-    
-* **ESCAPED BY**
-
-    Used for escape mechanism.
+    Specifies the row format for input and output. See [HIVE FORMAT](sql-ref-syntax-hive-format.html) for more syntax details.
 
 * **RECORDWRITER**
 

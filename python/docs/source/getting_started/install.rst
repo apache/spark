@@ -164,3 +164,11 @@ Package       Minimum supported version Note
 Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  
 If using JDK 11, set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
 to |downloading|_.
+
+Note for AArch64 (ARM64) users: PyArrow is required by PySpark SQL, but PyArrow support for AArch64
+is introduced in PyArrow 4.0.0. If PySpark installation fails on AArch64 due to PyArrow
+installation errors, you can install PyArrow >= 4.0.0 as below:
+
+.. code-block:: bash
+
+    pip install "pyarrow>=4.0.0" --prefer-binary

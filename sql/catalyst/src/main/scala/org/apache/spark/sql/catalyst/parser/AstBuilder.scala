@@ -993,31 +993,42 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           .map(groupByExpr => {
             val groupingAnalytics = groupByExpr.groupingAnalytics
             if (groupingAnalytics != null) {
-              val groupingSets = groupingAnalytics.groupingSet.asScala
-                .map(_.expression.asScala.map(e => expression(e)).toSeq)
-              if (groupingAnalytics.CUBE != null) {
-                // CUBE(A, B, (A, B), ()) is not supported.
-                if (groupingSets.exists(_.isEmpty)) {
-                  throw new ParseException("Empty set in CUBE grouping sets is not supported.",
-                    groupingAnalytics)
-                }
-                Cube(groupingSets.toSeq)
-              } else if (groupingAnalytics.ROLLUP != null) {
-                // ROLLUP(A, B, (A, B), ()) is not supported.
-                if (groupingSets.exists(_.isEmpty)) {
-                  throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
-                    groupingAnalytics)
-                }
-                Rollup(groupingSets.toSeq)
-              } else {
-                assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-                GroupingSets(groupingSets.toSeq)
-              }
+              visitGroupingAnalytics(groupingAnalytics)
             } else {
               expression(groupByExpr.expression)
             }
           })
       Aggregate(groupByExpressions.toSeq, selectExpressions, query)
+    }
+  }
+
+  override def visitGroupingAnalytics(
+      groupingAnalytics: GroupingAnalyticsContext): BaseGroupingSets = {
+    val groupingSets = groupingAnalytics.groupingSet.asScala
+      .map(_.expression.asScala.map(e => expression(e)).toSeq)
+    if (groupingAnalytics.CUBE != null) {
+      // CUBE(A, B, (A, B), ()) is not supported.
+      if (groupingSets.exists(_.isEmpty)) {
+        throw QueryParsingErrors.invalidGroupingSetError("CUBE", groupingAnalytics)
+      }
+      Cube(groupingSets.toSeq)
+    } else if (groupingAnalytics.ROLLUP != null) {
+      // ROLLUP(A, B, (A, B), ()) is not supported.
+      if (groupingSets.exists(_.isEmpty)) {
+        throw QueryParsingErrors.invalidGroupingSetError("ROLLUP", groupingAnalytics)
+      }
+      Rollup(groupingSets.toSeq)
+    } else {
+      assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
+      val groupingSets = groupingAnalytics.groupingElement.asScala.flatMap { expr =>
+        val groupingAnalytics = expr.groupingAnalytics()
+        if (groupingAnalytics != null) {
+          visitGroupingAnalytics(groupingAnalytics).selectedGroupByExprs
+        } else {
+          Seq(expr.groupingSet().expression().asScala.map(e => expression(e)).toSeq)
+        }
+      }
+      GroupingSets(groupingSets.toSeq)
     }
   }
 
@@ -1805,7 +1816,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val ignoreNulls =
       Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
     val function = UnresolvedFunction(
-      getFunctionIdentifier(ctx.functionName), arguments, isDistinct, filter, ignoreNulls)
+      getFunctionMultiparts(ctx.functionName), arguments, isDistinct, filter, ignoreNulls)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1815,15 +1826,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         WindowExpression(function, visitWindowDef(spec))
       case _ => function
     }
-  }
-
-
-  /**
-   * Create a function database (optional) and name pair, for multipartIdentifier.
-   * This is used in CREATE FUNCTION, DROP FUNCTION, SHOWFUNCTIONS.
-   */
-  protected def visitFunctionName(ctx: MultipartIdentifierContext): FunctionIdentifier = {
-    visitFunctionName(ctx, ctx.parts.asScala.map(_.getText).toSeq)
   }
 
   /**
@@ -1853,6 +1855,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       visitFunctionName(ctx.qualifiedName)
     } else {
       FunctionIdentifier(ctx.getText, None)
+    }
+  }
+
+  protected def getFunctionMultiparts(ctx: FunctionNameContext): Seq[String] = {
+    if (ctx.qualifiedName != null) {
+      ctx.qualifiedName().identifier().asScala.map(_.getText).toSeq
+    } else {
+      Seq(ctx.getText)
     }
   }
 
@@ -2395,13 +2405,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val value = Option(ctx.intervalValue.STRING).map(string).getOrElse {
+      val value = Option(ctx.intervalValue.STRING).map(string).map { interval =>
+        if (ctx.intervalValue().MINUS() == null) {
+          interval
+        } else {
+          interval.startsWith("-") match {
+            case true => interval.replaceFirst("-", "")
+            case false => s"-$interval"
+          }
+        }
+      }.getOrElse {
         throw QueryParsingErrors.invalidFromToUnitValueError(ctx.intervalValue)
       }
       try {
         val from = ctx.from.getText.toLowerCase(Locale.ROOT)
         val to = ctx.to.getText.toLowerCase(Locale.ROOT)
-        val interval = (from, to) match {
+        (from, to) match {
           case ("year", "month") =>
             IntervalUtils.fromYearMonthString(value)
           case ("day", "hour") =>
@@ -2419,9 +2438,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case _ =>
             throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
         }
-        Option(ctx.intervalValue.MINUS)
-          .map(_ => IntervalUtils.negateExact(interval))
-          .getOrElse(interval)
       } catch {
         // Handle Exceptions thrown by CalendarInterval
         case e: IllegalArgumentException =>

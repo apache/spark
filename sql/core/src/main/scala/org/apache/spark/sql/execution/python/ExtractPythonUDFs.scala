@@ -40,7 +40,6 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
   private def belongAggregate(e: Expression, agg: Aggregate): Boolean = {
     e.isInstanceOf[AggregateExpression] ||
       PythonUDF.isGroupedAggPandasUDF(e) ||
-      e.isInstanceOf[GroupingExprRef] ||
       agg.groupingExpressions.exists(_.semanticEquals(e))
   }
 
@@ -120,8 +119,23 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
         groupingExpr += expr
       }
     }
+    val aggExpr = agg.aggregateExpressions.map { expr =>
+      expr.transformUp {
+        // PythonUDF over aggregate was pull out by ExtractPythonUDFFromAggregate.
+        // PythonUDF here should be either
+        // 1. Argument of an aggregate function.
+        //    CheckAnalysis guarantees the arguments are deterministic.
+        // 2. PythonUDF in grouping key. Grouping key must be deterministic.
+        // 3. PythonUDF not in grouping key. It is either no arguments or with grouping key
+        // in its arguments. Such PythonUDF was pull out by ExtractPythonUDFFromAggregate, too.
+        case p: PythonUDF if p.udfDeterministic =>
+          val canonicalized = p.canonicalized.asInstanceOf[PythonUDF]
+          attributeMap.getOrElse(canonicalized, p)
+      }.asInstanceOf[NamedExpression]
+    }
     agg.copy(
       groupingExpressions = groupingExpr.toSeq,
+      aggregateExpressions = aggExpr,
       child = Project((projList ++ agg.child.output).toSeq, agg.child))
   }
 

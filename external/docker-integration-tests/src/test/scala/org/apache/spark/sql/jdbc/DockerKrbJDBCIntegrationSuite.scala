@@ -32,6 +32,7 @@ import org.apache.spark.util.{SecurityUtils, Utils}
 
 abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
   private var kdc: MiniKdc = _
+  private val KRB5_CONF_PROP = "java.security.krb5.conf"
   protected var entryPointDir: File = _
   protected var initDbDir: File = _
   protected val userName: String
@@ -159,5 +160,54 @@ abstract class DockerKrbJDBCIntegrationSuite extends DockerJDBCIntegrationSuite 
     assert(rows.length === 1)
     assert(rows(0).getString(0) === "foo")
     assert(rows(0).getString(1) === "bar")
+  }
+
+  test("SPARK-35226: JDBCOption should accept refreshKrb5Config parameter") {
+    // This makes sure Spark must do authentication
+    Configuration.setConfiguration(null)
+    withTempDir { dir =>
+      val dummyKrb5Conf = File.createTempFile("dummy", "krb5.conf", dir)
+      val origKrb5Conf = sys.props(KRB5_CONF_PROP)
+      try {
+        // Set dummy krb5.conf and refresh config so this assertion is expected to fail.
+        // The thrown exception is dependent on the actual JDBC driver class.
+        intercept[Exception] {
+          sys.props(KRB5_CONF_PROP) = dummyKrb5Conf.getAbsolutePath
+          spark.read.format("jdbc")
+            .option("url", jdbcUrl)
+            .option("keytab", keytabFullPath)
+            .option("principal", principal)
+            .option("refreshKrb5Config", "true")
+            .option("query", "SELECT 1")
+            .load()
+        }
+
+        // Set the authentic krb5.conf but doesn't refresh config
+        // so this assertion is expected to fail.
+        intercept[Exception] {
+          sys.props(KRB5_CONF_PROP) = origKrb5Conf
+          spark.read.format("jdbc")
+            .option("url", jdbcUrl)
+            .option("keytab", keytabFullPath)
+            .option("principal", principal)
+            .option("query", "SELECT 1")
+            .load()
+        }
+
+        sys.props(KRB5_CONF_PROP) = origKrb5Conf
+        val df = spark.read.format("jdbc")
+          .option("url", jdbcUrl)
+          .option("keytab", keytabFullPath)
+          .option("principal", principal)
+          .option("refreshKrb5Config", "true")
+          .option("query", "SELECT 1")
+          .load()
+        val result = df.collect().map(_.getInt(0))
+        assert(result.length === 1)
+        assert(result(0) === 1)
+      } finally {
+        sys.props(KRB5_CONF_PROP) = origKrb5Conf
+      }
+    }
   }
 }

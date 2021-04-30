@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector;
+package org.apache.spark.sql.connector.metric;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.read.PartitionReader;
@@ -34,13 +34,13 @@ import org.apache.spark.sql.connector.read.PartitionReader;
  */
 @Evolving
 public interface CustomTaskMetric {
-    /**
-     * Returns the name of custom task metric.
-     */
-    String name();
+  /**
+   * Returns the name of custom task metric.
+   */
+  String name();
 
-    /**
-     * Returns the long value of custom task metric.
-     */
-    long value();
+  /**
+   * Returns the long value of custom task metric.
+   */
+  long value();
 }

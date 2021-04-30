@@ -15,17 +15,14 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-
 import numpy as np
-import pyspark
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option, option_context
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class ReprTest(ReusedSQLTestCase):
+class ReprTest(PandasOnSparkTestCase):
     max_display_count = 23
 
     @classmethod
@@ -82,26 +79,25 @@ class ReprTest(ReusedSQLTestCase):
             kser = ps.range(ReprTest.max_display_count + 1).id.rename()
             self.assert_eq(repr(kser), repr(kser.to_pandas()))
 
-        if LooseVersion(pyspark.__version__) >= LooseVersion("2.4"):
-            kser = ps.MultiIndex.from_tuples(
-                [(100 * i, i) for i in range(ReprTest.max_display_count)]
-            ).to_series()
-            self.assertTrue("Showing only the first" not in repr(kser))
-            self.assert_eq(repr(kser), repr(kser.to_pandas()))
+        kser = ps.MultiIndex.from_tuples(
+            [(100 * i, i) for i in range(ReprTest.max_display_count)]
+        ).to_series()
+        self.assertTrue("Showing only the first" not in repr(kser))
+        self.assert_eq(repr(kser), repr(kser.to_pandas()))
 
+        kser = ps.MultiIndex.from_tuples(
+            [(100 * i, i) for i in range(ReprTest.max_display_count + 1)]
+        ).to_series()
+        self.assertTrue("Showing only the first" in repr(kser))
+        self.assertTrue(
+            repr(kser).startswith(repr(kser.to_pandas().head(ReprTest.max_display_count)))
+        )
+
+        with option_context("display.max_rows", None):
             kser = ps.MultiIndex.from_tuples(
                 [(100 * i, i) for i in range(ReprTest.max_display_count + 1)]
             ).to_series()
-            self.assertTrue("Showing only the first" in repr(kser))
-            self.assertTrue(
-                repr(kser).startswith(repr(kser.to_pandas().head(ReprTest.max_display_count)))
-            )
-
-            with option_context("display.max_rows", None):
-                kser = ps.MultiIndex.from_tuples(
-                    [(100 * i, i) for i in range(ReprTest.max_display_count + 1)]
-                ).to_series()
-                self.assert_eq(repr(kser), repr(kser.to_pandas()))
+            self.assert_eq(repr(kser), repr(kser.to_pandas()))
 
     def test_repr_indexes(self):
         kidx = ps.range(ReprTest.max_display_count).index
