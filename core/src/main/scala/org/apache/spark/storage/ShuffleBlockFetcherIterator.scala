@@ -379,9 +379,6 @@ final class ShuffleBlockFetcherIterator(
         remoteBlockBytes += blockInfos.map(_._2).sum
         val inMemoryBlocks = blockInfos.filter(_._2 <= maxReqSizeShuffleToMem).map(_._2)
         val maxInMemoryBlock = if (inMemoryBlocks.isEmpty) 0L else inMemoryBlocks.max
-        // scalastyle:off
-        println(PlatformDependent.maxDirectMemory())
-        println(maxInMemoryBlock)
         if (PlatformDependent.directBufferPreferred() &&
             PlatformDependent.maxDirectMemory() < maxInMemoryBlock) {
           throw new SparkException(
