@@ -149,14 +149,6 @@ final class ShuffleBlockFetcherIterator(
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
 
   /**
-   * The average size of the remote blocks. We'll only unset `isNettyOOMOnShuffle` when
-   * the free Netty memory is larger than this.
-   *
-   * Visible to [[BufferReleasingInputStream]]
-   */
-  var averageRemoteBlockSize = 0L
-
-  /**
    * The blocks that can't be decompressed successfully, it is used to guarantee that we retry
    * at most once for those corrupted blocks.
    */
@@ -384,7 +376,6 @@ final class ShuffleBlockFetcherIterator(
     }
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
     val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes
-    averageRemoteBlockSize = if (numRemoteBlocks > 0) remoteBlockBytes / numRemoteBlocks else 0L
     assert(numBlocksToFetch == localBlocks.size + hostLocalBlocks.size + numRemoteBlocks,
       s"The number of non-empty blocks $numBlocksToFetch doesn't equal to the number of local " +
         s"blocks ${localBlocks.size} + the number of host-local blocks ${hostLocalBlocks.size} " +
@@ -676,7 +667,7 @@ final class ShuffleBlockFetcherIterator(
           }
           if (isNetworkReqDone) {
             reqsInFlight -= 1
-            ShuffleBlockFetcherIterator.resetNettyOOMFlagIfPossible(averageRemoteBlockSize)
+            resetNettyOOMFlagIfPossible(freeNettyMemoryLowerBound)
             logDebug("Number of requests in flight " + reqsInFlight)
           }
 
@@ -790,7 +781,7 @@ final class ShuffleBlockFetcherIterator(
         // Return immediately if Netty is still OOMed and there're ongoing fetch requests
         return
       } else {
-        ShuffleBlockFetcherIterator.resetNettyOOMFlagIfPossible(0)
+        resetNettyOOMFlagIfPossible(0)
       }
     }
 
@@ -892,7 +883,8 @@ private class BufferReleasingInputStream(
       } finally {
         // Unset the flag when a remote request finished and free memory is fairly enough.
         if (isNetworkReqDone) {
-          ShuffleBlockFetcherIterator.resetNettyOOMFlagIfPossible(iterator.averageRemoteBlockSize)
+          ShuffleBlockFetcherIterator.resetNettyOOMFlagIfPossible(
+            ShuffleBlockFetcherIterator.freeNettyMemoryLowerBound)
         }
         closed = true
       }
@@ -963,6 +955,12 @@ object ShuffleBlockFetcherIterator {
    * complete fetch request).
    */
   val isNettyOOMOnShuffle = new AtomicBoolean(false)
+
+  /**
+   * The least free memory (200M - the default value of `maxReqSizeShuffleToMem`) that
+   * Netty should reserve before unset the `isNettyOOMOnShuffle`.
+   */
+  val freeNettyMemoryLowerBound = 200 * 1024 * 1024
 
   def resetNettyOOMFlagIfPossible(freeMemoryLowerBound: Long): Unit = {
     if (isNettyOOMOnShuffle.get() && NettyUtils.freeDirectMemory() >= freeMemoryLowerBound) {
