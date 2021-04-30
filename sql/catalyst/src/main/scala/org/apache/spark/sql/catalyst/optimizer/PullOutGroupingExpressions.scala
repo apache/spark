@@ -49,18 +49,17 @@ object PullOutGroupingExpressions extends Rule[LogicalPlan] {
     plan transform {
       case a: Aggregate if a.resolved =>
         val complexGroupingExpressionMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
-        val newGroupingExpressions = a.groupingExpressions
-          .filterNot(AggregateExpression.containsAggregate)
-          .map {
-            case e if !e.foldable && e.children.nonEmpty =>
-              complexGroupingExpressionMap
-                .getOrElseUpdate(e.canonicalized, Alias(e, s"_groupingexpression")())
-                .toAttribute
-            case o => o
-          }
+        val newGroupingExpressions = a.groupingExpressions.map {
+          case e if !e.foldable && e.children.nonEmpty =>
+            complexGroupingExpressionMap
+              .getOrElseUpdate(e.canonicalized, Alias(e, s"_groupingexpression")())
+              .toAttribute
+          case o => o
+        }
         if (complexGroupingExpressionMap.nonEmpty) {
           def replaceComplexGroupingExpressions(e: Expression): Expression = {
             e match {
+              case _ if AggregateExpression.isAggregate(e) => e
               case _ if e.foldable => e
               case _ if complexGroupingExpressionMap.contains(e.canonicalized) =>
                 complexGroupingExpressionMap.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
