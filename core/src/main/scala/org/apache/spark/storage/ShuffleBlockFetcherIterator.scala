@@ -27,7 +27,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, LinkedHashMap, Queue}
 import scala.util.{Failure, Success}
 
-import io.netty.util.internal.{OutOfDirectMemoryError, PlatformDependent}
+import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -147,6 +147,12 @@ final class ShuffleBlockFetcherIterator(
 
   /** Current number of blocks in flight per host:port */
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
+
+  /**
+   * Count the retry times for the blocks due to Netty OOM. The block will stop retry if
+   * retry times has exceeded the [[maxAttemptsOnNettyOOM]].
+   */
+  private[this] val blockOOMRetryTimes = new HashMap[String, Int]
 
   /**
    * The blocks that can't be decompressed successfully, it is used to guarantee that we retry
@@ -306,14 +312,18 @@ final class ShuffleBlockFetcherIterator(
           // Ensure the Netty memory is at least enough for serving only one block to avoid
           // the endless retry. And since the Netty memory is shared among multiple modules,
           // we use the factor "1.5" for the overhead concern.
-          case _: OutOfDirectMemoryError if PlatformDependent.maxDirectMemory() > ( 1.5 * size) =>
-            if (isNettyOOMOnShuffle.compareAndSet(false, true)) {
-              // The fetcher can fail remaining blocks in batch for the same error. So we only
-              // log the warning once to avoid flooding the logs.
-              logWarning(s"Netty OOM happens, will retry the failed blocks")
-            }
+          case _: OutOfDirectMemoryError
+              if blockOOMRetryTimes.getOrElseUpdate(blockId, 0) < maxAttemptsOnNettyOOM =>
             ShuffleBlockFetcherIterator.this.synchronized {
               if (!isZombie) {
+                val failureTimes = blockOOMRetryTimes(blockId)
+                blockOOMRetryTimes(blockId) += 1
+                if (isNettyOOMOnShuffle.compareAndSet(false, true)) {
+                  // The fetcher can fail remaining blocks in batch for the same error. So we only
+                  // log the warning once to avoid flooding the logs.
+                  logWarning(s"Bock $blockId has failed $failureTimes times " +
+                    s"due to Netty OOM, will retry")
+                }
                 remainingBlocks -= blockId
                 deferredBlocks += blockId
                 enqueueDeferredFetchRequestIfNecessary()
@@ -663,6 +673,7 @@ final class ShuffleBlockFetcherIterator(
               }
               shuffleMetrics.incRemoteBlocksFetched(1)
               bytesInFlight -= size
+              blockOOMRetryTimes.remove(blockId.toString)
             }
           }
           if (isNetworkReqDone) {
@@ -739,7 +750,13 @@ final class ShuffleBlockFetcherIterator(
           }
 
         case FailureFetchResult(blockId, mapIndex, address, e) =>
-          throwFetchFailedException(blockId, mapIndex, address, e)
+          var errorMsg: String = null
+          if (e.isInstanceOf[OutOfDirectMemoryError]) {
+            errorMsg = s"Block $blockId fetch failed after $maxAttemptsOnNettyOOM " +
+              s"retries due to Netty OOM"
+            logError(errorMsg)
+          }
+          throwFetchFailedException(blockId, mapIndex, address, e, errorMsg)
 
         case DeferFetchRequestResult(request) =>
           val address = request.address
@@ -843,12 +860,14 @@ final class ShuffleBlockFetcherIterator(
       blockId: BlockId,
       mapIndex: Int,
       address: BlockManagerId,
-      e: Throwable) = {
+      e: Throwable,
+      message: String = null) = {
+    val msg = Option(message).getOrElse(e.getMessage)
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
-        throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, e)
+        throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, msg, e)
       case ShuffleBlockBatchId(shuffleId, mapId, startReduceId, _) =>
-        throw new FetchFailedException(address, shuffleId, mapId, mapIndex, startReduceId, e)
+        throw new FetchFailedException(address, shuffleId, mapId, mapIndex, startReduceId, msg, e)
       case _ =>
         throw new SparkException(
           "Failed to get block " + blockId + ", which is not a shuffle block", e)
@@ -961,6 +980,11 @@ object ShuffleBlockFetcherIterator {
    * Netty should reserve before unset the `isNettyOOMOnShuffle`.
    */
   val freeNettyMemoryLowerBound = 200 * 1024 * 1024
+
+  /**
+   * The max number of a block could retry due to Netty OOM before throwing the fetch failure.
+   */
+  val maxAttemptsOnNettyOOM = 10
 
   def resetNettyOOMFlagIfPossible(freeMemoryLowerBound: Long): Unit = {
     if (isNettyOOMOnShuffle.get() && NettyUtils.freeDirectMemory() >= freeMemoryLowerBound) {
