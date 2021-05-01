@@ -642,7 +642,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Invoke(Literal(obj, clsType), "testFunc", IntegerType, Seq(Literal(1))), 0)
   }
 
-  test("SPARK-35278: static invoke should find method without exact param type") {
+  test("SPARK-35278: static invoke should find method without exact param type match") {
     val input = (1, 2)
 
     checkObjectExprEvaluation(

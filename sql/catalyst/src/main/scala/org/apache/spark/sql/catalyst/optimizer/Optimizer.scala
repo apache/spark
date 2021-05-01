@@ -1174,14 +1174,17 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
     // We only can combine them if and only if both are deterministic.
-    case Filter(fc, nf @ Filter(nc, grandChild)) if fc.deterministic && nc.deterministic =>
-      (ExpressionSet(splitConjunctivePredicates(fc)) --
+    case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
+      val (combineCandidates, nonDeterministic) =
+        splitConjunctivePredicates(fc).partition(_.deterministic)
+      val mergedFilter = (ExpressionSet(combineCandidates) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
+      nonDeterministic.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
   }
 }
 

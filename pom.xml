@@ -170,7 +170,7 @@
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.12.2</fasterxml.jackson.version>
-    <snappy.version>1.1.8.2</snappy.version>
+    <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <netlib.ludovic.dev.version>1.3.2</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
@@ -179,7 +179,7 @@
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.11</commons-lang3.version>
+    <commons-lang3.version>3.12.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
@@ -3159,7 +3159,7 @@
       <plugin>
         <groupId>org.antipathy</groupId>
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
-        <version>1.0.3</version>
+        <version>1.0.4</version>
         <configuration>
           <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
           <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
