@@ -828,6 +828,7 @@ private[hive] class HiveClientImpl(
       }
     }
 
+    SessionState.start(state)
     logDebug(s"Running hiveql '$cmd'")
     if (cmd.toLowerCase(Locale.ROOT).startsWith("set")) { logDebug(s"Changing config: $cmd") }
     try {
