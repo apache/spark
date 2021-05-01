@@ -162,13 +162,8 @@ object IntervalUtils {
         second
       }
     }
-//     val regex = dayTimePattern(DAY -> SECOND)
     val intervalStr = input.trimAll().toString
     intervalStr match {
-//      case regex("-", day, hour, minute, secondPer) =>
-//        toDTInterval(day, hour, minute, secondPer, -1)
-//      case regex(_, day, hour, minute, secondPer) =>
-//        toDTInterval(day, hour, minute, secondPer, 1)
       case daySecondPattern("-", day, hour, minute, second, micro) =>
         toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
       case daySecondPattern(_, day, hour, minute, second, micro) =>
