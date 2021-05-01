@@ -126,7 +126,7 @@ public class CLIService extends CompositeService implements ICLIService {
     // authorization and authentication are not session specific settings
     SessionState ss = new SessionState(newHiveConf);
     ss.setIsHiveServerQuery(true);
-    SessionState.start(ss);
+    SessionState.setCurrentSessionState(ss);
     ss.applyAuthorizationPolicy();
   }
 

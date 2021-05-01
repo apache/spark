@@ -190,7 +190,7 @@ private[hive] class HiveClientImpl(
     // For this reason we cannot load the jars added by ADDJarsCommand because of class loader
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
-    SessionState.start(state)
+    SessionState.setCurrentSessionState(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())
     state
@@ -1268,20 +1268,6 @@ private[hive] object HiveClientImpl extends Logging {
     }
     // Disable CBO because we removed the Calcite dependency.
     hiveConf.setBoolean("hive.cbo.enable", false)
-    // If this is true, SessionState.start will create a file to log hive job which will not be
-    // deleted on exit and is useless for spark
-    if (hiveConf.getBoolean("hive.session.history.enabled", false)) {
-      logWarning("Detected HiveConf hive.session.history.enabled is true and will be reset to" +
-        " false to disable useless hive logic")
-      hiveConf.setBoolean("hive.session.history.enabled", false)
-    }
-    // If this is tez engine, SessionState.start might bring extra logic to initialize tez stuff,
-    // which is useless for spark.
-    if (hiveConf.get("hive.execution.engine") == "tez") {
-      logWarning("Detected HiveConf hive.execution.engine is 'tez' and will be reset to 'mr'" +
-        " to disable useless hive logic")
-      hiveConf.set("hive.execution.engine", "mr")
-    }
     hiveConf
   }
 }
