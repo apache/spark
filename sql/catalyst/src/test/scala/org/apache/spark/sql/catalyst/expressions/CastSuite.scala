@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
@@ -1776,7 +1776,6 @@ class CastSuite extends CastSuiteBase {
   }
 
   test("SPARK-35112: Cast string to day-time interval") {
-    val interval = IntervalUtils.fromDayTimeString("106751991 04:00:54.775807")
     checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType), 0L)
     checkEvaluation(cast(Literal.create("INTERVAL '0 0:0:0' DAY TO SECOND"),
       DayTimeIntervalType), 0L)
