@@ -235,7 +235,32 @@ case class StaticInvoke(
   override def children: Seq[Expression] = arguments
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
-  @transient lazy val method = cls.getDeclaredMethod(functionName, argClasses : _*)
+  @transient lazy val method = {
+    try {
+      cls.getDeclaredMethod(functionName, argClasses: _*)
+    } catch {
+      case _: NoSuchMethodException =>
+        // For some cases, e.g. arg class is Object, `getMethod` cannot find the method.
+        // We look at function name + argument length
+        val m = cls.getDeclaredMethods.filter { m =>
+          m.getName == functionName && m.getParameterCount == arguments.length
+        }
+        if (m.isEmpty) {
+          sys.error(s"Couldn't find $functionName on $cls")
+        } else if (m.length > 1) {
+          // More than one matched method signature. Exclude synthetic one, e.g. generic one.
+          val realMethods = m.filter(!_.isSynthetic)
+          if (realMethods.length > 1) {
+            // Ambiguous case, we don't know which method to choose, just fail it.
+            sys.error(s"Found ${realMethods.length} $cls on $cls")
+          } else {
+            realMethods.head
+          }
+        } else {
+          m.head
+        }
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     invoke(null, method, arguments, input, dataType)

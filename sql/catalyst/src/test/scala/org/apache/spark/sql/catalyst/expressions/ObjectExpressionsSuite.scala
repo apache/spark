@@ -641,6 +641,18 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkObjectExprEvaluation(
       Invoke(Literal(obj, clsType), "testFunc", IntegerType, Seq(Literal(1))), 0)
   }
+
+  test("SPARK-35278: static invoke should find method without exact param type") {
+    val input = (1, 2)
+
+    checkObjectExprEvaluation(
+      StaticInvoke(TestStaticInvoke.getClass, IntegerType, "func",
+        Seq(Literal(input, ObjectType(input.getClass)))), 3)
+
+    checkObjectExprEvaluation(
+      StaticInvoke(TestStaticInvoke.getClass, IntegerType, "func",
+        Seq(Literal(1, IntegerType))), -1)
+  }
 }
 
 class TestBean extends Serializable {
@@ -650,6 +662,14 @@ class TestBean extends Serializable {
 
   def setNonPrimitive(i: AnyRef): Unit =
     assert(i != null, "this setter should not be called with null.")
+}
+
+object TestStaticInvoke {
+  def func(param: Any): Int = param match {
+    case pair: Tuple2[_, _] =>
+      pair.asInstanceOf[Tuple2[Int, Int]]._1 + pair.asInstanceOf[Tuple2[Int, Int]]._2
+    case _ => -1
+  }
 }
 
 abstract class BaseClass[T] {
