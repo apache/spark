@@ -618,6 +618,29 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[ArithmeticException](
       StaticInvoke(mathCls, IntegerType, "addExact", Seq(Literal(Int.MaxValue), Literal(1))), "")
   }
+
+  test("SPARK-35278: invoke should find method with correct number of parameters") {
+    val strClsType = ObjectType(classOf[String])
+    checkExceptionInExpression[StringIndexOutOfBoundsException](
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(3))), "")
+
+    checkObjectExprEvaluation(
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0))), "a")
+
+    checkExceptionInExpression[StringIndexOutOfBoundsException](
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(3))), "")
+
+    checkObjectExprEvaluation(
+      Invoke(Literal("a", strClsType), "substring", strClsType, Seq(Literal(0), Literal(1))), "a")
+  }
+
+  test("SPARK-35278: invoke should correctly invoke override method") {
+    val clsType = ObjectType(classOf[ConcreteClass])
+    val obj = new ConcreteClass
+
+    checkObjectExprEvaluation(
+      Invoke(Literal(obj, clsType), "testFunc", IntegerType, Seq(Literal(1))), 0)
+  }
 }
 
 class TestBean extends Serializable {
@@ -627,4 +650,12 @@ class TestBean extends Serializable {
 
   def setNonPrimitive(i: AnyRef): Unit =
     assert(i != null, "this setter should not be called with null.")
+}
+
+abstract class BaseClass[T] {
+  def testFunc(param: T): T
+}
+
+class ConcreteClass extends BaseClass[Int] with Serializable {
+  override def testFunc(param: Int): Int = param - 1
 }
