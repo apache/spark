@@ -62,8 +62,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     </svg></div>.toString.filter(_ != '\n')
 
   private def makeStageEvent(stageInfos: Seq[v1.StageData]): Seq[String] = {
+    val now = System.currentTimeMillis()
     stageInfos.sortBy { s =>
-      -math.max(s.submissionTime.get.getTime, s.completionTime.map(_.getTime).getOrElse(-1L))
+      (-s.completionTime.map(_.getTime).getOrElse(now), -s.submissionTime.get.getTime)
     }.take(MAX_TIMELINE_STAGES).map { stage =>
       val stageId = stage.stageId
       val attemptId = stage.attemptId
@@ -71,7 +72,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       val status = stage.status.toString.toLowerCase(Locale.ROOT)
       val submissionTime = stage.submissionTime.get.getTime()
       val completionTime = stage.completionTime.map(_.getTime())
-        .getOrElse(System.currentTimeMillis())
+        .getOrElse(now)
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
       // extra layers of escaping in order to embed this in a JavaScript string literal.

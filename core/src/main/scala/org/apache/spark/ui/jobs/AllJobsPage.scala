@@ -68,10 +68,11 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     </svg></div>.toString.filter(_ != '\n')
 
   private def makeJobEvent(jobs: Seq[v1.JobData]): Seq[String] = {
+    val now = System.currentTimeMillis()
     jobs.filter { job =>
       job.status != JobExecutionStatus.UNKNOWN && job.submissionTime.isDefined
     }.sortBy { j =>
-      -math.max(j.submissionTime.get.getTime, j.completionTime.map(_.getTime).getOrElse(-1L))
+      (-j.completionTime.map(_.getTime).getOrElse(now), -j.submissionTime.get.getTime)
     }.take(MAX_TIMELINE_JOBS).map { job =>
       val jobId = job.jobId
       val status = job.status
@@ -82,7 +83,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         plainText = true).text
 
       val submissionTime = job.submissionTime.get.getTime()
-      val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
+      val completionTime = job.completionTime.map(_.getTime()).getOrElse(now)
       val classNameByStatus = status match {
         case JobExecutionStatus.SUCCEEDED => "succeeded"
         case JobExecutionStatus.FAILED => "failed"
