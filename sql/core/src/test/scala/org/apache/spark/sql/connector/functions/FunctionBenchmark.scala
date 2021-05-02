@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector.functions
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd
+import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.{JavaLongAddDefault, JavaLongAddMagic, JavaLongAddStaticMagic}
+
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
@@ -42,31 +45,63 @@ object FunctionBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 500L * 1000 * 1000
-    scalarBenchmark(N, resultNullable = false)
-    scalarBenchmark(N, resultNullable = true)
+    Seq(true, false).foreach { enableCodeGen =>
+      Seq(true, false).foreach { resultNullable =>
+        javaScalarBenchmark(N, enableCodeGen = enableCodeGen, resultNullable = resultNullable)
+      }
+    }
+    Seq(true, false).foreach { enableCodeGen =>
+      Seq(true, false).foreach { resultNullable =>
+        scalaScalarBenchmark(N, enableCodeGen = enableCodeGen, resultNullable = resultNullable)
+      }
+    }
   }
 
-  private def scalarBenchmark(N: Long, resultNullable: Boolean): Unit = {
+  private def javaScalarBenchmark(
+      N: Long,
+      enableCodeGen: Boolean,
+      resultNullable: Boolean): Unit = {
+    withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
+      createFunction("long_add_default", new JavaLongAdd(new JavaLongAddDefault(resultNullable)))
+      createFunction("long_add_magic", new JavaLongAdd(new JavaLongAddMagic(resultNullable)))
+      createFunction("long_add_static_magic",
+          new JavaLongAdd(new JavaLongAddStaticMagic(resultNullable)))
+
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodeGen.toString) {
+        val flag = if (enableCodeGen) "on" else "off"
+        val nullable = if (resultNullable) "nullable" else "notnull"
+        val name = s"Java scalar function (long + long) -> long/$nullable wholestage $flag"
+        val benchmark = new Benchmark(name, N, output = output)
+        Seq("long_add_default", "long_add_magic", "long_add_static_magic").foreach { name =>
+          benchmark.addCase(s"with $name", numIters = 3) { _ =>
+            spark.range(N).selectExpr(s"$catalogName.$name(id, id)").noop()
+          }
+        }
+        benchmark.run()
+      }
+    }
+  }
+
+  private def scalaScalarBenchmark(
+      N: Long,
+      enableCodeGen: Boolean,
+      resultNullable: Boolean): Unit = {
     withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
       createFunction("long_add_default",
         LongAddUnbound(new LongAddWithProduceResult(resultNullable)))
       createFunction("long_add_magic", LongAddUnbound(new LongAddWithMagic(resultNullable)))
-      createFunction("long_add_static_magic", LongAddUnbound(
-        if (resultNullable) LongAddWithStaticMagicNullable else LongAddWithStaticMagic))
 
-      Seq(true, false).foreach { enableCodegen =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodegen.toString) {
-          val flag = if (enableCodegen) "on" else "off"
-          val nullable = if (resultNullable) "nullable" else "notnull"
-          val name = s"scalar function (long + long) -> long/$nullable wholestage $flag"
-          val benchmark = new Benchmark(name, N, output = output)
-          Seq("long_add_default", "long_add_magic", "long_add_static_magic").foreach { name =>
-            benchmark.addCase(s"with $name", numIters = 3) { _ =>
-              spark.range(N).selectExpr(s"$catalogName.$name(id, id)").noop()
-            }
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodeGen.toString) {
+        val flag = if (enableCodeGen) "on" else "off"
+        val nullable = if (resultNullable) "nullable" else "notnull"
+        val name = s"Scala scalar function (long + long) -> long/$nullable wholestage $flag"
+        val benchmark = new Benchmark(name, N, output = output)
+        Seq("long_add_default", "long_add_magic").foreach { name =>
+          benchmark.addCase(s"with $name", numIters = 3) { _ =>
+            spark.range(N).selectExpr(s"$catalogName.$name(id, id)").noop()
           }
-          benchmark.run()
         }
+        benchmark.run()
       }
     }
   }
@@ -76,44 +111,31 @@ object FunctionBenchmark extends SqlBasedBenchmark {
     val ident = Identifier.of(Array.empty, name)
     catalog.asInstanceOf[InMemoryCatalog].createFunction(ident, fn)
   }
-}
 
-case class LongAddUnbound(impl: ScalarFunction[Long]) extends UnboundFunction {
-  override def bind(inputType: StructType): BoundFunction = impl
-  override def description(): String = name()
-  override def name(): String = "long_add_unbound"
-}
-
-abstract class LongAddBase(resultNullable: Boolean) extends ScalarFunction[Long] {
-  override def inputTypes(): Array[DataType] = Array(LongType, LongType)
-  override def resultType(): DataType = LongType
-  override def isResultNullable: Boolean = resultNullable
-}
-
-class LongAddWithProduceResult(resultNullable: Boolean) extends LongAddBase(resultNullable) {
-  override def produceResult(input: InternalRow): Long = {
-    input.getLong(0) + input.getLong(1)
+  case class LongAddUnbound(impl: ScalarFunction[Long]) extends UnboundFunction {
+    override def bind(inputType: StructType): BoundFunction = impl
+    override def description(): String = name()
+    override def name(): String = "long_add_unbound"
   }
-  override def name(): String = "long_add_default"
+
+  abstract class LongAddBase(resultNullable: Boolean) extends ScalarFunction[Long] {
+    override def inputTypes(): Array[DataType] = Array(LongType, LongType)
+    override def resultType(): DataType = LongType
+    override def isResultNullable: Boolean = resultNullable
+  }
+
+  class LongAddWithProduceResult(resultNullable: Boolean) extends LongAddBase(resultNullable) {
+    override def produceResult(input: InternalRow): Long = {
+      input.getLong(0) + input.getLong(1)
+    }
+    override def name(): String = "long_add_default"
+  }
+
+  class LongAddWithMagic(resultNullable: Boolean) extends LongAddBase(resultNullable) {
+    def invoke(left: Long, right: Long): Long = {
+      left + right
+    }
+    override def name(): String = "long_add_magic"
+  }
 }
 
-case object LongAddWithStaticMagic extends LongAddBase(false) {
-  def staticInvoke(left: Long, right: Long): Long = {
-    left + right
-  }
-  override def name(): String = "long_add_static_magic"
-}
-
-case object LongAddWithStaticMagicNullable extends LongAddBase(true) {
-  def staticInvoke(left: Long, right: Long): Long = {
-    left + right
-  }
-  override def name(): String = "long_add_static_magic"
-}
-
-class LongAddWithMagic(resultNullable: Boolean) extends LongAddBase(resultNullable) {
-  def invoke(left: Long, right: Long): Long = {
-    left + right
-  }
-  override def name(): String = "long_add_magic"
-}

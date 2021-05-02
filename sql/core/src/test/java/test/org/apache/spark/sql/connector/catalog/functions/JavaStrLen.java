@@ -83,33 +83,34 @@ public class JavaStrLen implements UnboundFunction {
     }
   }
 
-  public static class JavaStrLenStaticMagic extends JavaStrLenBase {
-    public static int staticInvoke(UTF8String str) {
+  public static class JavaStrLenMagic extends JavaStrLenBase {
+    public int invoke(UTF8String str) {
       return str.toString().length();
     }
   }
 
-  public static class JavaStrLenBothMagic extends JavaStrLenBase {
-    public static int staticInvoke(UTF8String str) {
-      return str.toString().length() + 100;
+  public static class JavaStrLenStaticMagic extends JavaStrLenBase {
+    public static int invoke(UTF8String str) {
+      return str.toString().length();
     }
+  }
 
+  public static class JavaStrLenBoth extends JavaStrLenBase {
+    @Override
+    public Integer produceResult(InternalRow input) {
+      String str = input.getString(0);
+      return str.length();
+    }
     public int invoke(UTF8String str) {
       return str.toString().length();
     }
   }
 
   public static class JavaStrLenBadStaticMagic extends JavaStrLenBase {
-    public static int staticInvoke(String str) {
+    public static int invoke(String str) {
       return str.length() + 100;
     }
 
-    public int invoke(UTF8String str) {
-      return str.toString().length();
-    }
-  }
-
-  public static class JavaStrLenMagic extends JavaStrLenBase {
     public int invoke(UTF8String str) {
       return str.toString().length();
     }

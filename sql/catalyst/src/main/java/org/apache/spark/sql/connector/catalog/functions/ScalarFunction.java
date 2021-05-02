@@ -23,30 +23,24 @@ import org.apache.spark.sql.types.DataType;
 /**
  * Interface for a function that produces a result value for each input row.
  * <p>
- * To evaluate each input row, Spark will first try to lookup and use either a static or
- * non-static "magic method" (described below) through Java reflection. If neither of the
- * magic methods is not found, Spark will call {@link #produceResult(InternalRow)} as a fallback
- * approach. In other words, the precedence is as follow:
- * <ul>
- *   <li>static magic method</li>
- *   <li>non-static magic method</li>
- *   <li>{@link #produceResult(InternalRow)}</li>
- * </ul>
+ * To evaluate each input row, Spark will first try to lookup and use a "magic method" (described
+ * below) through Java reflection. If the method is not found, Spark will call
+ * {@link #produceResult(InternalRow)} as a fallback approach.
  * <p>
  * The JVM type of result values produced by this function must be the type used by Spark's
  * InternalRow API for the {@link DataType SQL data type} returned by {@link #resultType()}.
  * The mapping between {@link DataType} and the corresponding JVM type is defined below.
  * <p>
  * <b>IMPORTANT</b>: the default implementation of {@link #produceResult} throws
- * {@link UnsupportedOperationException}. Users can choose to override this method, or implement
- * a static magic method with name {@link #STATIC_MAGIC_METHOD_NAME}, or non-static magic
- * method with name {@link #MAGIC_METHOD_NAME}, both of which take individual parameters
- * instead of a {@link InternalRow}. <b>The static magic method is recommended if the function is
- * stateless</b> (i.e., don't need to maintain any intermediate state between the calls), as it
- * provides better performance over the non-static version due to avoidance of certain costs such
- * as Java dynamic method dispatch. Either of the magic method approach should provide better
- * performance over the default {@link #produceResult}, due to optimizations such as codegen,
- * removal of Java boxing, etc.
+ * {@link UnsupportedOperationException}. Users must choose to either override this method, or
+ * implement a magic method with name {@link #MAGIC_METHOD_NAME}, which takes individual parameters
+ * instead of a {@link InternalRow}. The magic method approach is generally recommended because it
+ * provides better performance over the default {@link #produceResult}, due to optimizations such
+ * as whole-stage codegen, elimination of Java boxing, etc.
+ * <p>
+ * In addition, for functions implemented in Java that are stateless, users can optionally define
+ * the {@link #MAGIC_METHOD_NAME} as a static method, which further avoids certain runtime costs
+ * such as nullness check on the method receiver, potential Java dynamic dispatch, etc.
  * <p>
  * For example, a scalar UDF for adding two integers can be defined as follow with the static magic
  * method approach:
@@ -56,12 +50,12 @@ import org.apache.spark.sql.types.DataType;
  *     public DataType[] inputTypes() {
  *       return new DataType[] { DataTypes.IntegerType, DataTypes.IntegerType };
  *     }
- *     public static int staticInvoke(int left, int right) {
+ *     public int invoke(int left, int right) {
  *       return left + right;
  *     }
  *   }
  * </pre>
- * In the above, since {@link #STATIC_MAGIC_METHOD_NAME} is defined, and also that it has
+ * In the above, since {@link #MAGIC_METHOD_NAME} is defined, and also that it has
  * matching parameter types and return type, Spark will use it to evaluate inputs.
  * <p>
  * As another example, in the following:
@@ -70,10 +64,7 @@ import org.apache.spark.sql.types.DataType;
  *     public DataType[] inputTypes() {
  *       return new DataType[] { DataTypes.IntegerType, DataTypes.IntegerType };
  *     }
- *     public static int staticInvoke(int left, int right) {
- *       return left + right;
- *     }
- *     public int invoke(int left, int right) {
+ *     public static int invoke(int left, int right) {
  *       return left + right;
  *     }
  *     public Integer produceResult(InternalRow input) {
@@ -82,15 +73,16 @@ import org.apache.spark.sql.types.DataType;
  *   }
  * </pre>
  *
- * Even though the class define both magic methods and the {@link #produceResult}, Spark will use
- * {@link #STATIC_MAGIC_METHOD_NAME} over the others as it takes higher precedence.
+ * the class defines both the magic method and the {@link #produceResult}, and Spark will use
+ * {@link #MAGIC_METHOD_NAME} over the {@link #produceResult(InternalRow)} as it takes higher
+ * precedence. Also note that the magic method is annotated as a static method in this case.
  * <p>
- * The magic method resolution is done during query analysis, where Spark looks up the magic
+ * Resolution on magic method is done during query analysis, where Spark looks up the magic
  * method by first converting the actual input SQL data types to their corresponding Java types
  * following the mapping defined below, and then checking if there is a matching method from all the
  * declared methods in the UDF class, using method name and the Java types.
  * <p>
- * The following are the mapping from {@link DataType SQL data type} to Java type which is used 
+ * The following are the mapping from {@link DataType SQL data type} to Java type which is used
  * by Spark to infer parameter types for the magic methods as well as return value type for
  * {@link #produceResult}:
  * <ul>
@@ -122,7 +114,6 @@ import org.apache.spark.sql.types.DataType;
  */
 public interface ScalarFunction<R> extends BoundFunction {
   String MAGIC_METHOD_NAME = "invoke";
-  String STATIC_MAGIC_METHOD_NAME = "staticInvoke";
 
   /**
    * Applies the function to an input row to produce a value.

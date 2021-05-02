@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.lang.reflect.Method
+import java.lang.reflect.{Method, Modifier}
 import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -48,7 +48,6 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction}
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
-import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.STATIC_MAGIC_METHOD_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -2181,30 +2180,27 @@ class Analyzer(override val catalogManager: CatalogManager)
         //  may also want to check if the parameter types from the magic method
         //  match the input type through `BoundFunction.inputTypes`.
         val argClasses = inputType.fields.map(_.dataType)
-        findMethod(scalarFunc, STATIC_MAGIC_METHOD_NAME, argClasses) match {
-          case Some(_) =>
+        findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
+          case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
-              STATIC_MAGIC_METHOD_NAME, arguments, returnNullable = scalarFunc.isResultNullable)
+              MAGIC_METHOD_NAME, arguments, returnNullable = scalarFunc.isResultNullable)
+          case Some(_) =>
+            val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
+            Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
+              arguments, returnNullable = scalarFunc.isResultNullable)
           case _ =>
-            findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
+            // TODO: handle functions defined in Scala too - in Scala, even if a
+            //  subclass do not override the default method in parent interface
+            //  defined in Java, the method can still be found from
+            //  `getDeclaredMethod`.
+            // since `inputType` is a `StructType`, it is mapped to a `InternalRow`
+            // which we can use to lookup the `produceResult` method.
+            findMethod(scalarFunc, "produceResult", Seq(inputType)) match {
               case Some(_) =>
-                val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
-                Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
-                  arguments, returnNullable = scalarFunc.isResultNullable)
-              case _ =>
-                // TODO: handle functions defined in Scala too - in Scala, even if a
-                //  subclass do not override the default method in parent interface
-                //  defined in Java, the method can still be found from
-                //  `getDeclaredMethod`.
-                // since `inputType` is a `StructType`, it is mapped to a `InternalRow`
-                // which we can use to lookup the `produceResult` method.
-                findMethod(scalarFunc, "produceResult", Seq(inputType)) match {
-                  case Some(_) =>
-                    ApplyFunctionExpression(scalarFunc, arguments)
-                  case None =>
-                    failAnalysis(s"ScalarFunction '${scalarFunc.name()}' neither implement" +
-                        s" magic method nor override 'produceResult'")
-                }
+                ApplyFunctionExpression(scalarFunc, arguments)
+              case None =>
+                failAnalysis(s"ScalarFunction '${scalarFunc.name()}' neither implement" +
+                  s" magic method nor override 'produceResult'")
             }
         }
       }

@@ -176,13 +176,6 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
   }
 
-  test("scalar function: static magic method in Java") {
-    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
-    addFunction(Identifier.of(Array("ns"), "strlen"),
-      new JavaStrLen(new JavaStrLenStaticMagic))
-    checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
-  }
-
   test("scalar function: magic method in Java") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"),
@@ -190,10 +183,17 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
   }
 
-  test("scalar function: static magic method should take higher precedence") {
+  test("scalar function: static magic method in Java") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"),
-      new JavaStrLen(new JavaStrLenBothMagic))
+      new JavaStrLen(new JavaStrLenStaticMagic))
+    checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
+  }
+
+  test("scalar function: magic method should take higher precedence in Java") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "strlen"),
+      new JavaStrLen(new JavaStrLenBoth))
     // to differentiate, the static method returns string length + 100
     checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(103) :: Nil)
   }
