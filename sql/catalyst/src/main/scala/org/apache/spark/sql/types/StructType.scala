@@ -435,7 +435,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     stringConcat.append("struct<")
     var i = 0
     while (i < len) {
-      stringConcat.append(s"${fields(i).name}:${fields(i).dataType.catalogString}")
+      stringConcat.append(
+        s"${fields(i).name}:${fields(i).dataType.catalogString}(nullable=${fields(i).nullable})")
       i += 1
       if (i < len) stringConcat.append(",")
     }

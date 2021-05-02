@@ -1858,6 +1858,65 @@ class CastSuite extends CastSuiteBase {
         checkEvaluation(cast(cast(interval, StringType), YearMonthIntervalType), period)
       }
   }
+
+  test("SPARK-35289: Casting failure message should specify nullable information") {
+    def checkCastingFailureMessage(ret: CastBase): Unit = {
+      val (from, to) = ret match {
+        case Cast(child, dataType, _) =>
+          (child.dataType.catalogString, dataType.catalogString)
+      }
+      val failureMessage = ret.typeCheckFailureMessage
+
+      assert(ret.resolved === false)
+      assert(from != to && from.contains("true") && to.contains("false"))
+      assert(failureMessage.contains(s"$from to $to"))
+    }
+
+    // ArrayType
+    val arrayContainsNull = Literal.create(Seq("contains", "null", null),
+      ArrayType(StringType, containsNull = true))
+    checkCastingFailureMessage(
+      cast(arrayContainsNull, ArrayType(StringType, containsNull = false)))
+
+    // MapType
+    val mapValueContainsNull = Literal.create(
+      Map("a" -> "false", "b" -> "true", "c" -> null),
+      MapType(StringType, StringType, valueContainsNull = true))
+    checkCastingFailureMessage(
+      cast(mapValueContainsNull, MapType(StringType, StringType, valueContainsNull = false)))
+
+    // StructType
+    val simple = Literal.create(
+      Row(0),
+      StructType(Seq(StructField("i", IntegerType, nullable = true)))
+    )
+    checkCastingFailureMessage(
+      cast(simple, StructType(Seq(StructField("i", IntegerType, nullable = false)))))
+
+    val complex = Literal.create(
+      Row(
+        Seq("123", "true", "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Row(0)),
+      StructType(Seq(
+        StructField("a",
+          ArrayType(StringType, containsNull = true), nullable = true),
+        StructField("m",
+          MapType(StringType, StringType, valueContainsNull = true), nullable = true),
+        StructField("s",
+          StructType(Seq(
+            StructField("i", IntegerType, nullable = true)))))))
+    checkCastingFailureMessage(
+      cast(complex,
+        StructType(Seq(
+          StructField("a",
+            ArrayType(StringType, containsNull = false), nullable = false),
+          StructField("m",
+            MapType(StringType, StringType, valueContainsNull = false), nullable = false),
+          StructField("s",
+            StructType(Seq(
+              StructField("i", IntegerType, nullable = false))))))))
+  }
 }
 
 /**
