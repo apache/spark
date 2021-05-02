@@ -150,9 +150,11 @@ object IntervalUtils {
     }
   }
 
-  private val daySecondStringPattern = ("(?i)^(INTERVAL\\s+)([+|-])?(')" +
-    "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?(')(\\s+DAY\\s+TO\\s+SECOND)$").r
-  private val daySecondPattern = "^([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?$".r
+  private val unquotedDaySecondPattern =
+    "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?"
+  private val quotedDaySecondPattern = (s"^$unquotedDaySecondPattern$$").r
+  private val daySecondLiteralPattern =
+    (s"(?i)^INTERVAL\\s+([+|-])?\\'$unquotedDaySecondPattern\\'\\s+DAY\\s+TO\\s+SECOND$$").r
 
   def castStringToDTInterval(input: UTF8String): Long = {
     def secondAndMicro(second: String, micro: String): String = {
@@ -162,14 +164,13 @@ object IntervalUtils {
         second
       }
     }
-    val intervalStr = input.trimAll().toString
-    intervalStr match {
-      case daySecondPattern("-", day, hour, minute, second, micro) =>
+
+    input.trimAll().toString match {
+      case quotedDaySecondPattern("-", day, hour, minute, second, micro) =>
         toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
-      case daySecondPattern(_, day, hour, minute, second, micro) =>
+      case quotedDaySecondPattern(_, day, hour, minute, second, micro) =>
         toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
-      case daySecondStringPattern(
-      _, firstSign, _, secondSign, day, hour, minute, second, micro, _, _) =>
+      case daySecondLiteralPattern(firstSign, secondSign, day, hour, minute, second, micro) =>
         (firstSign, secondSign) match {
           case ("-", "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
           case ("-", _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)

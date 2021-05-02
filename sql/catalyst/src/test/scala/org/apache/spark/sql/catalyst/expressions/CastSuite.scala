@@ -1777,7 +1777,7 @@ class CastSuite extends CastSuiteBase {
 
   test("SPARK-35112: Cast string to day-time interval") {
     checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType), 0L)
-    checkEvaluation(cast(Literal.create("INTERVAL '0 0:0:0' DAY TO SECOND"),
+    checkEvaluation(cast(Literal.create(" interval '0 0:0:0' Day TO second   "),
       DayTimeIntervalType), 0L)
     checkEvaluation(cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
       DayTimeIntervalType), 93784000000L)
