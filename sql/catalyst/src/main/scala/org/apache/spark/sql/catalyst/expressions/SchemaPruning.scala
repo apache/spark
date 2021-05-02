@@ -125,7 +125,7 @@ object SchemaPruning extends SQLConfHelper {
    * When expr is an [[Attribute]], construct a field around it and indicate that that
    * field was derived from an attribute.
    */
-  private def getRootFields(expr: Expression): Seq[RootField] = {
+  private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case att: Attribute =>
         RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
