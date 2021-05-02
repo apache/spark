@@ -293,8 +293,9 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
   }
 
   override def createCheckpointDirectory(): Path = {
-    fs.mkdirs(path, FsPermission.getDirDefault)
-    fs.makeQualified(path)
+    val qualifiedPath = fs.makeQualified(path)
+    fs.mkdirs(qualifiedPath, FsPermission.getDirDefault)
+    qualifiedPath
   }
 }
 
@@ -363,8 +364,9 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
   }
 
   override def createCheckpointDirectory(): Path = {
-    fc.mkdir(path, FsPermission.getDirDefault, true)
-    fc.makeQualified(path)
+    val qualifiedPath = fc.makeQualified(path)
+    fc.mkdir(qualifiedPath, FsPermission.getDirDefault, true)
+    qualifiedPath
   }
 
   private def mayRemoveCrcFile(path: Path): Unit = {
