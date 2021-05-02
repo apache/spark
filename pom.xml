@@ -3509,5 +3509,14 @@
         <debugForkedProcess>${test.debug.suite}</debugForkedProcess>
       </properties>
     </profile>
+
+    <!--
+      Deprecated: com.github.fommil.netlib has been replaced by dev.ludovic.netlib which
+      doesn't package or distribute any GPL/LGPL dependencies. There should now be hardware
+      acceleration out-of-the-box without enabling any additional profile.
+    -->
+    <profile>
+      <id>netlib-lgpl</id>
+    </profile>
   </profiles>
 </project>
