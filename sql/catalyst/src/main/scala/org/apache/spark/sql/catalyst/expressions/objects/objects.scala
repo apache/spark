@@ -256,25 +256,21 @@ case class StaticInvoke(
       ""
     }
 
-    val evaluate = if (returnNullable) {
+    val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
           ${ev.value} = $callFunc;
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
-        if (method.getReturnType.isPrimitive) {
-          s"${ev.value} = $callFunc;"
-        } else {
-          val boxedResult = ctx.freshName("boxedResult")
-          s"""
-            ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
-            ${ev.isNull} = $boxedResult == null;
-            if (!${ev.isNull}) {
-              ${ev.value} = $boxedResult;
-            }
-          """
-        }
+        val boxedResult = ctx.freshName("boxedResult")
+        s"""
+          ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
+          ${ev.isNull} = $boxedResult == null;
+          if (!${ev.isNull}) {
+            ${ev.value} = $boxedResult;
+          }
+        """
       }
     } else {
       s"${ev.value} = $callFunc;"
