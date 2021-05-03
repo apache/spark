@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpres
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 
 /**
  * This rule ensures that [[Aggregate]] nodes doesn't contain complex grouping expressions in the
@@ -46,7 +47,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object PullOutGroupingExpressions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan transform {
+    plan.transformWithPruning(_.containsPattern(AGGREGATE)) {
       case a: Aggregate if a.resolved =>
         val complexGroupingExpressionMap = mutable.LinkedHashMap.empty[Expression, NamedExpression]
         val newGroupingExpressions = a.groupingExpressions.map {

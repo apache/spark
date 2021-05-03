@@ -242,7 +242,8 @@ object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateH
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // push LeftSemi/LeftAnti down into the join below
     case j @ Join(AllowedJoin(left), right, LeftSemiOrAnti(joinType), joinCond, parentHint) =>
       val (childJoinType, childLeft, childRight, childCondition, childHint) =

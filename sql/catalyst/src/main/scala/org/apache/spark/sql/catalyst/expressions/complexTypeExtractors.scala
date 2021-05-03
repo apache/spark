@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -90,7 +91,9 @@ object ExtractValue {
   }
 }
 
-trait ExtractValue extends Expression
+trait ExtractValue extends Expression {
+  final override val nodePatterns: Seq[TreePattern] = Seq(EXTRACT_VALUE)
+}
 
 /**
  * Returns the value of fields in the Struct `child`.
