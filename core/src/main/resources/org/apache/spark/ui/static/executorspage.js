@@ -26,7 +26,11 @@ function getThreadDumpEnabled() {
 }
 
 function formatLossReason(status, type, row) {
-    return row.removeReason.join("")
+    if (row.removeReason) {
+       return row.removeReason
+    } else {
+       return ""
+    }
 }
 
 function formatStatus(status, type, row) {
