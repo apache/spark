@@ -53,8 +53,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGenerate" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGroupingAnalytics" ::
-      "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
-      "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveInsertInto" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveMissingReferences" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNaturalAndUsingJoin" ::
@@ -77,6 +75,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveCreateNamedStruct" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveInlineTables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
