@@ -172,6 +172,7 @@ private[kafka010] class KafkaSource(
       }
       currentPartitionOffsets = Some(offsets)
       latestPartitionOffsets = Some(latest)
+      lastTriggerMillis = System.currentTimeMillis()
       logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
       KafkaSourceOffset(offsets)
     }
