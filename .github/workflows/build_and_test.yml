@@ -520,7 +520,8 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ./tpcds-sf-1
-        key: tpcds-${{ hashFiles('sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
+        # key: tpcds-${{ hashFiles('sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
+        key: tpcds-4eafd95c9818802b6550bd48fcf860592de9b3c6
     - name: Checkout tpcds-kit repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       uses: actions/checkout@v2
