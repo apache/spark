@@ -318,7 +318,7 @@ final class ShuffleBlockFetcherIterator(
                 if (isNettyOOMOnShuffle.compareAndSet(false, true)) {
                   // The fetcher can fail remaining blocks in batch for the same error. So we only
                   // log the warning once to avoid flooding the logs.
-                  logWarning(s"Bock $blockId has failed $failureTimes times " +
+                  logInfo(s"Block $blockId has failed $failureTimes times " +
                     s"due to Netty OOM, will retry")
                 }
                 remainingBlocks -= blockId
