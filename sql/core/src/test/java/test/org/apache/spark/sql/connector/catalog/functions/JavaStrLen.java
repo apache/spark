@@ -58,7 +58,7 @@ public class JavaStrLen implements UnboundFunction {
         " strlen(string) -> int";
   }
 
-  private static abstract class JavaStrLenBase implements ScalarFunction<Integer> {
+  private abstract static class JavaStrLenBase implements ScalarFunction<Integer> {
     @Override
     public DataType[] inputTypes() {
       return new DataType[] { DataTypes.StringType };
@@ -102,17 +102,17 @@ public class JavaStrLen implements UnboundFunction {
       return str.length();
     }
     public int invoke(UTF8String str) {
-      return str.toString().length();
+      return str.toString().length() + 100;
     }
   }
 
   public static class JavaStrLenBadStaticMagic extends JavaStrLenBase {
     public static int invoke(String str) {
-      return str.length() + 100;
+      return str.length();
     }
 
     public int invoke(UTF8String str) {
-      return str.toString().length();
+      return str.toString().length() + 100;
     }
   }
 

@@ -202,7 +202,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"),
       new JavaStrLen(new JavaStrLenBadStaticMagic))
-    checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(3) :: Nil)
+    checkAnswer(sql("SELECT testcat.ns.strlen('abc')"), Row(103) :: Nil)
   }
 
   test("scalar function: no implementation found in Java") {
