@@ -638,11 +638,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val clsType = ObjectType(classOf[ConcreteClass])
     val obj = new ConcreteClass
 
+    val input = (1, 2)
     checkObjectExprEvaluation(
-      Invoke(Literal(obj, clsType), "testFunc", IntegerType, Seq(Literal(1))), 0)
+      Invoke(Literal(obj, clsType), "testFunc", IntegerType,
+        Seq(Literal(input, ObjectType(input.getClass)))), 2)
   }
 
-  test("SPARK-35278: static invoke should find method without exact param type match") {
+  test("SPARK-35288: static invoke should find method without exact param type match") {
     val input = (1, 2)
 
     checkObjectExprEvaluation(
@@ -673,9 +675,13 @@ object TestStaticInvoke {
 }
 
 abstract class BaseClass[T] {
-  def testFunc(param: T): T
+  def testFunc(param: T): Int
 }
 
-class ConcreteClass extends BaseClass[Int] with Serializable {
-  override def testFunc(param: Int): Int = param - 1
+class ConcreteClass extends BaseClass[Product] with Serializable {
+  override def testFunc(param: Product): Int = param match {
+    case _: Tuple2[_, _] => 2
+    case _: Tuple3[_, _, _] => 3
+    case _ => 4
+  }
 }

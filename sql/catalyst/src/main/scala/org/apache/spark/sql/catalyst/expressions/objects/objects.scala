@@ -249,14 +249,8 @@ case class StaticInvoke(
         if (m.isEmpty) {
           sys.error(s"Couldn't find $functionName on $cls")
         } else if (m.length > 1) {
-          // More than one matched method signature. Exclude synthetic one, e.g. generic one.
-          val realMethods = m.filter(!_.isSynthetic)
-          if (realMethods.length > 1) {
-            // Ambiguous case, we don't know which method to choose, just fail it.
-            sys.error(s"Found ${realMethods.length} $cls on $cls")
-          } else {
-            realMethods.head
-          }
+          // Ambiguous case, we don't know which method to choose, just fail it.
+          sys.error(s"Found ${m.length} $functionName on $cls")
         } else {
           m.head
         }
