@@ -30,8 +30,9 @@ import scala.util.{Failure, Success}
 import io.netty.util.internal.{OutOfDirectMemoryError, PlatformDependent}
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.{NettyUtils, TransportConf}
@@ -981,7 +982,7 @@ object ShuffleBlockFetcherIterator {
   /**
    * The max number of a block could retry due to Netty OOM before throwing the fetch failure.
    */
-  val maxAttemptsOnNettyOOM = 10
+  val maxAttemptsOnNettyOOM: Int = SparkEnv.get.conf.get(SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM)
 
   def resetNettyOOMFlagIfPossible(freeMemoryLowerBound: Long): Unit = {
     if (isNettyOOMOnShuffle.get() && NettyUtils.freeDirectMemory() >= freeMemoryLowerBound) {
