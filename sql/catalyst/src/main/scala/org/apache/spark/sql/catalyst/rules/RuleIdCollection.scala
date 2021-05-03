@@ -48,7 +48,11 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
+      "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
+      "org.apache.spark.sql.catalyst.optimizer.CollapseWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineFilters" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineUnions" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantFolding" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::

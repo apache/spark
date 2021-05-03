@@ -70,6 +70,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(PROJECT)
+
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg
@@ -273,6 +275,8 @@ case class Union(
       Some(children.flatMap(_.maxRows).sum)
     }
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
 
   /**
    * Note the definition has assumption about how union is implemented physically.
@@ -833,6 +837,8 @@ case class Window(
 
   override def producedAttributes: AttributeSet = windowOutputSet
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW)
+
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Window =
@@ -1179,6 +1185,7 @@ case class Sample(
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
 }
@@ -1191,6 +1198,7 @@ abstract class RepartitionOperation extends UnaryNode {
   def numPartitions: Int
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(REPARTITION_OPERATION)
   def partitioning: Partitioning
 }
 
@@ -1211,6 +1219,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
       case _ => RoundRobinPartitioning(numPartitions)
     }
   }
+
   override protected def withNewChildInternal(newChild: LogicalPlan): Repartition =
     copy(child = newChild)
 }
@@ -1290,6 +1299,7 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
 }
