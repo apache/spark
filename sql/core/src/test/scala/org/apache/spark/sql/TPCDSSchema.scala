@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 trait TPCDSSchema {
 
-  private val tableColumns = Map(
+  protected val tableColumns = Map(
     "store_sales" ->
       """
         |`ss_sold_date_sk` INT, `ss_sold_time_sk` INT, `ss_item_sk` INT, `ss_customer_sk` INT,
@@ -242,18 +242,4 @@ trait TPCDSSchema {
       """.stripMargin
   )
 
-  val tableNames: Iterable[String] = tableColumns.keys
-
-  def createTable(
-      spark: SparkSession,
-      tableName: String,
-      format: String = "parquet",
-      options: Seq[String] = Nil): Unit = {
-    spark.sql(
-      s"""
-         |CREATE TABLE `$tableName` (${tableColumns(tableName)})
-         |USING $format
-         |${options.mkString("\n")}
-       """.stripMargin)
-  }
 }
