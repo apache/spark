@@ -152,9 +152,9 @@ To install PySpark from source, refer to |building_spark|_.
 
 Dependencies
 ------------
-============= ========================= ================
+============= ========================= ============================
 Package       Minimum supported version Note
-============= ========================= ================
+============= ========================= ============================
 `pandas`      0.23.2                    Optional for SQL
 `NumPy`       1.7                       Required for ML 
 `pyarrow`     1.0.0                     Optional for SQL
@@ -162,7 +162,7 @@ Package       Minimum supported version Note
 `pandas`      0.23.2                    Required for pandas-on-Spark
 `pyarrow`     1.0.0                     Required for pandas-on-Spark
 `Numpy`       1.14(<1.20.0)             Required for pandas-on-Spark
-============= ========================= ================
+============= ========================= ============================
 
 Note that PySpark requires Java 8 or later with ``JAVA_HOME`` properly set.  
 If using JDK 11, set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
