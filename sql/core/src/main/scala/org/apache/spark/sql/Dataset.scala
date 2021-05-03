@@ -2481,8 +2481,14 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has
    * the same names.
+   *
+   * `column`'s expression in `cols` must only refer to attributes supplied by this Dataset.
+   * It is an error to add columns that refers to some other Dataset.
+   *
+   * @group untypedrel
+   * @since 3.2.0
    */
-  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
+  def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")

@@ -479,6 +479,35 @@ class DataFrameTests(ReusedSQLTestCase):
 
         self.assertRaises(TypeError, foo)
 
+    def test_with_columns(self):
+        # With key and value columns
+        kvs = self.df.with_columns(
+            ["key", "value"], [self.df.key, self.df.value]
+        ).select("key", "value").collect()
+        self.assertEqual([(r.key, r.value) for r in kvs], [(i, str(i)) for i in range(100)])
+
+        # With list style names and values
+        keys = self.df.with_columns(["key"], [self.df.key]).select("key").collect()
+        self.assertEqual([r.key for r in keys], list(range(100)))
+
+        # With tuple style names and values
+        keys = self.df.with_columns(("key",), (self.df.key,)).select("key").collect()
+        self.assertEqual([r.key for r in keys], list(range(100)))
+
+        # Columns rename
+        kvs = self.df.with_columns(
+            ["key_alias", "value_alias"], [self.df.key, self.df.value]
+        ).select("key_alias", "value_alias").collect()
+        self.assertEqual(
+            [(r.key_alias, r.value_alias) for r in kvs],
+            [(i, str(i)) for i in range(100)]
+        )
+
+        # Type check
+        erorr_type_val = ""
+        self.assertRaises(TypeError, self.df.with_columns, erorr_type_val, [self.df.key])
+        self.assertRaises(TypeError, self.df.with_columns, ["key"], erorr_type_val)
+
     def test_generic_hints(self):
         from pyspark.sql import DataFrame
 

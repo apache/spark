@@ -2911,6 +2911,43 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             support = 0.01
         return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
 
+    def with_columns(self, col_names, cols):
+        """
+        Returns a new :class:`DataFrame` by adding multiple columns or replacing the
+        existing columns that has the same name.
+
+        The cols expression must be a list of expression over this :class:`DataFrame`;
+        attempting to add columns from some other :class:`DataFrame` will raise an error.
+
+        .. versionadded:: 3.2.0
+           Added support for multiple columns adding
+
+        Parameters
+        ----------
+        col_names : tuple or list
+            a list of names for multiple columns.
+        cols : tuple or list
+            a list of names for multiple columns.
+
+        Examples
+        --------
+        >>> df.with_columns(['age2', 'age3'], [df.age + 2, df.age + 3]).collect()
+        [Row(age=2, name='Alice', age2=4, age3=5), Row(age=5, name='Bob', age2=7, age3=8)]
+        """
+        if not isinstance(col_names, (list, tuple)):
+            raise TypeError("colName must be string or list/tuple of column names.")
+        if not isinstance(cols, (list, tuple)):
+            raise TypeError("col must be a column or list/tuple of columns.")
+
+        # Covert tuple to list
+        col_names = list(col_names) if isinstance(col_names, tuple) else col_names
+        cols = list(cols) if isinstance(cols, tuple) else cols
+
+        return DataFrame(
+            self._jdf.withColumns(_to_seq(self._sc, col_names), self._jcols(cols)),
+            self.sql_ctx
+        )
+
     def withColumn(self, colName: str, col: Column) -> "DataFrame":
         """
         Returns a new :class:`DataFrame` by adding a column or replacing the
