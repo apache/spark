@@ -40,9 +40,9 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
@@ -130,11 +130,11 @@ class TestHiveContext(
    * when running in the JVM, i.e. it needs to be false when calling from Python.
    */
   def this(sc: SparkContext, loadTestTables: Boolean = true) = {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
+    this(new TestHiveSparkSession(TestHiveContext.withHiveExternalCatalog(sc), loadTestTables))
   }
 
   def this(sc: SparkContext, hiveClient: HiveClient) = {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc),
+    this(new TestHiveSparkSession(TestHiveContext.withHiveExternalCatalog(sc),
       hiveClient,
       loadTestTables = false))
   }
@@ -223,7 +223,7 @@ private[hive] class TestHiveSparkSession(
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestHiveSessionStateBuilder(this, parentSessionState, Map.empty).build()
+    new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
   lazy val metadataHive: HiveClient = {
@@ -596,15 +596,13 @@ private[hive] class TestHiveQueryExecution(
   }
 
   override lazy val analyzed: LogicalPlan = sparkSession.withActive {
-    val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _, _) => tbl.asTableIdentifier :: Nil
-      case _ => Nil
-    }
-
     // Make sure any test tables referenced are loaded.
-    val referencedTables =
-      describedTables ++
-        logical.collect { case UnresolvedRelation(ident, _, _) => ident.asTableIdentifier }
+    val referencedTables = logical.collect {
+      case UnresolvedRelation(ident, _, _) =>
+        if (ident.length > 1 && ident.head.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
+          ident.tail.asTableIdentifier
+        } else ident.asTableIdentifier
+    }
     val resolver = sparkSession.sessionState.conf.resolver
     val referencedTestTables = referencedTables.flatMap { tbl =>
       val testTableOpt = sparkSession.testTables.keys.find(resolver(_, tbl.table))
@@ -649,13 +647,16 @@ private[hive] object TestHiveContext {
     scratchDir
   }
 
+  private def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
+    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+    sc
+  }
 }
 
 private[sql] class TestHiveSessionStateBuilder(
     session: SparkSession,
-    state: Option[SessionState],
-    options: Map[String, String])
-  extends HiveSessionStateBuilder(session, state, options)
+    state: Option[SessionState])
+  extends HiveSessionStateBuilder(session, state)
   with WithTestConf {
 
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
@@ -664,7 +665,7 @@ private[sql] class TestHiveSessionStateBuilder(
     new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
   }
 
-  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _, Map.empty)
+  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }
 
 private[hive] object HiveTestJars {
@@ -683,7 +684,7 @@ private[hive] object HiveTestJars {
     val fileName = urlString.split("/").last
     val targetFile = new File(hiveTestJarsDir, fileName)
     if (!targetFile.exists()) {
-      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null, null)
+      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null)
     }
     targetFile
   }

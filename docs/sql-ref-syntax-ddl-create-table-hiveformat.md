@@ -39,14 +39,6 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ LOCATION path ]
     [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
     [ AS select_statement ]
-
-row_format:    
-    : SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ]
-    | DELIMITED [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escaped_char ] ] 
-        [ COLLECTION ITEMS TERMINATED BY collection_items_terminated_char ] 
-        [ MAP KEYS TERMINATED BY map_key_terminated_char ]
-        [ LINES TERMINATED BY row_terminated_char ]
-        [ NULL DEFINED AS null_char ]
 ```
 
 Note that, the clauses between the columns definition clause and the AS SELECT clause can come in
@@ -82,50 +74,10 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 * **INTO num_buckets BUCKETS**
 
     Specifies buckets numbers, which is used in `CLUSTERED BY` clause.
-    
-* **row_format**    
 
-    Use the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
-    
-* **SERDE**
+* **row_format** 
 
-    Specifies a custom SerDe for one table.
-    
-* **serde_class**
-
-    Specifies a fully-qualified class name of a custom SerDe.
-
-* **SERDEPROPERTIES**
-
-    A list of key-value pairs that is used to tag the SerDe definition.
-    
-* **DELIMITED**
-
-    The `DELIMITED` clause can be used to specify the native SerDe and state the delimiter, escape character, null character and so on.
-    
-* **FIELDS TERMINATED BY**
-
-    Used to define a column separator.
-    
-* **COLLECTION ITEMS TERMINATED BY**
-
-    Used to define a collection item separator.
-   
-* **MAP KEYS TERMINATED BY**
-
-    Used to define a map key separator.
-    
-* **LINES TERMINATED BY**
-
-    Used to define a row separator.
-    
-* **NULL DEFINED AS**
-
-    Used to define the specific value for NULL.
-    
-* **ESCAPED BY**
-
-    Used for escape mechanism.
+    Specifies the row format for input and output. See [HIVE FORMAT](sql-ref-syntax-hive-format.html) for more syntax details.
 
 * **STORED AS**
 

@@ -735,7 +735,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("analyze column command paramaters validation") {
+  test("analyze column command parameters validation") {
     val e1 = intercept[IllegalArgumentException] {
       AnalyzeColumnCommand(TableIdentifier("test"), Option(Seq("c1")), true).run(spark)
     }
@@ -812,32 +812,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assert(rawDataSize.isEmpty, "rawDataSize should not be shown without table analysis")
       assert(numRows.isEmpty, "numRows should not be shown without table analysis")
       assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
-    }
-  }
-
-  test("alter table rename after analyze table") {
-    Seq(true, false).foreach { analyzedBySpark =>
-      val oldName = "tab1"
-      val newName = "tab2"
-      withTable(oldName, newName) {
-        createNonPartitionedTable(oldName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
-        val fetchedStats1 = checkTableStats(
-          oldName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        sql(s"ALTER TABLE $oldName RENAME TO $newName")
-        val fetchedStats2 = checkTableStats(
-          newName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        assert(fetchedStats1 == fetchedStats2)
-
-        // ALTER TABLE RENAME does not affect the contents of Hive specific statistics
-        val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $newName")
-
-        val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-        val numRows = extractStatsPropValues(describeResult, "numRows")
-        val totalSize = extractStatsPropValues(describeResult, "totalSize")
-        assert(rawDataSize.isDefined && rawDataSize.get > 0, "rawDataSize is lost")
-        assert(numRows.isDefined && numRows.get == 500, "numRows is lost")
-        assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
-      }
     }
   }
 
@@ -983,12 +957,16 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           assert(fetched1.get.colStats.size == 2)
 
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
-            val file1 = new File(dir1 + "/data")
+            val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
+            val file1 = new File(partDir1, "data")
+            file1.getParentFile.mkdirs()
             Utils.tryWithResource(new PrintWriter(file1)) { writer =>
               writer.write("1,a")
             }
 
-            val file2 = new File(dir2 + "/data")
+            val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
+            val file2 = new File(partDir2, "data")
+            file2.getParentFile.mkdirs()
             Utils.tryWithResource(new PrintWriter(file2)) { writer =>
               writer.write("1,a")
             }
@@ -997,8 +975,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             sql(
               s"""
                  |ALTER TABLE $table ADD
-                 |PARTITION (ds='2008-04-09', hr='11') LOCATION '${dir1.toURI.toString}'
-                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${dir2.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='11') LOCATION '${partDir1.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${partDir1.toURI.toString}'
             """.stripMargin)
             if (autoUpdate) {
               val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
@@ -1524,7 +1502,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         Seq(tbl, ext_tbl).foreach { tblName =>
           sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
 
-          val expectedSize = 601
+          val expectedSize = 657
           // analyze table
           sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
           var tableStats = getTableStats(tblName)

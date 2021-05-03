@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.io.File
 
+import scala.collection.JavaConverters._
+
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -27,8 +29,7 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, ExternalCatalog, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.connector.InMemoryTableCatalog
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, InMemoryTable, InMemoryTableCatalog, Table}
 import org.apache.spark.sql.types._
 
 class TableLookupCacheSuite extends AnalysisTest with Matchers {
@@ -46,7 +47,12 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
       ignoreIfExists = false)
     val v2Catalog = new InMemoryTableCatalog {
       override def loadTable(ident: Identifier): Table = {
-        V1Table(externalCatalog.getTable("default", ident.name))
+        val catalogTable = externalCatalog.getTable("default", ident.name)
+        new InMemoryTable(
+          catalogTable.identifier.table,
+          catalogTable.schema,
+          Array.empty,
+          Map.empty[String, String].asJava)
       }
       override def name: String = CatalogManager.SESSION_CATALOG_NAME
     }

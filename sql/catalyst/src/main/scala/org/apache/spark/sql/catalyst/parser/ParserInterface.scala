@@ -70,10 +70,4 @@ trait ParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to a DataType")
   def parseDataType(sqlText: String): DataType
-
-  /**
-   * Parse a string to a raw [[DataType]] without CHAR/VARCHAR replacement.
-   */
-  @throws[ParseException]("Text cannot be parsed to a DataType")
-  def parseRawDataType(sqlText: String): DataType
 }

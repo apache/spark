@@ -23,10 +23,10 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                   InputAdapter
                                     BroadcastExchange #2
                                       WholeStageCodegen (1)
-                                        Filter [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk]
+                                        Filter [ss_item_sk,ss_customer_sk,ss_store_sk]
                                           ColumnarToRow
                                             InputAdapter
-                                              Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price]
+                                              Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price,ss_sold_date_sk]
                               InputAdapter
                                 BroadcastExchange #3
                                   WholeStageCodegen (2)

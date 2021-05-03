@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replaces [[ResolvedHint]] operators from the plan. Move the [[HintInfo]] to associated [[Join]]
@@ -27,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object EliminateResolvedHint extends Rule[LogicalPlan] {
 
-  private val hintErrorHandler = SQLConf.get.hintErrorHandler
+  private val hintErrorHandler = conf.hintErrorHandler
 
   // This is also called in the beginning of the optimization phase, and as a result
   // is using transformUp rather than resolveOperators.

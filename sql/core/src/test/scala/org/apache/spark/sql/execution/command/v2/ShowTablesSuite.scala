@@ -17,32 +17,14 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
-import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
 
-class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSession {
-  override def version: String = "V2"
-  override def catalog: String = "test_catalog"
+/**
+ * The class contains tests for the `SHOW TABLES` command to check V2 table catalogs.
+ */
+class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
-  override def defaultUsing: String = "USING _"
-  override def showSchema: StructType = {
-    new StructType()
-      .add("namespace", StringType, nullable = false)
-      .add("tableName", StringType, nullable = false)
-  }
-  override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
-    showRows.map {
-      case ShowRow(namespace, table, _) => Row(namespace, table)
-    }
-  }
-
-  override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
 
   // The test fails for V1 catalog with the error:
   // org.apache.spark.sql.AnalysisException:
@@ -52,7 +34,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSessio
       spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) $defaultUsing")
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.n1.n2.db",
-        Seq(ShowRow("n1.n2.db", "table_name", false)))
+        Seq(Row("n1.n2.db", "table_name", false)))
     }
   }
 
@@ -62,7 +44,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSessio
   test("using v2 catalog with empty namespace") {
     withTable(s"$catalog.table") {
       spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) $defaultUsing")
-      runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(ShowRow("", "table", false)))
+      runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(Row("", "table", false)))
     }
   }
 
@@ -74,7 +56,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSessio
       val e = intercept[AnalysisException] {
         sql(sqlCommand)
       }
-      assert(e.message.contains(s"The database name is not valid: ${namespace}"))
+      assert(e.message.contains(s"SHOW TABLE EXTENDED is not supported for v2 tables"))
     }
 
     val namespace = s"$catalog.ns1.ns2"
@@ -101,10 +83,10 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSessio
     val table = "people"
     withTable(s"$catalog.$table") {
       sql(s"CREATE TABLE $catalog.$table (name STRING, id INT) $defaultUsing")
-      val errMsg = intercept[NoSuchDatabaseException] {
+      val errMsg = intercept[AnalysisException] {
         sql(s"SHOW TABLE EXTENDED FROM $catalog LIKE '*$table*'").collect()
       }.getMessage
-      assert(errMsg.contains(s"Database '$catalog' not found"))
+      assert(errMsg.contains("SHOW TABLE EXTENDED is not supported for v2 tables"))
     }
   }
 }

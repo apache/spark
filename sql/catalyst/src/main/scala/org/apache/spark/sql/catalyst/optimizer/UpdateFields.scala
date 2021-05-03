@@ -24,7 +24,6 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{Expression, UpdateFields, WithField}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -32,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object OptimizeUpdateFields extends Rule[LogicalPlan] {
   private def canOptimize(names: Seq[String]): Boolean = {
-    if (SQLConf.get.caseSensitiveAnalysis) {
+    if (conf.caseSensitiveAnalysis) {
       names.distinct.length != names.length
     } else {
       names.map(_.toLowerCase(Locale.ROOT)).distinct.length != names.length
@@ -43,35 +42,29 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
     case UpdateFields(structExpr, fieldOps)
       if fieldOps.forall(_.isInstanceOf[WithField]) &&
         canOptimize(fieldOps.map(_.asInstanceOf[WithField].name)) =>
-      val caseSensitive = SQLConf.get.caseSensitiveAnalysis
+      val caseSensitive = conf.caseSensitiveAnalysis
 
       val withFields = fieldOps.map(_.asInstanceOf[WithField])
       val names = withFields.map(_.name)
       val values = withFields.map(_.valExpr)
 
       val newNames = mutable.ArrayBuffer.empty[String]
-      val newValues = mutable.ArrayBuffer.empty[Expression]
+      val newValues = mutable.HashMap.empty[String, Expression]
+      // Used to remember the casing of the last instance
+      val nameMap = mutable.HashMap.empty[String, String]
 
-      if (caseSensitive) {
-        names.zip(values).reverse.foreach { case (name, value) =>
-          if (!newNames.contains(name)) {
-            newNames += name
-            newValues += value
-          }
+      names.zip(values).foreach { case (name, value) =>
+        val normalizedName = if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
+        if (nameMap.contains(normalizedName)) {
+          newValues += normalizedName -> value
+        } else {
+          newNames += normalizedName
+          newValues += normalizedName -> value
         }
-      } else {
-        val nameSet = mutable.HashSet.empty[String]
-        names.zip(values).reverse.foreach { case (name, value) =>
-          val lowercaseName = name.toLowerCase(Locale.ROOT)
-          if (!nameSet.contains(lowercaseName)) {
-            newNames += name
-            newValues += value
-            nameSet += lowercaseName
-          }
-        }
+        nameMap += normalizedName -> name
       }
 
-      val newWithFields = newNames.reverse.zip(newValues.reverse).map(p => WithField(p._1, p._2))
+      val newWithFields = newNames.map(n => WithField(nameMap(n), newValues(n)))
       UpdateFields(structExpr, newWithFields.toSeq)
 
     case UpdateFields(UpdateFields(struct, fieldOps1), fieldOps2) =>

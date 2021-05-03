@@ -24,14 +24,13 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{BLAS, Vectors}
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -296,7 +295,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
       val x = random.nextDouble()
       if (x < totalFraction) {
-        val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
+        val rating = BLAS.nativeBLAS.sdot(rank, userFactor, 1, itemFactor, 1)
         if (x < trainingFraction) {
           val noise = noiseStd * random.nextGaussian()
           training += Rating(userId, itemId, rating + noise.toFloat)
@@ -1194,7 +1193,7 @@ object ALSSuite extends Logging {
     val training = ArrayBuffer.empty[Rating[Int]]
     val test = ArrayBuffer.empty[Rating[Int]]
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
-      val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
+      val rating = BLAS.nativeBLAS.sdot(rank, userFactor, 1, itemFactor, 1)
       val threshold = if (rating > 0) positiveFraction else negativeFraction
       val observed = random.nextDouble() < threshold
       if (observed) {

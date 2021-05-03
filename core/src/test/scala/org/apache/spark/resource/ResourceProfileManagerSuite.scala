@@ -110,7 +110,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
     val immrprof = rprof.require(gpuExecReq).build
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
 

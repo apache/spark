@@ -53,7 +53,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
@@ -303,12 +303,14 @@ class Dataset[T] private[sql](
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
-    schema.fieldNames.toSeq +: data.map { row =>
+    schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case _ => cell.toString
+          case _ =>
+            // Escapes meta-characters not to break the `showString` format
+            SchemaUtils.escapeMetaCharacters(cell.toString)
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
@@ -1363,7 +1365,7 @@ class Dataset[T] private[sql](
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
   // This must be called before we return a `Column` that contains `AttributeReference`.
-  // Note that, the metadata added here are only avaiable in the analyzer, as the analyzer rule
+  // Note that, the metadata added here are only available in the analyzer, as the analyzer rule
   // `DetectAmbiguousSelfJoin` will remove it.
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
@@ -1665,10 +1667,10 @@ class Dataset[T] private[sql](
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * {{{
-   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   // Compute the average for all numeric columns rolled up by department and group.
    *   ds.rollup($"department", $"group").avg()
    *
-   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   // Compute the max age and average salary, rolled up by department and gender.
    *   ds.rollup($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
@@ -1794,10 +1796,10 @@ class Dataset[T] private[sql](
    * (i.e. cannot construct expressions).
    *
    * {{{
-   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   // Compute the average for all numeric columns rolled up by department and group.
    *   ds.rollup("department", "group").avg()
    *
-   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   // Compute the max age and average salary, rolled up by department and gender.
    *   ds.rollup($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
@@ -2305,9 +2307,9 @@ class Dataset[T] private[sql](
    *   case class Book(title: String, words: String)
    *   val ds: Dataset[Book]
    *
-   *   val allWords = ds.select('title, explode(split('words, " ")).as("word"))
+   *   val allWords = ds.select($"title", explode(split($"words", " ")).as("word"))
    *
-   *   val bookCountPerWord = allWords.groupBy("word").agg(countDistinct("title"))
+   *   val bookCountPerWord = allWords.groupBy("word").agg(count_distinct("title"))
    * }}}
    *
    * Using `flatMap()` this can similarly be exploded as:
@@ -2344,7 +2346,7 @@ class Dataset[T] private[sql](
    * `functions.explode()`:
    *
    * {{{
-   *   ds.select(explode(split('words, " ")).as("word"))
+   *   ds.select(explode(split($"words", " ")).as("word"))
    * }}}
    *
    * or `flatMap()`:
@@ -2658,6 +2660,8 @@ class Dataset[T] private[sql](
    *   <li>min</li>
    *   <li>max</li>
    *   <li>arbitrary approximate percentiles specified as a percentage (e.g. 75%)</li>
+   *   <li>count_distinct</li>
+   *   <li>approx_count_distinct</li>
    * </ul>
    *
    * If no statistics are given, this function computes count, mean, stddev, min,
@@ -2698,6 +2702,20 @@ class Dataset[T] private[sql](
    *
    * {{{
    *   ds.select("age", "height").summary().show()
+   * }}}
+   *
+   * Specify statistics to output custom summaries:
+   *
+   * {{{
+   *   ds.summary("count", "count_distinct").show()
+   * }}}
+   *
+   * The distinct count isn't included by default.
+   *
+   * You can also run approximate distinct counts which are faster:
+   *
+   * {{{
+   *   ds.summary("count", "approx_count_distinct").show()
    * }}}
    *
    * See also [[describe]] for basic statistics.
@@ -3352,10 +3370,11 @@ class Dataset[T] private[sql](
       comment = None,
       properties = Map.empty,
       originalText = None,
-      child = logicalPlan,
+      plan = logicalPlan,
       allowExisting = false,
       replace = replace,
-      viewType = viewType)
+      viewType = viewType,
+      isAnalyzed = true)
   }
 
   /**
@@ -3464,7 +3483,7 @@ class Dataset[T] private[sql](
         fr.inputFiles
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
-      case DataSourceV2ScanRelation(table: FileTable, _, _) =>
+      case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _), _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray

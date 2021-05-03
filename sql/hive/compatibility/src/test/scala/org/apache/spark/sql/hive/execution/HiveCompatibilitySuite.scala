@@ -56,7 +56,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
-    // Ensures that the table insertion behaivor is consistent with Hive
+    // Ensures that the table insertion behavior is consistent with Hive
     TestHive.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, StoreAssignmentPolicy.LEGACY.toString)
     // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
     // (timestamp_*)
@@ -305,7 +305,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Unsupported underscore syntax.
     "inputddl5",
 
-    // Thift is broken...
+    // Thrift is broken...
     "inputddl8",
 
     // Hive changed ordering of ddl:
@@ -496,7 +496,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "drop_partitions_filter2",
     "drop_partitions_filter3",
 
-    // The following failes due to truncate table
+    // The following fails due to truncate table
     "truncate_table",
 
     // We do not support DFS command.
@@ -716,7 +716,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_multi_insert_common_distinct",
     "groupby_multi_single_reducer2",
     "groupby_multi_single_reducer3",
-    "groupby_mutli_insert_common_distinct",
+    "groupby_multi_insert_common_distinct",
     "groupby_neg_float",
     "groupby_ppd",
     "groupby_ppr",
@@ -958,8 +958,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "subq2",
     "subquery_exists",
     "subquery_exists_having",
-    "subquery_notexists",
-    "subquery_notexists_having",
+    "subquery_nonexistent",
+    "subquery_nonexistent_having",
     "subquery_in_having",
     "tablename_with_select",
     "timestamp_comparison",

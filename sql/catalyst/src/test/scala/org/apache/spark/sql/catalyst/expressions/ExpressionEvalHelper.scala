@@ -451,7 +451,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     if (interpret.isDefined && codegen.isDefined && !compareResults(interpret.get, codegen.get)) {
       fail(s"Incorrect evaluation: $expr, interpret: ${interpret.get}, codegen: ${codegen.get}")
     } else if (interpretExc.isDefined && codegenExc.isEmpty) {
-      fail(s"Incorrect evaluation: $expr, interpet threw exception ${interpretExc.get}")
+      fail(s"Incorrect evaluation: $expr, interpret threw exception ${interpretExc.get}")
     } else if (interpretExc.isEmpty && codegenExc.isDefined) {
       fail(s"Incorrect evaluation: $expr, codegen threw exception ${codegenExc.get}")
     } else if (interpretExc.isDefined && codegenExc.isDefined

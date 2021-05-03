@@ -34,7 +34,7 @@ private[sql] class OracleConnectionProvider extends SecureConnectionProvider {
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
-    setAuthenticationConfigIfNeeded(driver, jdbcOptions)
+    setAuthenticationConfig(driver, jdbcOptions)
     UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
       .doAs(
         new PrivilegedExceptionAction[Connection]() {
@@ -52,12 +52,5 @@ private[sql] class OracleConnectionProvider extends SecureConnectionProvider {
     // The value is coming from AUTHENTICATION_KERBEROS5 final String in driver version 19.6.0.0
     result.put("oracle.net.authentication_services", "(KERBEROS5)");
     result
-  }
-
-  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
-    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
-    if (configEntry == null || configEntry.isEmpty) {
-      setAuthenticationConfig(parent, driver, options)
-    }
   }
 }

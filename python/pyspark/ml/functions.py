@@ -71,7 +71,8 @@ def vector_to_array(col, dtype="float64"):
 
 def array_to_vector(col):
     """
-    Converts a column of array of numeric type into a column of dense vectors in MLlib
+    Converts a column of array of numeric type into a column of pyspark.ml.linalg.DenseVector
+    instances
 
     .. versionadded:: 3.1.0
 
@@ -83,7 +84,7 @@ def array_to_vector(col):
     Returns
     -------
     :py:class:`pyspark.sql.Column`
-        The converted column of MLlib dense vectors.
+        The converted column of dense vectors.
 
     Examples
     --------

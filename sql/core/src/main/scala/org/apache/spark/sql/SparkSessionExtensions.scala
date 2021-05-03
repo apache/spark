@@ -21,8 +21,9 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -40,6 +41,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>Analyzer Rules.</li>
  * <li>Check Analysis Rules.</li>
  * <li>Optimizer Rules.</li>
+ * <li>Pre CBO Rules.</li>
  * <li>Planning Strategies.</li>
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
@@ -96,6 +98,7 @@ class SparkSessionExtensions {
   type StrategyBuilder = SparkSession => Strategy
   type ParserBuilder = (SparkSession, ParserInterface) => ParserInterface
   type FunctionDescription = (FunctionIdentifier, ExpressionInfo, FunctionBuilder)
+  type TableFunctionDescription = (FunctionIdentifier, ExpressionInfo, TableFunctionBuilder)
   type ColumnarRuleBuilder = SparkSession => ColumnarRule
   type QueryStagePrepRuleBuilder = SparkSession => Rule[SparkPlan]
 
@@ -199,6 +202,21 @@ class SparkSessionExtensions {
     optimizerRules += builder
   }
 
+  private[this] val preCBORules = mutable.Buffer.empty[RuleBuilder]
+
+  private[sql] def buildPreCBORules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    preCBORules.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an optimizer `Rule` builder that rewrites logical plans into the [[SparkSession]].
+   * The injected rules will be executed once after the operator optimization batch and
+   * before any cost-based optimization rules that depend on stats.
+   */
+  def injectPreCBORule(builder: RuleBuilder): Unit = {
+    preCBORules += builder
+  }
+
   private[this] val plannerStrategyBuilders = mutable.Buffer.empty[StrategyBuilder]
 
   private[sql] def buildPlannerStrategies(session: SparkSession): Seq[Strategy] = {
@@ -236,11 +254,20 @@ class SparkSessionExtensions {
 
   private[this] val injectedFunctions = mutable.Buffer.empty[FunctionDescription]
 
+  private[this] val injectedTableFunctions = mutable.Buffer.empty[TableFunctionDescription]
+
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
       functionRegistry.registerFunction(name, expressionInfo, function)
     }
     functionRegistry
+  }
+
+  private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
+    for ((name, expressionInfo, function) <- injectedTableFunctions) {
+      tableFunctionRegistry.registerFunction(name, expressionInfo, function)
+    }
+    tableFunctionRegistry
   }
 
   /**
@@ -249,5 +276,13 @@ class SparkSessionExtensions {
   */
   def injectFunction(functionDescription: FunctionDescription): Unit = {
     injectedFunctions += functionDescription
+  }
+
+  /**
+   * Injects a custom function into the
+   * [[org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry]] at runtime for all sessions.
+   */
+  def injectTableFunction(functionDescription: TableFunctionDescription): Unit = {
+    injectedTableFunctions += functionDescription
   }
 }

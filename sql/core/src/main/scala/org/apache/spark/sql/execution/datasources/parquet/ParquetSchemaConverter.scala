@@ -26,6 +26,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -97,14 +98,11 @@ class ParquetToSparkSchemaConverter(
     def typeString =
       if (originalType == null) s"$typeName" else s"$typeName ($originalType)"
 
-    def typeNotSupported() =
-      throw new AnalysisException(s"Parquet type not supported: $typeString")
-
     def typeNotImplemented() =
-      throw new AnalysisException(s"Parquet type not yet supported: $typeString")
+      throw QueryCompilationErrors.parquetTypeUnsupportedYetError(typeString)
 
     def illegalType() =
-      throw new AnalysisException(s"Illegal Parquet type: $typeString")
+      throw QueryCompilationErrors.illegalParquetTypeError(typeString)
 
     // When maxPrecision = -1, we skip precision range check, and always respect the precision
     // specified in field.getDecimalMetadata.  This is useful when interpreting decimal types stored
@@ -130,13 +128,11 @@ class ParquetToSparkSchemaConverter(
       case INT32 =>
         originalType match {
           case INT_8 => ByteType
-          case INT_16 => ShortType
-          case INT_32 | null => IntegerType
+          case INT_16 | UINT_8 => ShortType
+          case INT_32 | UINT_16 | null => IntegerType
           case DATE => DateType
           case DECIMAL => makeDecimalType(Decimal.MAX_INT_DIGITS)
-          case UINT_8 => typeNotSupported()
-          case UINT_16 => typeNotSupported()
-          case UINT_32 => typeNotSupported()
+          case UINT_32 => LongType
           case TIME_MILLIS => typeNotImplemented()
           case _ => illegalType()
         }
@@ -145,7 +141,9 @@ class ParquetToSparkSchemaConverter(
         originalType match {
           case INT_64 | null => LongType
           case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
-          case UINT_64 => typeNotSupported()
+          // The precision to hold the largest unsigned long is:
+          // `java.lang.Long.toUnsignedString(-1).length` = 20
+          case UINT_64 => DecimalType(20, 0)
           case TIMESTAMP_MICROS => TimestampType
           case TIMESTAMP_MILLIS => TimestampType
           case _ => illegalType()
@@ -233,7 +231,7 @@ class ParquetToSparkSchemaConverter(
           valueContainsNull = valueOptional)
 
       case _ =>
-        throw new AnalysisException(s"Unrecognized Parquet type: $field")
+        throw QueryCompilationErrors.unrecognizedParquetTypeError(field.toString)
     }
   }
 
@@ -550,7 +548,7 @@ class SparkToParquetSchemaConverter(
         convertField(field.copy(dataType = udt.sqlType))
 
       case _ =>
-        throw new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
+        throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)
     }
   }
 }

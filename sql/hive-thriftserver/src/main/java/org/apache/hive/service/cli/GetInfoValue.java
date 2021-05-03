@@ -52,7 +52,7 @@ public class GetInfoValue {
       stringValue = tGetInfoValue.getStringValue();
       break;
     default:
-      throw new IllegalArgumentException("Unreconigzed TGetInfoValue");
+      throw new IllegalArgumentException("Unrecognized TGetInfoValue");
     }
   }
 

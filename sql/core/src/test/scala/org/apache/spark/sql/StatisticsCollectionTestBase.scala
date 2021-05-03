@@ -27,7 +27,8 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable, HiveTableRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -318,6 +319,17 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
         assert(table.stats.get.colStats(k) == v)
       }
     }
+  }
+
+  def checkOptimizedPlanStats(
+      df: DataFrame,
+      sizeInBytes: BigInt,
+      rowCount: Option[BigInt],
+      colStat: Seq[ColumnStat]): Unit = {
+    val optimizedPlan = df.queryExecution.optimizedPlan
+    val attributeStats = optimizedPlan.references.zip(colStat)
+    assert(optimizedPlan.stats ===
+      Statistics(sizeInBytes, rowCount, AttributeMap(attributeStats.toSeq)))
   }
 
   // Filter out the checksum file refer to ChecksumFileSystem#isChecksumFile.

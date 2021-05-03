@@ -78,6 +78,7 @@ private[spark] class AppStatusListener(
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
   private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
+  private[spark] val liveMiscellaneousProcess = new HashMap[String, LiveMiscellaneousProcess]()
 
   private val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   // Keep the active executor count as a separate variable to avoid having to do synchronization
@@ -107,6 +108,8 @@ private[spark] class AppStatusListener(
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(version) => sparkVersion = version
+    case processInfoEvent: SparkListenerMiscellaneousProcessAdded =>
+      onMiscellaneousProcessAdded(processInfoEvent)
     case _ =>
   }
 
@@ -366,10 +369,12 @@ private[spark] class AppStatusListener(
 
     // Implicitly exclude every available executor for the stage associated with this node
     Option(liveStages.get((stageId, stageAttemptId))).foreach { stage =>
-      val executorIds = liveExecutors.values.filter(_.host == hostId).map(_.executorId).toSeq
+      val executorIds = liveExecutors.values.filter(exec => exec.host == hostId
+        && exec.executorId != SparkContext.DRIVER_IDENTIFIER).map(_.executorId).toSeq
       setStageExcludedStatus(stage, now, executorIds: _*)
     }
-    liveExecutors.values.filter(_.hostname == hostId).foreach { exec =>
+    liveExecutors.values.filter(exec => exec.hostname == hostId
+      && exec.executorId != SparkContext.DRIVER_IDENTIFIER).foreach { exec =>
       addExcludedStageTo(exec, stageId, now)
     }
   }
@@ -416,7 +421,7 @@ private[spark] class AppStatusListener(
 
     // Implicitly (un)exclude every executor associated with the node.
     liveExecutors.values.foreach { exec =>
-      if (exec.hostname == host) {
+      if (exec.hostname == host && exec.executorId != SparkContext.DRIVER_IDENTIFIER) {
         updateExecExclusionStatus(exec, excluded, now)
       }
     }
@@ -687,6 +692,10 @@ private[spark] class AppStatusListener(
         stage.killedSummary = killedTasksSummary(event.reason, stage.killedSummary)
       }
       stage.activeTasksPerExecutor(event.taskInfo.executorId) -= 1
+
+      stage.peakExecutorMetrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
+      stage.executorSummary(event.taskInfo.executorId).peakExecutorMetrics
+        .compareAndUpdatePeakValues(event.taskExecutorMetrics)
       // [SPARK-24415] Wait for all tasks to finish before removing stage from live list
       val removeStage =
         stage.activeTasks == 0 &&
@@ -753,6 +762,7 @@ private[spark] class AppStatusListener(
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
       exec.totalDuration += event.taskInfo.duration
+      exec.peakExecutorMetrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
 
       // Note: For resubmitted tasks, we continue to use the metrics that belong to the
       // first attempt of this task. This may not be 100% accurate because the first attempt
@@ -1011,7 +1021,7 @@ private[spark] class AppStatusListener(
    */
   def activeStages(): Seq[v1.StageData] = {
     liveStages.values.asScala
-      .filter(_.info.submissionTime.isDefined)
+      .filter(s => Option(s.info).exists(_.submissionTime.isDefined))
       .map(_.toApi())
       .toList
       .sortBy(_.stageId)
@@ -1117,6 +1127,13 @@ private[spark] class AppStatusListener(
     })
   }
 
+  private def getOrCreateOtherProcess(processId: String,
+      addTime: Long): LiveMiscellaneousProcess = {
+    liveMiscellaneousProcess.getOrElseUpdate(processId, {
+      new LiveMiscellaneousProcess(processId, addTime)
+    })
+  }
+
   private def updateStreamBlock(event: SparkListenerBlockUpdated, stream: StreamBlockId): Unit = {
     val storageLevel = event.blockUpdatedInfo.storageLevel
     if (storageLevel.isValid) {
@@ -1172,7 +1189,7 @@ private[spark] class AppStatusListener(
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {
     val stage = liveStages.computeIfAbsent((info.stageId, info.attemptNumber),
-      (_: (Int, Int)) => new LiveStage())
+      (_: (Int, Int)) => new LiveStage(info))
     stage.info = info
     stage
   }
@@ -1344,6 +1361,18 @@ private[spark] class AppStatusListener(
     } else {
       0L
     }
+  }
+
+  private def onMiscellaneousProcessAdded(
+      processInfoEvent: SparkListenerMiscellaneousProcessAdded): Unit = {
+    val processInfo = processInfoEvent.info
+    val miscellaneousProcess =
+      getOrCreateOtherProcess(processInfoEvent.processId, processInfoEvent.time)
+    miscellaneousProcess.processLogs = processInfo.logUrlInfo
+    miscellaneousProcess.hostPort = processInfo.hostPort
+    miscellaneousProcess.isActive = true
+    miscellaneousProcess.totalCores = processInfo.cores
+    update(miscellaneousProcess, System.nanoTime())
   }
 
 }

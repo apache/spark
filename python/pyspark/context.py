@@ -227,7 +227,7 @@ class SparkContext(object):
         os.environ["SPARK_BUFFER_SIZE"] = \
             str(self._jvm.PythonUtils.getSparkBufferSize(self._jsc))
 
-        self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
+        self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python3')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.

@@ -39,6 +39,13 @@ function formatStatus(status, type, row) {
     return "Dead"
 }
 
+function formatProcessStatus(activeStatus) {
+    if (activeStatus) {
+        return "Active"
+    }
+    return "Dead"
+}
+
 function formatResourceCells(resources) {
     var result = ""
     var count = 0
@@ -414,38 +421,74 @@ $(document).ready(function () {
                         },
                         {
                             data: function (row, type) {
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.JVMHeapMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.JVMHeapMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.JVMOffHeapMemory, type));
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.JVMHeapMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.JVMHeapMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.JVMOffHeapMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
                             }
                         },
                         {
                             data: function (row, type) {
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.OnHeapExecutionMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.OnHeapExecutionMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.OffHeapExecutionMemory, type));
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.OnHeapExecutionMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.OnHeapExecutionMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.OffHeapExecutionMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
                             }
                         },
                         {
                             data: function (row, type) {
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.OnHeapStorageMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.OffHeapStorageMemory, type));
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.OnHeapStorageMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.OffHeapStorageMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
                             }
                         },
                         {
                             data: function (row, type) {
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.DirectPoolMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.DirectPoolMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.MappedPoolMemory, type));
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.DirectPoolMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.DirectPoolMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.MappedPoolMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
                             }
                         },
                         {data: 'diskUsed', render: formatBytes},
@@ -512,7 +555,48 @@ $(document).ready(function () {
                 execDataTable.column('executorLogsCol:name').visible(logsExist(response));
                 execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
-    
+
+                 // This section should be visible once API gives the response.
+                 $('.active-process-container').hide()
+                 var endPoint = createRESTEndPointForMiscellaneousProcess(appId);
+                 $.getJSON(endPoint, function( response, status, jqXHR ) {
+                    if (response.length) {
+                        var processSummaryResponse = response;
+                        var processSummaryConf = {
+                            "data": processSummaryResponse,
+                            "columns": [{
+                                    data: "id"
+                                },
+                                {
+                                    data: "hostPort"
+                                },
+                                {
+                                    data: function(row) {
+                                        return formatProcessStatus(row.isActive);
+                                    }
+                                },
+                                {
+                                    data: "totalCores"
+                                },
+                                {
+                                    data: "processLogs",
+                                    render: formatLogsCells
+                                },
+                            ],
+                            "deferRender": true,
+                            "order": [
+                                [0, "asc"]
+                            ],
+                            "bAutoWidth": false,
+                            "oLanguage": {
+                                "sEmptyTable": "No data to show yet"
+                            }
+                        };
+                        $("#active-process-table").DataTable(processSummaryConf);
+                        $('.active-process-container').show()
+                    }
+                 });
+
                 var sumSelector = "#summary-execs-table";
                 var sumConf = {
                     "data": [activeSummary, deadSummary, totalSummary],

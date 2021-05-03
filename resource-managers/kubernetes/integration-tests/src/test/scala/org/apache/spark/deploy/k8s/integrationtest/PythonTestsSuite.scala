@@ -31,7 +31,6 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       appArgs = Array("5"),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false)
   }
 
@@ -48,7 +47,6 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       appArgs = Array("python3"),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
@@ -66,7 +64,6 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       appArgs = Array(s"$additionalMemoryInBytes"),
       driverPodChecker = doDriverMemoryCheck,
       executorPodChecker = doExecutorMemoryCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }

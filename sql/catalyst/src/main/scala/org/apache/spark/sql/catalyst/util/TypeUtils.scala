@@ -61,6 +61,14 @@ object TypeUtils {
     }
   }
 
+  def checkForAnsiIntervalOrNumericType(
+      dt: DataType, funcName: String): TypeCheckResult = dt match {
+    case YearMonthIntervalType | DayTimeIntervalType | NullType => TypeCheckResult.TypeCheckSuccess
+    case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
+    case other => TypeCheckResult.TypeCheckFailure(
+      s"function $funcName requires numeric or interval types, not ${other.catalogString}")
+  }
+
   def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
     if (exactNumericRequired) {
       t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
@@ -101,17 +109,17 @@ object TypeUtils {
   }
 
   def failWithIntervalType(dataType: DataType): Unit = {
-    dataType match {
-      case CalendarIntervalType =>
-        throw new AnalysisException("Cannot use interval type in the table schema.")
-      case ArrayType(et, _) => failWithIntervalType(et)
-      case MapType(kt, vt, _) =>
-        failWithIntervalType(kt)
-        failWithIntervalType(vt)
-      case s: StructType => s.foreach(f => failWithIntervalType(f.dataType))
-      case u: UserDefinedType[_] => failWithIntervalType(u.sqlType)
-      case _ =>
+    invokeOnceForInterval(dataType) {
+      throw new AnalysisException("Cannot use interval type in the table schema.")
     }
+  }
+
+  def invokeOnceForInterval(dataType: DataType)(f: => Unit): Unit = {
+    def isInterval(dataType: DataType): Boolean = dataType match {
+      case CalendarIntervalType | DayTimeIntervalType | YearMonthIntervalType => true
+      case _ => false
+    }
+    if (dataType.existsRecursively(isInterval)) f
   }
 
   def rewriteInSetToMinMaxPredicate(inSet: InSet): Seq[Expression] = {

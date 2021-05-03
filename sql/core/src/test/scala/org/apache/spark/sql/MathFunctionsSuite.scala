@@ -366,14 +366,14 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        shiftLeft('a, 1), shiftLeft('b, 1), shiftLeft('c, 1), shiftLeft('d, 1),
-        shiftLeft('f, 1)),
+        shiftleft('a, 1), shiftleft('b, 1), shiftleft('c, 1), shiftleft('d, 1),
+        shiftLeft('f, 1)), // test deprecated one.
         Row(42.toLong, 42, 42.toShort, 42.toByte, null))
 
     checkAnswer(
       df.selectExpr(
-        "shiftLeft(a, 1)", "shiftLeft(b, 1)", "shiftLeft(b, 1)", "shiftLeft(d, 1)",
-        "shiftLeft(f, 1)"),
+        "shiftleft(a, 1)", "shiftleft(b, 1)", "shiftleft(b, 1)", "shiftleft(d, 1)",
+        "shiftleft(f, 1)"),
       Row(42.toLong, 42, 42.toShort, 42.toByte, null))
   }
 
@@ -383,14 +383,14 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        shiftRight('a, 1), shiftRight('b, 1), shiftRight('c, 1), shiftRight('d, 1),
-        shiftRight('f, 1)),
+        shiftright('a, 1), shiftright('b, 1), shiftright('c, 1), shiftright('d, 1),
+        shiftRight('f, 1)), // test deprecated one.
       Row(21.toLong, 21, 21.toShort, 21.toByte, null))
 
     checkAnswer(
       df.selectExpr(
-        "shiftRight(a, 1)", "shiftRight(b, 1)", "shiftRight(c, 1)", "shiftRight(d, 1)",
-        "shiftRight(f, 1)"),
+        "shiftright(a, 1)", "shiftright(b, 1)", "shiftright(c, 1)", "shiftright(d, 1)",
+        "shiftright(f, 1)"),
       Row(21.toLong, 21, 21.toShort, 21.toByte, null))
   }
 
@@ -400,14 +400,14 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(
-        shiftRightUnsigned('a, 1), shiftRightUnsigned('b, 1), shiftRightUnsigned('c, 1),
-        shiftRightUnsigned('d, 1), shiftRightUnsigned('f, 1)),
+        shiftrightunsigned('a, 1), shiftrightunsigned('b, 1), shiftrightunsigned('c, 1),
+        shiftrightunsigned('d, 1), shiftRightUnsigned('f, 1)), // test deprecated one.
       Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
 
     checkAnswer(
       df.selectExpr(
-        "shiftRightUnsigned(a, 1)", "shiftRightUnsigned(b, 1)", "shiftRightUnsigned(c, 1)",
-        "shiftRightUnsigned(d, 1)", "shiftRightUnsigned(f, 1)"),
+        "shiftrightunsigned(a, 1)", "shiftrightunsigned(b, 1)", "shiftrightunsigned(c, 1)",
+        "shiftrightunsigned(d, 1)", "shiftrightunsigned(f, 1)"),
       Row(9223372036854775787L, 21, 21.toShort, 21.toByte, null))
   }
 

@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.{Date, Timestamp}
 import java.util.{List => JList, Properties}
 
+import org.apache.hadoop.hive.common.`type`.{HiveIntervalDayTime, HiveIntervalYearMonth}
 import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet}
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.GetInfoType
@@ -31,7 +32,7 @@ import org.apache.thrift.transport.TSocket
 import org.apache.spark.sql.catalyst.util.NumberConverter
 import org.apache.spark.unsafe.types.UTF8String
 
-class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
+class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
 
   override def mode: ServerMode.Value = ServerMode.binary
 
@@ -456,6 +457,30 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         testGetTablesWithProtocolVersion(version, "%", "table1", null) { rs =>
           checkResult(Seq("table1"), rs)
         }
+      }
+    }
+
+    test(s"SPARK-35017: $version get day-time interval type") {
+      testExecuteStatementWithProtocolVersion(
+        version, "SELECT INTERVAL '1 10:11:12' DAY TO SECOND AS dt") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === new HiveIntervalDayTime(1, 10, 11, 12, 0))
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnName(1) === "dt")
+        assert(metaData.getColumnTypeName(1) === "interval_day_time")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
+      }
+    }
+
+    test(s"SPARK-35018: $version get year-month interval type") {
+      testExecuteStatementWithProtocolVersion(
+        version, "SELECT INTERVAL '1-1' YEAR TO MONTH AS ym") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === new HiveIntervalYearMonth(1, 1))
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnName(1) === "ym")
+        assert(metaData.getColumnTypeName(1) === "interval_year_month")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
       }
     }
   }

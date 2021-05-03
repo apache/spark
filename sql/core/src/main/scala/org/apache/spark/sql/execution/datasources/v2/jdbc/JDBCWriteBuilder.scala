@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.StructType
 
-case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) extends V1WriteBuilder
+case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) extends WriteBuilder
   with SupportsTruncate {
 
   private var isTruncate = false
@@ -33,8 +33,8 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
     this
   }
 
-  override def buildForV1Write(): InsertableRelation = new InsertableRelation {
-    override def insert(data: DataFrame, overwrite: Boolean): Unit = {
+  override def build(): V1Write = new V1Write {
+    override def toInsertableRelation: InsertableRelation = (data: DataFrame, _: Boolean) => {
       // TODO (SPARK-32595): do truncate and append atomically.
       if (isTruncate) {
         val conn = JdbcUtils.createConnectionFactory(options)()

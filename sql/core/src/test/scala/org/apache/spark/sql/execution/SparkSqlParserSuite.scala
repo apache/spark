@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
 import org.apache.spark.sql.internal.StaticSQLConf
@@ -184,7 +185,7 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
-  test("SPARK-33118 CREATE TMEPORARY TABLE with LOCATION") {
+  test("SPARK-33118 CREATE TEMPORARY TABLE with LOCATION") {
     assertEqual("CREATE TEMPORARY TABLE t USING parquet OPTIONS (path '/data/tmp/testspark1')",
       CreateTempViewUsing(TableIdentifier("t", None), None, false, false, "parquet",
         Map("path" -> "/data/tmp/testspark1")))
@@ -244,49 +245,38 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("manage resources") {
-    assertEqual("ADD FILE abc.txt", AddFileCommand("abc.txt"))
-    assertEqual("ADD FILE 'abc.txt'", AddFileCommand("abc.txt"))
-    assertEqual("ADD FILE \"/path/to/abc.txt\"", AddFileCommand("/path/to/abc.txt"))
+    assertEqual("ADD FILE abc.txt", AddFilesCommand(Seq("abc.txt")))
+    assertEqual("ADD FILE 'abc.txt'", AddFilesCommand(Seq("abc.txt")))
+    assertEqual("ADD FILE \"/path/to/abc.txt\"", AddFilesCommand("/path/to/abc.txt"::Nil))
     assertEqual("LIST FILE abc.txt", ListFilesCommand(Array("abc.txt")))
     assertEqual("LIST FILE '/path//abc.txt'", ListFilesCommand(Array("/path//abc.txt")))
     assertEqual("LIST FILE \"/path2/abc.txt\"", ListFilesCommand(Array("/path2/abc.txt")))
-    assertEqual("ADD JAR /path2/_2/abc.jar", AddJarCommand("/path2/_2/abc.jar"))
-    assertEqual("ADD JAR '/test/path_2/jar/abc.jar'", AddJarCommand("/test/path_2/jar/abc.jar"))
-    assertEqual("ADD JAR \"abc.jar\"", AddJarCommand("abc.jar"))
+    assertEqual("ADD JAR /path2/_2/abc.jar", AddJarsCommand(Seq("/path2/_2/abc.jar")))
+    assertEqual("ADD JAR '/test/path_2/jar/abc.jar'",
+      AddJarsCommand(Seq("/test/path_2/jar/abc.jar")))
+    assertEqual("ADD JAR \"abc.jar\"", AddJarsCommand(Seq("abc.jar")))
     assertEqual("LIST JAR /path-with-dash/abc.jar",
       ListJarsCommand(Array("/path-with-dash/abc.jar")))
     assertEqual("LIST JAR 'abc.jar'", ListJarsCommand(Array("abc.jar")))
     assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand(Array("abc.jar")))
-    assertEqual("ADD FILE /path with space/abc.txt", AddFileCommand("/path with space/abc.txt"))
-    assertEqual("ADD JAR /path with space/abc.jar", AddJarCommand("/path with space/abc.jar"))
+    assertEqual("ADD FILE '/path with space/abc.txt'",
+      AddFilesCommand(Seq("/path with space/abc.txt")))
+    assertEqual("ADD JAR '/path with space/abc.jar'",
+      AddJarsCommand(Seq("/path with space/abc.jar")))
   }
 
   test("SPARK-32608: script transform with row format delimit") {
-    assertEqual(
+    val rowFormat =
       """
-        |SELECT TRANSFORM(a, b, c)
         |  ROW FORMAT DELIMITED
         |  FIELDS TERMINATED BY ','
         |  COLLECTION ITEMS TERMINATED BY '#'
         |  MAP KEYS TERMINATED BY '@'
         |  LINES TERMINATED BY '\n'
         |  NULL DEFINED AS 'null'
-        |  USING 'cat' AS (a, b, c)
-        |  ROW FORMAT DELIMITED
-        |  FIELDS TERMINATED BY ','
-        |  COLLECTION ITEMS TERMINATED BY '#'
-        |  MAP KEYS TERMINATED BY '@'
-        |  LINES TERMINATED BY '\n'
-        |  NULL DEFINED AS 'NULL'
-        |FROM testData
-      """.stripMargin,
-    ScriptTransformation(
-      Seq('a, 'b, 'c),
-      "cat",
-      Seq(AttributeReference("a", StringType)(),
-        AttributeReference("b", StringType)(),
-        AttributeReference("c", StringType)()),
-      UnresolvedRelation(TableIdentifier("testData")),
+      """.stripMargin
+
+    val ioSchema =
       ScriptInputOutputSchema(
         Seq(("TOK_TABLEROWFORMATFIELD", ","),
           ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
@@ -296,9 +286,137 @@ class SparkSqlParserSuite extends AnalysisTest {
         Seq(("TOK_TABLEROWFORMATFIELD", ","),
           ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
           ("TOK_TABLEROWFORMATMAPKEYS", "@"),
-          ("TOK_TABLEROWFORMATNULL", "NULL"),
+          ("TOK_TABLEROWFORMATNULL", "null"),
           ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
-        List.empty, List.empty, None, None, false)))
+        List.empty, List.empty, None, None, false)
+
+    assertEqual(
+      s"""
+         |SELECT TRANSFORM(a, b, c)
+         |  $rowFormat
+         |  USING 'cat' AS (a, b, c)
+         |  $rowFormat
+         |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        Project(Seq('a, 'b, 'c),
+          UnresolvedRelation(TableIdentifier("testData"))),
+        ioSchema))
+
+    assertEqual(
+      s"""
+         |SELECT TRANSFORM(a, sum(b), max(c))
+         |  $rowFormat
+         |  USING 'cat' AS (a, b, c)
+         |  $rowFormat
+         |FROM testData
+         |GROUP BY a
+         |HAVING sum(b) > 10
+      """.stripMargin,
+      ScriptTransformation(
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        UnresolvedHaving(
+          GreaterThan(
+            UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
+            Literal(10)),
+          Aggregate(
+            Seq('a),
+            Seq(
+              'a,
+              UnresolvedAlias(
+                UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false), None),
+              UnresolvedAlias(
+                UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false), None)
+            ),
+            UnresolvedRelation(TableIdentifier("testData")))),
+        ioSchema))
+
+    assertEqual(
+      s"""
+         |SELECT TRANSFORM(a, sum(b) OVER w, max(c) OVER w)
+         |  $rowFormat
+         |  USING 'cat' AS (a, b, c)
+         |  $rowFormat
+         |FROM testData
+         |WINDOW w AS (PARTITION BY a ORDER BY b)
+      """.stripMargin,
+      ScriptTransformation(
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        WithWindowDefinition(
+          Map("w" -> WindowSpecDefinition(
+            Seq('a),
+            Seq(SortOrder('b, Ascending, NullsFirst, Seq.empty)),
+            UnspecifiedFrame)),
+          Project(
+            Seq(
+              'a,
+              UnresolvedAlias(
+                UnresolvedWindowExpression(
+                  UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
+                  WindowSpecReference("w")), None),
+              UnresolvedAlias(
+                UnresolvedWindowExpression(
+                  UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false),
+                  WindowSpecReference("w")), None)
+            ),
+            UnresolvedRelation(TableIdentifier("testData")))),
+        ioSchema))
+
+    assertEqual(
+      s"""
+         |SELECT TRANSFORM(a, sum(b), max(c))
+         |  $rowFormat
+         |  USING 'cat' AS (a, b, c)
+         |  $rowFormat
+         |FROM testData
+         |LATERAL VIEW explode(array(array(1,2,3))) myTable AS myCol
+         |LATERAL VIEW explode(myTable.myCol) myTable2 AS myCol2
+         |GROUP BY a, myCol, myCol2
+         |HAVING sum(b) > 10
+      """.stripMargin,
+      ScriptTransformation(
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        UnresolvedHaving(
+          GreaterThan(
+            UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
+            Literal(10)),
+          Aggregate(
+            Seq('a, 'myCol, 'myCol2),
+            Seq(
+              'a,
+              UnresolvedAlias(
+                UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false), None),
+              UnresolvedAlias(
+                UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false), None)
+            ),
+            Generate(
+              UnresolvedGenerator(
+                FunctionIdentifier("explode"),
+                Seq(UnresolvedAttribute("myTable.myCol"))),
+              Nil, false, Option("mytable2"), Seq('myCol2),
+              Generate(
+                UnresolvedGenerator(
+                  FunctionIdentifier("explode"),
+                  Seq(UnresolvedFunction("array",
+                    Seq(
+                      UnresolvedFunction("array", Seq(Literal(1), Literal(2), Literal(3)), false)),
+                    false))),
+                Nil, false, Option("mytable"), Seq('myCol),
+                UnresolvedRelation(TableIdentifier("testData")))))),
+        ioSchema))
   }
 
   test("SPARK-32607: Script Transformation ROW FORMAT DELIMITED" +
@@ -339,46 +457,14 @@ class SparkSqlParserSuite extends AnalysisTest {
       "LINES TERMINATED BY only supports newline '\\n' right now")
   }
 
-  test("CACHE TABLE") {
-    assertEqual(
-      "CACHE TABLE a.b.c",
-      CacheTableCommand(Seq("a", "b", "c"), None, false, Map.empty))
-
-    assertEqual(
-      "CACHE TABLE t AS SELECT * FROM testData",
-      CacheTableCommand(
-        Seq("t"),
-        Some(Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData")))),
-        false,
-        Map.empty))
-
-    assertEqual(
-      "CACHE LAZY TABLE a.b.c",
-      CacheTableCommand(Seq("a", "b", "c"), None, true, Map.empty))
-
-    assertEqual(
-      "CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')",
-      CacheTableCommand(
-        Seq("a", "b", "c"),
-        None,
-        true,
-        Map("storageLevel" -> "DISK_ONLY")))
-
-    intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
-      "It is not allowed to add catalog/namespace prefix a.b")
-  }
-
-  test("UNCACHE TABLE") {
-    assertEqual(
-      "UNCACHE TABLE a.b.c",
-      UncacheTableCommand(Seq("a", "b", "c"), ifExists = false))
-
-    assertEqual(
-      "UNCACHE TABLE IF EXISTS a.b.c",
-      UncacheTableCommand(Seq("a", "b", "c"), ifExists = true))
-  }
-
   test("CLEAR CACHE") {
     assertEqual("CLEAR CACHE", ClearCacheCommand)
+  }
+
+  test("CREATE TABLE LIKE COMMAND should reject reserved properties") {
+    Seq(TableCatalog.PROP_OWNER, TableCatalog.PROP_PROVIDER).foreach { reserved =>
+      intercept(s"CREATE TABLE target LIKE source TBLPROPERTIES ($reserved='howdy')",
+        "reserved")
+    }
   }
 }

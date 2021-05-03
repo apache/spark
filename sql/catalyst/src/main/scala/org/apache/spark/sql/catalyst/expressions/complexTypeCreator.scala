@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -52,7 +53,8 @@ trait NoThrow
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
   """,
-  since = "1.1.0")
+  since = "1.1.0",
+  group = "array_funcs")
 case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   extends Expression with NoThrow {
 
@@ -100,6 +102,9 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
   }
 
   override def prettyName: String = "array"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CreateArray =
+    copy(children = newChildren)
 }
 
 object CreateArray {
@@ -170,7 +175,8 @@ private [sql] object GenArrayData {
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
        {1.0:"2",3.0:"4"}
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "map_funcs")
 case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   extends Expression with NoThrow {
 
@@ -251,6 +257,9 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   }
 
   override def prettyName: String = "map"
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CreateMap =
+    copy(children = newChildren)
 }
 
 object CreateMap {
@@ -271,7 +280,8 @@ object CreateMap {
       > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
        {1.0:"2",3.0:"4"}
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "map_funcs")
 case class MapFromArrays(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -310,6 +320,10 @@ case class MapFromArrays(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "map_from_arrays"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): MapFromArrays =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -336,6 +350,14 @@ object CreateStruct {
    */
   def apply(children: Seq[Expression]): CreateNamedStruct = {
     CreateNamedStruct(children.zipWithIndex.flatMap {
+      // For multi-part column name like `struct(a.b.c)`, it may be resolved into:
+      //   1. Attribute if `a.b.c` is simply a qualified column name.
+      //   2. GetStructField if `a.b` refers to a struct-type column.
+      //   3. GetArrayStructFields if `a.b` refers to a array-of-struct-type column.
+      //   4. GetMapValue if `a.b` refers to a map-type column.
+      // We should always use the last part of the column name (`c` in the above example) as the
+      // alias name inside CreateNamedStruct.
+      case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
@@ -369,7 +391,7 @@ object CreateStruct {
         |       {"col1":1,"col2":2,"col3":3}
         |  """.stripMargin,
       "",
-      "",
+      "struct_funcs",
       "1.4.0",
       "")
     ("struct", (info, this.create))
@@ -389,7 +411,8 @@ object CreateStruct {
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
        {"a":1,"b":2,"c":3}
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "struct_funcs")
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression with NoThrow {
   lazy val (nameExprs, valExprs) = children.grouped(2).map {
@@ -480,6 +503,9 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
     val childrenSQL = children.indices.filter(_ % 2 == 1).map(children(_).sql).mkString(", ")
     s"$alias($childrenSQL)"
   }.getOrElse(super.sql)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): CreateNamedStruct = copy(children = newChildren)
 }
 
 /**
@@ -495,7 +521,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
       > SELECT _FUNC_('a');
        {"a":null}
   """,
-  since = "2.0.1")
+  since = "2.0.1",
+  group = "map_funcs")
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with ExpectsInputTypes with NullIntolerant {
@@ -508,7 +535,9 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     this(child, Literal(","), Literal(":"))
   }
 
-  override def children: Seq[Expression] = Seq(text, pairDelim, keyValueDelim)
+  override def first: Expression = text
+  override def second: Expression = pairDelim
+  override def third: Expression = keyValueDelim
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
 
@@ -560,6 +589,13 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   }
 
   override def prettyName: String = "str_to_map"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression = copy(
+    text = newFirst,
+    pairDelim = newSecond,
+    keyValueDelim = newThird
+  )
 }
 
 /**
@@ -584,7 +620,7 @@ trait StructFieldsOperation {
  * children, and thereby enable the analyzer to resolve and transform valExpr as necessary.
  */
 case class WithField(name: String, valExpr: Expression)
-  extends Unevaluable with StructFieldsOperation {
+  extends Unevaluable with StructFieldsOperation with UnaryLike[Expression] {
 
   override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] = {
     val newFieldExpr = (StructField(name, valExpr.dataType, valExpr.nullable), valExpr)
@@ -602,7 +638,7 @@ case class WithField(name: String, valExpr: Expression)
     result.toSeq
   }
 
-  override def children: Seq[Expression] = valExpr :: Nil
+  override def child: Expression = valExpr
 
   override def dataType: DataType = throw new IllegalStateException(
     "WithField.dataType should not be called.")
@@ -611,6 +647,9 @@ case class WithField(name: String, valExpr: Expression)
     "WithField.nullable should not be called.")
 
   override def prettyName: String = "WithField"
+
+  override protected def withNewChildInternal(newChild: Expression): WithField =
+    copy(valExpr = newChild)
 }
 
 /**
@@ -642,6 +681,9 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
   override def children: Seq[Expression] = structExpr +: fieldOps.collect {
     case e: Expression => e
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 
   override def dataType: StructType = StructType(newFields)
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.UUID
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -38,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
@@ -82,7 +84,7 @@ class SparkSession private(
     @transient private val existingSharedState: Option[SharedState],
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions,
-    @transient private val initialSessionOptions: Map[String, String])
+    @transient private[sql] val initialSessionOptions: Map[String, String])
   extends Serializable with Closeable with Logging { self =>
 
   // The call site where this SparkSession was constructed.
@@ -100,6 +102,8 @@ class SparkSession private(
         sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
         new SparkSessionExtensions), Map.empty)
   }
+
+  private[sql] val sessionUUID: String = UUID.randomUUID.toString
 
   sparkContext.assertNotStopped()
 
@@ -150,9 +154,8 @@ class SparkSession private(
       .map(_.clone(this))
       .getOrElse {
         val state = SparkSession.instantiateSessionState(
-          SparkSession.sessionStateClassName(sparkContext.conf),
-          self,
-          initialSessionOptions)
+          SparkSession.sessionStateClassName(sharedState.conf),
+          self)
         state
       }
   }
@@ -347,9 +350,10 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(replaced)
     val toRow = encoder.createSerializer()
     val catalystRows = rowRDD.map(toRow)
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
@@ -365,7 +369,8 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD.rdd, schema)
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+    createDataFrame(rowRDD.rdd, replaced)
   }
 
   /**
@@ -378,7 +383,8 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
-    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala.toSeq))
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(replaced.toAttributes, rows.asScala.toSeq))
   }
 
   /**
@@ -519,7 +525,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
-    range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
+    range(start, end, step = 1, numPartitions = leafNodeDefaultParallelism)
   }
 
   /**
@@ -529,7 +535,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
-    range(start, end, step, numPartitions = sparkContext.defaultParallelism)
+    range(start, end, step, numPartitions = leafNodeDefaultParallelism)
   }
 
   /**
@@ -768,6 +774,10 @@ class SparkSession private(
     try block finally {
       SparkSession.setActiveSession(old)
     }
+  }
+
+  private[sql] def leafNodeDefaultParallelism: Int = {
+    conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
   }
 }
 
@@ -1126,16 +1136,14 @@ object SparkSession extends Logging {
    */
   private def instantiateSessionState(
       className: String,
-      sparkSession: SparkSession,
-      options: Map[String, String]): SessionState = {
+      sparkSession: SparkSession): SessionState = {
     try {
       // invoke new [Hive]SessionStateBuilder(
       //   SparkSession,
-      //   Option[SessionState],
-      //   Map[String, String])
+      //   Option[SessionState])
       val clazz = Utils.classForName(className)
       val ctor = clazz.getConstructors.head
-      ctor.newInstance(sparkSession, None, options).asInstanceOf[BaseSessionStateBuilder].build()
+      ctor.newInstance(sparkSession, None).asInstanceOf[BaseSessionStateBuilder].build()
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)

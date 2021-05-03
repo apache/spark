@@ -35,6 +35,11 @@ class ParamGridBuilder:
     def baseOn(self, *args: Tuple[Param, Any]) -> ParamGridBuilder: ...
     def build(self) -> List[ParamMap]: ...
 
+class ParamRandomBuilder(ParamGridBuilder):
+    def __init__(self) -> None: ...
+    def addRandom(self, param: Param, x: Any, y: Any, n: int) -> ParamRandomBuilder: ...
+    def addLog10Random(self, param: Param, x: Any, y: Any, n: int) -> ParamRandomBuilder: ...
+
 class _ValidatorParams(HasSeed):
     estimator: Param[Estimator]
     estimatorParamMaps: Param[List[ParamMap]]
@@ -104,7 +109,7 @@ class CrossValidatorModel(
     def __init__(
         self,
         bestModel: Model,
-        avgMetrics: List[float] = ...,
+        avgMetrics: Optional[List[float]] = ...,
         subModels: Optional[List[List[Model]]] = ...,
     ) -> None: ...
     def copy(self, extra: Optional[ParamMap] = ...) -> CrossValidatorModel: ...
@@ -171,7 +176,7 @@ class TrainValidationSplitModel(
     def __init__(
         self,
         bestModel: Model,
-        validationMetrics: List[float] = ...,
+        validationMetrics: Optional[List[float]] = ...,
         subModels: Optional[List[Model]] = ...,
     ) -> None: ...
     def setEstimator(self, value: Estimator) -> TrainValidationSplitModel: ...

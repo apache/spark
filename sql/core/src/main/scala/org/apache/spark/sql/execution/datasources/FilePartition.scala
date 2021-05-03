@@ -89,7 +89,7 @@ object FilePartition extends Logging {
     val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
     val minPartitionNum = sparkSession.sessionState.conf.filesMinPartitionNum
-      .getOrElse(sparkSession.sparkContext.defaultParallelism)
+      .getOrElse(sparkSession.leafNodeDefaultParallelism)
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     val bytesPerCore = totalBytes / minPartitionNum
 

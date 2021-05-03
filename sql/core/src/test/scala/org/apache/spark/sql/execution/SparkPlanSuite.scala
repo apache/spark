@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -87,5 +88,25 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-30780 empty LocalTableScan should use RDD without partitions") {
     assert(LocalTableScanExec(Nil, Nil).execute().getNumPartitions == 0)
+  }
+
+  test("SPARK-33617: change default parallelism of LocalTableScan") {
+    Seq(1, 4).foreach { minPartitionNum =>
+      withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> minPartitionNum.toString) {
+        val df = spark.sql("SELECT * FROM VALUES (1), (2), (3), (4), (5), (6), (7), (8)")
+        assert(df.rdd.partitions.length === minPartitionNum)
+      }
+    }
+  }
+
+  test("SPARK-34420: Throw exception if non-streaming Deduplicate is not replaced by aggregate") {
+    val df = spark.range(10)
+    val planner = spark.sessionState.planner
+    val deduplicate = Deduplicate(df.queryExecution.analyzed.output, df.queryExecution.analyzed)
+    val err = intercept[IllegalStateException] {
+      planner.plan(deduplicate)
+    }
+    assert(err.getMessage.contains("Deduplicate operator for non streaming data source " +
+      "should have been replaced by aggregate in the optimizer"))
   }
 }

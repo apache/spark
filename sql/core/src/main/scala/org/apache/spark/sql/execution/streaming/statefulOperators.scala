@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
@@ -59,7 +58,7 @@ case class StatefulOperatorStateInfo(
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
 
-  protected def getStateInfo: StatefulOperatorStateInfo = attachTree(this) {
+  protected def getStateInfo: StatefulOperatorStateInfo = {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
@@ -282,6 +281,9 @@ case class StateStoreRestoreExec(
       ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StateStoreRestoreExec =
+    copy(child = newChild)
 }
 
 /**
@@ -437,6 +439,9 @@ case class StateStoreSaveExec(
       eventTimeWatermark.isDefined &&
       newMetadata.batchWatermarkMs > eventTimeWatermark.get
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StateStoreSaveExec =
+    copy(child = newChild)
 }
 
 /** Physical operator for executing streaming Deduplicate. */
@@ -510,6 +515,9 @@ case class StreamingDeduplicateExec(
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
+    copy(child = newChild)
 }
 
 object StreamingDeduplicateExec {

@@ -133,7 +133,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 
-    SharedState.loadHiveConfFile(sparkConf, conf)
+    val warehousePath = SharedState.resolveWarehousePath(sparkConf, conf)
+    val qualified = SharedState.qualifyWarehousePath(conf, warehousePath)
+    SharedState.setWarehousePathConf(sparkConf, conf, qualified)
     SessionState.start(sessionState)
 
     // Clean up after we exit
@@ -167,10 +169,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     // The class loader of CliSessionState's conf is current main thread's class loader
-    // used to load jars passed by --jars. One class loader used by AddJarCommand is
+    // used to load jars passed by --jars. One class loader used by AddJarsCommand is
     // sharedState.jarClassLoader which contain jar path passed by --jars in main thread.
     // We set CliSessionState's conf class loader to sharedState.jarClassLoader.
-    // Thus we can load all jars passed by --jars and AddJarCommand.
+    // Thus we can load all jars passed by --jars and AddJarsCommand.
     sessionState.getConf.setClassLoader(SparkSQLEnv.sqlContext.sharedState.jarClassLoader)
 
     // TODO work around for set the log output to console, because the HiveContext
@@ -404,7 +406,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           val res = new JArrayList[String]()
 
-          if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
+          if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER) ||
+              SparkSQLEnv.sqlContext.conf.cliPrintHeader) {
             // Print the column names.
             Option(driver.getSchema.getFieldSchemas).foreach { fields =>
               out.println(fields.asScala.map(_.getName).mkString("\t"))
@@ -522,15 +525,32 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
+  // Note: [SPARK-33100] Ignore a semicolon inside a bracketed comment in spark-sql.
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
-    var insideComment = false
+    var insideSimpleComment = false
+    var bracketedCommentLevel = 0
     var escape = false
     var beginIndex = 0
+    var leavingBracketedComment = false
+    var isStatement = false
     val ret = new JArrayList[String]
 
+    def insideBracketedComment: Boolean = bracketedCommentLevel > 0
+    def insideComment: Boolean = insideSimpleComment || insideBracketedComment
+    def statementInProgress(index: Int): Boolean = isStatement || (!insideComment &&
+      index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
+
     for (index <- 0 until line.length) {
+      // Checks if we need to decrement a bracketed comment level; the last character '/' of
+      // bracketed comments is still inside the comment, so `insideBracketedComment` must keep true
+      // in the previous loop and we decrement the level here if needed.
+      if (leavingBracketedComment) {
+        bracketedCommentLevel -= 1
+        leavingBracketedComment = false
+      }
+
       if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
         // See the comment above about SPARK-31595
@@ -553,21 +573,34 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // Sample query: select "quoted value --"
           //                                    ^^ avoids starting a comment if it's inside quotes.
         } else if (hasNext && line.charAt(index + 1) == '-') {
-          // ignore quotes and ;
-          insideComment = true
+          // ignore quotes and ; in simple comment
+          insideSimpleComment = true
         }
       } else if (line.charAt(index) == ';') {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
           // do not split
         } else {
-          // split, do not include ; itself
-          ret.add(line.substring(beginIndex, index))
+          if (isStatement) {
+            // split, do not include ; itself
+            ret.add(line.substring(beginIndex, index))
+          }
           beginIndex = index + 1
+          isStatement = false
         }
       } else if (line.charAt(index) == '\n') {
-        // with a new line the inline comment should end.
+        // with a new line the inline simple comment should end.
         if (!escape) {
-          insideComment = false
+          insideSimpleComment = false
+        }
+      } else if (line.charAt(index) == '/' && !insideSimpleComment) {
+        val hasNext = index + 1 < line.length
+        if (insideSingleQuote || insideDoubleQuote) {
+          // Ignores '/' in any case of quotes
+        } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
+          // Decrements `bracketedCommentLevel` at the beginning of the next loop
+          leavingBracketedComment = true
+        } else if (hasNext && !insideBracketedComment && line.charAt(index + 1) == '*') {
+          bracketedCommentLevel += 1
         }
       }
       // set the escape
@@ -576,8 +609,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       } else if (line.charAt(index) == '\\') {
         escape = true
       }
+
+      isStatement = statementInProgress(index)
     }
-    ret.add(line.substring(beginIndex))
+    if (isStatement) {
+      ret.add(line.substring(beginIndex))
+    }
     ret
   }
 }

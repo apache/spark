@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import org.apache.arrow.vector.IntervalDayVector
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util._
@@ -54,6 +56,8 @@ class ArrowWriterSuite extends SparkFunSuite {
             case BinaryType => reader.getBinary(rowId)
             case DateType => reader.getInt(rowId)
             case TimestampType => reader.getLong(rowId)
+            case YearMonthIntervalType => reader.getInt(rowId)
+            case DayTimeIntervalType => reader.getLong(rowId)
           }
           assert(value === datum)
       }
@@ -72,6 +76,34 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(BinaryType, Seq("a".getBytes(), "b".getBytes(), null, "d".getBytes()))
     check(DateType, Seq(0, 1, 2, null, 4))
     check(TimestampType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong), "America/Los_Angeles")
+    check(NullType, Seq(null, null, null))
+    check(YearMonthIntervalType, Seq(null, 0, 1, -1, Int.MaxValue, Int.MinValue))
+    check(DayTimeIntervalType, Seq(null, 0L, 1000L, -1000L, (Long.MaxValue - 807L),
+      (Long.MinValue + 808L)))
+  }
+
+  test("long overflow for DayTimeIntervalType")
+  {
+    val schema = new StructType().add("value", DayTimeIntervalType, nullable = true)
+    val writer = ArrowWriter.create(schema, null)
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+    val valueVector = writer.root.getFieldVectors().get(0).asInstanceOf[IntervalDayVector]
+
+    valueVector.set(0, 106751992, 0)
+    valueVector.set(1, 106751991, Int.MaxValue)
+
+    // first long overflow for test Math.multiplyExact()
+    val msg = intercept[java.lang.ArithmeticException] {
+      reader.getLong(0)
+    }.getMessage
+    assert(msg.equals("long overflow"))
+
+    // second long overflow for test Math.addExact()
+    val msg1 = intercept[java.lang.ArithmeticException] {
+      reader.getLong(1)
+    }.getMessage
+    assert(msg1.equals("long overflow"))
+    writer.root.close()
   }
 
   test("get multiple") {
@@ -96,6 +128,8 @@ class ArrowWriterSuite extends SparkFunSuite {
         case DoubleType => reader.getDoubles(0, data.size)
         case DateType => reader.getInts(0, data.size)
         case TimestampType => reader.getLongs(0, data.size)
+        case YearMonthIntervalType => reader.getInts(0, data.size)
+        case DayTimeIntervalType => reader.getLongs(0, data.size)
       }
       assert(values === data)
 
@@ -110,6 +144,8 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DoubleType, (0 until 10).map(_.toDouble))
     check(DateType, (0 until 10))
     check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), "America/Los_Angeles")
+    check(YearMonthIntervalType, (0 until 10))
+    check(DayTimeIntervalType, (-10 until 10).map(_ * 1000.toLong))
   }
 
   test("array") {
@@ -202,6 +238,46 @@ class ArrowWriterSuite extends SparkFunSuite {
     writer.root.close()
   }
 
+  test("null array") {
+    val schema = new StructType()
+      .add("arr", ArrayType(NullType, containsNull = true), nullable = true)
+    val writer = ArrowWriter.create(schema, null)
+    assert(writer.schema === schema)
+
+    writer.write(InternalRow(ArrayData.toArrayData(Array(null, null, null))))
+    writer.write(InternalRow(ArrayData.toArrayData(Array(null, null))))
+    writer.write(InternalRow(null))
+    writer.write(InternalRow(ArrayData.toArrayData(Array.empty[Int])))
+    writer.write(InternalRow(ArrayData.toArrayData(Array(null, null, null))))
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+
+    val array0 = reader.getArray(0)
+    assert(array0.numElements() === 3)
+    assert(array0.isNullAt(0))
+    assert(array0.isNullAt(1))
+    assert(array0.isNullAt(2))
+
+    val array1 = reader.getArray(1)
+    assert(array1.numElements() === 2)
+    assert(array1.isNullAt(0))
+    assert(array1.isNullAt(1))
+
+    assert(reader.isNullAt(2))
+
+    val array3 = reader.getArray(3)
+    assert(array3.numElements() === 0)
+
+    val array4 = reader.getArray(4)
+    assert(array4.numElements() === 3)
+    assert(array4.isNullAt(0))
+    assert(array4.isNullAt(1))
+    assert(array4.isNullAt(2))
+
+    writer.root.close()
+  }
+
   test("struct") {
     val schema = new StructType()
       .add("struct", new StructType().add("i", IntegerType).add("str", StringType))
@@ -268,6 +344,32 @@ class ArrowWriterSuite extends SparkFunSuite {
     writer.root.close()
   }
 
+  test("null struct") {
+    val schema = new StructType()
+      .add("struct", new StructType().add("n1", NullType).add("n2", NullType))
+    val writer = ArrowWriter.create(schema, null)
+    assert(writer.schema === schema)
+
+    writer.write(InternalRow(InternalRow(null, null)))
+    writer.write(InternalRow(null))
+    writer.write(InternalRow(InternalRow(null, null)))
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+
+    val struct0 = reader.getStruct(0)
+    assert(struct0.isNullAt(0))
+    assert(struct0.isNullAt(1))
+
+    assert(reader.isNullAt(1))
+
+    val struct2 = reader.getStruct(2)
+    assert(struct2.isNullAt(0))
+    assert(struct2.isNullAt(1))
+
+    writer.root.close()
+  }
+
   test("map") {
     val schema = new StructType()
       .add("map", MapType(IntegerType, StringType), nullable = true)
@@ -323,6 +425,37 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     val map0 = reader.getMap(0)
     assert(map0.numElements() == 0)
+    writer.root.close()
+  }
+
+  test("null value map") {
+    val schema = new StructType()
+      .add("map", MapType(IntegerType, NullType), nullable = true)
+    val writer = ArrowWriter.create(schema, null)
+    assert(writer.schema == schema)
+
+    writer.write(InternalRow(ArrayBasedMapData(
+      keys = Array(1, 2, 3),
+      values = Array(null, null, null)
+    )))
+    writer.write(InternalRow(ArrayBasedMapData(Array(43), Array(null))))
+    writer.write(InternalRow(null))
+
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors.get(0))
+    val map0 = reader.getMap(0)
+    assert(map0.numElements() == 3)
+    assert(map0.keyArray().array().mkString(",") == Array(1, 2, 3).mkString(","))
+    assert(map0.valueArray().array().mkString(",") == Array(null, null, null).mkString(","))
+
+    val map1 = reader.getMap(1)
+    assert(map1.numElements() == 1)
+    assert(map1.keyArray().array().mkString(",") == Array(43).mkString(","))
+    assert(map1.valueArray().array().mkString(",") == Array(null).mkString(","))
+
+    val map2 = reader.getMap(3)
+    assert(map2 == null)
     writer.root.close()
   }
 

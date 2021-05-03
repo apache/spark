@@ -20,9 +20,18 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
+
+  val DECOMMISSION_SCRIPT =
+    ConfigBuilder("spark.kubernetes.decommission.script")
+      .doc("The location of the script to use for graceful decommissioning")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefault("/opt/decom.sh")
+
 
   val KUBERNETES_CONTEXT =
     ConfigBuilder("spark.kubernetes.context")
@@ -44,6 +53,22 @@ private[spark] object Config extends Logging {
       .version("3.0.0")
       .stringConf
       .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
+
+  val KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION =
+    ConfigBuilder("spark.kubernetes.driver.service.deleteOnTermination")
+      .doc("If true, driver service will be deleted on Spark application termination. " +
+        "If false, it will be cleaned up when the driver pod is deletion.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val KUBERNETES_DRIVER_OWN_PVC =
+    ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
+      .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +
+        "instead of the executor pods")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
@@ -89,6 +114,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  val CONFIG_MAP_MAXSIZE =
+    ConfigBuilder("spark.kubernetes.configMap.maxSize")
+      .doc("Max size limit for a config map. This is configurable as per" +
+        " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
+      .version("3.1.0")
+      .longConf
+      .createWithDefault(1572864) // 1.5 MiB
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
@@ -207,9 +240,35 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names.")
       .version("2.3.0")
-      .internal()
       .stringConf
       .createOptional
+
+  val KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP =
+    ConfigBuilder("spark.kubernetes.executor.disableConfigMap")
+      .doc("If true, disable ConfigMap creation for executors.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_POD_FEATURE_STEPS =
+    ConfigBuilder("spark.kubernetes.driver.pod.featureSteps")
+      .doc("Class names of an extra driver pod feature step implementing " +
+        "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
+        "Runs after all of Spark internal feature steps.")
+      .version("3.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  val KUBERNETES_EXECUTOR_POD_FEATURE_STEPS =
+    ConfigBuilder("spark.kubernetes.executor.pod.featureSteps")
+      .doc("Class name of an extra executor pod feature step implementing " +
+        "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
+        "Runs after all of Spark internal feature steps.")
+      .version("3.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
@@ -229,7 +288,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT =
     ConfigBuilder("spark.kubernetes.allocation.executor.timeout")
-      .doc("Time to wait before considering a pending executor timedout.")
+      .doc("Time to wait before a newly created executor POD request, which does not reached " +
+        "the POD pending state yet, considered timedout and will be deleted.")
       .version("3.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
@@ -293,12 +353,19 @@ private[spark] object Config extends Logging {
 
   val PYSPARK_MAJOR_PYTHON_VERSION =
     ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")
-      .doc("This sets the major Python version. Only 3 is available for Python3.")
+      .doc(
+        s"(Deprecated since Spark 3.1, please set '${PYSPARK_PYTHON.key}' and " +
+        s"'${PYSPARK_DRIVER_PYTHON.key}' configurations or $ENV_PYSPARK_PYTHON and " +
+        s"$ENV_PYSPARK_DRIVER_PYTHON environment variables instead.)")
       .version("2.4.0")
       .stringConf
-      .checkValue(pv => List("3").contains(pv),
-        "Ensure that major Python version is Python3")
-      .createWithDefault("3")
+      .checkValue("3" == _,
+        "Python 2 was dropped from Spark 3.1, and only 3 is allowed in " +
+          "this configuration. Note that this configuration was deprecated in Spark 3.1. " +
+          s"Please set '${PYSPARK_PYTHON.key}' and '${PYSPARK_DRIVER_PYTHON.key}' " +
+          s"configurations or $ENV_PYSPARK_PYTHON and $ENV_PYSPARK_DRIVER_PYTHON environment " +
+          "variables instead.")
+      .createOptional
 
   val KUBERNETES_KERBEROS_KRB5_FILE =
     ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
@@ -392,6 +459,13 @@ private[spark] object Config extends Logging {
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
+  val KUBERNETES_TRUST_CERTIFICATES =
+    ConfigBuilder("spark.kubernetes.trust.certificates")
+      .doc("If set to true then client can submit to kubernetes cluster only with token")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
 
   val KUBERNETES_DELETE_EXECUTORS =
@@ -432,6 +506,17 @@ private[spark] object Config extends Logging {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA =
+    ConfigBuilder("spark.kubernetes.executor.missingPodDetectDelta")
+      .doc("When a registered executor's POD is missing from the Kubernetes API server's polled " +
+        "list of PODs then this delta time is taken as the accepted time difference between the " +
+        "registration time and the time of the polling. After this time the POD is considered " +
+        "missing from the cluster and the executor will be removed.")
+      .version("3.1.1")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(delay => delay > 0, "delay must be a positive time value")
+      .createWithDefaultString("30s")
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."

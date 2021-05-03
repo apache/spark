@@ -31,8 +31,10 @@ import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter}
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.{col, lit, struct}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.VersionUtils
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -381,6 +383,15 @@ private[ml] object DecisionTreeModelReadWrite {
           node.impurityStats.rawCount, -1.0, -1, -1, SplitData(-1, Array.emptyDoubleArray, -1))),
           id)
     }
+
+    /**
+     * When save a tree model, infer the number of partitions based on number of nodes.
+     */
+    def inferNumPartitions(numNodes: Long): Int = {
+      require(numNodes > 0)
+      // 7,280,000 nodes is about 128MB
+      (numNodes / 7280000.0).ceil.toInt
+    }
   }
 
   /**
@@ -401,8 +412,13 @@ private[ml] object DecisionTreeModelReadWrite {
     }
 
     val dataPath = new Path(path, "data").toString
-    val data = sparkSession.read.parquet(dataPath).as[NodeData]
-    buildTreeFromNodes(data.collect(), impurityType)
+    var df = sparkSession.read.parquet(dataPath)
+    val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+    if (major.toInt < 3) {
+      df = df.withColumn("rawCount", lit(-1L))
+    }
+
+    buildTreeFromNodes(df.as[NodeData].collect(), impurityType)
   }
 
   /**
@@ -452,23 +468,27 @@ private[ml] object EnsembleModelReadWrite {
   def saveImpl[M <: Params with TreeEnsembleModel[_ <: DecisionTreeModel]](
       instance: M,
       path: String,
-      sql: SparkSession,
+      sparkSession: SparkSession,
       extraMetadata: JObject): Unit = {
-    DefaultParamsWriter.saveMetadata(instance, path, sql.sparkContext, Some(extraMetadata))
-    val treesMetadataWeights: Array[(Int, String, Double)] = instance.trees.zipWithIndex.map {
-      case (tree, treeID) =>
-        (treeID,
-          DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sql.sparkContext),
-          instance.treeWeights(treeID))
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession.sparkContext, Some(extraMetadata))
+    val treesMetadataWeights = instance.trees.zipWithIndex.map { case (tree, treeID) =>
+      (treeID,
+        DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sparkSession.sparkContext),
+        instance.treeWeights(treeID))
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
-    sql.createDataFrame(treesMetadataWeights).toDF("treeID", "metadata", "weights")
+    sparkSession.createDataFrame(treesMetadataWeights)
+      .toDF("treeID", "metadata", "weights")
+      .repartition(1)
       .write.parquet(treesMetadataPath)
+
     val dataPath = new Path(path, "data").toString
-    val nodeDataRDD = sql.sparkContext.parallelize(instance.trees.zipWithIndex).flatMap {
-      case (tree, treeID) => EnsembleNodeData.build(tree, treeID)
-    }
-    sql.createDataFrame(nodeDataRDD).write.parquet(dataPath)
+    val numDataParts = NodeData.inferNumPartitions(instance.trees.map(_.numNodes.toLong).sum)
+    val nodeDataRDD = sparkSession.sparkContext.parallelize(instance.trees.zipWithIndex)
+      .flatMap { case (tree, treeID) => EnsembleNodeData.build(tree, treeID) }
+    sparkSession.createDataFrame(nodeDataRDD)
+      .repartition(numDataParts)
+      .write.parquet(dataPath)
   }
 
   /**
@@ -483,12 +503,12 @@ private[ml] object EnsembleModelReadWrite {
    */
   def loadImpl(
       path: String,
-      sql: SparkSession,
+      sparkSession: SparkSession,
       className: String,
       treeClassName: String): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
-    import sql.implicits._
+    import sparkSession.implicits._
     implicit val format = DefaultFormats
-    val metadata = DefaultParamsReader.loadMetadata(path, sql.sparkContext, className)
+    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession.sparkContext, className)
 
     // Get impurity to construct ImpurityCalculator for each node
     val impurityType: String = {
@@ -497,25 +517,36 @@ private[ml] object EnsembleModelReadWrite {
     }
 
     val treesMetadataPath = new Path(path, "treesMetadata").toString
-    val treesMetadataRDD: RDD[(Int, (Metadata, Double))] = sql.read.parquet(treesMetadataPath)
-      .select("treeID", "metadata", "weights").as[(Int, String, Double)].rdd.map {
-      case (treeID: Int, json: String, weights: Double) =>
+    val treesMetadataRDD = sparkSession.read.parquet(treesMetadataPath)
+      .select("treeID", "metadata", "weights")
+      .as[(Int, String, Double)].rdd
+      .map { case (treeID: Int, json: String, weights: Double) =>
         treeID -> ((DefaultParamsReader.parseMetadata(json, treeClassName), weights))
-    }
+      }
 
     val treesMetadataWeights = treesMetadataRDD.sortByKey().values.collect()
     val treesMetadata = treesMetadataWeights.map(_._1)
     val treesWeights = treesMetadataWeights.map(_._2)
 
     val dataPath = new Path(path, "data").toString
-    val nodeData: Dataset[EnsembleNodeData] =
-      sql.read.parquet(dataPath).as[EnsembleNodeData]
-    val rootNodesRDD: RDD[(Int, Node)] =
-      nodeData.rdd.map(d => (d.treeID, d.nodeData)).groupByKey().map {
-        case (treeID: Int, nodeData: Iterable[NodeData]) =>
-          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, impurityType)
+    var df = sparkSession.read.parquet(dataPath)
+    val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+    if (major.toInt < 3) {
+      val newNodeDataCol = df.schema("nodeData").dataType match {
+        case StructType(fields) =>
+          val cols = fields.map(f => col(s"nodeData.${f.name}")) :+ lit(-1L).as("rawCount")
+          struct(cols: _*)
       }
-    val rootNodes: Array[Node] = rootNodesRDD.sortByKey().values.collect()
+      df = df.withColumn("nodeData", newNodeDataCol)
+    }
+
+    val rootNodesRDD = df.as[EnsembleNodeData].rdd
+      .map(d => (d.treeID, d.nodeData))
+      .groupByKey()
+      .map { case (treeID: Int, nodeData: Iterable[NodeData]) =>
+        treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, impurityType)
+      }
+    val rootNodes = rootNodesRDD.sortByKey().values.collect()
     (metadata, treesMetadata.zip(rootNodes), treesWeights)
   }
 

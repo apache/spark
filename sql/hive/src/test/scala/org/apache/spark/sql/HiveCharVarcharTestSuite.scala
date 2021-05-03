@@ -17,9 +17,42 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSingleton {
+
+  // The default Hive serde doesn't support nested null values.
+  override def format: String = "hive OPTIONS(fileFormat='parquet')"
+
+  private var originalPartitionMode = ""
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    originalPartitionMode = spark.conf.get("hive.exec.dynamic.partition.mode", "")
+    spark.conf.set("hive.exec.dynamic.partition.mode", "nonstrict")
+  }
+
+  override protected def afterAll(): Unit = {
+    if (originalPartitionMode == "") {
+      spark.conf.unset("hive.exec.dynamic.partition.mode")
+    } else {
+      spark.conf.set("hive.exec.dynamic.partition.mode", originalPartitionMode)
+    }
+    super.afterAll()
+  }
+
+  test("SPARK-33892: SHOW CREATE TABLE AS SERDE w/ char/varchar") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
+      val rest = sql("SHOW CREATE TABLE t AS SERDE").head().getString(0)
+      assert(rest.contains("VARCHAR(3)"))
+      assert(rest.contains("CHAR(5)"))
+    }
+  }
+}
+
+class HiveCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with TestHiveSingleton {
 
   // The default Hive serde doesn't support nested null values.
   override def format: String = "hive OPTIONS(fileFormat='parquet')"

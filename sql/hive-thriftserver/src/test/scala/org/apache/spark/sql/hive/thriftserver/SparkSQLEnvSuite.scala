@@ -42,7 +42,7 @@ class SparkSQLEnvSuite extends SparkFunSuite {
       QUERY_EXECUTION_LISTENERS.key -> classOf[DummyQueryExecutionListener].getCanonicalName,
       STREAMING_QUERY_LISTENERS.key -> classOf[DummyStreamingQueryListener].getCanonicalName,
       WAREHOUSE_PATH.key -> TestHiveContext.makeWarehouseDir().toURI.getPath,
-      // The issue occured from "maven" and list of custom jars, but providing list of custom
+      // The issue occurred from "maven" and list of custom jars, but providing list of custom
       // jars to initialize HiveClient isn't trivial, so just use "maven".
       HIVE_METASTORE_JARS.key -> "maven",
       HIVE_METASTORE_VERSION.key -> null,

@@ -98,7 +98,7 @@ SELECT array(1), 2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-IntersectAll can only be performed on tables with the compatible column types. array<int> <> int at the first column of the second table;
+IntersectAll can only be performed on tables with the compatible column types. array<int> <> int at the first column of the second table
 
 
 -- !query
@@ -109,7 +109,7 @@ SELECT k, v FROM tab2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-IntersectAll can only be performed on tables with the same number of columns, but the first table has 1 columns and the second table has 2 columns;
+IntersectAll can only be performed on tables with the same number of columns, but the first table has 1 columns and the second table has 2 columns
 
 
 -- !query

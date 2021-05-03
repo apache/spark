@@ -103,7 +103,7 @@ case class BroadcastExchangeExec(
     promise.future
 
   @transient
-  private val timeout: Long = SQLConf.get.broadcastTimeout
+  private val timeout: Long = conf.broadcastTimeout
 
   @transient
   override lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
@@ -205,6 +205,9 @@ case class BroadcastExchangeExec(
           ex)
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): BroadcastExchangeExec =
+    copy(child = newChild)
 }
 
 object BroadcastExchangeExec {

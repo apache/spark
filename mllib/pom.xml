@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.1.0-SNAPSHOT</version>
+    <version>3.2.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -140,6 +140,19 @@
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>blas</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>lapack</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>arpack</artifactId>
     </dependency>
 
   </dependencies>

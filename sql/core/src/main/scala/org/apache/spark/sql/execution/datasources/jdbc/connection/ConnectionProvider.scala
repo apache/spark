@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
 import java.util.ServiceLoader
+import javax.security.auth.login.Configuration
 
 import scala.collection.mutable
 
@@ -60,7 +61,15 @@ private[jdbc] object ConnectionProvider extends Logging {
       "JDBC connection initiated but not exactly one connection provider found which can handle " +
         s"it. Found active providers: ${filteredProviders.mkString(", ")}")
     SecurityConfigurationLock.synchronized {
-      filteredProviders.head.getConnection(driver, options)
+      // Inside getConnection it's safe to get parent again because SecurityConfigurationLock
+      // makes sure it's untouched
+      val parent = Configuration.getConfiguration
+      try {
+        filteredProviders.head.getConnection(driver, options)
+      } finally {
+        logDebug("Restoring original security configuration")
+        Configuration.setConfiguration(parent)
+      }
     }
   }
 }

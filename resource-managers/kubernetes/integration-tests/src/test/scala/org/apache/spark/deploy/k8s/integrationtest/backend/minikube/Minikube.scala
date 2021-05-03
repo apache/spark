@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.backend.minikube
 
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}
 
@@ -36,18 +36,18 @@ private[spark] object Minikube extends Logging {
   private val MINIKUBE_PATH = ".minikube"
 
   def logVersion(): Unit = {
-    logInfo(executeMinikube("version").mkString("\n"))
+    logInfo(executeMinikube(true, "version").mkString("\n"))
   }
 
   def getMinikubeIp: String = {
-    val outputs = executeMinikube("ip")
+    val outputs = executeMinikube(true, "ip")
       .filter(_.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"))
     assert(outputs.size == 1, "Unexpected amount of output from minikube ip")
     outputs.head
   }
 
   def getMinikubeStatus: MinikubeStatus.Value = {
-    val statusString = executeMinikube("status")
+    val statusString = executeMinikube(true, "status")
     logInfo(s"Minikube status command output:\n$statusString")
     // up to minikube version v0.30.0 use this to check for minikube status
     val oldMinikube = statusString
@@ -68,15 +68,23 @@ private[spark] object Minikube extends Logging {
   def getKubernetesClient: DefaultKubernetesClient = {
     val kubernetesMaster = s"https://${getMinikubeIp}:8443"
     val userHome = System.getProperty("user.home")
+    val minikubeBasePath = Paths.get(userHome, MINIKUBE_PATH).toString
+    val profileDir = if (Files.exists(Paths.get(minikubeBasePath, "apiserver.crt"))) {
+      // For Minikube <1.9
+      ""
+    } else {
+      // For Minikube >=1.9
+      Paths.get("profiles", executeMinikube(true, "profile")(0)).toString
+    }
+    val apiServerCertPath = Paths.get(minikubeBasePath, profileDir, "apiserver.crt")
+    val apiServerKeyPath = Paths.get(minikubeBasePath, profileDir, "apiserver.key")
     val kubernetesConf = new ConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(kubernetesMaster)
       .withCaCertFile(
         Paths.get(userHome, MINIKUBE_PATH, "ca.crt").toFile.getAbsolutePath)
-      .withClientCertFile(
-        Paths.get(userHome, MINIKUBE_PATH, "apiserver.crt").toFile.getAbsolutePath)
-      .withClientKeyFile(
-        Paths.get(userHome, MINIKUBE_PATH, "apiserver.key").toFile.getAbsolutePath)
+      .withClientCertFile(apiServerCertPath.toFile.getAbsolutePath)
+      .withClientKeyFile(apiServerKeyPath.toFile.getAbsolutePath)
       .build()
     new DefaultKubernetesClient(kubernetesConf)
   }
@@ -118,18 +126,22 @@ private[spark] object Minikube extends Logging {
     }
   }
 
-  def executeMinikube(action: String, args: String*): Seq[String] = {
+  def executeMinikube(logOutput: Boolean, action: String, args: String*): Seq[String] = {
     ProcessUtils.executeProcess(
-      Array("bash", "-c", s"minikube $action ${args.mkString(" ")}"),
-      MINIKUBE_STARTUP_TIMEOUT_SECONDS).filter{x =>
+      Array("bash", "-c", s"MINIKUBE_IN_STYLE=true minikube $action ${args.mkString(" ")}"),
+      MINIKUBE_STARTUP_TIMEOUT_SECONDS, dumpOutput = logOutput).filter{x =>
       !x.contains("There is a newer version of minikube") &&
       !x.contains("https://github.com/kubernetes")
     }
   }
 
   def minikubeServiceAction(args: String*): String = {
-    executeMinikube("service", args: _*).head
+    executeMinikube(true, "service", args: _*).head
   }
+
+  def describePods(labels: String): Seq[String] =
+    Minikube.executeMinikube(false, "kubectl", "--", "describe", "pods", "--all-namespaces",
+      "-l", labels)
 }
 
 private[spark] object MinikubeStatus extends Enumeration {

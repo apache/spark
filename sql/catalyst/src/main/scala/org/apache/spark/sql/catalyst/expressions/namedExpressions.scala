@@ -23,8 +23,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern.ATTRIBUTE_REFERENCE
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableBitSet
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -143,14 +148,14 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
  *                  fully qualified way. Consider the examples tableName.name, subQueryAlias.name.
  *                  tableName and subQueryAlias are possible qualifiers.
  * @param explicitMetadata Explicit metadata associated with this alias that overwrites child's.
- * @param deniedMetadataKeys Keys of metadata entries that are supposed to be removed when
- *                           inheriting the metadata from the child.
+ * @param nonInheritableMetadataKeys Keys of metadata entries that are supposed to be removed when
+ *                                   inheriting the metadata from the child.
  */
 case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty,
     val explicitMetadata: Option[Metadata] = None,
-    val deniedMetadataKeys: Seq[String] = Seq.empty)
+    val nonInheritableMetadataKeys: Seq[String] = Seq.empty)
   extends UnaryExpression with NamedExpression {
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
@@ -162,7 +167,7 @@ case class Alias(child: Expression, name: String)(
   /** Just a simple passthrough for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw new IllegalStateException("Alias.doGenCode should not be called.")
+    throw QueryExecutionErrors.doGenCodeOfAliasShouldNotBeCalledError
   }
 
   override def dataType: DataType = child.dataType
@@ -172,7 +177,7 @@ case class Alias(child: Expression, name: String)(
       child match {
         case named: NamedExpression =>
           val builder = new MetadataBuilder().withMetadata(named.metadata)
-          deniedMetadataKeys.foreach(builder.remove)
+          nonInheritableMetadataKeys.foreach(builder.remove)
           builder.build()
 
         case _ => Metadata.empty
@@ -181,7 +186,10 @@ case class Alias(child: Expression, name: String)(
   }
 
   def newInstance(): NamedExpression =
-    Alias(child, name)(qualifier = qualifier, explicitMetadata = explicitMetadata)
+    Alias(child, name)(
+      qualifier = qualifier,
+      explicitMetadata = explicitMetadata,
+      nonInheritableMetadataKeys = nonInheritableMetadataKeys)
 
   override def toAttribute: Attribute = {
     if (resolved) {
@@ -201,7 +209,7 @@ case class Alias(child: Expression, name: String)(
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix$delaySuffix"
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
-    exprId :: qualifier :: explicitMetadata :: deniedMetadataKeys :: Nil
+    exprId :: qualifier :: explicitMetadata :: nonInheritableMetadataKeys :: Nil
   }
 
   override def hashCode(): Int = {
@@ -212,14 +220,24 @@ case class Alias(child: Expression, name: String)(
   override def equals(other: Any): Boolean = other match {
     case a: Alias =>
       name == a.name && exprId == a.exprId && child == a.child && qualifier == a.qualifier &&
-        explicitMetadata == a.explicitMetadata && deniedMetadataKeys == a.deniedMetadataKeys
+        explicitMetadata == a.explicitMetadata &&
+        nonInheritableMetadataKeys == a.nonInheritableMetadataKeys
     case _ => false
   }
 
   override def sql: String = {
-    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
-    s"${child.sql} AS $qualifierPrefix${quoteIdentifier(name)}"
+    val qualifierPrefix =
+      if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
+    s"${child.sql} AS $qualifierPrefix${quoteIfNeeded(name)}"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Alias =
+    copy(child = newChild)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
+}
+
+// Singleton tree pattern BitSet for all AttributeReference instances.
+object AttributeReferenceTreeBits {
+  val bits: BitSet = new ImmutableBitSet(TreePattern.maxId, ATTRIBUTE_REFERENCE.id)
 }
 
 /**
@@ -243,6 +261,8 @@ case class AttributeReference(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
+
+  override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
   /**
    * Returns true iff the expression id is the same for both attributes.
@@ -342,8 +362,9 @@ case class AttributeReference(
   }
 
   override def sql: String = {
-    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
-    s"$qualifierPrefix${quoteIdentifier(name)}"
+    val qualifierPrefix =
+      if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
+    s"$qualifierPrefix${quoteIfNeeded(name)}"
   }
 }
 

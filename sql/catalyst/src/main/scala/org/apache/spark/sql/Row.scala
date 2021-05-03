@@ -351,7 +351,7 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i.
    * For primitive types if value is null it returns 'zero value' specific for primitive
-   * ie. 0 for Int - use isNullAt to ensure that value is not null
+   * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -360,7 +360,7 @@ trait Row extends Serializable {
   /**
    * Returns the value of a given fieldName.
    * For primitive types if value is null it returns 'zero value' specific for primitive
-   * ie. 0 for Int - use isNullAt to ensure that value is not null
+   * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
@@ -381,7 +381,7 @@ trait Row extends Serializable {
   /**
    * Returns a Map consisting of names and values for the requested fieldNames
    * For primitive types if value is null it returns 'zero value' specific for primitive
-   * ie. 0 for Int - use isNullAt to ensure that value is not null
+   * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.

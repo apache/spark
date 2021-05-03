@@ -15,7 +15,9 @@
 .ensime_cache/
 .ensime_lucene
 .generated-mima*
-.idea/
+# The star is required for further !.idea/ to work, see https://git-scm.com/docs/gitignore
+.idea/*
+!.idea/vcs.xml
 .idea_modules/
 .project
 .pydevproject
@@ -30,7 +32,6 @@ R/pkg/tests/fulltests/Rplots.pdf
 build/*.jar
 build/apache-maven*
 build/scala*
-build/zinc*
 cache
 checkpoint
 conf/*.cmd
@@ -48,6 +49,7 @@ dev/pr-deps/
 dist/
 docs/_site/
 docs/api
+docs/.local_ruby_bundle
 sql/docs
 sql/site
 lib_managed/

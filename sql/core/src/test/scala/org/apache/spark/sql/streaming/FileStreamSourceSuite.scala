@@ -413,7 +413,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           createFileStreamSourceAndGetSchema(
             format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
         }
-        assert("Unable to infer schema for JSON. It must be specified manually.;" === e.getMessage)
+        assert("Unable to infer schema for JSON. It must be specified manually." === e.getMessage)
       }
     }
   }
@@ -1532,8 +1532,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   private def readOffsetFromResource(file: String): SerializedOffset = {
     import scala.io.Source
-    val str = Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI).mkString
-    SerializedOffset(str.trim)
+    Utils.tryWithResource(
+      Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI)) { source =>
+      SerializedOffset(source.mkString.trim)
+    }
   }
 
   private def runTwoBatchesAndVerifyResults(
@@ -1946,9 +1948,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   test("SourceFileArchiver - fail when base archive path matches source pattern") {
     val fakeFileSystem = new FakeFileSystem("fake")
 
-    def assertThrowIllegalArgumentException(sourcePatttern: Path, baseArchivePath: Path): Unit = {
+    def assertThrowIllegalArgumentException(sourcePattern: Path, baseArchivePath: Path): Unit = {
       intercept[IllegalArgumentException] {
-        new SourceFileArchiver(fakeFileSystem, sourcePatttern, fakeFileSystem, baseArchivePath)
+        new SourceFileArchiver(fakeFileSystem, sourcePattern, fakeFileSystem, baseArchivePath)
       }
     }
 
