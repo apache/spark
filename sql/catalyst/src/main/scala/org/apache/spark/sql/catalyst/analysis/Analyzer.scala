@@ -1976,7 +1976,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   object LookupFunctions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
-      plan.resolveExpressionsWithPruning(AlwaysProcess.fn, ruleId) {
+      plan.resolveExpressions {
         case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _) =>
           if (externalFunctionNameSet.contains(normalizeFuncName(ident)) ||
             v1SessionCatalog.isRegisteredFunction(ident)) {
@@ -3074,8 +3074,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    * and we should return null if the input is null.
    */
   object HandleNullInputsForUDF extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p if !p.resolved => p // Skip unresolved nodes.
 
       case p => p transformExpressionsUp {
@@ -3505,8 +3504,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   /** Rule to mostly resolve, normalize and rewrite column names based on case sensitivity. */
   object ResolveAlterTableChanges extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      AlwaysProcess.fn, ruleId) {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
         // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
         // normalized parent name of fields to field names that belong to the parent.
@@ -3671,8 +3669,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    * being optimized. This rule should run after all other analysis rules are run.
    */
   object HandleAnalysisOnlyCommand extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-      AlwaysProcess.fn, ruleId) {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case c: AnalysisOnlyCommand if c.resolved =>
         checkAnalysis(c)
         c.markAsAnalyzed()
@@ -3698,7 +3695,8 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
  * Removes [[Union]] operators from the plan if it just has one child.
  */
 object EliminateUnions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    AlwaysProcess.fn, ruleId) {
     case u: Union if u.children.size == 1 => u.children.head
   }
 }
@@ -3792,7 +3790,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * @return the logical plan that will generate the time windows using the Expand operator, with
    *         the Filter operator for correctness and Project for usability.
    */
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    AlwaysProcess.fn, ruleId) {
     case p: LogicalPlan if p.children.size == 1 =>
       val child = p.children.head
       val windowExpressions =
