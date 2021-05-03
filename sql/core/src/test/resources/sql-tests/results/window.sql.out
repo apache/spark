@@ -273,7 +273,7 @@ ORDER BY cate, val_date
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY testdata.cate ORDER BY testdata.val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)' due to data type mismatch: The data type 'date' used in the order specification does not match the data type 'day-time interval' which is used in the range frame.; line 1 pos 46
+cannot resolve '(PARTITION BY testdata.cate ORDER BY testdata.val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)' due to data type mismatch: The data type 'date' used in the order specification does not match the data type 'interval day to second' which is used in the range frame.; line 1 pos 46
 
 
 -- !query
