@@ -279,6 +279,7 @@ final class ShuffleBlockFetcherIterator(
             // This needs to be released after use.
             buf.retain()
             remainingBlocks -= blockId
+            blockOOMRetryTimes.remove(blockId)
             results.put(new SuccessFetchResult(BlockId(blockId), infoMap(blockId)._2,
               address, infoMap(blockId)._1, buf, remainingBlocks.isEmpty))
             logDebug("remainingBlocks: " + remainingBlocks)
@@ -289,29 +290,28 @@ final class ShuffleBlockFetcherIterator(
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
-        logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-        val (size, mapIndex) = infoMap(blockId)
-        e match {
-          // SPARK-27991: Catch the Netty OOM and set the flag `isNettyOOMOnShuffle` (shared among
-          // tasks) to true as early as possible. The pending fetch requests won't be sent
-          // afterwards until the flag is set to false on:
-          // 1) the Netty free memory >= maxReqSizeShuffleToMem - we'll check this whenever
-          //    there's a fetch request succeeds.
-          // 2) the number of in-flight requests becomes 0 - we'll check this in `fetchUpToMaxBytes`
-          //    whenever it's invoked.
-          // Although Netty memory is shared across multiple modules, e.g., shuffle, rpc, the flag
-          // only takes effect for the shuffle due to the implementation simplicity concern.
-          // And we'll buffer the consecutive block failures caused by the OOM error until there's
-          // no remaining blocks in the current request. Then, we'll package these blocks into
-          // a same fetch request for the retry later. In this way, instead of creating the fetch
-          // request per block, it would help reduce the concurrent connections and data loads
-          // pressure at remote server.
-          // Note that catching OOM and do something based on it is only a workaround for
-          // handling the Netty OOM issue, which is not the best way towards memory management.
-          // We can get rid of it when we find a way to manage Netty's memory precisely.
-          case _: OutOfDirectMemoryError
+        ShuffleBlockFetcherIterator.this.synchronized {
+          logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
+          e match {
+            // SPARK-27991: Catch the Netty OOM and set the flag `isNettyOOMOnShuffle` (shared among
+            // tasks) to true as early as possible. The pending fetch requests won't be sent
+            // afterwards until the flag is set to false on:
+            // 1) the Netty free memory >= maxReqSizeShuffleToMem
+            //    - we'll check this whenever there's a fetch request succeeds.
+            // 2) the number of in-flight requests becomes 0
+            //    - we'll check this in `fetchUpToMaxBytes` whenever it's invoked.
+            // Although Netty memory is shared across multiple modules, e.g., shuffle, rpc, the flag
+            // only takes effect for the shuffle due to the implementation simplicity concern.
+            // And we'll buffer the consecutive block failures caused by the OOM error until there's
+            // no remaining blocks in the current request. Then, we'll package these blocks into
+            // a same fetch request for the retry later. In this way, instead of creating the fetch
+            // request per block, it would help reduce the concurrent connections and data loads
+            // pressure at remote server.
+            // Note that catching OOM and do something based on it is only a workaround for
+            // handling the Netty OOM issue, which is not the best way towards memory management.
+            // We can get rid of it when we find a way to manage Netty's memory precisely.
+            case _: OutOfDirectMemoryError
               if blockOOMRetryTimes.getOrElseUpdate(blockId, 0) < maxAttemptsOnNettyOOM =>
-            ShuffleBlockFetcherIterator.this.synchronized {
               if (!isZombie) {
                 val failureTimes = blockOOMRetryTimes(blockId)
                 blockOOMRetryTimes(blockId) += 1
@@ -325,10 +325,10 @@ final class ShuffleBlockFetcherIterator(
                 deferredBlocks += blockId
                 enqueueDeferredFetchRequestIfNecessary()
               }
-            }
 
-          case _ =>
-            results.put(FailureFetchResult(BlockId(blockId), mapIndex, address, e))
+            case _ =>
+              results.put(FailureFetchResult(BlockId(blockId), infoMap(blockId)._2, address, e))
+          }
         }
       }
     }
@@ -678,7 +678,6 @@ final class ShuffleBlockFetcherIterator(
               }
               shuffleMetrics.incRemoteBlocksFetched(1)
               bytesInFlight -= size
-              blockOOMRetryTimes.remove(blockId.toString)
             }
           }
           if (isNetworkReqDone) {
