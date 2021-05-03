@@ -22,6 +22,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.{JavaLo
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
@@ -39,70 +40,74 @@ import org.apache.spark.sql.types.{DataType, LongType, StructType}
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *      Results will be written to "benchmarks/FunctionBenchmark-results.txt".
  * }}}
+ * '''NOTE''': to update the result of this benchmark, please use Github benchmark action:
+ *   https://spark.apache.org/developer-tools.html#github-workflow-benchmarks
  */
 object FunctionBenchmark extends SqlBasedBenchmark {
   val catalogName: String = "benchmark_catalog"
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 500L * 1000 * 1000
-    Seq(true, false).foreach { enableCodeGen =>
+    Seq(true, false).foreach { codegenEnabled =>
       Seq(true, false).foreach { resultNullable =>
-        javaScalarBenchmark(N, enableCodeGen = enableCodeGen, resultNullable = resultNullable)
+        javaScalarFunctionBenchmark(N, codegenEnabled = codegenEnabled,
+          resultNullable = resultNullable)
       }
     }
-    Seq(true, false).foreach { enableCodeGen =>
+    Seq(true, false).foreach { codegenEnabled =>
       Seq(true, false).foreach { resultNullable =>
-        scalaScalarBenchmark(N, enableCodeGen = enableCodeGen, resultNullable = resultNullable)
+        scalaScalarFunctionBenchmark(N, codegenEnabled = codegenEnabled,
+          resultNullable = resultNullable)
       }
     }
   }
 
-  private def javaScalarBenchmark(
+  private def javaScalarFunctionBenchmark(
       N: Long,
-      enableCodeGen: Boolean,
+      codegenEnabled: Boolean,
       resultNullable: Boolean): Unit = {
     withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
       createFunction("long_add_default", new JavaLongAdd(new JavaLongAddDefault(resultNullable)))
       createFunction("long_add_magic", new JavaLongAdd(new JavaLongAddMagic(resultNullable)))
       createFunction("long_add_static_magic",
-          new JavaLongAdd(new JavaLongAddStaticMagic(resultNullable)))
+        new JavaLongAdd(new JavaLongAddStaticMagic(resultNullable)))
 
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodeGen.toString) {
-        val flag = if (enableCodeGen) "on" else "off"
-        val nullable = if (resultNullable) "nullable" else "notnull"
-        val name = s"Java scalar function (long + long) -> long/$nullable wholestage $flag"
-        val benchmark = new Benchmark(name, N, output = output)
-        Seq("long_add_default", "long_add_magic", "long_add_static_magic").foreach { name =>
-          benchmark.addCase(s"with $name", numIters = 3) { _ =>
-            spark.range(N).selectExpr(s"$catalogName.$name(id, id)").noop()
-          }
-        }
-        benchmark.run()
-      }
+      runBenchmark(N, "Java scalar function (long + long) -> long", codegenEnabled, resultNullable,
+        "long_add_default", "long_add_magic", "long_add_static_magic")
     }
   }
 
-  private def scalaScalarBenchmark(
+  private def scalaScalarFunctionBenchmark(
       N: Long,
-      enableCodeGen: Boolean,
+      codegenEnabled: Boolean,
       resultNullable: Boolean): Unit = {
     withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
       createFunction("long_add_default",
         LongAddUnbound(new LongAddWithProduceResult(resultNullable)))
       createFunction("long_add_magic", LongAddUnbound(new LongAddWithMagic(resultNullable)))
 
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableCodeGen.toString) {
-        val flag = if (enableCodeGen) "on" else "off"
-        val nullable = if (resultNullable) "nullable" else "notnull"
-        val name = s"Scala scalar function (long + long) -> long/$nullable wholestage $flag"
-        val benchmark = new Benchmark(name, N, output = output)
-        Seq("long_add_default", "long_add_magic").foreach { name =>
-          benchmark.addCase(s"with $name", numIters = 3) { _ =>
-            spark.range(N).selectExpr(s"$catalogName.$name(id, id)").noop()
-          }
+      runBenchmark(N, "scalar function (long + long) -> long", codegenEnabled, resultNullable,
+        "long_add_default", "long_add_magic")
+    }
+  }
+
+  private def runBenchmark(
+      N: Long,
+      shortName: String,
+      codegenEnabled: Boolean,
+      resultNullable: Boolean,
+      functions: String*): Unit = {
+    val codeGenFactoryMode = if (codegenEnabled) FALLBACK else NO_CODEGEN
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+      SQLConf.CODEGEN_FACTORY_MODE.key -> codeGenFactoryMode.toString) {
+      val name = s"$shortName result_nullable = $resultNullable codegen = $codegenEnabled"
+      val benchmark = new Benchmark(name, N, output = output)
+      functions.foreach { name =>
+        benchmark.addCase(s"with $name", numIters = 3) { _ =>
+          spark.range(N).selectExpr(s"$catalogName.$name(id, id)").noop()
         }
-        benchmark.run()
       }
+      benchmark.run()
     }
   }
 

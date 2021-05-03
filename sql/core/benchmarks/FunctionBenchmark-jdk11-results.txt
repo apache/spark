@@ -1,0 +1,60 @@
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Java scalar function (long + long) -> long result_nullable = true codegen = true:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+with long_add_default                                                                     52937          54250        1181          9.4         105.9       1.0X
+with long_add_magic                                                                       20527          20975         683         24.4          41.1       2.6X
+with long_add_static_magic                                                                20513          20944         447         24.4          41.0       2.6X
+
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Java scalar function (long + long) -> long result_nullable = false codegen = true:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+with long_add_default                                                                      54502          54710         208          9.2         109.0       1.0X
+with long_add_magic                                                                        21790          22062         414         22.9          43.6       2.5X
+with long_add_static_magic                                                                 19014          19715         626         26.3          38.0       2.9X
+
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Java scalar function (long + long) -> long result_nullable = true codegen = false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+with long_add_default                                                                      64039          64306         293          7.8         128.1       1.0X
+with long_add_magic                                                                       199121         199232         144          2.5         398.2       0.3X
+with long_add_static_magic                                                                197914         199933        1892          2.5         395.8       0.3X
+
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+Java scalar function (long + long) -> long result_nullable = false codegen = false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+with long_add_default                                                                       60515          60887         453          8.3         121.0       1.0X
+with long_add_magic                                                                        201052         202036         957          2.5         402.1       0.3X
+with long_add_static_magic                                                                 202037         202639         584          2.5         404.1       0.3X
+
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+scalar function (long + long) -> long result_nullable = true codegen = true:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+with long_add_default                                                                62105          62467         341          8.1         124.2       1.0X
+with long_add_magic                                                                  20721          22705        1729         24.1          41.4       3.0X
+
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+scalar function (long + long) -> long result_nullable = false codegen = true:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+with long_add_default                                                                 59724          61054        1209          8.4         119.4       1.0X
+with long_add_magic                                                                   20084          20185         109         24.9          40.2       3.0X
+
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+scalar function (long + long) -> long result_nullable = true codegen = false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+with long_add_default                                                                 66310          69107         NaN          7.5         132.6       1.0X
+with long_add_magic                                                                  207814         209434        1735          2.4         415.6       0.3X
+
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+scalar function (long + long) -> long result_nullable = false codegen = false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+with long_add_default                                                                  65385          66432         948          7.6         130.8       1.0X
+with long_add_magic                                                                   198884         199494         528          2.5         397.8       0.3X
+
