@@ -44,15 +44,15 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
     case p =>
       val optimized = if (conf.jsonExpressionOptimization) {
         p.transformExpressionsWithPruning(
-          _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, JSON_TO_STRUCT),
-          ruleId)(jsonOptimization)
+          _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, JSON_TO_STRUCT)
+          )(jsonOptimization)
       } else {
         p
       }
 
       if (conf.csvExpressionOptimization) {
         optimized.transformExpressionsWithPruning(
-          _.containsAnyPattern(EXTRACT_VALUE), ruleId)(csvOptimization)
+          _.containsAnyPattern(EXTRACT_VALUE))(csvOptimization)
       } else {
         optimized
       }
