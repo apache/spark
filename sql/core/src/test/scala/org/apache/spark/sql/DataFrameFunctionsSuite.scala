@@ -2261,32 +2261,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(ex3.getMessage.contains("cannot resolve 'a'"))
   }
 
-  test("nested transform (DSL)") {
-    val df = Seq(
-        (Seq(1, 2, 3), Seq("a", "b", "c"))
-    ).toDF("numbers", "letters")
-
-    checkAnswer(
-        df.select(
-          flatten(
-            transform(
-              $"numbers",
-              (number: Column) => transform(
-                $"letters",
-                (letter: Column) => struct(
-                  number.as("number"),
-                  letter.as("letter")
-                )
-              )
-            )
-          ).as("zipped")
-        ),
-        Seq(Row(Seq(Row(1, "a"), Row(1, "b"), Row(1, "c"), Row(2, "a"), Row(2, "b"),
-            Row(2, "c"), Row(3, "a"), Row(3, "b"), Row(3, "c")
-        )))
-    )
-  }
-
   test("map_filter") {
     val dfInts = Seq(
       Map(1 -> 10, 2 -> 20, 3 -> 30),
@@ -3654,6 +3628,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(map(map_entries($"m"), lit(1))),
       Row(Map(Seq(Row(1, "a")) -> 1)))
+  }
+
+  test("SPARK-34794: lambda variable name issues in nested functions") {
+    val df1 = Seq((Seq(1, 2), Seq("a", "b"))).toDF("numbers", "letters")
+
+    checkAnswer(df1.select(flatten(transform($"numbers", (number: Column) =>
+        transform($"letters", (letter: Column) =>
+          struct(number, letter))))),
+        Seq(Row(Seq(Row(1, "a"), Row(1, "b"), Row(2, "a"), Row(2, "b"))))
+    )
+    checkAnswer(df1.select(flatten(transform($"numbers", (number: Column, i: Column) =>
+        transform($"letters", (letter: Column, j: Column) =>
+          struct(number + j, concat(letter, i)))))),
+        Seq(Row(Seq(Row(1, "a0"), Row(2, "b0"), Row(2, "a1"), Row(3, "b1"))))
+    )
+
+    val df2 = Seq((Map("a" -> 1, "b" -> 2), Map("a" -> 2, "b" -> 3))).toDF("m1", "m2")
+
+    checkAnswer(df2.select(map_zip_with($"m1", $"m2", (k1: Column, ov1: Column, ov2: Column) =>
+        map_zip_with($"m1", $"m2", (k2: Column, iv1: Column, iv2: Column) =>
+          ov1 + iv1 + ov2 + iv2))),
+        Seq(Row(Map("a" -> Map("a" -> 6, "b" -> 8), "b" -> Map("a" -> 8, "b" -> 10))))
+    )
   }
 }
 
