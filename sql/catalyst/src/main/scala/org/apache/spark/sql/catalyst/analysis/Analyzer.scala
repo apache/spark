@@ -2028,7 +2028,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
 
       case q: LogicalPlan =>
-        q transformExpressions {
+        q.transformExpressionsUpWithPruning(AlwaysProcess.fn, ruleId) {
           case u if !u.childrenResolved => u // Skip until children are resolved.
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {
@@ -3126,7 +3126,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       AlwaysProcess.fn, ruleId) {
       case p if !p.resolved => p // Skip unresolved nodes.
 
-      case p => p transformExpressionsUp {
+      case p => p.transformExpressionsUpWithPruning(AlwaysProcess.fn, ruleId) {
 
         case udf: ScalaUDF if udf.inputEncoders.nonEmpty =>
           val boundEncoders = udf.inputEncoders.zipWithIndex.map { case (encOpt, i) =>
@@ -3445,7 +3445,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case p if !p.childrenResolved => p
       case p if p.resolved => p
 
-      case p => p transformExpressions {
+      case p => p.transformExpressionsUpWithPruning(AlwaysProcess.fn, ruleId) {
         case n: NewInstance if n.childrenResolved && !n.resolved =>
           val outer = OuterScopes.getOuterScope(n.cls)
           if (outer == null) {
@@ -3685,7 +3685,7 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   // This is also called in the beginning of the optimization phase, and as a result
   // is using transformUp rather than resolveOperators.
   def apply(plan: LogicalPlan): LogicalPlan = AnalysisHelper.allowInvokingTransformsInAnalyzer {
-    plan transformUp {
+    plan.transformUpWithPruning(AlwaysProcess.fn, ruleId) {
       case SubqueryAlias(_, child) => child
     }
   }
