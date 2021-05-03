@@ -236,7 +236,7 @@ class BarrierTaskContext(TaskContext):
         This API is experimental
         """
         if not isinstance(message, str):
-            raise ValueError("Argument `message` must be of type `str`")
+            raise TypeError("Argument `message` must be of type `str`")
         elif self._port is None or self._secret is None:
             raise Exception("Not supported to call barrier() before initialize " +
                             "BarrierTaskContext.")
