@@ -172,7 +172,7 @@
     <fasterxml.jackson.version>2.12.2</fasterxml.jackson.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <netlib.ludovic.dev.version>2-SNAPSHOT</netlib.ludovic.dev.version>
+    <netlib.ludovic.dev.version>2.0.0</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.20</commons-compress.version>
     <commons-io.version>2.8.0</commons-io.version>
@@ -298,18 +298,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-
-    <!-- THIS SHOULD NOT BE MERGED!!! THIS IS A TEMPORARY WORKAROUND!!! -->
-    <repository>
-      <id>sonatype-oss-snapshots</id>
-      <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
@@ -335,17 +323,6 @@
       </releases>
       <snapshots>
         <enabled>false</enabled>
-      </snapshots>
-    </pluginRepository>
-    <!-- THIS SHOULD NOT BE MERGED!!! THIS IS A TEMPORARY WORKAROUND!!! -->
-    <pluginRepository>
-      <id>sonatype-oss-snapshots</id>
-      <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
       </snapshots>
     </pluginRepository>
   </pluginRepositories>
