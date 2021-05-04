@@ -241,6 +241,8 @@ case class Except(
 
   override def metadataOutput: Seq[Attribute] = Nil
 
+  final override val nodePatterns : Seq[TreePattern] = Seq(EXCEPT)
+
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
 
   override protected def withNewChildrenInternal(
@@ -817,6 +819,8 @@ case class Aggregate(
     }
   }
 
+  final override val nodePatterns : Seq[TreePattern] = Seq(AGGREGATE)
+
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
@@ -1046,6 +1050,8 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderP
     }
   }
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
     copy(child = newChild)
 }
@@ -1065,6 +1071,8 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
       case _ => None
     }
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LocalLimit =
     copy(child = newChild)

@@ -2484,6 +2484,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
+  override def visitYearMonthIntervalDataType(ctx: YearMonthIntervalDataTypeContext): DataType = {
+    YearMonthIntervalType
+  }
+
+  override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
+    DayTimeIntervalType
+  }
+
   /**
    * Create a complex DataType. Arrays, Maps and Structures are supported.
    */

@@ -256,7 +256,7 @@ case class StaticInvoke(
       ""
     }
 
-    val evaluate = if (returnNullable) {
+    val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
           ${ev.value} = $callFunc;

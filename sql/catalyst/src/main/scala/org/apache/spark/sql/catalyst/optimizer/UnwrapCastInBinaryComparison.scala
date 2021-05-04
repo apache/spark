@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.BINARY_COMPARISON
 import org.apache.spark.sql.types._
 
 /**
@@ -87,9 +88,10 @@ import org.apache.spark.sql.types._
  * Similarly, `if(isnull(fromExp), null, true)` is represented with `or(isnotnull(fromExp), null)`.
  */
 object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(BINARY_COMPARISON), ruleId) {
     case l: LogicalPlan =>
-      l transformExpressionsUp {
+      l.transformExpressionsUpWithPruning(_.containsPattern(BINARY_COMPARISON), ruleId) {
         case e @ BinaryComparison(_, _) => unwrapCast(e)
       }
   }
