@@ -374,7 +374,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       logWarning("maxOffsetsPerTrigger option ignored in batch queries")
     }
 
-    if (caseInsensitiveParams.get("minoffsetspertrigger").isDefined) {
+    if (params.contains(MIN_OFFSET_PER_TRIGGER)) {
       logWarning("minOffsetsPerTrigger option ignored in batch queries")
     }
   }
