@@ -315,7 +315,7 @@ private[spark] class SparkSubmit extends Logging {
         } else {
           // In K8s client mode, when in the driver, resolved jars are added in the driver.
           //
-          // For example we might use the dependencies for downloading
+          // For example, we might use the dependencies for downloading
           // files from a Hadoop Compatible fs e.g. S3. In this case the user might pass:
           // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
           if (isKubernetesClusterModeDriver) {
