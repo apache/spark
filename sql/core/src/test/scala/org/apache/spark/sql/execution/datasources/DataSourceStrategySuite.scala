@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -310,27 +309,6 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
 
     // `Abs(col)` can not be pushed down, so it returns `None`
     assert(PushableColumnAndNestedColumn.unapply(Abs('col.int)) === None)
-  }
-
-  test("SPARK-32792: Rewrite InSet to Min Max filter") { attrInts.zip(attrStrs)
-    .foreach { case ((attrInt, intColName), (_, _)) =>
-      Seq(20, 50, 100).foreach { threshold =>
-        withSQLConf(SQLConf.OPTIMIZER_INSET_REWRITE_MIN_MAX_THRESHOLD.key -> threshold.toString) {
-          val minValue = 1
-          val maxValue = 60
-          val setValue = minValue to maxValue
-          val expected = if (threshold < maxValue) {
-            sources.And(sources.And(sources.GreaterThanOrEqual(intColName, minValue),
-              sources.LessThanOrEqual(intColName, maxValue)),
-              sources.In(intColName, setValue.toSet.toArray))
-          } else {
-            sources.In(intColName, setValue.toSet.toArray)
-          }
-
-          testTranslateFilter(InSet(attrInt, setValue.toSet), Some(expected))
-        }
-      }
-    }
   }
 
   /**

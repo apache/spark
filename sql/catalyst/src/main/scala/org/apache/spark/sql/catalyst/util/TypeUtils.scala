@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.{Expression, GreaterThanOrEqual, InSet, LessThanOrEqual, Literal, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.types._
 
 /**
@@ -120,12 +120,5 @@ object TypeUtils {
       case _ => false
     }
     if (dataType.existsRecursively(isInterval)) f
-  }
-
-  def rewriteInSetToMinMaxPredicate(inSet: InSet): Seq[Expression] = {
-    val dataType = inSet.child.dataType
-    val sortedValues = inSet.hset.toSeq.sorted(getInterpretedOrdering(dataType))
-    Seq(GreaterThanOrEqual(inSet.child, Literal(sortedValues.head, dataType)),
-      LessThanOrEqual(inSet.child, Literal(sortedValues.last, dataType)))
   }
 }

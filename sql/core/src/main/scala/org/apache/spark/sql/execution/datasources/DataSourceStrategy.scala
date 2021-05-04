@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -313,7 +312,7 @@ object DataSourceStrategy
           toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
     case ScanOperation(projects, filters,
-        l @ LogicalRelation(t: PrunedFilteredScan, _, _, _)) =>
+                           l @ LogicalRelation(t: PrunedFilteredScan, _, _, _)) =>
       pruneFilterProject(
         l,
         projects,
@@ -605,33 +604,13 @@ object DataSourceStrategy
         translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
           .map(sources.Not)
 
-      case inSet @ expressions.InSet(_, set) =>
-        val minMaxFilter = if (set.size > conf.optimizerInSetRewriteMinMaxThreshold) {
-          TypeUtils.rewriteInSetToMinMaxPredicate(inSet)
-        } else {
-          Seq.empty
-        }
-
-        (minMaxFilter :+ inSet).flatMap { f =>
-          translateLeafNodeFilterWithMapping(
-            f, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-        }.reduceLeftOption(sources.And)
-
       case other =>
-        translateLeafNodeFilterWithMapping(
-          other, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+        val filter = translateLeafNodeFilter(other, PushableColumn(nestedPredicatePushdownEnabled))
+        if (filter.isDefined && translatedFilterToExpr.isDefined) {
+          translatedFilterToExpr.get(filter.get) = predicate
+        }
+        filter
     }
-  }
-
-  private def translateLeafNodeFilterWithMapping(
-      predicate: Expression,
-      translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]],
-      nestedPredicatePushdownEnabled: Boolean): Option[Filter] = {
-    val filter = translateLeafNodeFilter(predicate, PushableColumn(nestedPredicatePushdownEnabled))
-    if (filter.isDefined && translatedFilterToExpr.isDefined) {
-      translatedFilterToExpr.get(filter.get) = predicate
-    }
-    filter
   }
 
   protected[sql] def rebuildExpressionFromFilter(
