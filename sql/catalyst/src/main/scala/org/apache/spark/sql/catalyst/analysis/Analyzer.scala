@@ -346,7 +346,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveBinaryArithmetic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case p: LogicalPlan => p.transformExpressionsUp {
+      case p: LogicalPlan => p.transformExpressionsUpWithPruning(AlwaysProcess.fn, ruleId) {
         case a @ Add(l, r, f) if a.childrenResolved => (l.dataType, r.dataType) match {
           case (DateType, DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
           case (DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
@@ -2027,7 +2027,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
 
       case q: LogicalPlan =>
-        q.transformExpressionsUpWithPruning(AlwaysProcess.fn, ruleId) {
+        q.transformExpressionsWithPruning(AlwaysProcess.fn, ruleId) {
           case u if !u.childrenResolved => u // Skip until children are resolved.
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {
@@ -3348,7 +3348,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case p if !p.childrenResolved => p
       case p if p.resolved => p
 
-      case p => p transformExpressions {
+      case p => p.transformExpressionsWithPruning(AlwaysProcess.fn, ruleId) {
         case UnresolvedDeserializer(deserializer, inputAttributes) =>
           val inputs = if (inputAttributes.isEmpty) {
             p.children.flatMap(_.output)
@@ -3472,7 +3472,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case p if !p.childrenResolved => p
       case p if p.resolved => p
 
-      case p => p transformExpressions {
+      case p => p.transformExpressionsWithPruning(AlwaysProcess.fn, ruleId) {
         case u @ UpCast(child, _, _) if !child.resolved => u
 
         case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
