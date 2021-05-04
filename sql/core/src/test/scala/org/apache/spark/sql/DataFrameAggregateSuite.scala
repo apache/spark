@@ -1135,7 +1135,7 @@ class DataFrameAggregateSuite extends QueryTest
     val sumDF2 = df.groupBy($"class").agg(sum($"year-month"), sum($"day-time"))
     checkAnswer(sumDF2, Row(1, Period.ofMonths(10), Duration.ofDays(10)) ::
       Row(2, Period.ofMonths(1), Duration.ofDays(1)) ::
-      Row(3, Period.of(1, 6, 0), Duration.ofDays(-11)) ::Nil)
+      Row(3, Period.of(1, 6, 0), Duration.ofDays(-11)) :: Nil)
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
       StructField("sum(year-month)", YearMonthIntervalType),
@@ -1173,7 +1173,7 @@ class DataFrameAggregateSuite extends QueryTest
     val avgDF2 = df.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
     checkAnswer(avgDF2, Row(1, Period.ofMonths(10), Duration.ofDays(10)) ::
       Row(2, Period.ofMonths(1), Duration.ofDays(1)) ::
-      Row(3, Period.ofMonths(9), Duration.ofDays(-5).plusHours(-12)) ::Nil)
+      Row(3, Period.ofMonths(9), Duration.ofDays(-5).plusHours(-12)) :: Nil)
     assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
     assert(avgDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
       StructField("avg(year-month)", YearMonthIntervalType),
@@ -1188,6 +1188,13 @@ class DataFrameAggregateSuite extends QueryTest
       checkAnswer(df2.select(avg($"day-time")), Nil)
     }
     assert(error2.toString contains "java.lang.ArithmeticException: long overflow")
+
+    val df3 = df.filter($"class" > 4)
+    val avgDF3 = df3.select(avg($"year-month"), avg($"day-time"))
+    checkAnswer(avgDF3, Row(null, null) :: Nil)
+
+    val avgDF4 = df3.groupBy($"class").agg(avg($"year-month"), avg($"day-time"))
+    checkAnswer(avgDF4, Nil)
   }
 }
 

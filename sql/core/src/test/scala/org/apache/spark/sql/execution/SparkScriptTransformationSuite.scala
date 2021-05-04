@@ -25,6 +25,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with SharedSparkSession {
   import testImplicits._
 
+  override protected def defaultSerDe(): String = "row-format-delimited"
+
   override def createScriptTransformationExec(
       script: String,
       output: Seq[Attribute],

@@ -506,6 +506,14 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       checkKeywordsExistsInExplain(df2, keywords = "[key1=value1, KEY2=VALUE2]")
     }
   }
+
+  test("SPARK-35225: Handle empty output for analyzed plan") {
+    withTempView("test") {
+      checkKeywordsExistsInExplain(
+        sql("CREATE TEMPORARY VIEW test AS SELECT 1"),
+        "== Analyzed Logical Plan ==\nCreateViewCommand")
+    }
+  }
 }
 
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {

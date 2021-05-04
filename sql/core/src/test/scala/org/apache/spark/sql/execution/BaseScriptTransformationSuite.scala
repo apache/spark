@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
@@ -42,6 +43,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   with BeforeAndAfterEach {
   import testImplicits._
   import ScriptTransformationIOSchema._
+
+  protected def defaultSerDe(): String
 
   protected val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
 
@@ -597,6 +600,37 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'c.cast("string"),
           'd.cast("string"),
           'e.cast("string")).collect())
+    }
+  }
+
+  test("SPARK-35220: DayTimeIntervalType/YearMonthIntervalType show different " +
+    "between hive serde and row format delimited\t") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTempView("v") {
+      val df = Seq(
+        (Duration.ofDays(1), Period.ofMonths(10))
+      ).toDF("a", "b")
+      df.createTempView("v")
+
+      if (defaultSerDe == "hive-serde") {
+        checkAnswer(sql(
+          """
+            |SELECT TRANSFORM(a, b)
+            |  USING 'cat' AS (a, b)
+            |FROM v
+            |""".stripMargin),
+          identity,
+          Row("1 00:00:00.000000000", "0-10") :: Nil)
+      } else {
+        checkAnswer(sql(
+          """
+            |SELECT TRANSFORM(a, b)
+            |  USING 'cat' AS (a, b)
+            |FROM v
+            |""".stripMargin),
+          identity,
+          Row("INTERVAL '1 00:00:00' DAY TO SECOND", "INTERVAL '0-10' YEAR TO MONTH") :: Nil)
+      }
     }
   }
 }

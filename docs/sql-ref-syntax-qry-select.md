@@ -41,7 +41,7 @@ select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_stat
 
 While `select_statement` is defined as
 ```sql
-SELECT [ hints , ... ] [ ALL | DISTINCT ] { [[ named_expression | regex_column_names ] [ , ... ] | TRANSFORM (...)) ] }
+SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_names ] [ , ... ] | TRANSFORM (...) ] }
     FROM { from_item [ , ... ] }
     [ PIVOT clause ]
     [ LATERAL VIEW clause ] [ ... ] 

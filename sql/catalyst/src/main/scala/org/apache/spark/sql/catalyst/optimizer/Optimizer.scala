@@ -148,6 +148,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
+      PullOutGroupingExpressions,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -267,7 +268,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
-      ReplaceUpdateFieldsExpression.ruleName :: Nil
+      ReplaceUpdateFieldsExpression.ruleName ::
+      PullOutGroupingExpressions.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -524,22 +526,18 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   }
 
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperHasNoAggregateExpressions = !upper.aggregateExpressions.exists(isAggregate)
+    val upperHasNoAggregateExpressions =
+      !upper.aggregateExpressions.exists(AggregateExpression.containsAggregate)
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower
         .aggregateExpressions
         .filter(_.deterministic)
-        .filter(!isAggregate(_))
+        .filterNot(AggregateExpression.containsAggregate)
         .map(_.toAttribute)
     ))
 
     upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
-  }
-
-  private def isAggregate(expr: Expression): Boolean = {
-    expr.find(e => e.isInstanceOf[AggregateExpression] ||
-      PythonUDF.isGroupedAggPandasUDF(e)).isDefined
   }
 }
 
@@ -1174,14 +1172,17 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
     // We only can combine them if and only if both are deterministic.
-    case Filter(fc, nf @ Filter(nc, grandChild)) if fc.deterministic && nc.deterministic =>
-      (ExpressionSet(splitConjunctivePredicates(fc)) --
+    case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
+      val (combineCandidates, nonDeterministic) =
+        splitConjunctivePredicates(fc).partition(_.deterministic)
+      val mergedFilter = (ExpressionSet(combineCandidates) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
+      nonDeterministic.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
   }
 }
 
