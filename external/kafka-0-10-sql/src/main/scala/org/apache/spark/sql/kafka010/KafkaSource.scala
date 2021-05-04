@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimi
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * A [[Source]] that reads data from Kafka using the following design.
@@ -94,7 +95,7 @@ private[kafka010] class KafkaSource(
     sourceOptions.get(MIN_OFFSET_PER_TRIGGER).map(_.toLong)
 
   private val maxTriggerDelayMs =
-    sc.conf.getTimeAsMs(sourceOptions.getOrElse(MAX_TRIGGER_DELAY, DEFAULT_MAX_TRIGGER_DELAY))
+    Utils.timeStringAsMs(sourceOptions.getOrElse(MAX_TRIGGER_DELAY, DEFAULT_MAX_TRIGGER_DELAY))
 
   private var lastTriggerMillis = 0L
 
