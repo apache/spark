@@ -56,7 +56,7 @@ abstract class BenchmarkBase {
         // scalastyle:on println
         dir.mkdirs()
       }
-      val file = new File(s"${dir}$resultFileName")
+      val file = new File(dir, resultFileName)
       if (!file.exists()) {
         file.createNewFile()
       }
