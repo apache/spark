@@ -409,8 +409,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       AlwaysProcess.fn, ruleId) {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
-      case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressionsWithPruning(
-        AlwaysProcess.fn, ruleId) {
+      case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressions {
         case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
           val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
@@ -2248,7 +2247,7 @@ class Analyzer(override val catalogManager: CatalogManager)
      * resolved outer references are wrapped in an [[OuterReference]]
      */
     private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
-      plan.resolveOperatorsDownWithPruning(AlwaysProcess.fn, ruleId) {
+      plan resolveOperatorsDown {
         case q: LogicalPlan if q.childrenResolved && !q.resolved =>
           q transformExpressions {
             case u @ UnresolvedAttribute(nameParts) =>
