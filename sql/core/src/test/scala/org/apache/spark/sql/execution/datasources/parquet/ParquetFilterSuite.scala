@@ -330,6 +330,22 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkFilterPredicate(intAttr =!= 1, classOf[NotEq[_]],
         (2 to 4).map(i => Row.apply(resultFun(i))))
 
+      checkFilterPredicate(intAttr < 2, classOf[Lt[_]], resultFun(1))
+      checkFilterPredicate(intAttr > 3, classOf[Gt[_]], resultFun(4))
+      checkFilterPredicate(intAttr <= 1, classOf[LtEq[_]], resultFun(1))
+      checkFilterPredicate(intAttr >= 4, classOf[GtEq[_]], resultFun(4))
+
+      checkFilterPredicate(Literal(1) === intAttr, classOf[Eq[_]], resultFun(1))
+      checkFilterPredicate(Literal(1) <=> intAttr, classOf[Eq[_]], resultFun(1))
+      checkFilterPredicate(Literal(2) > intAttr, classOf[Lt[_]], resultFun(1))
+      checkFilterPredicate(Literal(3) < intAttr, classOf[Gt[_]], resultFun(4))
+      checkFilterPredicate(Literal(1) >= intAttr, classOf[LtEq[_]], resultFun(1))
+      checkFilterPredicate(Literal(4) <= intAttr, classOf[GtEq[_]], resultFun(4))
+
+      checkFilterPredicate(!(intAttr < 4), classOf[GtEq[_]], resultFun(4))
+      checkFilterPredicate(intAttr < 2 || intAttr > 3, classOf[Operators.Or],
+        Seq(Row(resultFun(1)), Row(resultFun(4))))
+
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
           checkFilterPredicate(
