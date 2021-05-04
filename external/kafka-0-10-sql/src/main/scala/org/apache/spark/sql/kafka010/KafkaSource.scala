@@ -157,6 +157,7 @@ private[kafka010] class KafkaSource(
     if (skipBatch) {
       logDebug(
         s"Delaying batch as number of records available is less than minOffserPerTrigger")
+      // Pass same curret offsets as output to skip trigger
       KafkaSourceOffset(currentOffsets.get)
     } else {
       val offsets = limit match {
@@ -176,6 +177,7 @@ private[kafka010] class KafkaSource(
     }
   }
 
+  /** Checks if we need to skip this trigger based on minOffsetsPerTrigger & maxTriggerDelay */
   private def delayBatch(
       latestOffsets: Map[TopicPartition, Long],
       currentOffsets: Map[TopicPartition, Long]) : Boolean = {
