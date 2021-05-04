@@ -2643,7 +2643,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         self.assert_eq(expected_result, kdf.groupby("a")["b"].median().sort_index())
 
-        with self.assertRaisesRegex(ValueError, "accuracy must be an integer; however"):
+        with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             kdf.groupby("a").median(accuracy="a")
 
     def test_tail(self):
