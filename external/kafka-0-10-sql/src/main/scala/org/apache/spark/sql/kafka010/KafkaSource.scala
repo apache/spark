@@ -191,7 +191,6 @@ private[kafka010] class KafkaSource(
         case (topic, offset) =>
           Some(topic -> (offset - currentOffsets.getOrElse(topic, 0L)))
       }.values.sum.toDouble
-
       if (newRecords < minOffsetPerTrigger.get) true else false
     }
   }
