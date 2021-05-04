@@ -171,6 +171,9 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   File mergeManagerFile;
 
+  @VisibleForTesting
+  MergedShuffleFileManager shuffleMergeManager;
+
   private DB db;
 
   public YarnShuffleService() {
@@ -224,8 +227,7 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
-      MergedShuffleFileManager shuffleMergeManager = newMergedShuffleFileManagerInstance(
-        transportConf, mergeManagerFile);
+      shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 
@@ -278,7 +280,9 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   @VisibleForTesting
-  static MergedShuffleFileManager newMergedShuffleFileManagerInstance(TransportConf conf) {
+  static MergedShuffleFileManager newMergedShuffleFileManagerInstance(
+      TransportConf conf,
+      File mergeManagerFile) {
     String mergeManagerImplClassName = conf.mergedShuffleFileManagerImpl();
     try {
       Class<?> mergeManagerImplClazz = Class.forName(
@@ -286,11 +290,12 @@ public class YarnShuffleService extends AuxiliaryService {
       Class<? extends MergedShuffleFileManager> mergeManagerSubClazz =
         mergeManagerImplClazz.asSubclass(MergedShuffleFileManager.class);
       // The assumption is that all the custom implementations just like the RemoteBlockPushResolver
-      // will also need the transport configuration.
-      return mergeManagerSubClazz.getConstructor(TransportConf.class).newInstance(conf);
+      // will also need the transport configuration and recovery file.
+      return mergeManagerSubClazz.getConstructor(TransportConf.class, File.class)
+        .newInstance(conf, mergeManagerFile);
     } catch (Exception e) {
       logger.error("Unable to create an instance of {}", mergeManagerImplClassName);
-      return new ExternalBlockHandler.NoOpMergedShuffleFileManager(conf);
+      return new ExternalBlockHandler.NoOpMergedShuffleFileManager(conf, null);
     }
   }
 

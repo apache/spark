@@ -16,8 +16,8 @@
  */
 package org.apache.spark.network.shuffle
 
-import java.io.{DataOutputStream, File}
-import java.nio.channels.FileChannel
+import java.io.File
+import java.util
 import java.util.concurrent.ConcurrentMap
 
 import org.apache.hadoop.yarn.api.records.ApplicationId
@@ -68,40 +68,35 @@ object ShuffleTestAccessor {
     mergeManager.db
   }
 
-  def updateAppPathInfo(
-      info: AppPathsInfo,
-      appId: String,
-      localDirs: Array[String],
-      db: DB): Unit = {
-    info.updateActiveLocalDirs(appId, "", localDirs, db)
-  }
-
   def getOrCreateAppShufflePartitionInfo(
       mergeManager: RemoteBlockPushResolver,
       partitionId: AppShufflePartitionId): AppShufflePartitionInfo = {
-    mergeManager.getOrCreateAppShufflePartitionInfo(partitionId)
+    val appShuffleId = new AppShuffleId(partitionId.appId, partitionId.shuffleId)
+    mergeManager.getOrCreateAppShufflePartitionInfo(appShuffleId, partitionId.reduceId)
   }
 
-  def generateDataFileName(partitionId: AppShufflePartitionId): String = {
-    partitionId.generateFileName()
+  def getDataFile(
+      mergeManager: RemoteBlockPushResolver,
+      partitionId: AppShufflePartitionId): File = {
+    mergeManager.getMergedShuffleDataFile(partitionId)
   }
 
-  def generateIndexFileName(partitionId: AppShufflePartitionId): String = {
-    partitionId.generateIndexFileName()
+  def getIndexFile(
+      mergeManager: RemoteBlockPushResolver,
+      partitionId: AppShufflePartitionId): File = {
+    mergeManager.getMergedShuffleIndexFile(partitionId)
   }
 
-  def generateMetaFileName(partitionId: AppShufflePartitionId): String = {
-    partitionId.generateMetaFileName()
-  }
-
-  def getFile(mergeManager: RemoteBlockPushResolver, appId: String, fileName: String): File = {
-    mergeManager.getFile(appId, fileName)
+  def getMetaFile(
+      mergeManager: RemoteBlockPushResolver,
+      partitionId: AppShufflePartitionId): File = {
+    mergeManager.getMergedShuffleMetaFile(partitionId)
   }
 
   def getPartitionFileHandlers(
       partitionInfo: AppShufflePartitionInfo):
       (MergeShuffleDataFile, MergeShuffleMetaFile, MergeShuffleMetaFile) = {
-    (partitionInfo.getDataFile(), partitionInfo.getMetaFile(), partitionInfo.getIndexFile())
+    (partitionInfo.getDataFile, partitionInfo.getMetaFile, partitionInfo.getIndexFile)
   }
 
   def closePartitionFiles(partitionInfo: AppShufflePartitionInfo): Unit = {
@@ -116,7 +111,7 @@ object ShuffleTestAccessor {
 
   def reloadActiveAppShufflePartitions(
       mergeMgr: RemoteBlockPushResolver,
-      db: DB): ConcurrentMap[AppShufflePartitionId, AppShufflePartitionInfo] = {
+      db: DB): ConcurrentMap[AppShuffleId, util.Map[Integer, AppShufflePartitionInfo]] = {
     mergeMgr.reloadActiveAppShufflePartitions(db)
   }
 

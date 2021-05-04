@@ -29,20 +29,11 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.Map;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.Metric;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
-
 import org.apache.commons.io.FileUtils;
-
-import org.apache.commons.lang3.mutable.Mutable;
-import org.apache.commons.lang3.mutable.MutableObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -414,7 +405,7 @@ public class RemoteBlockPushResolverSuite {
   public void testCleanUpDirectory() throws IOException, InterruptedException {
     String testApp = "cleanUpDirectory";
     Semaphore deleted = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       void deleteExecutorDirs(Path[] dirs) {
         super.deleteExecutorDirs(dirs);
@@ -442,14 +433,15 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testRecoverIndexFileAfterIOExceptions() throws IOException {
     useTestFiles(true, false);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback1 =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[4]));
     callback1.onComplete(callback1.getID());
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
     // Close the index stream so it throws IOException
-    TestMergeShuffleMetaFile testIndexFile = (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
+    TestMergeShuffleMetaFile testIndexFile =
+      (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
       new PushBlockStream(TEST_APP, 0, 1, 0, 0));
@@ -475,14 +467,15 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testRecoverIndexFileAfterIOExceptionsInFinalize() throws IOException {
     useTestFiles(true, false);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback1 =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[4]));
     callback1.onComplete(callback1.getID());
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
     // Close the index stream so it throws IOException
-    TestMergeShuffleMetaFile testIndexFile = (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
+    TestMergeShuffleMetaFile testIndexFile =
+      (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
       new PushBlockStream(TEST_APP, 0, 1, 0, 0));
@@ -505,8 +498,8 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testRecoverMetaFileAfterIOExceptions() throws IOException {
     useTestFiles(false, true);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback1 =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[4]));
     callback1.onComplete(callback1.getID());
@@ -541,8 +534,8 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testRecoverMetaFileAfterIOExceptionsInFinalize() throws IOException {
     useTestFiles(false, true);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback1 =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[4]));
     callback1.onComplete(callback1.getID());
@@ -573,8 +566,8 @@ public class RemoteBlockPushResolverSuite {
 
   @Test (expected = RuntimeException.class)
   public void testIOExceptionsExceededThreshold() throws IOException {
-    RemoteBlockPushResolver.PushBlockStreamCallback callback =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
@@ -582,8 +575,8 @@ public class RemoteBlockPushResolverSuite {
     // Close the data stream so it throws continuous IOException
     partitionInfo.getDataFile().getChannel().close();
     for (int i = 1; i < 5; i++) {
-      RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
-        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+      PushBlockStreamCallback callback1 =
+        (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
           new PushBlockStream(TEST_APP, 0, i, 0, 0));
       try {
         callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[2]));
@@ -595,8 +588,8 @@ public class RemoteBlockPushResolverSuite {
     assertEquals(4, partitionInfo.getNumIOExceptions());
     // After 4 IOException, the server will respond with IOExceptions exceeded threshold
     try {
-      RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
-        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+      PushBlockStreamCallback callback2 =
+        (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
           new PushBlockStream(TEST_APP, 0, 5, 0, 0));
       callback2.onData(callback.getID(), ByteBuffer.wrap(new byte[1]));
     } catch (Throwable t) {
@@ -609,17 +602,18 @@ public class RemoteBlockPushResolverSuite {
   @Test (expected = RuntimeException.class)
   public void testIOExceptionsDuringMetaUpdateIncreasesExceptionCount() throws IOException {
     useTestFiles(true, false);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
     callback.onComplete(callback.getID());
-    TestMergeShuffleMetaFile testIndexFile = (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
+    TestMergeShuffleMetaFile testIndexFile =
+      (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     for (int i = 1; i < 5; i++) {
-      RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
-        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+      PushBlockStreamCallback callback1 =
+        (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
           new PushBlockStream(TEST_APP, 0, i, 0, 0));
       callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[5]));
       // This will complete without any exceptions but the exception count is increased.
@@ -629,8 +623,8 @@ public class RemoteBlockPushResolverSuite {
     // After 4 IOException, the server will respond with IOExceptions exceeded threshold for any
     // new request for this partition.
     try {
-      RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+      PushBlockStreamCallback callback2 =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 5, 0, 0));
       callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[4]));
       callback2.onComplete(callback2.getID());
@@ -658,48 +652,19 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test
-  public void testFailureWhileTruncatingFiles() throws IOException {
-    useTestFiles(true, false);
-    PushBlockStream[] pushBlocks = new PushBlockStream[] {
-      new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0),
-      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0),
-      new PushBlockStream(TEST_APP, "shuffle_0_0_1", 0),
-      new PushBlockStream(TEST_APP, "shuffle_0_1_1", 0),
-    };
-    ByteBuffer[] buffers = new ByteBuffer[] {
-      ByteBuffer.wrap(new byte[2]), ByteBuffer.wrap(new byte[3]), ByteBuffer.wrap(new byte[5]),
-      ByteBuffer.wrap(new byte[3])
-    };
-    pushBlockHelper(TEST_APP, pushBlocks, buffers);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0));
-    callback.onData(callback.getID(), ByteBuffer.wrap(new byte[2]));
-    callback.onComplete(callback.getID());
-    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
-    TestMergeShuffleMetaFile testIndexFile = (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
-    // Close the index file so truncate throws IOException
-    testIndexFile.close();
-    MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
-      new FinalizeShuffleMerge(TEST_APP, 0));
-    validateMergeStatuses(statuses, new int[] {1}, new long[] {8});
-    MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 1);
-    validateChunks(TEST_APP, 0, 1, meta, new int[]{5, 3}, new int[][]{{0},{1}});
-  }
-
   @Test (expected = RuntimeException.class)
   public void testPendingBlockIsAbortedImmediately() throws IOException {
     useTestFiles(true, false);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
-    TestMergeShuffleMetaFile testIndexFile = (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
+    TestMergeShuffleMetaFile testIndexFile =
+      (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     for (int i = 1; i < 6; i++) {
-      RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
-        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+      PushBlockStreamCallback callback1 =
+        (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
           new PushBlockStream(TEST_APP, 0, i, 0, 0));
       try {
         callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[5]));
@@ -724,15 +689,16 @@ public class RemoteBlockPushResolverSuite {
   @Test (expected = RuntimeException.class)
   public void testWritingPendingBufsIsAbortedImmediatelyDuringComplete() throws IOException {
     useTestFiles(true, false);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
-    TestMergeShuffleMetaFile testIndexFile = (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
+    TestMergeShuffleMetaFile testIndexFile =
+      (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
     testIndexFile.close();
     for (int i = 1; i < 5; i++) {
-      RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
-        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+      PushBlockStreamCallback callback1 =
+        (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
           new PushBlockStream(TEST_APP, 0, i, 0, 0));
       try {
         callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[5]));
@@ -743,8 +709,8 @@ public class RemoteBlockPushResolverSuite {
       }
     }
     assertEquals(4, partitionInfo.getNumIOExceptions());
-    RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback2 =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 5, 0, 0));
     callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
     // This is deferred
@@ -778,13 +744,14 @@ public class RemoteBlockPushResolverSuite {
       new PushBlock(0, 1, 1, ByteBuffer.wrap(new byte[3]))
     };
     pushBlockHelper(TEST_APP, pushBlocks);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+    PushBlockStreamCallback callback =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 2, 0, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[2]));
     callback.onComplete(callback.getID());
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
-    TestMergeShuffleFile testIndexFile = (TestMergeShuffleFile) partitionInfo.getIndexFile();
+    TestMergeShuffleMetaFile testIndexFile =
+      (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
     // Close the index file so truncate throws IOException
     testIndexFile.close();
     MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
@@ -869,7 +836,7 @@ public class RemoteBlockPushResolverSuite {
       AppShufflePartitionId.class);
     assertEquals(partitionId, parsedPartitionId);
 
-    AppPathsInfo pathInfo = new AppPathsInfo("user", new String[]{"/foo", "/bar"});
+    AppPathsInfo pathInfo = new AppPathsInfo(new String[]{"/foo", "/bar"}, 2);
     String pathInfoJson = mapper.writeValueAsString(pathInfo);
     AppPathsInfo parsedPathInfo = mapper.readValue(pathInfoJson, AppPathsInfo.class);
     assertEquals(pathInfo, parsedPathInfo);
@@ -879,25 +846,27 @@ public class RemoteBlockPushResolverSuite {
     String legacyPartitionIdJson = "{\"appId\":\"foo\", \"shuffleId\":\"1\", \"reduceId\":\"5\"}";
     assertEquals(partitionId, mapper.readValue(legacyPartitionIdJson,
       AppShufflePartitionId.class));
-    String legacyAppPathInfoJson = "{\"user\":\"user\", \"activeLocalDirs\": "
-      + "[\"/foo\", \"/bar\"]}";
+    String legacyAppPathInfoJson = "{\"activeLocalDirs\": "
+      + "[\"/foo\", \"/bar\"], \"subDirsPerLocalDir\":\"2\"}";
     assertEquals(pathInfo, mapper.readValue(legacyAppPathInfoJson, AppPathsInfo.class));
   }
 
   @Test
   public void testFailureWritingToMetaFileAfterNMRecovery() throws IOException {
     useTestFiles(false, true, true);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0));
+    PushBlockStreamCallback callback =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[2]));
     callback.onComplete(callback.getID());
-    callback = (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_5_0", 0));
+    callback =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 5, 0, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[1]));
     callback.onComplete(callback.getID());
-    callback = (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_10_0", 0));
+    callback =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 10, 0, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[1]));
     callback.onComplete(callback.getID());
 
@@ -911,7 +880,7 @@ public class RemoteBlockPushResolverSuite {
     testMetaFile.getDos().write(randomBytes);
     testMetaFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0));
+      new PushBlockStream(TEST_APP, 0, 1, 0, 0));
     callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
     // This will complete without any IOExceptions because number of IOExceptions are less than
     // the threshold but the update to index and meta file will be unsuccessful.
@@ -920,7 +889,7 @@ public class RemoteBlockPushResolverSuite {
     // Restore the meta stream so it can write successfully again.
     testMetaFile.restore(metaPosBeforeClose);
     StreamCallbackWithID callback3 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0));
+      new PushBlockStream(TEST_APP, 0, 2, 0, 0));
     callback3.onData(callback3.getID(), ByteBuffer.wrap(new byte[2]));
     callback3.onComplete(callback3.getID());
     assertTrue("meta position", testMetaFile.getPos() > metaPosBeforeClose);
@@ -935,21 +904,22 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testFailureWritingToIndexFileAfterNMRecovery() throws IOException {
     useTestFiles(true, false, true);
-    RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0));
+    PushBlockStreamCallback callback1 =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[4]));
     callback1.onComplete(callback1.getID());
     RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
     // Append some bytes to validate it gets overwritten and close the index stream so it throws
     // IOException
-    TestMergeShuffleMetaFile testIndexFile = (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
+    TestMergeShuffleMetaFile testIndexFile =
+      (TestMergeShuffleMetaFile) partitionInfo.getIndexFile();
     byte[] randomBytes = new byte[2];
     ThreadLocalRandom.current().nextBytes(randomBytes);
     testIndexFile.getDos().write(randomBytes);
     testIndexFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0));
+      new PushBlockStream(TEST_APP, 0, 1, 0, 0));
     callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
     // This will complete without any IOExceptions because number of IOExceptions are less than
     // the threshold but the update to index file will be unsuccessful.
@@ -958,7 +928,7 @@ public class RemoteBlockPushResolverSuite {
     // Restore the index stream so it can write successfully again.
     testIndexFile.restore();
     StreamCallbackWithID callback3 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0));
+      new PushBlockStream(TEST_APP, 0, 2, 0, 0));
     callback3.onData(callback3.getID(), ByteBuffer.wrap(new byte[2]));
     callback3.onComplete(callback3.getID());
     assertEquals("index position", 24, testIndexFile.getPos());
@@ -972,30 +942,31 @@ public class RemoteBlockPushResolverSuite {
 
   @Test
   public void testFailureWritingToDataFileAfterNMRecovery() throws IOException {
-    pushResolver = new RemoteBlockPushResolver(conf, null, MERGE_DIR_RELATIVE_PATH) {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       AppShufflePartitionInfo newAppShufflePartitionInfo(
-        AppShufflePartitionId partitionId,
-        File dataFile,
-        File indexFile,
-        File metaFile) throws IOException {
-        return new AppShufflePartitionInfo(partitionId, new TestMergeShuffleDataFile(dataFile),
-          new MergeShuffleMetaFile(indexFile), new MergeShuffleMetaFile(metaFile));
+          AppShuffleId appShuffleId,
+          int reduceId,
+          File dataFile,
+          File indexFile,
+          File metaFile) throws IOException {
+        return new AppShufflePartitionInfo(appShuffleId, reduceId,
+          new TestMergeShuffleDataFile(dataFile), new MergeShuffleMetaFile(indexFile),
+          new MergeShuffleMetaFile(metaFile));
       }
     };
-    registerApplication(TEST_APP, TEST_USER);
-    registerExecutor(TEST_APP, prepareBlockManagerLocalDirs(TEST_APP, TEST_USER, localDirs));
-    RemoteBlockPushResolver.PushBlockStreamCallback callback =
-      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, "shuffle_0_0_0", 0));
+    registerExecutor(TEST_APP, prepareLocalDirs(localDirs));
+    PushBlockStreamCallback callback =
+      (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[2]));
     callback.onComplete(callback.getID());
-    callback = (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_5_0", 0));
+    callback = (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, 0, 5, 0, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[1]));
     callback.onComplete(callback.getID());
-    callback = (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_10_0", 0));
+    callback = (PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, 0, 10, 0, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[1]));
     callback.onComplete(callback.getID());
 
@@ -1009,7 +980,7 @@ public class RemoteBlockPushResolverSuite {
     testDataFile.getChannel().write(ByteBuffer.wrap(randomBytes));
     testDataFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_1_0", 0));
+      new PushBlockStream(TEST_APP, 0, 1, 0, 0));
     try {
       callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
     } catch (IOException ioe) {
@@ -1020,7 +991,7 @@ public class RemoteBlockPushResolverSuite {
     // Restore the data stream so it can write successfully again.
     testDataFile.restore();
     StreamCallbackWithID callback3 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, "shuffle_0_2_0", 0));
+      new PushBlockStream(TEST_APP, 0, 2, 0, 0));
     callback3.onData(callback3.getID(), ByteBuffer.wrap(new byte[2]));
     callback3.onComplete(callback3.getID());
     assertTrue("data position", testDataFile.getPos() > dataPosBeforeClose);
@@ -1036,8 +1007,11 @@ public class RemoteBlockPushResolverSuite {
     useTestFiles(useTestIndexFile, useTestMetaFile, false);
   }
 
-  private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile, boolean append) throws IOException {
-    pushResolver = new RemoteBlockPushResolver(conf) {
+  private void useTestFiles(
+      boolean useTestIndexFile,
+      boolean useTestMetaFile,
+      boolean append) throws IOException {
+    pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       AppShufflePartitionInfo newAppShufflePartitionInfo(
           AppShuffleId appShuffleId,
@@ -1046,13 +1020,11 @@ public class RemoteBlockPushResolverSuite {
           File indexFile,
           File metaFile) throws IOException {
         MergeShuffleMetaFile mergedIndexFile = useTestIndexFile ?
-          new TestMergeShuffleMetaFile(indexFile, append)
-          : new MergeShuffleMetaFile(indexFile);
+          new TestMergeShuffleMetaFile(indexFile, append) : new MergeShuffleMetaFile(indexFile);
         MergeShuffleMetaFile mergedMetaFile = useTestMetaFile ?
-          new TestMergeShuffleMetaFile(metaFile, append) :
-          new MergeShuffleMetaFile(metaFile);
-        return new AppShufflePartitionInfo(partitionId, new MergeShuffleDataFile(dataFile),
-          mergedIndexFile, mergedMetaFile);
+          new TestMergeShuffleMetaFile(metaFile, append) : new MergeShuffleMetaFile(metaFile);
+        return new AppShufflePartitionInfo(appShuffleId, reduceId,
+          new MergeShuffleDataFile(dataFile), mergedIndexFile, mergedMetaFile);
       }
     };
     registerExecutor(TEST_APP, prepareLocalDirs(localDirs));
@@ -1156,12 +1128,12 @@ public class RemoteBlockPushResolverSuite {
     }
 
     @Override
-    DataOutputStream getDos() {
+    public DataOutputStream getDos() {
       return activeDos;
     }
 
     @Override
-    FileChannel getChannel() {
+    public FileChannel getChannel() {
       return channel;
     }
 

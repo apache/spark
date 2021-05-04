@@ -34,6 +34,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -55,8 +56,6 @@ import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.apache.spark.network.protocol.Encoders;
-import org.apache.spark.network.util.LevelDBProvider;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
 import org.roaringbitmap.RoaringBitmap;
@@ -66,6 +65,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
+import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
@@ -85,7 +85,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
   @VisibleForTesting
-  static final String MERGE_MANAGER_DIR = "merge_manager";
+  public static final String MERGE_MANAGER_DIR = "merge_manager";
 
   private static final ObjectMapper mapper = new ObjectMapper();
   /**
@@ -97,7 +97,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private static final LevelDBProvider.StoreVersion
     CURRENT_VERSION = new LevelDBProvider.StoreVersion(1, 0);
 
-  private final ConcurrentMap<String, AppPathsInfo> appsPathInfo;
+  @VisibleForTesting
+  final ConcurrentMap<String, AppPathsInfo> appsPathInfo;
   private final ConcurrentMap<AppShuffleId, Map<Integer, AppShufflePartitionInfo>> partitions;
 
   private final Executor directoryCleaner;
@@ -116,7 +117,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   final DB db;
 
   @SuppressWarnings("UnstableApiUsage")
-  public RemoteBlockPushResolver(TransportConf conf,  File recoveryFile) {
+  public RemoteBlockPushResolver(TransportConf conf,  File recoveryFile) throws IOException {
     this.conf = conf;
     this.directoryCleaner = Executors.newSingleThreadExecutor(
       // Add `spark` prefix because it will run in NM in Yarn mode.
@@ -155,7 +156,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   AppShufflePartitionInfo getOrCreateAppShufflePartitionInfo(
       AppShuffleId appShuffleId,
       int reduceId) {
-    File dataFile = getMergedShuffleDataFile(appShuffleId, reduceId);
+    AppShufflePartitionId partitionId = new AppShufflePartitionId(appShuffleId, reduceId);
+    File dataFile = getMergedShuffleDataFile(partitionId);
     if (!partitions.containsKey(appShuffleId) && dataFile.exists()) {
       // If this partition is already finalized then the partitions map will not contain
       // the appShuffleId but the data file would exist. In that case the block is considered late.
@@ -168,15 +170,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // be the first time the merge manager receives a pushed block for a given application
       // shuffle partition, or after the merged shuffle file is finalized. We handle these
       // two cases accordingly by checking if the file already exists.
-      File indexFile = getMergedShuffleIndexFile(appShuffleId, reduceId);
-      File metaFile = getMergedShuffleMetaFile(appShuffleId, reduceId);
+      File indexFile = getMergedShuffleIndexFile(partitionId);
+      File metaFile = getMergedShuffleMetaFile(partitionId);
       try {
         if (dataFile.exists()) {
           return null;
         } else {
           try {
             if (db != null) {
-              byte[] dbKey = dbAppShufflePartKey(key);
+              byte[] dbKey = dbAppShufflePartKey(partitionId);
               // We can reload a partition's state solely from the partition ID. Thus only the
               // partition Ids are stored in levelDB.
               db.put(dbKey, new byte[0]);
@@ -211,8 +213,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   @Override
   public MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId) {
-    AppShuffleId appShuffleId = new AppShuffleId(appId, shuffleId);
-    File indexFile = getMergedShuffleIndexFile(appShuffleId, reduceId);
+    AppShufflePartitionId partitionId = new AppShufflePartitionId(appId, shuffleId, reduceId);
+    File indexFile = getMergedShuffleIndexFile(partitionId);
     if (!indexFile.exists()) {
       throw new RuntimeException(String.format(
         "Merged shuffle index file %s not found", indexFile.getPath()));
@@ -220,7 +222,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     int size = (int) indexFile.length();
     // First entry is the zero offset
     int numChunks = (size / Long.BYTES) - 1;
-    File metaFile = getMergedShuffleMetaFile(appShuffleId, reduceId);
+    File metaFile = getMergedShuffleMetaFile(partitionId);
     if (!metaFile.exists()) {
       throw new RuntimeException(String.format("Merged shuffle meta file %s not found",
         metaFile.getPath()));
@@ -235,13 +237,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @SuppressWarnings("UnstableApiUsage")
   @Override
   public ManagedBuffer getMergedBlockData(String appId, int shuffleId, int reduceId, int chunkId) {
-    AppShuffleId appShuffleId = new AppShuffleId(appId, shuffleId);
-    File dataFile = getMergedShuffleDataFile(appShuffleId, reduceId);
+    AppShufflePartitionId partitionId = new AppShufflePartitionId(appId, shuffleId, reduceId);
+    File dataFile = getMergedShuffleDataFile(partitionId);
     if (!dataFile.exists()) {
       throw new RuntimeException(String.format("Merged shuffle data file %s not found",
         dataFile.getPath()));
     }
-    File indexFile = getMergedShuffleIndexFile(appShuffleId, reduceId);
+    File indexFile = getMergedShuffleIndexFile(partitionId);
     try {
       // If we get here, the merged shuffle file should have been properly finalized. Thus we can
       // use the file length to determine the size of the merged shuffle block.
@@ -269,19 +271,22 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     return targetFile;
   }
 
-  private File getMergedShuffleDataFile(AppShuffleId appShuffleId, int reduceId) {
-    String fileName = String.format("%s.data", generateFileName(appShuffleId, reduceId));
-    return getFile(appShuffleId.appId, fileName);
+  @VisibleForTesting
+  File getMergedShuffleDataFile(AppShufflePartitionId partitionId) {
+    String fileName = String.format("%s.data", generateFileName(partitionId));
+    return getFile(partitionId.appId, fileName);
   }
 
-  private File getMergedShuffleIndexFile(AppShuffleId appShuffleId, int reduceId) {
-    String indexName = String.format("%s.index", generateFileName(appShuffleId, reduceId));
-    return getFile(appShuffleId.appId, indexName);
+  @VisibleForTesting
+  File getMergedShuffleIndexFile(AppShufflePartitionId partitionId) {
+    String indexName = String.format("%s.index", generateFileName(partitionId));
+    return getFile(partitionId.appId, indexName);
   }
 
-  private File getMergedShuffleMetaFile(AppShuffleId appShuffleId, int reduceId) {
-    String metaName = String.format("%s.meta", generateFileName(appShuffleId, reduceId));
-    return getFile(appShuffleId.appId, metaName);
+  @VisibleForTesting
+  File getMergedShuffleMetaFile(AppShufflePartitionId partitionId) {
+    String metaName = String.format("%s.meta", generateFileName(partitionId));
+    return getFile(partitionId.appId, metaName);
   }
 
   @Override
@@ -299,7 +304,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
     AppPathsInfo appPathsInfo = appsPathInfo.remove(appId);
-    Preconditions.checkArgument(appPathsInfo != null, "application " + appId + " is not registered.");
+    Preconditions.checkArgument(appPathsInfo != null,
+      "application " + appId + " is not registered.");
     if (db != null) {
       try {
         db.delete(dbAppPathsKey(appId));
@@ -314,15 +320,17 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       AppShuffleId appShuffleId = entry.getKey();
       if (appId.equals(appShuffleId.appId)) {
         iterator.remove();
-        for (AppShufflePartitionInfo partitionInfo : entry.getValue().values()) {
-          if (db != null) {
+        if (db != null) {
+          for (AppShufflePartitionInfo partitionInfo : entry.getValue().values()) {
+            AppShufflePartitionId partitionId = new AppShufflePartitionId(
+              partitionInfo.appShuffleId, partitionInfo.reduceId);
             try {
               db.delete(dbAppShufflePartKey(partitionId));
             } catch (Exception e) {
               logger.error("Error deleting {} from app shuffle partition db", partitionId, e);
             }
+            partitionInfo.closeAllFiles();
           }
-          partitionInfo.closeAllFiles();
         }
       }
     }
@@ -469,6 +477,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             // for the same reduce partition will see that the data file exists.
             partitionsIter.remove();
             if (db != null) {
+              AppShufflePartitionId partitionId = new AppShufflePartitionId(partition.appShuffleId,
+                partition.reduceId);
               try {
                 db.delete(dbAppShufflePartKey(partitionId));
               } catch (Exception e) {
@@ -495,12 +505,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           executorInfo.subDirsPerLocalDir);
     }
     appsPathInfo.computeIfAbsent(appId, id -> new AppPathsInfo(appId, executorInfo.localDirs,
-      executorInfo.subDirsPerLocalDir));
+      executorInfo.subDirsPerLocalDir, db));
   }
 
-  private static String generateFileName(AppShuffleId appShuffleId, int reduceId) {
-    return String.format("mergedShuffle_%s_%d_%d", appShuffleId.appId, appShuffleId.shuffleId,
-      reduceId);
+  private static String generateFileName(AppShufflePartitionId partitionId) {
+    return String.format("mergedShuffle_%s_%d_%d", partitionId.appId, partitionId.shuffleId,
+      partitionId.reduceId);
   }
 
   @Override
@@ -513,8 +523,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           + "shuffle partition info", e);
       }
     }
-    for (AppShufflePartitionInfo partitionInfo : partitions.values()) {
-      partitionInfo.closeAllFiles();
+    Iterator<Map.Entry<AppShuffleId, Map<Integer, AppShufflePartitionInfo>>> iterator =
+      partitions.entrySet().iterator();
+    while (iterator.hasNext()) {
+      Map.Entry<AppShuffleId, Map<Integer, AppShufflePartitionInfo>> entry = iterator.next();
+      for (AppShufflePartitionInfo partitionInfo : entry.getValue().values()) {
+        partitionInfo.closeAllFiles();
+      }
     }
   }
 
@@ -562,9 +577,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   @VisibleForTesting
-  ConcurrentMap<AppShufflePartitionId, AppShufflePartitionInfo>
-  reloadActiveAppShufflePartitions(DB db) throws IOException {
-    ConcurrentMap<AppShufflePartitionId, AppShufflePartitionInfo> partitions =
+  ConcurrentMap<AppShuffleId, Map<Integer, AppShufflePartitionInfo>>
+      reloadActiveAppShufflePartitions(DB db) throws IOException {
+    ConcurrentMap<AppShuffleId, Map<Integer, AppShufflePartitionInfo>> partitions =
       Maps.newConcurrentMap();
     if (db != null) {
       DBIterator itr = db.iterator();
@@ -577,15 +592,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
         AppShufflePartitionId partitionId = parseDbAppShufflePartKey(key);
         try {
-          File dataFile = getFile(partitionId.appId, partitionId.generateFileName());
-          File metaFile = getFile(partitionId.appId, partitionId.generateMetaFileName());
-          File indexFile = getFile(partitionId.appId, partitionId.generateIndexFileName());
+          File dataFile = getMergedShuffleDataFile(partitionId);
+          File metaFile = getMergedShuffleMetaFile(partitionId);
+          File indexFile = getMergedShuffleIndexFile(partitionId);
           logger.debug("Reloading active application shuffle partition info for partition {} "
               + "with data file {}, meta file {}, and index file {}.",
             partitionId, dataFile.getAbsolutePath(), metaFile.getAbsolutePath(),
             indexFile.getAbsolutePath());
-          partitions.put(partitionId, reloadPartitionInfo(partitionId, dataFile,
-            metaFile, indexFile));
+          AppShuffleId appShuffleId = new AppShuffleId(partitionId.appId, partitionId.shuffleId);
+          Map<Integer, AppShufflePartitionInfo> shufflePartitions =
+            partitions.computeIfAbsent(appShuffleId, id -> new ConcurrentHashMap<>());
+          shufflePartitions.put(partitionId.reduceId,
+            reloadPartitionInfo(partitionId, dataFile, metaFile, indexFile));
         } catch (Exception ex) {
           // Do not propagate exceptions from reloading individual shuffle partitions.
           // If exception is encountered, the corresponding files for this partition is
@@ -601,10 +619,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   private AppShufflePartitionInfo reloadPartitionInfo(
-    AppShufflePartitionId partitionId,
-    File dataFile,
-    File metaFile,
-    File indexFile) throws IOException {
+      AppShufflePartitionId partitionId,
+      File dataFile,
+      File metaFile,
+      File indexFile) throws IOException {
     Preconditions.checkArgument(dataFile.exists() && indexFile.exists() && metaFile.exists(),
       "Not all files for reloading partition " + partitionId + " are present.");
     int numChunksRecoveredFromIndexFile = (int) indexFile.length() / 8 - 1;
@@ -634,6 +652,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // to numChunksRecoveredFromMetaFile.
     int numChunks = Math.min(numChunksRecoveredFromIndexFile, numChunksRecoveredFromMetaFile);
     long dataFileLength;
+    long indexFileLength = (numChunks + 1) * 8;
     // Truncate the files accordingly, so to discard the unrecoverable portion of the data.
     // Here, we only reload blocks that belong to a chunk whose index and bitmap have already
     // been successfully reloaded from the index and meta files. Blocks beyond the successfully
@@ -646,7 +665,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       indexRAFile.skipBytes(numChunks * 8);
       dataFileLength = indexRAFile.readLong();
       dataChannel.truncate(dataFileLength);
-      indexRAFile.setLength((numChunks + 1) * 8);
+      indexRAFile.setLength(indexFileLength);
     }
     FileOutputStream indexFOS = new FileOutputStream(indexFile, true);
     MergeShuffleMetaFile mergeIndexFile = new MergeShuffleMetaFile(indexFOS.getChannel(),
@@ -657,8 +676,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     FileOutputStream dataFOS = new FileOutputStream(dataFile, true);
     MergeShuffleDataFile shuffleDataFile = new MergeShuffleDataFile(dataFOS.getChannel(),
       dataFOS, dataFileLength);
-    return new AppShufflePartitionInfo(partitionId, shuffleDataFile, mergeIndexFile, mergeMetaFile,
-      dataFileLength, mapTracker);
+    return new AppShufflePartitionInfo(new AppShuffleId(partitionId.appId, partitionId.shuffleId),
+      partitionId.reduceId, shuffleDataFile, mergeIndexFile, mergeMetaFile, dataFileLength,
+      mapTracker);
   }
 
   /**
@@ -705,8 +725,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private void writeBuf(ByteBuffer buf) throws IOException {
       while (buf.hasRemaining()) {
         if (partitionInfo.isEncounterFailureAfterRecovery() && partitionInfo.dataFile.recovered) {
-          logger.info("{} shuffleId {} reduceId {} truncate pos {}", partitionId.appId,
-            partitionId.shuffleId, partitionId.reduceId, partitionInfo.dataFile.getPos());
+          logger.info("{} shuffleId {} reduceId {} truncate pos {}",
+            partitionInfo.appShuffleId.appId, partitionInfo.appShuffleId.shuffleId,
+            partitionInfo.reduceId, partitionInfo.dataFile.getPos());
           // truncate the data file because it is open in append mode and any write will always
           // append to the end of the file.
           partitionInfo.dataFile.getChannel().truncate(partitionInfo.dataFile.getPos());
@@ -715,8 +736,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         long updatedPos = partitionInfo.dataFile.getPos() + length;
         logger.debug("{} shuffleId {} reduceId {} current pos {} updated pos {}",
           partitionInfo.appShuffleId.appId, partitionInfo.appShuffleId.shuffleId,
-          partitionInfo.reduceId, partitionInfo.getDataFilePos(), updatedPos);
-        length += partitionInfo.dataChannel.write(buf, updatedPos);
+          partitionInfo.reduceId, partitionInfo.dataFile.getPos(), updatedPos);
+        length += partitionInfo.dataFile.getChannel().write(buf, updatedPos);
       }
     }
 
@@ -1016,6 +1037,46 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
   }
 
+  /**
+   * ID that uniquely identifies a shuffle partition for an application. This is used to key the
+   * metadata tracked in LevelDb.
+   */
+  public static class AppShufflePartitionId {
+    public final String appId;
+    public final int shuffleId;
+    public final int reduceId;
+
+    AppShufflePartitionId(
+        AppShuffleId appShuffleId,
+        int reduceId) {
+      this(appShuffleId.appId, appShuffleId.shuffleId, reduceId);
+    }
+
+    @JsonCreator
+    public AppShufflePartitionId(
+        @JsonProperty("appId") String appId,
+        @JsonProperty("shuffleId") int shuffleId,
+        @JsonProperty("reduceId") int reduceId) {
+      this.appId = appId;
+      this.shuffleId = shuffleId;
+      this.reduceId = reduceId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      AppShufflePartitionId that = (AppShufflePartitionId) o;
+      return shuffleId == that.shuffleId
+          && reduceId == that.reduceId
+          && Objects.equal(appId, that.appId);
+    }
+  }
+
   /** Metadata tracked for an actively merged shuffle partition */
   public static class AppShufflePartitionInfo {
 
@@ -1189,7 +1250,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // be due to failure, or a request still being processed when the shuffle
       // merge gets finalized, or any exceptions while updating index/meta files.
       logger.trace("{} shuffleId {} reduceId {} truncating files data {} index {} meta {}",
-        partitionId.appId, partitionId.shuffleId, partitionId.reduceId, lastChunkOffset,
+        appShuffleId.appId, appShuffleId.shuffleId, reduceId, lastChunkOffset,
         indexFile.getPos(), metaFile.getPos());
       dataFile.getChannel().truncate(lastChunkOffset);
       indexFile.getChannel().truncate(indexFile.getPos());
@@ -1253,6 +1314,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     int getNumIOExceptions() {
       return numIOExceptions;
     }
+
+    @VisibleForTesting
+    public RoaringBitmap getMapTracker() {
+      return mapTracker;
+    }
   }
 
   /**
@@ -1311,40 +1377,37 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
       return false;
     }
+
+    // Public getters to allow jackson serde of the object
+    public String[] getActiveLocalDirs() {
+      return activeLocalDirs;
+    }
+
+    public int getSubDirsPerLocalDir() {
+      return subDirsPerLocalDir;
+    }
   }
 
   @VisibleForTesting
-  public static class MergeShuffleDataFile {
-    private FileChannel channel;
-    private FileOutputStream fos;
-    private long pos;
-    private final boolean recovered;
+  abstract static class AbstractMergeShuffleFile {
+    FileChannel channel;
+    long pos;
+    boolean recovered;
+    FileOutputStream fos;
 
-    MergeShuffleDataFile(File file) throws IOException {
+    AbstractMergeShuffleFile() {
+      this.recovered = false;
+    }
+
+    AbstractMergeShuffleFile(File file) throws IOException {
       fos = new FileOutputStream(file);
       channel = fos.getChannel();
       pos = 0;
       recovered = false;
     }
 
-    MergeShuffleDataFile(FileChannel channel, FileOutputStream fos, long position) {
-      this.channel = channel;
-      this.fos = fos;
-      this.pos = position;
-      recovered = true;
-    }
-
-    private void setPos(long pos) {
+    void setPos(long pos) {
       this.pos = pos;
-    }
-
-    void close() throws IOException {
-      try {
-        fos.close();
-      } finally {
-        fos = null;
-        channel = null;
-      }
     }
 
     @VisibleForTesting
@@ -1356,21 +1419,40 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     public long getPos() {
       return pos;
     }
+
+    void close() throws IOException {
+      try {
+        fos.close();
+      } finally {
+        fos = null;
+        channel = null;
+      }
+    }
   }
 
   @VisibleForTesting
-  public static class MergeShuffleMetaFile {
-    private FileChannel channel;
+  public static class MergeShuffleDataFile extends AbstractMergeShuffleFile {
+
+    MergeShuffleDataFile(File file) throws IOException {
+      super(file);
+    }
+
+    MergeShuffleDataFile(FileChannel channel, FileOutputStream fos, long position) {
+      this.channel = channel;
+      this.fos = fos;
+      this.pos = position;
+      recovered = true;
+    }
+  }
+
+  @VisibleForTesting
+  public static class MergeShuffleMetaFile extends AbstractMergeShuffleFile {
     private DataOutputStream dos;
-    private long pos;
-    private final boolean recovered;
 
     @VisibleForTesting
     MergeShuffleMetaFile(File file) throws IOException {
-      FileOutputStream fos = new FileOutputStream(file);
-      channel = fos.getChannel();
+      super(file);
       dos = new DataOutputStream(fos);
-      recovered = false;
     }
 
     @VisibleForTesting
@@ -1385,6 +1467,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       pos += numBytes;
     }
 
+    @Override
     void close() throws IOException {
       try {
         dos.close();
@@ -1395,18 +1478,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     @VisibleForTesting
-    DataOutputStream getDos() {
+    public DataOutputStream getDos() {
       return dos;
-    }
-
-    @VisibleForTesting
-    FileChannel getChannel() {
-      return channel;
-    }
-
-    @VisibleForTesting
-    long getPos() {
-      return pos;
     }
   }
 }

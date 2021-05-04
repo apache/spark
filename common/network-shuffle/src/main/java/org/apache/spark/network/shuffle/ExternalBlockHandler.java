@@ -68,7 +68,7 @@ public class ExternalBlockHandler extends RpcHandler {
     throws IOException {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
-      new NoOpMergedShuffleFileManager(conf));
+      new NoOpMergedShuffleFileManager(conf, null));
   }
 
   public ExternalBlockHandler(
@@ -89,7 +89,7 @@ public class ExternalBlockHandler extends RpcHandler {
   public ExternalBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
-    this(streamManager, blockManager, new NoOpMergedShuffleFileManager(null));
+    this(streamManager, blockManager, new NoOpMergedShuffleFileManager(null, null));
   }
 
   /** Enables mocking out the StreamManager, BlockManager, and MergeManager. */
@@ -440,7 +440,7 @@ public class ExternalBlockHandler extends RpcHandler {
     // This constructor is needed because we use this constructor to instantiate an implementation
     // of MergedShuffleFileManager using reflection.
     // See YarnShuffleService#newMergedShuffleFileManagerInstance.
-    public NoOpMergedShuffleFileManager(TransportConf transportConf) {}
+    public NoOpMergedShuffleFileManager(TransportConf transportConf, File recoveryFile) {}
 
     @Override
     public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.network.yarn
 
-import java.io.{DataOutputStream, File, FileOutputStream, IOException, RandomAccessFile}
+import java.io.{DataOutputStream, File, FileOutputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -37,19 +37,17 @@ import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.BeforeAndAfterEach
 import org.roaringbitmap.RoaringBitmap
-import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.network.protocol.Encoders
-import org.apache.spark.network.shuffle.{RemoteBlockPushResolver, ShuffleTestAccessor}
-import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.internal.config._
+import org.apache.spark.network.protocol.Encoders
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.{ExternalBlockHandler, RemoteBlockPushResolver, ShuffleTestAccessor}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
@@ -76,7 +74,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     yarnConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
     val localDir = Utils.createTempDir()
     yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
-
+    yarnConfig.set("spark.shuffle.server.mergedShuffleFileManagerImpl",
+      "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
     recoveryLocalDir = Utils.createTempDir()
     tempDir = Utils.createTempDir()
   }
@@ -108,14 +107,11 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       appId: String,
       partitionId: AppShufflePartitionId,
       mergeManager: RemoteBlockPushResolver): AppShufflePartitionInfo = {
-    val dataFile = ShuffleTestAccessor.getFile(mergeManager, appId,
-      ShuffleTestAccessor.generateDataFileName(partitionId))
+    val dataFile = ShuffleTestAccessor.getDataFile(mergeManager, partitionId)
     dataFile.getParentFile.mkdirs()
-    val indexFile = ShuffleTestAccessor.getFile(mergeManager, appId,
-      ShuffleTestAccessor.generateIndexFileName(partitionId))
+    val indexFile = ShuffleTestAccessor.getIndexFile(mergeManager, partitionId)
     indexFile.getParentFile.mkdirs()
-    val metaFile = ShuffleTestAccessor.getFile(mergeManager, appId,
-      ShuffleTestAccessor.generateMetaFileName(partitionId))
+    val metaFile = ShuffleTestAccessor.getMetaFile(mergeManager, partitionId)
     metaFile.getParentFile.mkdirs()
     val partitionInfo = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
       mergeManager, partitionId)
@@ -124,14 +120,14 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       ShuffleTestAccessor.getPartitionFileHandlers(partitionInfo)
     for (chunkId <- 1 to 5) {
       (0 until 4).foreach(_ => mergedDataFile.getChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA)))
-      mergeIndexFile.getDos().writeLong(chunkId * 4 * DUMMY_BLOCK_DATA.length - 1)
+      mergeIndexFile.getDos.writeLong(chunkId * 4 * DUMMY_BLOCK_DATA.length - 1)
       val bitmap = new RoaringBitmap
       for (j <- (chunkId - 1) * 10 until chunkId * 10) {
         bitmap.add(j)
       }
       val buffer = Unpooled.buffer(Encoders.Bitmaps.encodedLength(bitmap))
       Encoders.Bitmaps.encode(buffer, bitmap)
-      metaChannel.write(buffer.nioBuffer)
+      mergeMetaFile.getChannel.write(buffer.nioBuffer)
     }
     mergedDataFile.getChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA))
     ShuffleTestAccessor.closePartitionFiles(partitionInfo)
@@ -165,7 +161,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
     ShuffleTestAccessor.registeredExecutorFile(blockResolver) should be (execStateFile)
 
-    val mergeManager = s1.shuffleMergeManager
+    val mergeManager = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
     ShuffleTestAccessor.recoveryFile(mergeManager) should be (mergeMgrFile)
 
     blockResolver.registerExecutor(app1Id.toString, "exec-1", shuffleInfo1)
@@ -175,19 +171,22 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", blockResolver) should
       be (Some(shuffleInfo2))
 
-    val localDirs1 = Array(new File(tempDir, "foo").getAbsolutePath,
-      new File(tempDir, "bar").getAbsolutePath)
-    val localDirs2 = Array(new File(tempDir, "bippy").getAbsolutePath)
-    val appPathsInfo1 = new AppPathsInfo("user", localDirs1)
-    val appPathsInfo2 = new AppPathsInfo("user", localDirs2)
-    ShuffleTestAccessor.updateAppPathInfo(
-      ShuffleTestAccessor.getAppPathsInfo(app1Id.toString, mergeManager).get,
-      app1Id.toString, localDirs1, ShuffleTestAccessor.mergeManagerLevelDB(mergeManager))
-    ShuffleTestAccessor.updateAppPathInfo(
-      ShuffleTestAccessor.getAppPathsInfo(app2Id.toString, mergeManager).get,
-      app2Id.toString, localDirs2, ShuffleTestAccessor.mergeManagerLevelDB(mergeManager))
+    val localDir1 = new File(tempDir, "foo")
+    val executorInfo1 = new ExecutorShuffleInfo(Array(localDir1.getAbsolutePath), 2, SORT_MANAGER)
+    mergeManager.registerExecutor(app1Id.toString, executorInfo1)
+
+    val localDir2 = new File(tempDir, "bar")
+    val executorInfo2 = new ExecutorShuffleInfo(Array(localDir2.getAbsolutePath), 4, SORT_MANAGER)
+    mergeManager.registerExecutor(app2Id.toString, executorInfo2)
+
+    val appPathsInfo1 = new AppPathsInfo(
+      Array(localDir1.toPath.getParent.resolve(RemoteBlockPushResolver.MERGE_MANAGER_DIR).toString),
+      2)
     ShuffleTestAccessor.getAppPathsInfo(app1Id.toString, mergeManager) should
       be (Some(appPathsInfo1))
+    val appPathsInfo2 = new AppPathsInfo(
+      Array(localDir2.toPath.getParent.resolve(RemoteBlockPushResolver.MERGE_MANAGER_DIR).toString),
+      4)
     ShuffleTestAccessor.getAppPathsInfo(app2Id.toString, mergeManager) should
       be (Some(appPathsInfo2))
 
@@ -219,7 +218,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val handler2 = s2.blockHandler
     val resolver2 = ShuffleTestAccessor.getBlockResolver(handler2)
-    val mergeManager2 = s2.shuffleMergeManager
+    val mergeManager2 = s2.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
 
     // now we reinitialize only one of the apps, and expect yarn to tell us that app2 was stopped
     // during the restart
@@ -234,8 +233,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       mergeManager2, partitionId1)
     partitionInfoReload1.getDataFile.getPos should be (20 * DUMMY_BLOCK_DATA.length - 1)
     partitionInfoReload1.getMapTracker.getCardinality should be (50)
-    val dataFileReload1 = ShuffleTestAccessor.getFile(mergeManager2, app1Id.toString,
-      ShuffleTestAccessor.generateDataFileName(partitionId1))
+    val dataFileReload1 = ShuffleTestAccessor.getDataFile(mergeManager2, partitionId1)
     dataFileReload1.length() should be (partitionInfoReload1.getDataFile.getPos)
 
     // Act like the NM restarts one more time
@@ -248,7 +246,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val handler3 = s3.blockHandler
     val resolver3 = ShuffleTestAccessor.getBlockResolver(handler3)
-    val mergeManager3 = s3.shuffleMergeManager
+    val mergeManager3 = s3.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
 
     // app1 is still running
     s3.initializeApplication(app1Data)
@@ -261,8 +259,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       mergeManager3, partitionId1)
     partitionInfoReload2.getDataFile.getPos should be (20 * DUMMY_BLOCK_DATA.length - 1)
     partitionInfoReload2.getMapTracker.getCardinality should be (50)
-    val dataFileReload2 = ShuffleTestAccessor.getFile(mergeManager3, app1Id.toString,
-      ShuffleTestAccessor.generateDataFileName(partitionId1))
+    val dataFileReload2 = ShuffleTestAccessor.getDataFile(mergeManager3, partitionId1)
     dataFileReload2.length() should be (partitionInfoReload2.getDataFile.getPos)
     s3.stop()
   }
@@ -291,21 +288,20 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ShuffleTestAccessor.registeredExecutorFile(blockResolver) should be (execStateFile)
 
     val mergeMgrFile = s1.mergeManagerFile
-    val mergeManager = s1.shuffleMergeManager
+    val mergeManager = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
     ShuffleTestAccessor.recoveryFile(mergeManager) should be (mergeMgrFile)
 
     blockResolver.registerExecutor(app1Id.toString, "exec-1", shuffleInfo1)
     blockResolver.registerExecutor(app2Id.toString, "exec-2", shuffleInfo2)
 
-    val localDirs1 = Array(new File(tempDir, "foo").getAbsolutePath,
-      new File(tempDir, "bar").getAbsolutePath)
+    val localDirs1 = Array(new File(tempDir, "foo").getAbsolutePath)
+    val executorInfo1 = new ExecutorShuffleInfo(localDirs1, 1, SORT_MANAGER)
+    mergeManager.registerExecutor(app1Id.toString, executorInfo1)
+
     val localDirs2 = Array(new File(tempDir, "bippy").getAbsolutePath)
-    ShuffleTestAccessor.updateAppPathInfo(
-      ShuffleTestAccessor.getAppPathsInfo(app1Id.toString, mergeManager).get,
-      app1Id.toString, localDirs1, ShuffleTestAccessor.mergeManagerLevelDB(mergeManager))
-    ShuffleTestAccessor.updateAppPathInfo(
-      ShuffleTestAccessor.getAppPathsInfo(app2Id.toString, mergeManager).get,
-      app2Id.toString, localDirs2, ShuffleTestAccessor.mergeManagerLevelDB(mergeManager))
+    val executorInfo2 = new ExecutorShuffleInfo(localDirs2, 1, SORT_MANAGER)
+    mergeManager.registerExecutor(app2Id.toString, executorInfo2)
+
     val partitionId1 = new AppShufflePartitionId(app1Id.toString, 1, 1)
     val partitionId2 = new AppShufflePartitionId(app2Id.toString, 2, 2)
     prepareAppShufflePartition(app1Id.toString, partitionId1, mergeManager)
@@ -550,7 +546,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     val mockConf = mock(classOf[TransportConf])
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager")
-    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
     assert(mergeMgr.isInstanceOf[ExternalBlockHandler.NoOpMergedShuffleFileManager])
   }
 
@@ -558,7 +554,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     val mockConf = mock(classOf[TransportConf])
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
-    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
     assert(mergeMgr.isInstanceOf[RemoteBlockPushResolver])
   }
 
@@ -566,7 +562,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     val mockConf = mock(classOf[TransportConf])
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.NotExistent")
-    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
     assert(mergeMgr.isInstanceOf[ExternalBlockHandler.NoOpMergedShuffleFileManager])
   }
 }
