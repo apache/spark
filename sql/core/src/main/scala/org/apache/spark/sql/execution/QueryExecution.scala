@@ -35,8 +35,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
+import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -197,7 +198,14 @@ class QueryExecution(
         queryExecution.toString(maxFields, append)
       case CodegenMode =>
         try {
-          org.apache.spark.sql.execution.debug.writeCodegen(append, queryExecution.executedPlan)
+          queryExecution.executedPlan match {
+            case p: AdaptiveSparkPlanExec =>
+              // Explain codegen for original input plan of AQE.
+              val inputExecutedPlan = QueryExecution.prepareForExecution(
+                  QueryExecution.preparations(sparkSession, None), p.inputPlan)
+              writeCodegen(append, inputExecutedPlan)
+            case p => writeCodegen(append, p)
+          }
         } catch {
           case e: AnalysisException => append(e.toString)
         }
