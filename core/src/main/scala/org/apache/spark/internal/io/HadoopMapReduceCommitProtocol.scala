@@ -215,6 +215,16 @@ class HadoopMapReduceCommitProtocol(
           }
           fs.rename(new Path(stagingDir, part), finalPartPath)
         }
+        // move the _SUCCESS/_ERROR file to the final location
+        fs.globStatus(new Path(s"${stagingDir.toString}/*")).foreach {
+          x => x.getPath.getName match {
+            case ("_SUCCESS") =>
+              fs.rename(new Path(stagingDir, "_SUCCESS"), new Path(path))
+            case ("_ERROR") =>
+              fs.rename(new Path(stagingDir, "_ERROR"), new Path(path))
+            case _ =>
+          }
+        }
       }
 
       fs.delete(stagingDir, true)
