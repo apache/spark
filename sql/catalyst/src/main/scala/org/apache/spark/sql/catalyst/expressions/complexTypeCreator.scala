@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, Func
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CREATE_NAMED_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -424,6 +425,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   override def nullable: Boolean = false
 
   override def foldable: Boolean = valExprs.forall(_.foldable)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(CREATE_NAMED_STRUCT)
 
   override lazy val dataType: StructType = {
     val fields = names.zip(valExprs).map {

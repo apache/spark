@@ -31,19 +31,23 @@ object TreePattern extends Enumeration  {
   val CAST: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
+  val CREATE_NAMED_STRUCT: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
+  val EXTRACT_VALUE: Value = Value
   val IF: Value = Value
   val IN: Value = Value
   val IN_SUBQUERY: Value = Value
   val INSET: Value = Value
+  val JSON_TO_STRUCT: Value = Value
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value
   val NOT: Value = Value
   val NULL_CHECK: Value = Value
   val NULL_LITERAL: Value = Value
+  val OUTER_REFERENCE: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val SCALAR_SUBQUERY: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
@@ -52,10 +56,15 @@ object TreePattern extends Enumeration  {
   val UPPER_OR_LOWER: Value = Value
 
   // Logical plan patterns (alphabetically ordered)
+  val AGGREGATE: Value = Value
+  val EXCEPT: Value = Value
   val FILTER: Value = Value
   val INNER_LIKE_JOIN: Value = Value
   val JOIN: Value = Value
   val LEFT_SEMI_OR_ANTI_JOIN: Value = Value
+  val LIMIT: Value = Value
+  val LOCAL_RELATION: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value
   val OUTER_JOIN: Value = Value
+  val WINDOW: Value = Value
 }
