@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.metric
 
-import org.apache.spark.sql.connector.metric.CustomMetric
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 
 object CustomMetrics {
   private[spark] val V2_CUSTOM = "v2Custom"
 
-  private[spark] val numRowsPerUpdate = 100L
+  private[spark] val numRowsPerUpdate = 100
 
   /**
    * Given a class name, builds and returns a metric type for a V2 custom metric class
@@ -41,6 +41,17 @@ object CustomMetrics {
       Some(metricType.drop(V2_CUSTOM.length + 1))
     } else {
       None
+    }
+  }
+
+  /**
+   * Updates given custom metrics.
+   */
+  def updateMetrics(
+      currentMetricsValues: Seq[CustomTaskMetric],
+      customMetrics: Map[String, SQLMetric]): Unit = {
+    currentMetricsValues.foreach { metric =>
+      customMetrics(metric.name()).set(metric.value())
     }
   }
 }

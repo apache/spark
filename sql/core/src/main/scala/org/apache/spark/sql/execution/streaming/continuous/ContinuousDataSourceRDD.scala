@@ -96,12 +96,7 @@ class ContinuousDataSourceRDD(
 
       override def getNext(): InternalRow = {
         if (numRow % CustomMetrics.numRowsPerUpdate == 0) {
-          partitionReader.currentMetricsValues.foreach { metric =>
-            assert(customMetrics.contains(metric.name()),
-              s"Custom metrics ${customMetrics.keys.mkString(", ")} do not contain the metric " +
-                s"${metric.name()}")
-            customMetrics(metric.name()).set(metric.value())
-          }
+          CustomMetrics.updateMetrics(partitionReader.currentMetricsValues, customMetrics)
         }
         numRow += 1
         readerForPartition.next() match {

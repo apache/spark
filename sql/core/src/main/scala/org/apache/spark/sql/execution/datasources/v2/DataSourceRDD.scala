@@ -69,12 +69,7 @@ class DataSourceRDD(
     context.addTaskCompletionListener[Unit] { _ =>
       // In case of early stopping before consuming the entire iterator,
       // we need to do one more metric update at the end of the task.
-      reader.currentMetricsValues.foreach { metric =>
-        assert(customMetrics.contains(metric.name()),
-          s"Custom metrics ${customMetrics.keys.mkString(", ")} do not contain the metric " +
-            s"${metric.name()}")
-        customMetrics(metric.name()).set(metric.value())
-      }
+      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
       reader.close()
     }
     // TODO: SPARK-25083 remove the type erasure hack in data source scan
@@ -105,12 +100,7 @@ private class PartitionIterator[T](
       throw QueryExecutionErrors.endOfStreamError()
     }
     if (numRow % CustomMetrics.numRowsPerUpdate == 0) {
-      reader.currentMetricsValues.foreach { metric =>
-        assert(customMetrics.contains(metric.name()),
-          s"Custom metrics ${customMetrics.keys.mkString(", ")} do not contain the metric " +
-            s"${metric.name()}")
-        customMetrics(metric.name()).set(metric.value())
-      }
+      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
     }
     numRow += 1
     valuePrepared = false
