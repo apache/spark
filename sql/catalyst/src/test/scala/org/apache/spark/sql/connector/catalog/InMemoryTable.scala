@@ -240,9 +240,8 @@ class InMemoryTable(
       new InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
-      schema = StructType(requiredSchema.filter { f =>
-        (metadataColumnNames ++ tableSchema.map(_.name)).contains(f.name)
-      })
+      val schemaNames = metadataColumnNames ++ tableSchema.map(_.name)
+      schema = StructType(requiredSchema.filter(f => schemaNames.contains(f.name)))
     }
   }
 
@@ -539,7 +538,7 @@ private class BufferedRowsReader(
         }
         new GenericInternalRow(resultValue)
       case dt =>
-        row.get(index, CharVarcharUtils.replaceCharVarcharWithString(dt))
+        row.get(index, dt)
     }
   }
 }
