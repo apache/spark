@@ -52,6 +52,7 @@ object TreePattern extends Enumeration  {
   val UPPER_OR_LOWER: Value = Value
 
   // Logical plan patterns (alphabetically ordered)
+  val AGGREGATE: Value = Value
   val DISTINCT_LIKE: Value = Value
   val FILTER: Value = Value
   val INNER_LIKE_JOIN: Value = Value

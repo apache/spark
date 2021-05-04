@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
@@ -377,7 +378,8 @@ object EliminateDistinct extends Rule[LogicalPlan] {
  * This rule should be applied before RewriteDistinctAggregates.
  */
 object EliminateAggregateFilter extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsWithPruning(
+    _.containsAllPatterns(AGGREGATE, TRUE_OR_FALSE_LITERAL))  {
     case ae @ AggregateExpression(_, _, _, Some(Literal.TrueLiteral), _) =>
       ae.copy(filter = None)
     case AggregateExpression(af: DeclarativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>
@@ -745,7 +747,8 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
  */
 object ColumnPruning extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(
+    plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
