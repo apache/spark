@@ -431,6 +431,10 @@ The tracked operations are listed as follows.
     * latestOffset & getOffset: Time taken to query the maximum available offset for this source.
     * queryPlanning: Time taken to generates the execution plan.
     * walCommit: Time taken to write the offsets to the metadata log.
+* **Aggregated Number Of Total State Rows.** The aggregated number of total state rows.
+* **Aggregated Number Of Updated State Rows.** The aggregated number of updated state rows.
+* **Aggregated State Memory Used In Bytes.** The aggregated state memory used in bytes.
+* **Aggregated Number Of State Rows Dropped By Watermark.** The aggregated number of state rows dropped by watermark.
     
 As an early-release version, the statistics page is still under development and will be improved in
 future releases.
