@@ -57,6 +57,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.CombineUnions" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantFolding" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
+      "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.DecimalAggregates" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateAggregateFilter" ::
