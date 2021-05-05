@@ -18,12 +18,12 @@
 package org.apache.spark
 
 import scala.reflect.ClassTag
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -96,6 +96,15 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, this)
 
+  // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle is enabled
+  private[this] var _shuffleMergeEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf)
+
+  def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
+    _shuffleMergeEnabled = shuffleMergeEnabled
+  }
+
+  def shuffleMergeEnabled : Boolean = _shuffleMergeEnabled
+
   /**
    * Stores the location of the list of chosen external shuffle services for handling the
    * shuffle merge requests from mappers in this shuffle map stage.
@@ -106,7 +115,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    * Stores the information about whether the shuffle merge is finalized for the shuffle map stage
    * associated with this shuffle dependency
    */
-  private[this] var shuffleMergedFinalized: Boolean = false
+  private[this] var _shuffleMergedFinalized: Boolean = false
 
   def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
     if (mergerLocs != null) {
@@ -117,10 +126,10 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def getMergerLocs: Seq[BlockManagerId] = mergerLocs
 
   def markShuffleMergeFinalized: Unit = {
-    shuffleMergedFinalized = true
+    _shuffleMergedFinalized = true
   }
 
-  def shuffleMergeFinalized : Boolean = shuffleMergedFinalized
+  def shuffleMergeFinalized : Boolean = _shuffleMergedFinalized
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
   _rdd.sparkContext.shuffleDriverComponents.registerShuffle(shuffleId)

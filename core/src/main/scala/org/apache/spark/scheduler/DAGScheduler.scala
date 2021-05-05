@@ -260,12 +260,13 @@ private[spark] class DAGScheduler(
     sc.getConf.get(config.STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT).millis
 
   private val shuffleMergeResultsTimeoutSec =
-    JavaUtils.timeStringAsSec(sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT))
+    sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT)
 
   private val shuffleMergeFinalizeWaitSec =
-    JavaUtils.timeStringAsSec(sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_TIMEOUT))
+    sc.getConf.get(config.PUSH_BASED_SHUFFLE_MERGE_FINALIZE_TIMEOUT)
 
-  // lazy initialized so that the shuffle client can be properly initialized
+  // Since SparkEnv gets initialized after DAGScheduler, externalShuffleClient needs to be
+  // initialized lazily
   private lazy val externalShuffleClient: Option[ExternalBlockStoreClient] =
     if (pushBasedShuffleEnabled) {
       val transConf = SparkTransportConf.fromSparkConf(sc.conf, "shuffle", 1)
@@ -716,6 +717,9 @@ private[spark] class DAGScheduler(
             dep match {
               case shufDep: ShuffleDependency[_, _, _] =>
                 val mapStage = getOrCreateShuffleMapStage(shufDep, stage.firstJobId)
+                // Mark mapStage as available with shuffle outputs only after shuffle merge is
+                // finalized with push based shuffle. If not, subsequent ShuffleMapStage won't
+                // read from merged output as the MergeStatuses are not available.
                 if (!mapStage.isAvailable || !mapStage.isMergeFinalized) {
                   missing += mapStage
                 }
@@ -1298,7 +1302,8 @@ private[spark] class DAGScheduler(
    * locations for block push/merge by getting the historical locations of past executors.
    */
   private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage): Unit = {
-    if (!stage.shuffleDep.shuffleMergeFinalized) {
+    if (stage.shuffleDep.shuffleMergeEnabled && !stage.shuffleDep.shuffleMergeFinalized
+      && stage.shuffleDep.getMergerLocs.isEmpty) {
       val mergerLocs = sc.schedulerBackend.getShufflePushMergerLocations(
         stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
       if (mergerLocs.nonEmpty) {
@@ -1309,8 +1314,16 @@ private[spark] class DAGScheduler(
         logDebug("List of shuffle push merger locations " +
           s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
       } else {
+        stage.shuffleDep.setShuffleMergeEnabled(false)
         logInfo("Push-based shuffle disabled for $stage (${stage.name})")
       }
+    } else if (stage.shuffleDep.shuffleMergeFinalized) {
+      // Disable Shuffle merge for the retry/reuse of the same shuffle dependency if it has
+      // already been merge finalized. If the shuffle dependency was previously assigned merger
+      // locations but the corresponding shuffle map stage did not complete successfully, we
+      // would still enable push for its retry.
+      logInfo("Push-based shuffle disabled for $stage (${stage.name})")
+      stage.shuffleDep.setShuffleMergeEnabled(false)
     }
   }
 
@@ -1346,7 +1359,7 @@ private[spark] class DAGScheduler(
         // Only generate merger location for a given shuffle dependency once. This way, even if
         // this stage gets retried, it would still be merging blocks using the same set of
         // shuffle services.
-        if (pushBasedShuffleEnabled) {
+        if (pushBasedShuffleEnabled && !s.isMergeFinalized) {
           prepareShuffleServicesForShuffleMapStage(s)
         }
       case s: ResultStage =>
@@ -1703,7 +1716,8 @@ private[spark] class DAGScheduler(
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
-              if (pushBasedShuffleEnabled) {
+              if (!shuffleStage.isMergeFinalized &&
+                  shuffleStage.shuffleDep.getMergerLocs.nonEmpty) {
                 scheduleShuffleMergeFinalize(shuffleStage)
               } else {
                 processShuffleMapStageCompletion(shuffleStage)
@@ -2038,20 +2052,13 @@ private[spark] class DAGScheduler(
       val results = (0 until numMergers).map(_ => SettableFuture.create[Boolean]())
       val timedOut = new AtomicBoolean()
 
-      // NOTE: This is a defensive check to post finalize event if numMergers is 0 (i.e. no shuffle
-      // service available).
-      if (numMergers == 0) {
-        eventProcessLoop.post(ShuffleMergeFinalized(stage))
-        return
-      }
-
-      def increaseAndCheckResponseCount: Unit = {
+      def increaseAndCheckResponseCount(): Unit = {
         if (numResponses.incrementAndGet() == numMergers) {
+          logInfo("%s (%s) shuffle merge finalized".format(stage, stage.name))
           // Since this runs in the netty client thread and is outside of DAGScheduler
           // event loop, we only post ShuffleMergeFinalized event into the event queue.
           // The processing of this event should be done inside the event loop, so it
           // can safely modify scheduler's internal state.
-          logInfo("%s (%s) shuffle merge finalized".format(stage, stage.name))
           eventProcessLoop.post(ShuffleMergeFinalized(stage))
         }
       }
@@ -2090,10 +2097,8 @@ private[spark] class DAGScheduler(
       // DAGScheduler only waits for a limited amount of time for the merge results.
       // It will attempt to submit the next stage(s) irrespective of whether merge results
       // from all shuffle services are received or not.
-      // TODO what are the reasonable configurations for the 2 timeouts? When # mappers
-      // TODO and # reducers for a shuffle is really large, and if the merge ratio is not
-      // TODO high enough, the MergeStatuses to be retrieved from 1 shuffle service could
-      // TODO be pretty large (10s MB to 100s MB). How to properly handle this scenario?
+      // TODO: SPARK-33701: Instead of waiting for a constant amount of time for finalization
+      // TODO: for all the stages, adaptively tune timeout for merge finalization
       try {
         Futures.allAsList(results: _*).get(shuffleMergeResultsTimeoutSec, TimeUnit.SECONDS)
       } catch {

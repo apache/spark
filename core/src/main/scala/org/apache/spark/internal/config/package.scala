@@ -2080,9 +2080,10 @@ package object config {
       .doc("Specify the max amount of time DAGScheduler waits for the merge results from " +
         "all remote shuffle services for a given shuffle. DAGScheduler will start to submit " +
         "following stages if not all results are received within the timeout.")
-      .version("3.1.0")
-      .stringConf
-      .createWithDefault("10s")
+      .version("3.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefaultString("10s")
 
   private[spark] val PUSH_BASED_SHUFFLE_MERGE_FINALIZE_TIMEOUT =
     ConfigBuilder("spark.shuffle.push.merge.finalize.timeout")
@@ -2090,9 +2091,10 @@ package object config {
         "a given shuffle map stage before it starts sending merge finalize requests to " +
         "remote shuffle services. This allows the shuffle services some extra time to " +
         "merge as many blocks as possible.")
-      .version("3.1.0")
-      .stringConf
-      .createWithDefault("10s")
+      .version("3.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefaultString("10s")
 
   private[spark] val SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS =
     ConfigBuilder("spark.shuffle.push.maxRetainedMergerLocations")

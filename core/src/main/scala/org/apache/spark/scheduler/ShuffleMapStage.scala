@@ -101,7 +101,7 @@ private[spark] class ShuffleMapStage(
    */
   def isMergeFinalized: Boolean = {
     // EmptyRDD should not be computed
-    if (numPartitions > 0 && shuffleDep.mergerLocs.nonEmpty) {
+    if (numPartitions > 0 && shuffleDep.shuffleMergeEnabled) {
       shuffleDep.shuffleMergeFinalized
     } else {
       true

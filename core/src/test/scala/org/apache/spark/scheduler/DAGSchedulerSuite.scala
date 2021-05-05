@@ -333,7 +333,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
        * Schedules shuffle merge finalize.
        */
       override private[scheduler] def scheduleShuffleMergeFinalize(
-        shuffleMapStage: ShuffleMapStage): Unit = {
+          shuffleMapStage: ShuffleMapStage): Unit = {
         for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
           mapOutputTracker.registerMergeResult(shuffleMapStage.shuffleDep.shuffleId, part,
             makeMergeStatus(""))
@@ -3511,7 +3511,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     submit(reduceRdd, (0 until parts).toArray)
     completeShuffleMapStageSuccessfully(0, 0, parts)
     val shuffleStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
-    assert(shuffleStage.shuffleDep.mergerLocs.isEmpty)
+    assert(!shuffleStage.shuffleDep.shuffleMergeEnabled)
 
     completeNextResultStageWithSuccess(1, 0)
     assert(results === Map(2 -> 42, 5 -> 42, 4 -> 42, 1 -> 42, 3 -> 42, 6 -> 42, 0 -> 42))
@@ -3521,7 +3521,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-32920: Ensure child stage should not start before all the" +
-    " parent stages are completed with shuffle merge finalized for all the parent stages") {
+      " parent stages are completed with shuffle merge finalized for all the parent stages") {
     initPushBasedShuffleConfs(conf)
     DAGSchedulerSuite.clearMergerLocs
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
@@ -3557,7 +3557,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-32920: Reused ShuffleDependency with Shuffle Merge disabled for the corresponding" +
-    " ShuffleDependency should not cause DAGScheduler to hang") {
+      " ShuffleDependency should not cause DAGScheduler to hang") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 10)
     DAGSchedulerSuite.clearMergerLocs
@@ -3572,7 +3572,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     completeShuffleMapStageSuccessfully(0, 0, parts)
     val shuffleStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
-    assert(shuffleStage.shuffleDep.mergerLocs.isEmpty)
+    assert(!shuffleStage.shuffleDep.shuffleMergeEnabled)
 
     completeNextResultStageWithSuccess(1, 0)
     val reduce2 = new MyRDD(sc, parts, List(shuffleDep))
@@ -3588,7 +3588,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-32920: Reused ShuffleDependency with Shuffle Merge disabled for the corresponding" +
-    " ShuffleDependency with shuffle data loss should recompute missing partitions") {
+      " ShuffleDependency with shuffle data loss should recompute missing partitions") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 10)
     DAGSchedulerSuite.clearMergerLocs
@@ -3603,7 +3603,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     completeShuffleMapStageSuccessfully(0, 0, parts)
     val shuffleStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
-    assert(shuffleStage.shuffleDep.mergerLocs.isEmpty)
+    assert(!shuffleStage.shuffleDep.shuffleMergeEnabled)
 
     completeNextResultStageWithSuccess(1, 0)
 
@@ -3614,13 +3614,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val reduce2 = new MyRDD(sc, parts, List(shuffleDep))
     submit(reduce2, partitions)
     // Note that the stage numbering here is only b/c the shared dependency produces a new, skipped
-    // stage.  If instead it reused the existing stage, then this would be stage 2
+    // stage. If instead it reused the existing stage, then this would be stage 2
     completeNextStageWithFetchFailure(3, 0, shuffleDep)
     scheduler.resubmitFailedStages()
 
     // Make sure shuffle merge is disabled for the retry
     val stage2 = scheduler.stageIdToStage(2).asInstanceOf[ShuffleMapStage]
-    assert(stage2.shuffleDep.mergerLocs.isEmpty)
+    assert(!stage2.shuffleDep.shuffleMergeEnabled)
 
     // the scheduler now creates a new task set to regenerate the missing map output, but this time
     // using a different stage, the "skipped" one
@@ -3751,12 +3751,13 @@ object FailThisAttempt {
 }
 
 private class PushBasedSchedulerBackend(
-  conf: SparkConf,
-  scheduler: TaskSchedulerImpl, cores: Int) extends LocalSchedulerBackend(conf, scheduler, cores) {
+    conf: SparkConf,
+    scheduler: TaskSchedulerImpl,
+    cores: Int) extends LocalSchedulerBackend(conf, scheduler, cores) {
 
   override def getShufflePushMergerLocations(
-    numPartitions: Int,
-    resourceProfileId: Int): Seq[BlockManagerId] = {
+      numPartitions: Int,
+      resourceProfileId: Int): Seq[BlockManagerId] = {
     val mergerLocations = Utils.randomize(DAGSchedulerSuite.mergerLocs).take(numPartitions)
     if (mergerLocations.size < numPartitions && mergerLocations.size <
       conf.getInt(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD.key, 5)) {
@@ -3771,15 +3772,15 @@ private class PushBasedClusterManager extends ExternalClusterManager {
   def canCreate(masterURL: String): Boolean = masterURL == "pushbasedshuffleclustermanager"
 
   override def createSchedulerBackend(
-    sc: SparkContext,
-    masterURL: String,
-    scheduler: TaskScheduler): SchedulerBackend = {
+      sc: SparkContext,
+      masterURL: String,
+      scheduler: TaskScheduler): SchedulerBackend = {
     new PushBasedSchedulerBackend(sc.conf, scheduler.asInstanceOf[TaskSchedulerImpl], 1)
   }
 
   override def createTaskScheduler(
-    sc: SparkContext,
-    masterURL: String): TaskScheduler = new TaskSchedulerImpl(sc, 1, isLocal = true)
+      sc: SparkContext,
+      masterURL: String): TaskScheduler = new TaskSchedulerImpl(sc, 1, isLocal = true)
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
     val sc = scheduler.asInstanceOf[TaskSchedulerImpl]
