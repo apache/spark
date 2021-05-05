@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 
 /**
  * Decorrelate the inner query by eliminating outer references and create domain joins.
@@ -137,7 +138,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
   private def replaceOuterReference[E <: Expression](
       expression: E,
       outerReferenceMap: Map[Attribute, Attribute]): E = {
-    expression.transform {
+    expression.transformWithPruning(_.containsPattern(OUTER_REFERENCE)) {
       case o: OuterReference => outerReferenceMap.getOrElse(o.toAttribute, o)
     }.asInstanceOf[E]
   }

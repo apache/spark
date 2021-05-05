@@ -27,6 +27,12 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 class EvaluatorTests(SparkSessionTestCase):
 
+    def test_evaluate_invalid_type(self):
+        evaluator = RegressionEvaluator(metricName="r2")
+        df = self.spark.createDataFrame([Row(label=1.0, prediction=1.1)])
+        invalid_type = ""
+        self.assertRaises(TypeError, evaluator.evaluate, df, invalid_type)
+
     def test_java_params(self):
         """
         This tests a bug fixed by SPARK-18274 which causes multiple copies

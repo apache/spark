@@ -336,7 +336,7 @@ cannot resolve '1 + (- INTERVAL '2 seconds')' due to data type mismatch: argumen
 -- !query
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678'
 -- !query schema
-struct<(DATE '2020-01-01' - TIMESTAMP '2019-10-06 10:11:12.345678'):day-time interval>
+struct<(DATE '2020-01-01' - TIMESTAMP '2019-10-06 10:11:12.345678'):interval day to second>
 -- !query output
 86 13:48:47.654322000
 
@@ -344,7 +344,7 @@ struct<(DATE '2020-01-01' - TIMESTAMP '2019-10-06 10:11:12.345678'):day-time int
 -- !query
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
 -- !query schema
-struct<(TIMESTAMP '2019-10-06 10:11:12.345678' - DATE '2020-01-01'):day-time interval>
+struct<(TIMESTAMP '2019-10-06 10:11:12.345678' - DATE '2020-01-01'):interval day to second>
 -- !query output
 -86 13:48:47.654322000
 
@@ -352,7 +352,7 @@ struct<(TIMESTAMP '2019-10-06 10:11:12.345678' - DATE '2020-01-01'):day-time int
 -- !query
 select timestamp'2019-10-06 10:11:12.345678' - null
 -- !query schema
-struct<(TIMESTAMP '2019-10-06 10:11:12.345678' - NULL):day-time interval>
+struct<(TIMESTAMP '2019-10-06 10:11:12.345678' - NULL):interval day to second>
 -- !query output
 NULL
 
@@ -360,7 +360,7 @@ NULL
 -- !query
 select null - timestamp'2019-10-06 10:11:12.345678'
 -- !query schema
-struct<(NULL - TIMESTAMP '2019-10-06 10:11:12.345678'):day-time interval>
+struct<(NULL - TIMESTAMP '2019-10-06 10:11:12.345678'):interval day to second>
 -- !query output
 NULL
 
@@ -602,7 +602,7 @@ cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), v.str)' due to data type mi
 -- !query
 select null - date '2019-10-06'
 -- !query schema
-struct<(NULL - DATE '2019-10-06'):day-time interval>
+struct<(NULL - DATE '2019-10-06'):interval day to second>
 -- !query output
 NULL
 
@@ -610,7 +610,7 @@ NULL
 -- !query
 select date '2001-10-01' - date '2001-09-28'
 -- !query schema
-struct<(DATE '2001-10-01' - DATE '2001-09-28'):day-time interval>
+struct<(DATE '2001-10-01' - DATE '2001-09-28'):interval day to second>
 -- !query output
 3 00:00:00.000000000
 

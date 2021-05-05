@@ -150,6 +150,58 @@ object IntervalUtils {
     }
   }
 
+  private val unquotedDaySecondPattern =
+    "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?"
+  private val quotedDaySecondPattern = (s"^$unquotedDaySecondPattern$$").r
+  private val daySecondLiteralPattern =
+    (s"(?i)^INTERVAL\\s+([+|-])?\\'$unquotedDaySecondPattern\\'\\s+DAY\\s+TO\\s+SECOND$$").r
+
+  def castStringToDTInterval(input: UTF8String): Long = {
+    def secondAndMicro(second: String, micro: String): String = {
+      if (micro != null) {
+        s"$second$micro"
+      } else {
+        second
+      }
+    }
+
+    input.trimAll().toString match {
+      case quotedDaySecondPattern("-", day, hour, minute, second, micro) =>
+        toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
+      case quotedDaySecondPattern(_, day, hour, minute, second, micro) =>
+        toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
+      case daySecondLiteralPattern(firstSign, secondSign, day, hour, minute, second, micro) =>
+        (firstSign, secondSign) match {
+          case ("-", "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
+          case ("-", _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
+          case (_, "-") => toDTInterval(day, hour, minute, secondAndMicro(second, micro), -1)
+          case (_, _) => toDTInterval(day, hour, minute, secondAndMicro(second, micro), 1)
+        }
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Interval string must match day-time format of `d h:m:s.n` " +
+            s"or `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND`: ${input.toString}, " +
+            s"$fallbackNotice")
+    }
+  }
+
+  def toDTInterval(
+      dayStr: String,
+      hourStr: String,
+      minuteStr: String,
+      secondStr: String,
+      sign: Int): Long = {
+    var micros = 0L
+    val days = toLongWithRange(DAY, dayStr, 0, Int.MaxValue).toInt
+    micros = Math.addExact(micros, sign * days * MICROS_PER_DAY)
+    val hours = toLongWithRange(HOUR, hourStr, 0, 23)
+    micros = Math.addExact(micros, sign * hours * MICROS_PER_HOUR)
+    val minutes = toLongWithRange(MINUTE, minuteStr, 0, 59)
+    micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
+    micros = Math.addExact(micros, sign * parseSecondNano(secondStr))
+    micros
+  }
+
   /**
    * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
    *

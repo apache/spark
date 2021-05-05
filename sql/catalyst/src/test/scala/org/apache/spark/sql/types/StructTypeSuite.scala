@@ -235,4 +235,12 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         .exists(_.sameType(missing4)))
     }
   }
+
+  test("SPARK-35285: ANSI interval types in schema") {
+    val yearMonthInterval = "`ymi` INTERVAL YEAR TO MONTH"
+    assert(fromDDL(yearMonthInterval).toDDL === yearMonthInterval)
+
+    val dayTimeInterval = "`dti` INTERVAL DAY TO SECOND"
+    assert(fromDDL(dayTimeInterval).toDDL === dayTimeInterval)
+  }
 }
