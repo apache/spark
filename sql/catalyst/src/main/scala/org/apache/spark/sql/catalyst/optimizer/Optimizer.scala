@@ -2053,7 +2053,7 @@ object OptimizeLimitZero extends Rule[LogicalPlan] {
     LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(LIMIT)) {
+    _.containsAllPatterns(LIMIT, LITERAL)) {
     // Nodes below GlobalLimit or LocalLimit can be pruned if the limit value is zero (0).
     // Any subtree in the logical plan that has GlobalLimit 0 or LocalLimit 0 as its root is
     // semantically equivalent to an empty relation.
