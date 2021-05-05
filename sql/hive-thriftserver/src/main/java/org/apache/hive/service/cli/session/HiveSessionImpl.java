@@ -141,6 +141,7 @@ public class HiveSessionImpl implements HiveSession {
     sessionState = new SessionState(hiveConf, username);
     sessionState.setUserIpAddress(ipAddress);
     sessionState.setIsHiveServerQuery(true);
+    // Use setCurrentSessionState to avoid creating useless SessionDirs.
     SessionState.setCurrentSessionState(sessionState);
     try {
       sessionState.loadAuxJars();
