@@ -190,15 +190,16 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-35279 _SUCCESS file is present when using dynamic partition overwrite mode") {
+  test("SPARK-35279: _SUCCESS file is present when using dynamic partition overwrite mode") {
     withTempPath { f =>
       withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
         SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
         val path = f.getAbsolutePath
         val df = Seq(("p", "q"), ("c", "d")).toDF("a", "b")
-        df.write.mode("overwrite").partitionBy("a").parquet(path)
+        df.write.mode("overwrite").partitionBy("b").parquet(path)
         val listFiles = new File(path).listFiles().filter(_.getName == "_SUCCESS")
         assert(listFiles.nonEmpty)
+        checkAnswer(spark.read.parquet(path), df)
       }
     }
   }
