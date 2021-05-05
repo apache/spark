@@ -35,9 +35,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
-import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -198,14 +197,8 @@ class QueryExecution(
         queryExecution.toString(maxFields, append)
       case CodegenMode =>
         try {
-          queryExecution.executedPlan match {
-            case p: AdaptiveSparkPlanExec =>
-              // Explain codegen for original input plan of AQE.
-              val inputExecutedPlan = QueryExecution.prepareForExecution(
-                  QueryExecution.preparations(sparkSession, None), p.inputPlan)
-              writeCodegen(append, inputExecutedPlan)
-            case p => writeCodegen(append, p)
-          }
+          org.apache.spark.sql.execution.debug.writeCodegen(
+            append, queryExecution.executedPlan, sparkSession)
         } catch {
           case e: AnalysisException => append(e.toString)
         }
@@ -300,7 +293,7 @@ class QueryExecution(
      */
     def codegen(): Unit = {
       // scalastyle:off println
-      println(org.apache.spark.sql.execution.debug.codegenString(executedPlan))
+      println(org.apache.spark.sql.execution.debug.codegenString(executedPlan, sparkSession))
       // scalastyle:on println
     }
 
@@ -310,7 +303,7 @@ class QueryExecution(
      * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
      */
     def codegenToSeq(): Seq[(String, String, ByteCodeStats)] = {
-      org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
+      org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan, sparkSession)
     }
 
     /**
@@ -333,7 +326,8 @@ class QueryExecution(
         explainString(mode, maxFields, writer.write)
         if (mode != CodegenMode) {
           writer.write("\n== Whole Stage Codegen ==\n")
-          org.apache.spark.sql.execution.debug.writeCodegen(writer.write, executedPlan)
+          org.apache.spark.sql.execution.debug.writeCodegen(
+            writer.write, executedPlan, sparkSession)
         }
         log.info(s"Debug information was written at: $filePath")
       } finally {

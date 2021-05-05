@@ -24,14 +24,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
+import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.StructType
 
-// Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
-class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecutionSuite {
+abstract class DebuggingSuiteBase extends SharedSparkSession {
 
   test("DataFrame.debug()") {
     testData.debug()
@@ -44,7 +43,7 @@ class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecutionSui
 
   test("debugCodegen") {
     val res = codegenString(spark.range(10).groupBy(col("id") * 2).count()
-      .queryExecution.executedPlan)
+      .queryExecution.executedPlan, spark)
     assert(res.contains("Subtree 1 / 2"))
     assert(res.contains("Subtree 2 / 2"))
     assert(res.contains("Object[]"))
@@ -52,52 +51,10 @@ class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecutionSui
 
   test("debugCodegenStringSeq") {
     val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
-      .queryExecution.executedPlan)
+      .queryExecution.executedPlan, spark)
     assert(res.length == 2)
     assert(res.forall{ case (subtree, code, _) =>
       subtree.contains("Range") && code.contains("Object[]")})
-  }
-
-  test("SPARK-28537: DebugExec cannot debug broadcast related queries") {
-    val rightDF = spark.range(10)
-    val leftDF = spark.range(10)
-    val joinedDF = leftDF.join(rightDF, leftDF("id") === rightDF("id"))
-
-    val captured = new ByteArrayOutputStream()
-    Console.withOut(captured) {
-      joinedDF.debug()
-    }
-
-    val output = captured.toString()
-    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
-    assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
-      s"""== BroadcastExchange $hashedModeString, [id=#x] ==
-        |Tuples output: 0
-        | id LongType: {}
-        |== WholeStageCodegen (1) ==
-        |Tuples output: 10
-        | id LongType: {java.lang.Long}
-        |== Range (0, 10, step=1, splits=2) ==
-        |Tuples output: 0
-        | id LongType: {}""".stripMargin))
-  }
-
-  test("SPARK-28537: DebugExec cannot debug columnar related queries") {
-    val df = spark.range(5)
-    df.persist()
-
-    val captured = new ByteArrayOutputStream()
-    Console.withOut(captured) {
-      df.debug()
-    }
-    df.unpersist()
-
-    val output = captured.toString().replaceAll("#\\d+", "#x")
-    assert(output.contains(
-      """== InMemoryTableScan [id#xL] ==
-        |Tuples output: 0
-        | id LongType: {}
-        |""".stripMargin))
   }
 
   case class DummyCodeGeneratorPlan(useInnerClass: Boolean)
@@ -123,17 +80,64 @@ class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecutionSui
     Seq(true, false).foreach { useInnerClass =>
       val plan = WholeStageCodegenExec(DummyCodeGeneratorPlan(useInnerClass))(codegenStageId = 0)
 
-      val genCodes = codegenStringSeq(plan)
+      val genCodes = codegenStringSeq(plan, spark)
       assert(genCodes.length == 1)
       val (_, _, codeStats) = genCodes.head
       val expectedNumInnerClasses = if (useInnerClass) 1 else 0
       assert(codeStats.maxMethodCodeSize > 0 && codeStats.maxConstPoolSize > 0 &&
         codeStats.numInnerClasses == expectedNumInnerClasses)
 
-      val debugCodegenStr = codegenString(plan)
+      val debugCodegenStr = codegenString(plan, spark)
       assert(debugCodegenStr.contains("maxMethodCodeSize:"))
       assert(debugCodegenStr.contains("maxConstantPoolSize:"))
       assert(debugCodegenStr.contains("numInnerClasses:"))
     }
   }
 }
+
+class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSuite {
+
+  test("SPARK-28537: DebugExec cannot debug broadcast related queries") {
+    val rightDF = spark.range(10)
+    val leftDF = spark.range(10)
+    val joinedDF = leftDF.join(rightDF, leftDF("id") === rightDF("id"))
+
+    val captured = new ByteArrayOutputStream()
+    Console.withOut(captured) {
+      joinedDF.debug()
+    }
+
+    val output = captured.toString()
+    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
+    assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
+      s"""== BroadcastExchange $hashedModeString, [id=#x] ==
+         |Tuples output: 0
+         | id LongType: {}
+         |== WholeStageCodegen (1) ==
+         |Tuples output: 10
+         | id LongType: {java.lang.Long}
+         |== Range (0, 10, step=1, splits=2) ==
+         |Tuples output: 0
+         | id LongType: {}""".stripMargin))
+  }
+
+  test("SPARK-28537: DebugExec cannot debug columnar related queries") {
+    val df = spark.range(5)
+    df.persist()
+
+    val captured = new ByteArrayOutputStream()
+    Console.withOut(captured) {
+      df.debug()
+    }
+    df.unpersist()
+
+    val output = captured.toString().replaceAll("#\\d+", "#x")
+    assert(output.contains(
+      """== InMemoryTableScan [id#xL] ==
+        |Tuples output: 0
+        | id LongType: {}
+        |""".stripMargin))
+  }
+}
+
+class DebuggingSuiteAE extends DebuggingSuiteBase with EnableAdaptiveExecutionSuite

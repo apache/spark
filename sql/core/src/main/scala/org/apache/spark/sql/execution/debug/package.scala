@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFor
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -73,14 +74,14 @@ package object debug {
    * @param plan the query plan for codegen
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
-  def codegenString(plan: SparkPlan): String = {
+  def codegenString(plan: SparkPlan, sparkSession: SparkSession): String = {
     val concat = new StringConcat()
-    writeCodegen(concat.append, plan)
+    writeCodegen(concat.append, plan, sparkSession)
     concat.toString
   }
 
-  def writeCodegen(append: String => Unit, plan: SparkPlan): Unit = {
-    val codegenSeq = codegenStringSeq(plan)
+  def writeCodegen(append: String => Unit, plan: SparkPlan, sparkSession: SparkSession): Unit = {
+    val codegenSeq = codegenStringSeq(plan, sparkSession)
     append(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
     for (((subtree, code, codeStats), i) <- codegenSeq.zipWithIndex) {
       val usedConstPoolRatio = if (codeStats.maxConstPoolSize > 0) {
@@ -105,13 +106,20 @@ package object debug {
    * @param plan the query plan for codegen
    * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
    */
-  def codegenStringSeq(plan: SparkPlan): Seq[(String, String, ByteCodeStats)] = {
+  def codegenStringSeq(
+      plan: SparkPlan,
+      sparkSession: SparkSession): Seq[(String, String, ByteCodeStats)] = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
 
     def findSubtrees(plan: SparkPlan): Unit = {
       plan foreach {
         case s: WholeStageCodegenExec =>
           codegenSubtrees += s
+        case p: AdaptiveSparkPlanExec =>
+          // Find subtrees from original input plan of AQE.
+          val inputExecutedPlan = QueryExecution.prepareForExecution(
+            QueryExecution.preparations(sparkSession, None), p.inputPlan)
+          findSubtrees(inputExecutedPlan)
         case s =>
           s.subqueries.foreach(findSubtrees)
       }
@@ -139,7 +147,7 @@ package object debug {
   def codegenString(query: StreamingQuery): String = {
     val w = asStreamExecution(query)
     if (w.lastExecution != null) {
-      codegenString(w.lastExecution.executedPlan)
+      codegenString(w.lastExecution.executedPlan, w.lastExecution.sparkSession)
     } else {
       "No physical plan. Waiting for data."
     }
@@ -154,7 +162,7 @@ package object debug {
   def codegenStringSeq(query: StreamingQuery): Seq[(String, String, ByteCodeStats)] = {
     val w = asStreamExecution(query)
     if (w.lastExecution != null) {
-      codegenStringSeq(w.lastExecution.executedPlan)
+      codegenStringSeq(w.lastExecution.executedPlan, w.lastExecution.sparkSession)
     } else {
       Seq.empty
     }
@@ -190,7 +198,8 @@ package object debug {
      * WholeStageCodegen subtree).
      */
     def debugCodegen(): Unit = {
-      debugPrint(codegenString(query.queryExecution.executedPlan))
+      debugPrint(codegenString(
+        query.queryExecution.executedPlan, query.queryExecution.sparkSession))
     }
   }
 
