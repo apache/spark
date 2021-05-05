@@ -190,6 +190,11 @@ private[hive] class HiveClientImpl(
     // For this reason we cannot load the jars added by ADDJarsCommand because of class loader
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
+    if (version != hive.v12) {
+      SessionState.setCurrentSessionState(state)
+    } else {
+      SessionState.start(state)
+    }
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())
     state
@@ -828,7 +833,9 @@ private[hive] class HiveClientImpl(
     }
 
     // Hive query needs to start SessionState.
-    SessionState.start(state)
+    if (version != hive.v12) {
+      SessionState.start(state)
+    }
     logDebug(s"Running hiveql '$cmd'")
     if (cmd.toLowerCase(Locale.ROOT).startsWith("set")) { logDebug(s"Changing config: $cmd") }
     try {
