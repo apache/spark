@@ -99,15 +99,16 @@ object IntervalUtils {
     result
   }
 
-  private val yearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
-  private val yearMonthStringPattern =
-    "(?i)^(INTERVAL\\s+)([+|-])?(')([+|-])?(\\d+)-(\\d+)(')(\\s+YEAR\\s+TO\\s+MONTH)$".r
+  private val unquotedYearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
+  private val quotedYearMonthPattern = (s"^$unquotedYearMonthPattern$$").r
+  private val yearMonthLiteralPattern =
+    "(?i)^INTERVAL\\s+([+|-])?'([+|-])?(\\d+)-(\\d+)'\\s+YEAR\\s+TO\\s+MONTH$".r
 
   def castStringToYMInterval(input: UTF8String): Int = {
     input.trimAll().toString match {
-      case yearMonthPattern("-", year, month) => toYMInterval(year, month, -1)
-      case yearMonthPattern(_, year, month) => toYMInterval(year, month, 1)
-      case yearMonthStringPattern(_, firstSign, _, secondSign, year, month, _, _) =>
+      case quotedYearMonthPattern("-", year, month) => toYMInterval(year, month, -1)
+      case quotedYearMonthPattern(_, year, month) => toYMInterval(year, month, 1)
+      case yearMonthLiteralPattern(firstSign, secondSign, year, month) =>
         (firstSign, secondSign) match {
           case ("-", "-") => toYMInterval(year, month, 1)
           case ("-", _) => toYMInterval(year, month, -1)
@@ -128,9 +129,9 @@ object IntervalUtils {
   def fromYearMonthString(input: String): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
     input.trim match {
-      case yearMonthPattern("-", yearStr, monthStr) =>
+      case quotedYearMonthPattern("-", yearStr, monthStr) =>
         new CalendarInterval(toYMInterval(yearStr, monthStr, -1), 0, 0)
-      case yearMonthPattern(_, yearStr, monthStr) =>
+      case quotedYearMonthPattern(_, yearStr, monthStr) =>
         new CalendarInterval(toYMInterval(yearStr, monthStr, 1), 0, 0)
       case _ =>
         throw new IllegalArgumentException(
