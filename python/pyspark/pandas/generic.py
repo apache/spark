@@ -1895,7 +1895,7 @@ class Frame(object, metaclass=ABCMeta):
             numeric_only = True
 
         if not isinstance(accuracy, int):
-            raise ValueError(
+            raise TypeError(
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 

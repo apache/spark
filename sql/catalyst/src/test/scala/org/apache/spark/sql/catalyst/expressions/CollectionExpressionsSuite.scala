@@ -1098,7 +1098,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(Date.valueOf("2018-01-05")),
           Literal(Period.ofDays(2))),
         EmptyRow,
-        "sequence step must be a day year-month interval if start and end values are dates")
+        "sequence step must be a day interval year to month if start and end values are dates")
 
       checkExceptionInExpression[IllegalArgumentException](
         new Sequence(

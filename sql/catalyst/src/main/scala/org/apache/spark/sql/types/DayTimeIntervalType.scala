@@ -57,7 +57,7 @@ class DayTimeIntervalType private() extends AtomicType {
 
   private[spark] override def asNullable: DayTimeIntervalType = this
 
-  override def typeName: String = "day-time interval"
+  override def typeName: String = "interval day to second"
 }
 
 /**

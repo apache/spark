@@ -2016,7 +2016,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         original Series, simply ignoring the incompatible types.
         """
         if is_list_like(lower) or is_list_like(upper):
-            raise ValueError(
+            raise TypeError(
                 "List-like value are not supported for 'lower' and 'upper' at the " + "moment"
             )
 
@@ -3182,7 +3182,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         elif isinstance(func, str):
             return getattr(self, func)()
         else:
-            raise ValueError("func must be a string or list of strings")
+            raise TypeError("func must be a string or list of strings")
 
     agg = aggregate
 
@@ -3345,7 +3345,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Name: x, dtype: float64
         """
         if not isinstance(decimals, int):
-            raise ValueError("decimals must be an integer")
+            raise TypeError("decimals must be an integer")
         scol = F.round(self.spark.column, decimals)
         return self._with_new_scol(scol)
 
@@ -3402,12 +3402,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             ).rename(self.name)
         else:
             if not isinstance(accuracy, int):
-                raise ValueError(
+                raise TypeError(
                     "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
                 )
 
             if not isinstance(q, float):
-                raise ValueError(
+                raise TypeError(
                     "q must be a float or an array of floats; however, [%s] found." % type(q)
                 )
             if q < 0.0 or q > 1.0:
@@ -3639,7 +3639,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _diff(self, periods, *, part_cols=()):
         if not isinstance(periods, int):
-            raise ValueError("periods should be an int; however, got [%s]" % type(periods).__name__)
+            raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
         window = (
             Window.partitionBy(*part_cols)
             .orderBy(NATURAL_ORDER_COLUMN_NAME)
@@ -3984,7 +3984,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: float64
         """
         if not is_name_like_value(item):
-            raise ValueError("'key' should be string or tuple that contains strings")
+            raise TypeError("'key' should be string or tuple that contains strings")
         if not is_name_like_tuple(item):
             item = (item,)
         if self._internal.index_level < len(item):
@@ -4328,7 +4328,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if to_replace is None:
             return self.fillna(method="ffill")
         if not isinstance(to_replace, (str, list, tuple, dict, int, float)):
-            raise ValueError("'to_replace' should be one of str, list, tuple, dict, int, float")
+            raise TypeError("'to_replace' should be one of str, list, tuple, dict, int, float")
         if regex:
             raise NotImplementedError("replace currently not support for regex")
         to_replace = list(to_replace) if isinstance(to_replace, tuple) else to_replace
@@ -4438,7 +4438,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> reset_option("compute.ops_on_diff_frames")
         """
         if not isinstance(other, Series):
-            raise ValueError("'other' must be a Series")
+            raise TypeError("'other' must be a Series")
 
         combined = combine_frames(self._kdf, other._kdf, how="leftouter")
 
@@ -4813,7 +4813,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: float64
         """
         if not isinstance(other, ps.Series):
-            raise ValueError("`combine_first` only allows `Series` for parameter `other`")
+            raise TypeError("`combine_first` only allows `Series` for parameter `other`")
         if same_anchor(self, other):
             this = self.spark.column
             that = other.spark.column
@@ -4977,7 +4977,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Series([], dtype: int64)
         """
         if not isinstance(repeats, (int, Series)):
-            raise ValueError(
+            raise TypeError(
                 "`repeats` argument must be integer or Series, but got {}".format(type(repeats))
             )
 

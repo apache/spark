@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.lang.reflect.Method
 import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -29,7 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
-import org.apache.spark.sql.catalyst.expressions.{FrameLessOffsetWindowFunction, _}
+import org.apache.spark.sql.catalyst.expressions.{Expression, FrameLessOffsetWindowFunction, _}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -44,6 +45,8 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -281,7 +284,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables ::
-      ResolveHigherOrderFunctions(v1SessionCatalog) ::
+      ResolveHigherOrderFunctions(catalogManager) ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::
       ResolveRandomSeed ::
@@ -895,9 +898,10 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
-  // If we are resolving relations insides views, we need to expand single-part relation names with
-  // the current catalog and namespace of when the view was created.
-  private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
+  // If we are resolving database objects (relations, functions, etc.) insides views, we may need to
+  // expand single or multi-part identifiers with the current catalog and namespace of when the
+  // view was created.
+  private def expandIdentifier(nameParts: Seq[String]): Seq[String] = {
     if (!isResolvingView || isReferredTempViewName(nameParts)) return nameParts
 
     if (nameParts.length == 1) {
@@ -1040,7 +1044,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         identifier: Seq[String],
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean): Option[LogicalPlan] =
-      expandRelationName(identifier) match {
+      expandIdentifier(identifier) match {
         case NonSessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident) match {
             case Some(table) =>
@@ -1153,7 +1157,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
-      expandRelationName(identifier) match {
+      expandIdentifier(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
           CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
@@ -1173,7 +1177,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         identifier: Seq[String],
         options: CaseInsensitiveStringMap,
         isStreaming: Boolean): Option[LogicalPlan] = {
-      expandRelationName(identifier) match {
+      expandIdentifier(identifier) match {
         case SessionCatalogAndIdentifier(catalog, ident) =>
           lazy val loaded = CatalogV2Util.loadTable(catalog, ident).map {
             case v1Table: V1Table =>
@@ -1569,8 +1573,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           // results and confuse users if there is any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
           if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              f1.name.database.isEmpty &&
-              f1.name.funcName == "count" &&
+              f1.nameParts == Seq("count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
               case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
@@ -1958,17 +1961,19 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
       plan.resolveExpressions {
-        case f: UnresolvedFunction
-          if externalFunctionNameSet.contains(normalizeFuncName(f.name)) => f
-        case f: UnresolvedFunction if v1SessionCatalog.isRegisteredFunction(f.name) => f
-        case f: UnresolvedFunction if v1SessionCatalog.isPersistentFunction(f.name) =>
-          externalFunctionNameSet.add(normalizeFuncName(f.name))
-          f
-        case f: UnresolvedFunction =>
-          withPosition(f) {
-            throw new NoSuchFunctionException(
-              f.name.database.getOrElse(v1SessionCatalog.getCurrentDatabase),
-              f.name.funcName)
+        case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _) =>
+          if (externalFunctionNameSet.contains(normalizeFuncName(ident)) ||
+            v1SessionCatalog.isRegisteredFunction(ident)) {
+            f
+          } else if (v1SessionCatalog.isPersistentFunction(ident)) {
+            externalFunctionNameSet.add(normalizeFuncName(ident))
+            f
+          } else {
+            withPosition(f) {
+              throw new NoSuchFunctionException(
+                ident.database.getOrElse(v1SessionCatalog.getCurrentDatabase),
+                ident.funcName)
+            }
           }
       }
     }
@@ -2016,9 +2021,10 @@ class Analyzer(override val catalogManager: CatalogManager)
                   name, other.getClass.getCanonicalName)
               }
             }
-          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter, ignoreNulls) =>
-            withPosition(u) {
-              v1SessionCatalog.lookupFunction(funcId, arguments) match {
+
+          case u @ UnresolvedFunction(AsFunctionIdentifier(ident), arguments, isDistinct, filter,
+            ignoreNulls) => withPosition(u) {
+              v1SessionCatalog.lookupFunction(ident, arguments) match {
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
@@ -2095,8 +2101,122 @@ class Analyzer(override val catalogManager: CatalogManager)
                 case other =>
                   other
               }
+          }
+
+          case u @ UnresolvedFunction(nameParts, arguments, isDistinct, filter, ignoreNulls) =>
+            withPosition(u) {
+              expandIdentifier(nameParts) match {
+                case NonSessionCatalogAndIdentifier(catalog, ident) =>
+                  if (!catalog.isFunctionCatalog) {
+                    throw new AnalysisException(s"Trying to lookup function '$ident' in " +
+                      s"catalog '${catalog.name()}', but it is not a FunctionCatalog.")
+                  }
+
+                  val unbound = catalog.asFunctionCatalog.loadFunction(ident)
+                  val inputType = StructType(arguments.zipWithIndex.map {
+                    case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+                  })
+                  val bound = try {
+                    unbound.bind(inputType)
+                  } catch {
+                    case unsupported: UnsupportedOperationException =>
+                      throw new AnalysisException(s"Function '${unbound.name}' cannot process " +
+                        s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
+                        unsupported.getMessage, cause = Some(unsupported))
+                  }
+
+                  bound match {
+                    case scalarFunc: ScalarFunction[_] =>
+                      processV2ScalarFunction(scalarFunc, inputType, arguments, isDistinct,
+                        filter, ignoreNulls)
+                    case aggFunc: V2AggregateFunction[_, _] =>
+                      processV2AggregateFunction(aggFunc, arguments, isDistinct, filter,
+                        ignoreNulls)
+                    case _ =>
+                      failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction" +
+                        s" or AggregateFunction")
+                  }
+
+                case _ => u
+              }
             }
         }
+    }
+
+    private def processV2ScalarFunction(
+        scalarFunc: ScalarFunction[_],
+        inputType: StructType,
+        arguments: Seq[Expression],
+        isDistinct: Boolean,
+        filter: Option[Expression],
+        ignoreNulls: Boolean): Expression = {
+      if (isDistinct) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          scalarFunc.name(), "DISTINCT")
+      } else if (filter.isDefined) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          scalarFunc.name(), "FILTER clause")
+      } else if (ignoreNulls) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          scalarFunc.name(), "IGNORE NULLS")
+      } else {
+        // TODO: implement type coercion by looking at input type from the UDF. We
+        //  may also want to check if the parameter types from the magic method
+        //  match the input type through `BoundFunction.inputTypes`.
+        val argClasses = inputType.fields.map(_.dataType)
+        findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
+          case Some(_) =>
+            val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
+            Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
+              arguments, returnNullable = scalarFunc.isResultNullable)
+          case _ =>
+            // TODO: handle functions defined in Scala too - in Scala, even if a
+            //  subclass do not override the default method in parent interface
+            //  defined in Java, the method can still be found from
+            //  `getDeclaredMethod`.
+            // since `inputType` is a `StructType`, it is mapped to a `InternalRow`
+            // which we can use to lookup the `produceResult` method.
+            findMethod(scalarFunc, "produceResult", Seq(inputType)) match {
+              case Some(_) =>
+                ApplyFunctionExpression(scalarFunc, arguments)
+              case None =>
+                failAnalysis(s"ScalarFunction '${scalarFunc.name()}' neither implement" +
+                  s" magic method nor override 'produceResult'")
+            }
+        }
+      }
+    }
+
+    private def processV2AggregateFunction(
+        aggFunc: V2AggregateFunction[_, _],
+        arguments: Seq[Expression],
+        isDistinct: Boolean,
+        filter: Option[Expression],
+        ignoreNulls: Boolean): Expression = {
+      if (ignoreNulls) {
+        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+          aggFunc.name(), "IGNORE NULLS")
+      }
+      val aggregator = V2Aggregator(aggFunc, arguments)
+      AggregateExpression(aggregator, Complete, isDistinct, filter)
+    }
+
+    /**
+     * Check if the input `fn` implements the given `methodName` with parameter types specified
+     * via `inputType`.
+     */
+    private def findMethod(
+        fn: BoundFunction,
+        methodName: String,
+        inputType: Seq[DataType]): Option[Method] = {
+      val cls = fn.getClass
+      try {
+        val argClasses = inputType.map(ScalaReflection.dataTypeJavaClass)
+        Some(cls.getDeclaredMethod(methodName, argClasses: _*))
+      } catch {
+        case _: NoSuchMethodException =>
+          None
+      }
     }
   }
 
