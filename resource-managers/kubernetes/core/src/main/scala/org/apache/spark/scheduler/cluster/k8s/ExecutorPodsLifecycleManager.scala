@@ -224,7 +224,7 @@ private[spark] class ExecutorPodsLifecycleManager(
       case 1 => "(generic, look at logs to clarify)"
       case 42 => "(douglas adams)"
       // Spark specific
-      case 10 => "(Uncaught exception)"
+      case 10 | 50 => "(Uncaught exception)"
       case 50 => "(Uncaught exception)"
       case 52 => "(JVM OOM)"
       case 53 => "(DiskStore failed to create temp dir)"
