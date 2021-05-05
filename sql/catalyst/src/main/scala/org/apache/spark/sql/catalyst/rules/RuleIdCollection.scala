@@ -49,6 +49,7 @@ object RuleIdCollection {
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
+      "org.apache.spark.sql.catalyst.optimizer.CollapseRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.ColumnPruning" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
@@ -58,9 +59,9 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.DecimalAggregates" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateAggregateFilter" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateLimits" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
-      "org.apache.spark.sql.catalyst.optimizer.EliminateSorts" ::
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDown" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDownThroughWindow" ::
@@ -71,6 +72,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.OptimizeRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeWindowFunctions" ::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
+      "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushFoldableIntoBranches" ::
@@ -78,7 +80,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.RemoveDispensableExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveLiteralFromGroupExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators" ::
-      "org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAggregates" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRepetitionFromGroupExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderAssociativeOperator" ::

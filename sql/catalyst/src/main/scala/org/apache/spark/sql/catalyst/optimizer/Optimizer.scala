@@ -379,7 +379,7 @@ object EliminateDistinct extends Rule[LogicalPlan] {
  */
 object EliminateAggregateFilter extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsWithPruning(
-    _.containsAllPatterns(TRUE_OR_FALSE_LITERAL))  {
+    _.containsAllPatterns(TRUE_OR_FALSE_LITERAL), ruleId)  {
     case ae @ AggregateExpression(_, _, _, Some(Literal.TrueLiteral), _) =>
       ae.copy(filter = None)
     case AggregateExpression(af: DeclarativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>
@@ -605,7 +605,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAllPatterns(DISTINCT_LIKE, UNION), ruleId) {
+    _.containsAllPatterns(DISTINCT_LIKE, UNION)) {
     case d @ Distinct(u: Union) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
     case d @ Deduplicate(_, u: Union) =>
@@ -933,7 +933,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(REPARTITION_OPERATION)) {
+    _.containsPattern(REPARTITION_OPERATION), ruleId) {
     // Case 1: When a Repartition has a child of Repartition or RepartitionByExpression,
     // 1) When the top node does not enable the shuffle (i.e., coalesce API), but the child
     //   enables the shuffle. Returns the child node if the last numPartitions is bigger;
@@ -1223,7 +1223,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(SORT), ruleId)(applyLocally)
+    _.containsPattern(SORT))(applyLocally)
 
   private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
@@ -1291,7 +1291,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(FILTER)) {
+    _.containsPattern(FILTER), ruleId) {
     // If the filter condition always evaluate to true, remove the filter.
     case Filter(Literal(true, BooleanType), child) => child
     // If the filter condition always evaluate to null or false,
