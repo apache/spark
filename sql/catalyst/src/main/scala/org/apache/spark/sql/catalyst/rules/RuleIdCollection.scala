@@ -57,28 +57,45 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ConstantFolding" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
+      "org.apache.spark.sql.catalyst.optimizer.DecimalAggregates" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateLimits" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateSorts" ::
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
+      "org.apache.spark.sql.catalyst.optimizer.LimitPushDown" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDownThroughWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.NullPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeCsvJsonExprs" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeIn" ::
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
+      "org.apache.spark.sql.catalyst.optimizer.OptimizeRepartition" ::
+      "org.apache.spark.sql.catalyst.optimizer.OptimizeWindowFunctions" ::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushFoldableIntoBranches" ::
       "org.apache.spark.sql.catalyst.optimizer.PushLeftSemiLeftAntiThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveDispensableExpressions" ::
+      "org.apache.spark.sql.catalyst.optimizer.RemoveLiteralFromGroupExpressions" ::
+      "org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators" ::
+      "org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion" ::
+      "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAggregates" ::
+      "org.apache.spark.sql.catalyst.optimizer.RemoveRepetitionFromGroupExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderAssociativeOperator" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.ReplaceExceptWithAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceExceptWithFilter" ::
+      "org.apache.spark.sql.catalyst.optimizer.ReplaceDistinctWithAggregate" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceNullWithFalseInPredicate" ::
+      "org.apache.spark.sql.catalyst.optimizer.ReplaceIntersectWithSemiJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.RewriteExceptAll" ::
+      "org.apache.spark.sql.catalyst.optimizer.RewriteIntersectAll" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyBinaryComparison" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCasts" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionals" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionalsInPredicate" ::
+      "org.apache.spark.sql.catalyst.optimizer.TransposeWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
   }
 
