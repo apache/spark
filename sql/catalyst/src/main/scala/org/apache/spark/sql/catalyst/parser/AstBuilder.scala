@@ -206,7 +206,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: DdlStatementForQueryContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.showNamespacesAction() != null) {
       visitShowNamespaceAction(ctx.showNamespacesAction())
-    } else if (ctx.showNamespacesAction() != null) {
+    } else if (ctx.showTablesAction() != null) {
       visitShowTablesAction(ctx.showTablesAction())
     } else if (ctx.showTblPropertiesAction() != null) {
       visitShowTblPropertiesAction(ctx.showTblPropertiesAction())

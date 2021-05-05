@@ -62,4 +62,4 @@ DROP TABLE test_show_partitions;
 DROP TABLE test_show_table_properties;
 DROP TABLE test_show_tables;
 USE default;
-DROP NAMESPACE table_valued_command;
+DROP NAMESPACE query_ddl_namespace;
