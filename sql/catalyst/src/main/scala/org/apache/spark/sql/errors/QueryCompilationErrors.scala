@@ -1371,7 +1371,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Cannot use catalog ${plugin.name}: $msg")
   }
 
-  def invalidIdentifierAsItHasMoreThanTwoNamePartsError(
+  def identifierHavingMoreThanTwoNamePartsError(
       quoted: String, identifier: String): Throwable = {
     new AnalysisException(s"$quoted is not a valid $identifier as it has more than 2 name parts.")
   }
@@ -1384,7 +1384,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Cannot create tables with ${NullType.simpleString} type.")
   }
 
-  def functionUnsupportedInV1CatalogError(): Throwable = {
+  def functionUnsupportedInV2CatalogError(): Throwable = {
     new AnalysisException("function is only supported in v1 catalog")
   }
 }

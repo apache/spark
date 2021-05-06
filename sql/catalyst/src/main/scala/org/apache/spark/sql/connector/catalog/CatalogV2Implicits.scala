@@ -124,7 +124,7 @@ private[sql] object CatalogV2Implicits {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
       case _ =>
-        throw QueryCompilationErrors.invalidIdentifierAsItHasMoreThanTwoNamePartsError(
+        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "TableIdentifier")
     }
 
@@ -132,7 +132,7 @@ private[sql] object CatalogV2Implicits {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
       case _ =>
-        throw QueryCompilationErrors.invalidIdentifierAsItHasMoreThanTwoNamePartsError(
+        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "FunctionIdentifier")
     }
   }
@@ -148,7 +148,7 @@ private[sql] object CatalogV2Implicits {
       case Seq(tblName) => TableIdentifier(tblName)
       case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
       case _ =>
-        throw QueryCompilationErrors.invalidIdentifierAsItHasMoreThanTwoNamePartsError(
+        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "TableIdentifier")
     }
 
@@ -156,7 +156,7 @@ private[sql] object CatalogV2Implicits {
       case Seq(funcName) => FunctionIdentifier(funcName)
       case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
       case _ =>
-        throw QueryCompilationErrors.invalidIdentifierAsItHasMoreThanTwoNamePartsError(
+        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
           quoted, "FunctionIdentifier")
     }
 

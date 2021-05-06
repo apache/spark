@@ -196,7 +196,7 @@ private[sql] trait LookupCatalog extends Logging {
           }
         }
 
-      case _ => throw QueryCompilationErrors.functionUnsupportedInV1CatalogError()
+      case _ => throw QueryCompilationErrors.functionUnsupportedInV2CatalogError()
     }
   }
 }
