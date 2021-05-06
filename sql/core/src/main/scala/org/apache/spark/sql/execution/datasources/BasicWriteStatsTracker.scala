@@ -151,7 +151,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
     }
   }
 
-  override def newRow(row: InternalRow): Unit = {
+  override def newRow(filePath: String, row: InternalRow): Unit = {
     numRows += 1
   }
 
