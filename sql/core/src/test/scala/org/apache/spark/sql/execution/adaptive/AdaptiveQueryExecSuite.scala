@@ -1641,4 +1641,41 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-35282: Support AQE side shuffled hash join formula") {
+    withTempView("t1", "t2") {
+      def checkJoinStrategy(shouldShuffledHashJoin: Boolean): Unit = {
+        val (origin, adaptive) = runAdaptiveAndVerifyResult(
+          "SELECT t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
+        assert(findTopLevelSortMergeJoin(origin).size == 1)
+        if (shouldShuffledHashJoin) {
+          assert(findTopLevelShuffledHashJoin(adaptive).size == 1)
+        } else {
+          assert(findTopLevelSortMergeJoin(adaptive).size == 1)
+        }
+      }
+
+      withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+
+        // t1 shuffle partition size [926, 729, 731]
+        // t2 shuffle partition size [318, 120, 0]
+        spark.sparkContext.parallelize(
+          (1 to 100).map(i => TestData(i, i.toString)), 10)
+          .toDF("c1", "c2").createOrReplaceTempView("t1")
+        spark.sparkContext.parallelize(
+          (1 to 10).map(i => TestData(i, i.toString)), 5)
+          .toDF("c1", "c2").createOrReplaceTempView("t2")
+
+        withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "318") {
+          checkJoinStrategy(true)
+        }
+        withSQLConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "317") {
+          checkJoinStrategy(false)
+        }
+      }
+    }
+  }
 }

@@ -44,7 +44,13 @@ case class LogicalQueryStage(
     // TODO this is not accurate when there is other physical nodes above QueryStageExec.
     val physicalStats = physicalPlan.collectFirst {
       case s: QueryStageExec => s
-    }.flatMap(_.computeStats())
+    }.flatMap {
+      case shuffle: ShuffleQueryStageExec =>
+        shuffle.computeStats().map(_.copy(mapOutputStatistics = shuffle.mapStats))
+      case broadcast: BroadcastQueryStageExec =>
+        broadcast.computeStats()
+      case _ => None
+    }
     if (physicalStats.isDefined) {
       logDebug(s"Physical stats available as ${physicalStats.get} for plan: $physicalPlan")
     } else {

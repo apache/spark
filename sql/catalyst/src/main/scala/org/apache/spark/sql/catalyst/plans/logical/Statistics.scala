@@ -22,6 +22,7 @@ import java.math.{MathContext, RoundingMode}
 
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
 
+import org.apache.spark.MapOutputStatistics
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -49,12 +50,15 @@ object Statistics {
  * @param attributeStats Statistics for Attributes.
  * @param isRuntime Whether the statistics is inferred from query stage runtime statistics during
  *                  adaptive query execution.
+ * @param mapOutputStatistics the map output statistics from query stage runtime statistics during
+ *                            adaptive query execution.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
     attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
-    isRuntime: Boolean = false) {
+    isRuntime: Boolean = false,
+    mapOutputStatistics: Option[MapOutputStatistics] = None) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
 

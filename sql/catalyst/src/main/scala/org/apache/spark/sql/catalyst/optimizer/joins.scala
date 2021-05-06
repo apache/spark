@@ -378,11 +378,17 @@ trait JoinSelectionHelper {
   /**
    * Matches a plan whose single partition should be small enough to build a hash table.
    *
-   * Note: this assume that the number of partition is fixed, requires additional work if it's
-   * dynamic.
+   * In AQE framework, we use runtime statistics to check if we can build local map. Only if
+   * all the partition size not large than `ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD`,
+   * we allow to build local hash map.
    */
   private def canBuildLocalHashMapBySize(plan: LogicalPlan, conf: SQLConf): Boolean = {
-    plan.stats.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
+    if (plan.stats.isRuntime && plan.stats.mapOutputStatistics.isDefined) {
+      val localMapThreshold = conf.getConf(SQLConf.ADAPTIVE_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
+      plan.stats.mapOutputStatistics.get.bytesByPartitionId.forall(_ <= localMapThreshold)
+    } else {
+      plan.stats.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
+    }
   }
 
   /**
