@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{GetStructField, MultiScalarSubquery, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -27,11 +28,10 @@ import org.apache.spark.sql.catalyst.rules._
 class MergeScalarSubqueriesSuite extends PlanTest {
 
   private object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches =
-      Batch("MergeScalarSubqueries", Once, MergeScalarSubqueries) :: Nil
+    val batches = Batch("MergeScalarSubqueries", Once, MergeScalarSubqueries) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int)
+  val testRelation = LocalRelation('a.int, 'b.int, 'c.string)
 
   test("Simple non-correlated scalar subquery merge") {
     val subquery1 = testRelation
@@ -65,6 +65,49 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     val correctAnswer = testRelation
       .select(GetStructField(MultiScalarSubquery(multiSubquery), 0).as("scalarsubquery()"),
         GetStructField(MultiScalarSubquery(multiSubquery), 1).as("scalarsubquery()"))
+
+    // checkAnalysis is disabled because `Analizer` is not prepared for `MultiScalarSubquery` nodes
+    // as only `Optimizer` can insert such a node to the plan
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer, false)
+  }
+
+  test("Do not merge different aggregate implementations") {
+    // supports HashAggregate
+    val subquery1 = testRelation
+      .groupBy('b)(max('a))
+    val subquery2 = testRelation
+      .groupBy('b)(min('a))
+
+    // supports ObjectHashAggregate
+    val subquery3 = testRelation
+      .groupBy('b)(CollectList('a).toAggregateExpression(isDistinct = false))
+    val subquery4 = testRelation
+      .groupBy('b)(CollectSet('a).toAggregateExpression(isDistinct = false))
+
+    // supports SortAggregate
+    val subquery5 = testRelation
+      .groupBy('b)(max('c))
+    val subquery6 = testRelation
+      .groupBy('b)(min('c))
+
+    val originalQuery = testRelation
+      .select(ScalarSubquery(subquery1), ScalarSubquery(subquery2), ScalarSubquery(subquery3),
+        ScalarSubquery(subquery4), ScalarSubquery(subquery5), ScalarSubquery(subquery6))
+
+    val hashAggregates = testRelation
+      .groupBy('b)(max('a), min('a)).analyze
+    val objectHashAggregates = testRelation
+      .groupBy('b)(CollectList('a).toAggregateExpression(isDistinct = false),
+        CollectSet('a).toAggregateExpression(isDistinct = false)).analyze
+    val sortAggregates = testRelation
+      .groupBy('b)(max('c), min('c)).analyze
+    val correctAnswer = testRelation
+      .select(GetStructField(MultiScalarSubquery(hashAggregates), 0).as("scalarsubquery()"),
+        GetStructField(MultiScalarSubquery(hashAggregates), 1).as("scalarsubquery()"),
+        GetStructField(MultiScalarSubquery(objectHashAggregates), 0).as("scalarsubquery()"),
+        GetStructField(MultiScalarSubquery(objectHashAggregates), 1).as("scalarsubquery()"),
+        GetStructField(MultiScalarSubquery(sortAggregates), 0).as("scalarsubquery()"),
+        GetStructField(MultiScalarSubquery(sortAggregates), 1).as("scalarsubquery()"))
 
     // checkAnalysis is disabled because `Analizer` is not prepared for `MultiScalarSubquery` nodes
     // as only `Optimizer` can insert such a node to the plan

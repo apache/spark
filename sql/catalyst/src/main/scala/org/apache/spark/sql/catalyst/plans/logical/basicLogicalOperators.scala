@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -826,6 +826,24 @@ case class Aggregate(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
+}
+
+object Aggregate {
+  def supportsAggregationBufferSchema(schema: StructType): Boolean = {
+    schema.forall(f => UnsafeRow.isMutable(f.dataType))
+  }
+
+  def supportsHashAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
+    val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
+    supportsAggregationBufferSchema(aggregationBufferSchema)
+  }
+
+  def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
+    aggregateExpressions.map(_.aggregateFunction).exists {
+      case _: TypedImperativeAggregate[_] => true
+      case _ => false
+    }
+  }
 }
 
 case class Window(

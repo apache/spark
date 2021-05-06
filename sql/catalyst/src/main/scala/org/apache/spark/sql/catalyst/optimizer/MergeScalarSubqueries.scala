@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{MULTI_SCALAR_SUBQUERY, SCALAR_SUBQUERY}
@@ -134,7 +135,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
           val newOutputMap = createOutputMap(np.projectList, newProjectList)
           Project(distinctExpressions(ep.output ++ newProjectList), mergedChild) -> newOutputMap
         }
-      case (np: Aggregate, ep: Aggregate) =>
+      case (np: Aggregate, ep: Aggregate) if supportedAggregateMerge(np, ep) =>
         tryMergePlans(np.child, ep.child).flatMap { case (mergedChild, outputMap) =>
           val newGroupingExpression = replaceAttributes(np.groupingExpressions, outputMap)
           if (ExpressionSet(newGroupingExpression) == ExpressionSet(ep.groupingExpressions)) {
@@ -147,8 +148,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             None
           }
         }
-      case _ =>
-        None
+      case _ => None
     }
   }
 
@@ -166,6 +166,29 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   private def distinctExpressions(expressions: Seq[NamedExpression]) = {
     ExpressionSet(expressions).toSeq.asInstanceOf[Seq[NamedExpression]]
+  }
+
+  // Merging different aggregate implementations could cause performance regression
+  private def supportedAggregateMerge(newPlan: Aggregate, existingPlan: Aggregate) = {
+    val newPlanAggregateExpressions = newPlan.aggregateExpressions.flatMap(_.collect {
+      case a: AggregateExpression => a
+    })
+    val existingPlanAggregateExpressions = existingPlan.aggregateExpressions.flatMap(_.collect {
+      case a: AggregateExpression => a
+    })
+    val newPlanSupportsHashAggregate = Aggregate.supportsHashAggregate(
+      newPlanAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
+    val existingPlanSupportsHashAggregate = Aggregate.supportsHashAggregate(
+      existingPlanAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
+    newPlanSupportsHashAggregate && existingPlanSupportsHashAggregate ||
+      !newPlanSupportsHashAggregate && !existingPlanSupportsHashAggregate && {
+        val newPlanSupportsObjectHashAggregate =
+          Aggregate.supportsObjectHashAggregate(newPlanAggregateExpressions)
+        val existingPlanSupportsObjectHashAggregate =
+          Aggregate.supportsObjectHashAggregate(existingPlanAggregateExpressions)
+        newPlanSupportsObjectHashAggregate && existingPlanSupportsObjectHashAggregate ||
+          !newPlanSupportsObjectHashAggregate && !existingPlanSupportsObjectHashAggregate
+      }
   }
 
   private def removeReferences(
