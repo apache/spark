@@ -3,4 +3,4 @@
 -- !query schema
 struct<Excess Discount Amount :decimal(17,2)>
 -- !query output
-39529.71
+39037.04
