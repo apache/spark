@@ -218,7 +218,6 @@ javax.jdo:jdo-api
 joda-time:joda-time
 net.sf.opencsv:opencsv
 org.apache.derby:derby
-org.ehcache:ehcache
 org.objenesis:objenesis
 org.roaringbitmap:RoaringBitmap
 org.scalanlp:breeze-macros_2.12
@@ -261,7 +260,6 @@ net.sf.supercsv:super-csv
 org.apache.arrow:arrow-format
 org.apache.arrow:arrow-memory
 org.apache.arrow:arrow-vector
-org.apache.commons:commons-configuration2
 org.apache.commons:commons-crypto
 org.apache.commons:commons-lang3
 org.apache.hadoop:hadoop-annotations
@@ -296,7 +294,6 @@ org.apache.kerby:kerby-config
 org.apache.kerby:kerby-pkix
 org.apache.kerby:kerby-util
 org.apache.kerby:kerby-xdr
-org.apache.kerby:token-provider
 org.apache.orc:orc-core
 org.apache.orc:orc-mapreduce
 org.mortbay.jetty:jetty
@@ -316,19 +313,15 @@ com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider
 com.fasterxml.jackson.module:jackson-module-jaxb-annotations
 com.fasterxml.jackson.module:jackson-module-paranamer
 com.fasterxml.jackson.module:jackson-module-scala_2.12
-com.fasterxml.woodstox:woodstox-core
 com.github.mifmif:generex
-com.github.stephenc.jcip:jcip-annotations
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
 com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
 com.google.inject:guice
 com.google.inject.extensions:guice-servlet
-com.nimbusds:nimbus-jose-jwt
 com.twitter:parquet-hadoop-bundle
 commons-cli:commons-cli
-commons-daemon:commons-daemon
 commons-dbcp:commons-dbcp
 commons-io:commons-io
 commons-lang:commons-lang
@@ -340,8 +333,6 @@ javax.inject:javax.inject
 javax.validation:validation-api
 log4j:apache-log4j-extras
 log4j:log4j
-net.minidev:accessors-smart
-net.minidev:json-smart
 net.sf.jpam:jpam
 org.apache.avro:avro
 org.apache.avro:avro-ipc
@@ -357,7 +348,6 @@ org.apache.directory.server:apacheds-i18n
 org.apache.directory.server:apacheds-kerberos-codec
 org.apache.htrace:htrace-core
 org.apache.ivy:ivy
-org.apache.geronimo.specs:geronimo-jcache_1.0_spec
 org.apache.mesos:mesos
 org.apache.parquet:parquet-column
 org.apache.parquet:parquet-common
@@ -432,7 +422,6 @@ BSD 2-Clause
 ------------
 
 com.github.luben:zstd-jni
-dnsjava:dnsjava
 javolution:javolution
 com.esotericsoftware:kryo-shaded
 com.esotericsoftware:minlog
@@ -440,7 +429,6 @@ com.esotericsoftware:reflectasm
 com.google.protobuf:protobuf-java
 org.codehaus.janino:commons-compiler
 org.codehaus.janino:janino
-org.codehaus.woodstox:stax2-api
 jline:jline
 org.jodd:jodd-core
 com.github.wendykierp:JTransforms
@@ -457,7 +445,6 @@ org.antlr:stringtemplate
 org.antlr:antlr4-runtime
 antlr:antlr
 com.github.fommil.netlib:core
-com.google.re2j:re2j
 com.thoughtworks.paranamer:paranamer
 org.scala-lang:scala-compiler
 org.scala-lang:scala-library

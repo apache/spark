@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Comparator
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
 
@@ -52,6 +52,16 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def toString: String = s"lambda '$name"
 
   override def sql: String = name
+}
+
+object UnresolvedNamedLambdaVariable {
+
+  // Counter to ensure lambda variable names are unique
+  private val nextVarNameId = new AtomicInteger(0)
+
+  def freshVarName(name: String): String = {
+    s"${name}_${nextVarNameId.getAndIncrement()}"
+  }
 }
 
 /**

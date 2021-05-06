@@ -1606,4 +1606,39 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-35264: Support AQE side broadcastJoin threshold") {
+    withTempView("t1", "t2") {
+      def checkJoinStrategy(shouldBroadcast: Boolean): Unit = {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val (origin, adaptive) = runAdaptiveAndVerifyResult(
+            "SELECT t1.c1, t2.c1 FROM t1 JOIN t2 ON t1.c1 = t2.c1")
+          assert(findTopLevelSortMergeJoin(origin).size == 1)
+          if (shouldBroadcast) {
+            assert(findTopLevelBroadcastHashJoin(adaptive).size == 1)
+          } else {
+            assert(findTopLevelSortMergeJoin(adaptive).size == 1)
+          }
+        }
+      }
+
+      // t1: 1600 bytes
+      // t2: 160 bytes
+      spark.sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString)), 10)
+        .toDF("c1", "c2").createOrReplaceTempView("t1")
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 5)
+        .toDF("c1", "c2").createOrReplaceTempView("t2")
+
+      checkJoinStrategy(false)
+      withSQLConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        checkJoinStrategy(false)
+      }
+
+      withSQLConf(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "160") {
+        checkJoinStrategy(true)
+      }
+    }
+  }
 }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
-import org.apache.spark.sql.catalyst.trees.TreePattern.ATTRIBUTE_REFERENCE
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -417,6 +417,7 @@ case class OuterReference(e: NamedExpression)
   override def exprId: ExprId = e.exprId
   override def toAttribute: Attribute = e.toAttribute
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
+  final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE)
 }
 
 object VirtualColumn {

@@ -1109,9 +1109,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Assert list-like values are not accepted for 'lower' and 'upper'
         msg = "List-like value are not supported for 'lower' and 'upper' at the moment"
-        with self.assertRaises(ValueError, msg=msg):
+        with self.assertRaises(TypeError, msg=msg):
             kser.clip(lower=[1])
-        with self.assertRaises(ValueError, msg=msg):
+        with self.assertRaises(TypeError, msg=msg):
             kser.clip(upper=[1])
 
         # Assert no lower or upper
@@ -1324,7 +1324,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.cumprod(skipna=False).astype(int), kser.cumprod(skipna=False))
 
     def test_median(self):
-        with self.assertRaisesRegex(ValueError, "accuracy must be an integer; however"):
+        with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).median(accuracy="a")
 
     def test_rank(self):
@@ -1347,7 +1347,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         kser = ps.from_pandas(pser)
         self.assert_eq(pser.round(2), kser.round(2))
         msg = "decimals must be an integer"
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(TypeError, msg):
             kser.round(1.5)
 
     def test_quantile(self):
@@ -1357,11 +1357,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(kser.quantile(0.5), pser.quantile(0.5))
         self.assert_eq(kser.quantile([0.25, 0.5, 0.75]), pser.quantile([0.25, 0.5, 0.75]))
 
-        with self.assertRaisesRegex(ValueError, "accuracy must be an integer; however"):
+        with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(accuracy="a")
-        with self.assertRaisesRegex(ValueError, "q must be a float or an array of floats;"):
+        with self.assertRaisesRegex(TypeError, "q must be a float or an array of floats;"):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q="a")
-        with self.assertRaisesRegex(ValueError, "q must be a float or an array of floats;"):
+        with self.assertRaisesRegex(TypeError, "q must be a float or an array of floats;"):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q=["a"])
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
@@ -1433,7 +1433,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(kser.shift(periods=2), pser.shift(periods=2))
         else:
             self.assert_eq(kser.shift(periods=2, fill_value=0), pser.shift(periods=2, fill_value=0))
-        with self.assertRaisesRegex(ValueError, "periods should be an int; however"):
+        with self.assertRaisesRegex(TypeError, "periods should be an int; however"):
             kser.shift(periods=1.5)
 
     def test_diff(self):
@@ -1602,7 +1602,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = pd.Series([10, 20, 15, 30, 45], name="x")
         kser = ps.Series(pser)
         msg = "func must be a string or list of strings"
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(TypeError, msg):
             kser.aggregate({"x": ["min", "max"]})
         msg = (
             "If the given function is a list, it " "should only contains function names as strings."
@@ -1692,7 +1692,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(kser.replace((10, 15), (45, 50)), pser.replace((10, 15), (45, 50)))
 
         msg = "'to_replace' should be one of str, list, tuple, dict, int, float"
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(TypeError, msg):
             kser.replace(ps.range(5))
         msg = "Replacement lists must match in length. Expecting 3 got 2"
         with self.assertRaisesRegex(ValueError, msg):
@@ -1734,7 +1734,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         kser = ps.Series(pser)
 
         msg = "'other' must be a Series"
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(TypeError, msg):
             kser.update(10)
 
     def test_where(self):
@@ -1883,7 +1883,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(kser.repeat(0).sort_index(), pser.repeat(0).sort_index())
 
         self.assertRaises(ValueError, lambda: kser.repeat(-1))
-        self.assertRaises(ValueError, lambda: kser.repeat("abc"))
+        self.assertRaises(TypeError, lambda: kser.repeat("abc"))
 
         pdf = pd.DataFrame({"a": ["a", "b", "c"], "rep": [10, 20, 30]}, index=np.random.rand(3))
         kdf = ps.from_pandas(pdf)
@@ -1904,10 +1904,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         # Checking the type of indices.
-        self.assertRaises(ValueError, lambda: kser.take(1))
-        self.assertRaises(ValueError, lambda: kser.take("1"))
-        self.assertRaises(ValueError, lambda: kser.take({1, 2}))
-        self.assertRaises(ValueError, lambda: kser.take({1: None, 2: None}))
+        self.assertRaises(TypeError, lambda: kser.take(1))
+        self.assertRaises(TypeError, lambda: kser.take("1"))
+        self.assertRaises(TypeError, lambda: kser.take({1, 2}))
+        self.assertRaises(TypeError, lambda: kser.take({1: None, 2: None}))
 
     def test_divmod(self):
         pser = pd.Series([100, None, 300, None, 500], name="Koalas")
