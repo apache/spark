@@ -1493,7 +1493,7 @@ abstract class DynamicPartitionPruningSuiteBase
       //          +- HashAggregate
       //             +- Filter
       //                +- FileScan
-      //                   +- SubqueryBroadcast
+      //                      Dynamicpruning Subquery
       //                      +- AdaptiveSparkPlan
       //                         +- BroadcastQueryStage
       //                            +- BroadcastExchange
