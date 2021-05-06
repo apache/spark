@@ -273,7 +273,9 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       clientLoader.cachedHive.asInstanceOf[Hive]
     } else {
-      val c = Hive.get(conf)
+      // don't register all Hive permanent functions in Hive's FunctionRegistry since Spark loads
+      // them through direct HMS API calls
+      val c = Hive.getWithFastCheck(conf, false)
       clientLoader.cachedHive = c
       c
     }
