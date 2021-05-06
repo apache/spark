@@ -95,7 +95,7 @@ class ContinuousDataSourceRDD(
       private var numRow = 0L
 
       override def getNext(): InternalRow = {
-        if (numRow % CustomMetrics.numRowsPerUpdate == 0) {
+        if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
           CustomMetrics.updateMetrics(partitionReader.currentMetricsValues, customMetrics)
         }
         numRow += 1

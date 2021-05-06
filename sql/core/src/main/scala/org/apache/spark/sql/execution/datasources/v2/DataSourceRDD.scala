@@ -99,7 +99,7 @@ private class PartitionIterator[T](
     if (!hasNext) {
       throw QueryExecutionErrors.endOfStreamError()
     }
-    if (numRow % CustomMetrics.numRowsPerUpdate == 0) {
+    if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
       CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
     }
     numRow += 1
