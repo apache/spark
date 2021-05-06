@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{CombineUnions, OptimizeUpdateFields}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -249,7 +250,8 @@ object ResolveUnion extends Rule[LogicalPlan] {
       caseSensitiveAnalysis)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    AlwaysProcess.fn, ruleId) {
     case e if !e.childrenResolved => e
 
     case Union(children, byName, allowMissingCol) if byName =>
