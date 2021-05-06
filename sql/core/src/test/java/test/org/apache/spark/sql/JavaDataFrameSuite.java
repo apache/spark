@@ -322,15 +322,13 @@ public class JavaDataFrameSuite {
   @Test
   public void testwithColumns() {
     Dataset<Row> df = spark.table("testData2");
-    List<String> colNames = new ArrayList<>(Arrays.asList("a1", "b1"));
-    List<Column> cols = new ArrayList<>(Arrays.asList(col("a"), col("b")));
+    Map<String, Column> colMaps = new HashMap<>();
+    colMaps.put("a1", col("a"));
+    colMaps.put("b1", col("b"));
 
     StructType expected = df.withColumn("a1", col("a")).withColumn("b1", col("b")).schema();
-    StructType actual = df.withColumns(
-            JavaConverters.collectionAsScalaIterableConverter(colNames).asScala().toSeq(),
-            JavaConverters.collectionAsScalaIterableConverter(cols).asScala().toSeq()
-    ).schema();
-    // Validate same result with withColumn loop call
+    StructType actual = df.withColumns(colMaps).schema();
+    // Validate geting same result with withColumn loop call
     Assert.assertEquals(expected, actual);
     // Validate the col names
     Assert.assertArrayEquals(actual.fieldNames(), new String[] {"a", "b", "a1", "b1"});

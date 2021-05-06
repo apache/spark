@@ -2479,16 +2479,40 @@ class Dataset[T] private[sql](
   def withColumn(colName: String, col: Column): DataFrame = withColumns(Seq(colName), Seq(col))
 
   /**
-   * Returns a new Dataset by adding columns or replacing the existing columns that has
-   * the same names.
+   * (Scala-specific) Returns a new Dataset by adding columns or replacing the existing columns
+   * that has the same names.
    *
-   * `column`'s expression in `cols` must only refer to attributes supplied by this Dataset.
-   * It is an error to add columns that refers to some other Dataset.
+   * `colsMap` is a map of column name and column, the column must only refer to attributes
+   * supplied by this Dataset. It is an error to add columns that refers to some other Dataset.
    *
    * @group untypedrel
    * @since 3.2.0
    */
-  def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
+  def withColumns(colsMap: Map[String, Column]): DataFrame = {
+    val colNames = colsMap.flatMap{ case (colName, _) => Seq(colName) }.toSeq
+    val newCols = colsMap.flatMap{ case (_, col) => Seq(col) }.toSeq
+    withColumns(colNames, newCols)
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset by adding columns or replacing the existing columns
+   * that has the same names.
+   *
+   * `colsMap` is a map of column name and column, the column must only refer to attribute
+   * supplied by this Dataset. It is an error to add columns that refers to some other Dataset.
+   *
+   * @group untypedrel
+   * @since 3.2.0
+   */
+  def withColumns(colsMap: java.util.Map[String, Column]): DataFrame = withColumns(
+    colsMap.asScala.toMap
+  )
+
+  /**
+   * Returns a new Dataset by adding columns or replacing the existing columns that has
+   * the same names.
+   */
+  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
