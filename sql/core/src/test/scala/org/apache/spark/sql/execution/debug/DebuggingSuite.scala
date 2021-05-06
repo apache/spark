@@ -42,16 +42,18 @@ abstract class DebuggingSuiteBase extends SharedSparkSession {
   }
 
   test("debugCodegen") {
-    val res = codegenString(spark.range(10).groupBy(col("id") * 2).count()
-      .queryExecution.executedPlan)
+    val df = spark.range(10).groupBy(col("id") * 2).count()
+    df.collect()
+    val res = codegenString(df.queryExecution.executedPlan)
     assert(res.contains("Subtree 1 / 2"))
     assert(res.contains("Subtree 2 / 2"))
     assert(res.contains("Object[]"))
   }
 
   test("debugCodegenStringSeq") {
-    val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
-      .queryExecution.executedPlan)
+    val df = spark.range(10).groupBy(col("id") * 2).count()
+    df.collect()
+    val res = codegenStringSeq(df.queryExecution.executedPlan)
     assert(res.length == 2)
     assert(res.forall{ case (subtree, code, _) =>
       subtree.contains("Range") && code.contains("Object[]")})

@@ -115,15 +115,7 @@ package object debug {
           codegenSubtrees += s
         case p: AdaptiveSparkPlanExec =>
           // Find subtrees from current executed plan of AQE.
-          val executedPlan = p.executedPlan
-          if (executedPlan.find(_.isInstanceOf[WholeStageCodegenExec]).isEmpty) {
-            // Apply preparation rules if whole stage code-gen rule is not applied yet.
-            val preparedPlan = QueryExecution.prepareForExecution(
-              QueryExecution.preparations(SparkSession.getActiveSession.get, None), executedPlan)
-            findSubtrees(preparedPlan)
-          } else {
-            findSubtrees(executedPlan)
-          }
+          findSubtrees(p.executedPlan)
         case s: QueryStageExec =>
           findSubtrees(s.plan)
         case s =>
