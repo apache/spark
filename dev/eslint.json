@@ -12,7 +12,8 @@
                 "SwitchCase": 1,
                 "MemberExpression": "off"
             }
-        ]
+        ],
+        "no-unused-vars": ["error", {"argsIgnorePattern": "^_ignored_.*"}]
     },
     "ignorePatterns": ["*.min.js"]
 }
