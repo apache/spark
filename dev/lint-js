@@ -41,7 +41,7 @@ fi
 cd $SCRIPT_DIR
 
 if ! npm ls eslint > /dev/null; then
-  npm install eslint
+  npm ci eslint
 fi
 
 npx eslint -c "$SPARK_ROOT_DIR/dev/eslint.json" $LINT_TARGET_FILES | tee "$LINT_JS_REPORT_FILE_NAME"
