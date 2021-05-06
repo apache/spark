@@ -63,6 +63,7 @@ class RssShuffleWriter[K, V, C](
         bufferSize = bufferOptions.individualBufferSize,
         maxBufferSize = bufferOptions.individualBufferMax,
         spillSize = bufferOptions.bufferSpillThreshold,
+        numPartitions = numPartitions,
         createCombiner = createCombiner)
     } else {
       if (shuffleDependency.aggregator.isEmpty) {

@@ -31,9 +31,10 @@ class WriteBufferManagerTest {
   def singlePartition(): Unit = {
     var bufferSize = 2
     val spillSize = 100
+    val numPartitions = 10
     val record = (1, "123") // it is 7 bytes after serialization
     var bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize)
+      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
     Assert.assertEquals(bufferManager.filledBytes, 0)
 
     var spilledData = bufferManager.clear().toList
@@ -50,7 +51,7 @@ class WriteBufferManagerTest {
 
     bufferSize = 20
     bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize)
+      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
     spilledData = bufferManager.clear().toList
     Assert.assertEquals(spilledData.size, 0)
 
@@ -89,8 +90,9 @@ class WriteBufferManagerTest {
   def multiPartitions(): Unit = {
     val bufferSize = 20
     val spillSize = 30
+    val numPartitions = 10
     val bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize)
+      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
     var spilledData = bufferManager.clear().toList
     Assert.assertEquals(spilledData.size, 0)
 
@@ -129,8 +131,9 @@ class WriteBufferManagerTest {
   def totalSizeExceedSpillSize(): Unit = {
     val bufferSize = 1000000
     val spillSize = 20
+    val numPartitions = 10
     val bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize)
+      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
 
     val partition1 = 1
     val partition2 = 2
@@ -160,12 +163,13 @@ class WriteBufferManagerTest {
   def randomTest(): Unit = {
     val bufferSize = 10
     val spillSize = 20
+    val numPartitions = 10
     val partitions = List(1, 2, 3, 4, 5)
     val records = List((1, "123"), (1, 2), (1, "123456789"), ("123456789", "123456789"))
     val recordSet = records.toSet
 
     val bufferManager = new WriteBufferManager[Any, Any](
-      serializer, bufferSize, maxBufferSize, spillSize)
+      serializer, bufferSize, maxBufferSize, spillSize, numPartitions)
 
     val numRecords = 2000
     val random = new Random()
