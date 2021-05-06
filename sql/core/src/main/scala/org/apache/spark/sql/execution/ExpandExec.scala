@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -153,16 +152,15 @@ case class ExpandExec(
         // This column is the same across all output rows. Just generate code for it here.
         BindReferences.bindReference(firstExpr, attributeSeq).genCode(ctx)
       } else {
-        val isNull = ctx.addMutableState(
-          CodeGenerator.JAVA_BOOLEAN,
-          "resultIsNull",
-          v => s"$v = true;")
-        val value = ctx.addMutableState(
-          CodeGenerator.javaType(firstExpr.dataType),
-          "resultValue",
-          v => s"$v = ${CodeGenerator.defaultValue(firstExpr.dataType)};")
-
+        val isNull = ctx.freshName("isNull")
+        val value = ctx.freshName("value")
+        val code = code"""
+          |boolean $isNull = true;
+          |${CodeGenerator.javaType(firstExpr.dataType)} $value =
+          |  ${CodeGenerator.defaultValue(firstExpr.dataType)};
+         """.stripMargin
         ExprCode(
+          code,
           JavaCode.isNullVariable(isNull),
           JavaCode.variable(value, firstExpr.dataType))
       }
@@ -170,42 +168,22 @@ case class ExpandExec(
 
     // Part 2: switch/case statements
     val cases = projections.zipWithIndex.map { case (exprs, row) =>
-      val updateCode = mutable.ArrayBuffer[String]()
-      exprs.indices.foreach { col =>
+      var updateCode = ""
+      for (col <- exprs.indices) {
         if (!sameOutput(col)) {
-          val boundExpr = BindReferences.bindReference(exprs(col), attributeSeq)
-          val ev = boundExpr.genCode(ctx)
-          val inputVars = CodeGenerator.getLocalInputVariableValues(ctx, boundExpr)._1.toSeq
-          val argList = inputVars.map { v =>
-            s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
-          }
-          val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars)
-          if (CodeGenerator.isValidParamLength(paramLength)) {
-            val switchCaseFunc = ctx.freshName("switchCaseCode")
-            ctx.addNewFunction(switchCaseFunc,
-              s"""
-                 |private void $switchCaseFunc(${argList.mkString(", ")}) {
-                 |  ${ev.code}
-                 |  ${outputColumns(col).isNull} = ${ev.isNull};
-                 |  ${outputColumns(col).value} = ${ev.value};
-                 |}
-               """.stripMargin)
-
-            updateCode += s"$switchCaseFunc(${inputVars.map(_.variableName).mkString(", ")});"
-          } else {
-            updateCode +=
-              s"""
-                 |${ev.code}
-                 |${outputColumns(col).isNull} = ${ev.isNull};
-                 |${outputColumns(col).value} = ${ev.value};
-               """.stripMargin
-          }
+          val ev = BindReferences.bindReference(exprs(col), attributeSeq).genCode(ctx)
+          updateCode +=
+            s"""
+               |${ev.code}
+               |${outputColumns(col).isNull} = ${ev.isNull};
+               |${outputColumns(col).value} = ${ev.value};
+            """.stripMargin
         }
       }
 
       s"""
          |case $row:
-         |  ${updateCode.mkString("\n")}
+         |  ${updateCode.trim}
          |  break;
        """.stripMargin
     }
