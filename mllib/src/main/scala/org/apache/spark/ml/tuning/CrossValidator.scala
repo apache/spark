@@ -26,6 +26,7 @@ import scala.concurrent.duration.Duration
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -202,7 +203,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
           Thread.sleep(1000)
           val sparkContext = sparkSession.sparkContext
           sparkContext.cancelJobGroup(
-            sparkContext.getLocalProperty(sparkContext.SPARK_JOB_GROUP_ID)
+            sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
           )
         }
         // Unpersist training & validation set once all metrics have been produced
