@@ -73,7 +73,16 @@ private[spark] trait SchedulerBackend {
    * Executors tab for the driver.
    * @return Map containing the log names and their respective URLs
    */
-  def getDriverLogUrls: Option[Map[String, String]] = None
+  def getDriverLogUrls: Option[Map[String, String]] = {
+    val prefix = "SPARK_LOG_URL_"
+    val logUrls = sys.env.filterKeys(_.startsWith(prefix))
+      .map(e => (e._1.substring(prefix.length).toLowerCase(), e._2))
+    if (logUrls.isEmpty) {
+      None
+    } else {
+      Some(logUrls)
+    }
+  }
 
   /**
    * Get the attributes on driver. These attributes are used to replace log URLs when
