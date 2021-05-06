@@ -23,6 +23,7 @@ import java.util.Optional
 import scala.collection.JavaConverters._
 
 import org.apache.kafka.common.TopicPartition
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
