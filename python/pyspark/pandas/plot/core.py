@@ -40,7 +40,7 @@ class TopNPlotBase:
         if isinstance(data, (Series, DataFrame)):
             data = data.head(max_rows + 1).to_pandas()
         else:
-            raise ValueError("Only DataFrame and Series are supported for plotting.")
+            raise TypeError("Only DataFrame and Series are supported for plotting.")
 
         self.partial = False
         if len(data) > max_rows:
@@ -80,7 +80,7 @@ class SampledPlotBase:
             sampled = data._internal.resolved_copy.spark_frame.sample(fraction=self.fraction)
             return DataFrame(data._internal.with_new_sdf(sampled)).to_pandas()
         else:
-            raise ValueError("Only DataFrame and Series are supported for plotting.")
+            raise TypeError("Only DataFrame and Series are supported for plotting.")
 
     def set_result_text(self, ax):
         assert hasattr(self, "fraction")

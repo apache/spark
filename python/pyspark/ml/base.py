@@ -160,8 +160,8 @@ class Estimator(Params, metaclass=ABCMeta):
             else:
                 return self._fit(dataset)
         else:
-            raise ValueError("Params must be either a param map or a list/tuple of param maps, "
-                             "but got %s." % type(params))
+            raise TypeError("Params must be either a param map or a list/tuple of param maps, "
+                            "but got %s." % type(params))
 
 
 @inherit_doc
@@ -216,7 +216,7 @@ class Transformer(Params, metaclass=ABCMeta):
             else:
                 return self._transform(dataset)
         else:
-            raise ValueError("Params must be a param map but got %s." % type(params))
+            raise TypeError("Params must be a param map but got %s." % type(params))
 
 
 @inherit_doc

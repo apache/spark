@@ -21,12 +21,13 @@ import scala.math.Numeric._
 import scala.math.Ordering
 
 import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
 private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
   private def checkOverflow(res: Int, x: Byte, y: Byte, op: String): Unit = {
     if (res > Byte.MaxValue || res < Byte.MinValue) {
-      throw new ArithmeticException(s"$x $op $y caused overflow.")
+      throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y)
     }
   }
 
@@ -50,7 +51,7 @@ private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOr
 
   override def negate(x: Byte): Byte = {
     if (x == Byte.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw new ArithmeticException(s"- $x caused overflow.")
+      throw QueryExecutionErrors.unaryMinusCauseOverflowError(x)
     }
     (-x).toByte
   }
@@ -60,7 +61,7 @@ private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOr
 private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
   private def checkOverflow(res: Int, x: Short, y: Short, op: String): Unit = {
     if (res > Short.MaxValue || res < Short.MinValue) {
-      throw new ArithmeticException(s"$x $op $y caused overflow.")
+      throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y)
     }
   }
 
@@ -84,7 +85,7 @@ private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.Shor
 
   override def negate(x: Short): Short = {
     if (x == Short.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw new ArithmeticException(s"- $x caused overflow.")
+      throw QueryExecutionErrors.unaryMinusCauseOverflowError(x)
     }
     (-x).toShort
   }
@@ -114,14 +115,11 @@ private[sql] object LongExactNumeric extends LongIsIntegral with Ordering.LongOr
     if (x == x.toInt) {
       x.toInt
     } else {
-      throw new ArithmeticException(s"Casting $x to int causes overflow")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, "int")
     }
 }
 
 private[sql] object FloatExactNumeric extends FloatIsFractional {
-  private def overflowException(x: Float, dataType: String) =
-    throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
-
   private val intUpperBound = Int.MaxValue
   private val intLowerBound = Int.MinValue
   private val longUpperBound = Long.MaxValue
@@ -137,7 +135,7 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
       x.toInt
     } else {
-      overflowException(x, "int")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, "int")
     }
   }
 
@@ -145,7 +143,7 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
-      overflowException(x, "int")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, "int")
     }
   }
 
@@ -153,9 +151,6 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
 }
 
 private[sql] object DoubleExactNumeric extends DoubleIsFractional {
-  private def overflowException(x: Double, dataType: String) =
-    throw new ArithmeticException(s"Casting $x to $dataType causes overflow")
-
   private val intUpperBound = Int.MaxValue
   private val intLowerBound = Int.MinValue
   private val longUpperBound = Long.MaxValue
@@ -165,7 +160,7 @@ private[sql] object DoubleExactNumeric extends DoubleIsFractional {
     if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
       x.toInt
     } else {
-      overflowException(x, "int")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, "int")
     }
   }
 
@@ -173,7 +168,7 @@ private[sql] object DoubleExactNumeric extends DoubleIsFractional {
     if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
-      overflowException(x, "long")
+      throw QueryExecutionErrors.castingCauseOverflowError(x, "long")
     }
   }
 

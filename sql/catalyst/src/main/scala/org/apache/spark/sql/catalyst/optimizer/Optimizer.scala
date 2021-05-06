@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -118,8 +119,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
         OptimizeCsvJsonExprs,
-        CombineConcats,
-        UpdateGroupingExprRefNullability) ++
+        CombineConcats) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
@@ -148,7 +148,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
-      EnforceGroupingReferencesInAggregates,
+      PullOutGroupingExpressions,
       ComputeCurrentTime,
       GetCurrentDatabaseAndCatalog(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -269,8 +269,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery.ruleName ::
       NormalizeFloatingNumbers.ruleName ::
       ReplaceUpdateFieldsExpression.ruleName ::
-      EnforceGroupingReferencesInAggregates.ruleName ::
-      UpdateGroupingExprRefNullability.ruleName :: Nil
+      PullOutGroupingExpressions.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.
@@ -283,7 +282,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         case other => other
       }
     }
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+      _.containsPattern(PLAN_EXPRESSION), ruleId) {
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
@@ -510,7 +510,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
       val aliasMap = getAliasMap(lower)
 
-      val newAggregate = Aggregate.withGroupingRefs(
+      val newAggregate = upper.copy(
         child = lower.child,
         groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
         aggregateExpressions = upper.aggregateExpressions.map(
@@ -1172,14 +1172,17 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
     // We only can combine them if and only if both are deterministic.
-    case Filter(fc, nf @ Filter(nc, grandChild)) if fc.deterministic && nc.deterministic =>
-      (ExpressionSet(splitConjunctivePredicates(fc)) --
+    case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
+      val (combineCandidates, nonDeterministic) =
+        splitConjunctivePredicates(fc).partition(_.deterministic)
+      val mergedFilter = (ExpressionSet(combineCandidates) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
+      nonDeterministic.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
   }
 }
 
@@ -1976,18 +1979,7 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
     case a @ Aggregate(grouping, _, _) if grouping.nonEmpty =>
       val newGrouping = grouping.filter(!_.foldable)
       if (newGrouping.nonEmpty) {
-        val droppedGroupsBefore =
-          grouping.scanLeft(0)((n, e) => n + (if (e.foldable) 1 else 0)).toArray
-
-        val newAggregateExpressions =
-          a.aggregateExpressions.map(_.transform {
-            case g: GroupingExprRef if droppedGroupsBefore(g.ordinal) > 0 =>
-              g.copy(ordinal = g.ordinal - droppedGroupsBefore(g.ordinal))
-          }.asInstanceOf[NamedExpression])
-
-        a.copy(
-          groupingExpressions = newGrouping,
-          aggregateExpressions = newAggregateExpressions)
+        a.copy(groupingExpressions = newGrouping)
       } else {
         // All grouping expressions are literals. We should not drop them all, because this can
         // change the return semantics when the input of the Aggregate is empty (SPARK-17114). We
@@ -2008,25 +2000,7 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       if (newGrouping.size == grouping.size) {
         a
       } else {
-        var i = 0
-        val droppedGroupsBefore = grouping.scanLeft(0)((n, e) =>
-          n + (if (i >= newGrouping.size || e.eq(newGrouping(i))) {
-            i += 1
-            0
-          } else {
-            1
-          })
-        ).toArray
-
-        val newAggregateExpressions =
-          a.aggregateExpressions.map(_.transform {
-            case g: GroupingExprRef if droppedGroupsBefore(g.ordinal) > 0 =>
-              g.copy(ordinal = g.ordinal - droppedGroupsBefore(g.ordinal))
-          }.asInstanceOf[NamedExpression])
-
-        a.copy(
-          groupingExpressions = newGrouping,
-          aggregateExpressions = newAggregateExpressions)
+        a.copy(groupingExpressions = newGrouping)
       }
   }
 }

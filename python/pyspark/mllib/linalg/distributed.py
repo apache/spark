@@ -465,8 +465,7 @@ class RowMatrix(DistributedMatrix):
         [DenseVector([2.0, 3.0]), DenseVector([6.0, 11.0])]
         """
         if not isinstance(matrix, DenseMatrix):
-            raise ValueError("Only multiplication with DenseMatrix "
-                             "is supported.")
+            raise TypeError("Only multiplication with DenseMatrix is supported.")
         j_model = self._java_matrix_wrapper.call("multiply", matrix)
         return RowMatrix(j_model)
 
@@ -854,8 +853,7 @@ class IndexedRowMatrix(DistributedMatrix):
         [IndexedRow(0, [2.0,3.0]), IndexedRow(1, [6.0,11.0])]
         """
         if not isinstance(matrix, DenseMatrix):
-            raise ValueError("Only multiplication with DenseMatrix "
-                             "is supported.")
+            raise TypeError("Only multiplication with DenseMatrix is supported.")
         return IndexedRowMatrix(self._java_matrix_wrapper.call("multiply", matrix))
 
 

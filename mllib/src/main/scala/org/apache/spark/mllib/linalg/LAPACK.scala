@@ -15,20 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.mllib.linalg
 
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.catalyst.rules.Rule
+import dev.ludovic.netlib.{JavaLAPACK => NetlibJavaLAPACK,
+                           LAPACK => NetlibLAPACK,
+                           NativeLAPACK => NetlibNativeLAPACK}
 
 /**
- * This rule ensures that [[Aggregate]] nodes contain all required [[GroupingExprRef]]
- * references for optimization phase.
+ * LAPACK routines for MLlib's vectors and matrices.
  */
-object EnforceGroupingReferencesInAggregates extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan transform {
-      case a: Aggregate =>
-        Aggregate.withGroupingRefs(a.groupingExpressions, a.aggregateExpressions, a.child)
+private[spark] object LAPACK extends Serializable {
+
+  @transient private var _javaLAPACK: NetlibLAPACK = _
+  @transient private var _nativeLAPACK: NetlibLAPACK = _
+
+  private[spark] def javaLAPACK: NetlibLAPACK = {
+    if (_javaLAPACK == null) {
+      _javaLAPACK = NetlibJavaLAPACK.getInstance
     }
+    _javaLAPACK
+  }
+
+  private[spark] def nativeLAPACK: NetlibLAPACK = {
+    if (_nativeLAPACK == null) {
+      _nativeLAPACK =
+        try { NetlibNativeLAPACK.getInstance } catch { case _: Throwable => javaLAPACK }
+    }
+    _nativeLAPACK
   }
 }

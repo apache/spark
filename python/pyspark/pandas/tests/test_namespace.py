@@ -20,11 +20,12 @@ import itertools
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.testing.utils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.pandas.namespace import _get_index_map
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NamespaceTest(ReusedSQLTestCase, SQLTestUtils):
+class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_from_pandas(self):
         pdf = pd.DataFrame({"year": [2015, 2016], "month": [2, 3], "day": [4, 5]})
         kdf = ps.from_pandas(pdf)
@@ -47,7 +48,7 @@ class NamespaceTest(ReusedSQLTestCase, SQLTestUtils):
         self.assert_eq(kmidx, pmidx)
 
         expected_error_message = "Unknown data type: {}".format(type(kidx).__name__)
-        with self.assertRaisesRegex(ValueError, expected_error_message):
+        with self.assertRaisesRegex(TypeError, expected_error_message):
             ps.from_pandas(kidx)
 
     def test_to_datetime(self):
@@ -302,7 +303,7 @@ class NamespaceTest(ReusedSQLTestCase, SQLTestUtils):
         expected_error_message = "Invalid type : expected DataFrame got {}".format(
             type(kser).__name__
         )
-        with self.assertRaisesRegex(ValueError, expected_error_message):
+        with self.assertRaisesRegex(TypeError, expected_error_message):
             ps.broadcast(kser)
 
     def test_get_index_map(self):

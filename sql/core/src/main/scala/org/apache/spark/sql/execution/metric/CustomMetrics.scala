@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.execution.metric
 
-import java.text.NumberFormat
-import java.util.Locale
-
-import org.apache.spark.sql.connector.CustomMetric
+import org.apache.spark.sql.connector.metric.CustomMetric
 
 object CustomMetrics {
   private[spark] val V2_CUSTOM = "v2Custom"
@@ -43,37 +40,5 @@ object CustomMetrics {
     } else {
       None
     }
-  }
-}
-
-/**
- * Built-in `CustomMetric` that sums up metric values.
- */
-class CustomSumMetric extends CustomMetric {
-  override def name(): String = "CustomSumMetric"
-
-  override def description(): String = "Sum up CustomMetric"
-
-  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
-    taskMetrics.sum.toString
-  }
-}
-
-/**
- * Built-in `CustomMetric` that computes average of metric values.
- */
-class CustomAvgMetric extends CustomMetric {
-  override def name(): String = "CustomAvgMetric"
-
-  override def description(): String = "Average CustomMetric"
-
-  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
-    val average = if (taskMetrics.isEmpty) {
-      0.0
-    } else {
-      taskMetrics.sum.toDouble / taskMetrics.length
-    }
-    val numberFormat = NumberFormat.getNumberInstance(Locale.US)
-    numberFormat.format(average)
   }
 }

@@ -126,7 +126,7 @@ def from_pandas(pobj: Union[pd.DataFrame, pd.Series, pd.Index]) -> Union[Series,
     elif isinstance(pobj, pd.Index):
         return DataFrame(pd.DataFrame(index=pobj)).index
     else:
-        raise ValueError("Unknown data type: {}".format(type(pobj).__name__))
+        raise TypeError("Unknown data type: {}".format(type(pobj).__name__))
 
 
 _range = range  # built-in range
@@ -2770,7 +2770,7 @@ def broadcast(obj) -> DataFrame:
     ...
     """
     if not isinstance(obj, DataFrame):
-        raise ValueError("Invalid type : expected DataFrame got {}".format(type(obj).__name__))
+        raise TypeError("Invalid type : expected DataFrame got {}".format(type(obj).__name__))
     return DataFrame(
         obj._internal.with_new_sdf(F.broadcast(obj._internal.resolved_copy.spark_frame))
     )

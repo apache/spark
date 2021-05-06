@@ -87,8 +87,12 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
         Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
-    case _: YearMonthIntervalType => DivideYMInterval(sum, count)
-    case _: DayTimeIntervalType => DivideDTInterval(sum, count)
+    case _: YearMonthIntervalType =>
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, YearMonthIntervalType), DivideYMInterval(sum, count))
+    case _: DayTimeIntervalType =>
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, DayTimeIntervalType), DivideDTInterval(sum, count))
     case _ =>
       Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
   }
