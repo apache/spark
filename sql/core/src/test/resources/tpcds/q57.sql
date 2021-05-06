@@ -29,7 +29,6 @@ WITH v1 AS (
     SELECT
       v1.i_category,
       v1.i_brand,
-      v1.cc_name,
       v1.d_year,
       v1.d_moy,
       v1.avg_monthly_sales,

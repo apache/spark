@@ -32,3 +32,7 @@ WHERE i_color = 'chiffon'
 GROUP BY c_last_name, c_first_name, s_store_name
 HAVING sum(netpaid) > (SELECT 0.05 * avg(netpaid)
 FROM ssales)
+ORDER BY
+  c_last_name,
+  c_first_name,
+  s_store_name

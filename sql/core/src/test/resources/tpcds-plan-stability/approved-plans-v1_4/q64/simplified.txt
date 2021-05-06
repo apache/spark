@@ -1,7 +1,7 @@
 WholeStageCodegen (54)
-  Sort [product_name,store_name,cnt]
+  Sort [product_name,store_name,cnt,s1,s1]
     InputAdapter
-      Exchange [product_name,store_name,cnt] #1
+      Exchange [product_name,store_name,cnt,s1,s1] #1
         WholeStageCodegen (53)
           Project [product_name,store_name,store_zip,b_street_number,b_streen_name,b_city,b_zip,c_street_number,c_street_name,c_city,c_zip,syear,cnt,s1,s2,s3,s1,s2,s3,syear,cnt]
             SortMergeJoin [item_sk,store_name,store_zip,item_sk,store_name,store_zip,cnt,cnt]

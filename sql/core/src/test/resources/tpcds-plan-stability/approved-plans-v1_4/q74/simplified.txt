@@ -1,4 +1,4 @@
-TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name]
+TakeOrderedAndProject [customer_first_name,customer_id,customer_last_name]
   WholeStageCodegen (16)
     Project [customer_id,customer_first_name,customer_last_name]
       BroadcastHashJoin [customer_id,customer_id,year_total,year_total,year_total,year_total]

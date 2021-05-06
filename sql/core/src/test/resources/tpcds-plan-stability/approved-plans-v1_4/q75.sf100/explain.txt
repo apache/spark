@@ -721,7 +721,7 @@ Input [14]: [d_year#15, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact
 
 (133) TakeOrderedAndProject
 Input [10]: [prev_year#143, year#144, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, prev_yr_cnt#145, curr_yr_cnt#146, sales_cnt_diff#147, sales_amt_diff#148]
-Arguments: 100, [sales_cnt_diff#147 ASC NULLS FIRST], [prev_year#143, year#144, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, prev_yr_cnt#145, curr_yr_cnt#146, sales_cnt_diff#147, sales_amt_diff#148]
+Arguments: 100, [sales_cnt_diff#147 ASC NULLS FIRST, sales_amt_diff#148 ASC NULLS FIRST], [prev_year#143, year#144, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, prev_yr_cnt#145, curr_yr_cnt#146, sales_cnt_diff#147, sales_amt_diff#148]
 
 ===== Subqueries =====
 

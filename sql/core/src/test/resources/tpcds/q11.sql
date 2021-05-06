@@ -40,7 +40,11 @@ WITH year_total AS (
   GROUP BY
     c_customer_id, c_first_name, c_last_name, c_preferred_cust_flag, c_birth_country,
     c_login, c_email_address, d_year)
-SELECT t_s_secyear.customer_preferred_cust_flag
+SELECT
+  t_s_secyear.customer_id,
+  t_s_secyear.customer_first_name,
+  t_s_secyear.customer_last_name,
+  t_s_secyear.customer_email_address
 FROM year_total t_s_firstyear
   , year_total t_s_secyear
   , year_total t_w_firstyear
@@ -60,9 +64,13 @@ WHERE t_s_secyear.customer_id = t_s_firstyear.customer_id
   AND t_w_firstyear.year_total > 0
   AND CASE WHEN t_w_firstyear.year_total > 0
   THEN t_w_secyear.year_total / t_w_firstyear.year_total
-      ELSE NULL END
+      ELSE 0.0 END
   > CASE WHEN t_s_firstyear.year_total > 0
   THEN t_s_secyear.year_total / t_s_firstyear.year_total
-    ELSE NULL END
-ORDER BY t_s_secyear.customer_preferred_cust_flag
+    ELSE 0.0 END
+ORDER BY
+  t_s_secyear.customer_id,
+  t_s_secyear.customer_first_name,
+  t_s_secyear.customer_last_name,
+  t_s_secyear.customer_email_address
 LIMIT 100

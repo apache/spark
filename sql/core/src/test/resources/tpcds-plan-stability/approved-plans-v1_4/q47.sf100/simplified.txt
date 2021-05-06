@@ -1,6 +1,6 @@
-TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_brand,s_company_name,d_year,d_moy,psum,nsum]
+TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_moy,i_category,d_year,psum,nsum]
   WholeStageCodegen (37)
-    Project [i_category,i_brand,s_store_name,s_company_name,d_year,d_moy,avg_monthly_sales,sum_sales,sum_sales,sum_sales]
+    Project [i_category,d_year,d_moy,avg_monthly_sales,sum_sales,sum_sales,sum_sales]
       SortMergeJoin [i_category,i_brand,s_store_name,s_company_name,rn,i_category,i_brand,s_store_name,s_company_name,rn]
         InputAdapter
           WholeStageCodegen (25)

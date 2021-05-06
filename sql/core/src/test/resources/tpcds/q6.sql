@@ -17,5 +17,5 @@ WHERE a.ca_address_sk = c.c_current_addr_sk
   WHERE j.i_category = i.i_category)
 GROUP BY a.ca_state
 HAVING count(*) >= 10
-ORDER BY cnt
+order by cnt, a.ca_state
 LIMIT 100

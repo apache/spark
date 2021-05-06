@@ -72,5 +72,7 @@ WHERE curr_yr.i_brand_id = prev_yr.i_brand_id
   AND curr_yr.d_year = 2002
   AND prev_yr.d_year = 2002 - 1
   AND CAST(curr_yr.sales_cnt AS DECIMAL(17, 2)) / CAST(prev_yr.sales_cnt AS DECIMAL(17, 2)) < 0.9
-ORDER BY sales_cnt_diff
+ORDER BY
+  sales_cnt_diff,
+  sales_amt_diff
 LIMIT 100

@@ -55,10 +55,14 @@ FROM ss
     ON (cs_sold_year = ss_sold_year AND cs_item_sk = ss_item_sk AND cs_customer_sk = ss_customer_sk)
 WHERE coalesce(ws_qty, 0) > 0 AND coalesce(cs_qty, 0) > 0 AND ss_sold_year = 2000
 ORDER BY
-  ratio,
-  ss_qty DESC, ss_wc DESC, ss_sp DESC,
+  ss_sold_year,
+  ss_item_sk,
+  ss_customer_sk,
+  ss_qty desc,
+  ss_wc desc,
+  ss_sp desc,
   other_chan_qty,
   other_chan_wholesale_cost,
   other_chan_sales_price,
-  round(ss_qty / (coalesce(ws_qty + cs_qty, 1)), 2)
+  ratio
 LIMIT 100

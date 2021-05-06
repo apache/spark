@@ -38,10 +38,10 @@ trait TPCDSBase extends SharedSparkSession with TPCDSSchema {
 
   // This list only includes TPCDS v2.7 queries that are different from v1.4 ones
   val tpcdsQueriesV2_7_0 = Seq(
-    "q5a", "q6", "q10a", "q11", "q12", "q14", "q14a", "q18a",
-    "q20", "q22", "q22a", "q24", "q27a", "q34", "q35", "q35a", "q36a", "q47", "q49",
-    "q51a", "q57", "q64", "q67a", "q70a", "q72", "q74", "q75", "q77a", "q78",
-    "q80a", "q86a", "q98")
+    "q5a", "q10a", "q14", "q14a", "q18a",
+    "q22", "q22a", "q27a", "q35", "q35a", "q36a", "q49",
+    "q51a", "q67a", "q70a", "q72", "q77a",
+    "q80a", "q86a")
 
   // These queries are from https://github.com/cloudera/impala-tpcds-kit/tree/master/queries
   val modifiedTPCDSQueries = Seq(
