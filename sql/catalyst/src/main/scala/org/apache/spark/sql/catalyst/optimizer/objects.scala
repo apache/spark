@@ -112,7 +112,7 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(MAP_OBJECTS), ruleId) {
+    _.containsAllPatterns(MAP_OBJECTS, LAMBDA_VARIABLE), ruleId) {
      case MapObjects(_, LambdaVariable(_, _, false, _), inputData, None) => inputData
   }
 }
