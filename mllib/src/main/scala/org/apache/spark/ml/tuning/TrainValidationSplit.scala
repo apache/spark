@@ -146,8 +146,15 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     // Fit models in a Future for training in parallel
     instr.logDebug(s"Train split with multiple sets of parameters.")
+
+    var subTaskFailed = false
     val metricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
       Future[Double] {
+        if (subTaskFailed) {
+          throw new RuntimeException(
+            "Terminate this task because one of other task failed."
+          )
+        }
         val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
 
         if (collectSubModelsParam) {
@@ -161,11 +168,26 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     }
 
     // Wait for all metrics to be calculated
-    val metrics = metricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
-
-    // Unpersist training & validation set once all metrics have been produced
-    trainingDataset.unpersist()
-    validationDataset.unpersist()
+    val metrics = try {
+      metricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+    }
+    catch {
+      case e: Throwable =>
+        subTaskFailed = true
+        throw e
+    }
+    finally {
+      if (subTaskFailed) {
+        Thread.sleep(1000)
+        val sparkContext = sparkSession.sparkContext
+        sparkContext.cancelJobGroup(
+          sparkContext.getLocalProperty(sparkContext.SPARK_JOB_GROUP_ID)
+        )
+      }
+      // Unpersist training & validation set once all metrics have been produced
+      trainingDataset.unpersist()
+      validationDataset.unpersist()
+    }
 
     instr.logInfo(s"Train validation split metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =

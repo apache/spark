@@ -264,43 +264,34 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def _on_inheritable_thread_start():
-    from pyspark import SparkContext
-    sc = SparkContext._active_spark_context
-    if isinstance(sc._gateway, ClientServer):
-        # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
-        properties = sc._jsc.sc().getLocalProperties().clone()
-        sc._jsc.sc().setLocalProperties(properties)
-
-
-def _on_inheritable_thread_stop():
-    from pyspark import SparkContext
-    sc = SparkContext._active_spark_context
-    if isinstance(SparkContext._gateway, ClientServer):
-        thread_connection = sc._jvm._gateway_client.thread_connection.connection()
-        if thread_connection is not None:
-            connections = sc._jvm._gateway_client.deque
-
-            # Reuse the lock for Py4J in PySpark
-            with SparkContext._lock:
-                for i in range(len(connections)):
-                    if connections[i] is thread_connection:
-                        connections[i].close()
-                        del connections[i]
-                        break
-                else:
-                    # Just in case the connection was not closed but removed from the queue.
-                    thread_connection.close()
-
-
 def inheritable_thread(f):
     @functools.wraps(f)
     def wrapped_f(*args, **kwargs):
-        try:
-            _on_inheritable_thread_start()
+        from pyspark import SparkContext
+        if isinstance(SparkContext._gateway, ClientServer):
+            sc = SparkContext._active_spark_context
+            try:
+                # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+                properties = sc._jsc.sc().getLocalProperties().clone()
+                sc._jsc.sc().setLocalProperties(properties)
+                return f(*args, **kwargs)
+            finally:
+                thread_connection = sc._jvm._gateway_client.thread_connection.connection()
+                if thread_connection is not None:
+                    connections = sc._jvm._gateway_client.deque
+                    # Reuse the lock for Py4J in PySpark
+                    with SparkContext._lock:
+                        for i in range(len(connections)):
+                            if connections[i] is thread_connection:
+                                connections[i].close()
+                                del connections[i]
+                                break
+                        else:
+                            # Just in case the connection was not closed but removed from the queue.
+                            thread_connection.close()
+        else:
             return f(*args, **kwargs)
-        finally:
-            _on_inheritable_thread_stop()
+
     return wrapped_f
 
 
@@ -326,42 +317,9 @@ class InheritableThread(threading.Thread):
     This API is experimental.
     """
     def __init__(self, target, *args, **kwargs):
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-
-        if isinstance(sc._gateway, ClientServer):
-            # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
-            properties = sc._jsc.sc().getLocalProperties().clone()
-            self._sc = sc
-
-            def copy_local_properties(*a, **k):
-                sc._jsc.sc().setLocalProperties(properties)
-                return target(*a, **k)
-
-            super(InheritableThread, self).__init__(
-                target=copy_local_properties, *args, **kwargs)
-        else:
-            super(InheritableThread, self).__init__(target=target, *args, **kwargs)
-
-    def __del__(self):
-        from pyspark import SparkContext
-
-        if isinstance(SparkContext._gateway, ClientServer):
-            thread_connection = self._sc._jvm._gateway_client.thread_connection.connection()
-            if thread_connection is not None:
-                connections = self._sc._jvm._gateway_client.deque
-
-                # Reuse the lock for Py4J in PySpark
-                with SparkContext._lock:
-                    for i in range(len(connections)):
-                        if connections[i] is thread_connection:
-                            connections[i].close()
-                            del connections[i]
-                            break
-                    else:
-                        # Just in case the connection was not closed but removed from the queue.
-                        thread_connection.close()
+        super(InheritableThread, self).__init__(
+            target=inheritable_thread(target), *args, **kwargs
+        )
 
 
 if __name__ == "__main__":

@@ -169,7 +169,6 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       instr.logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       var subTaskFailed = false
-
       // Fit models in a Future for training in parallel
       val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
         Future[Double] {
@@ -192,18 +191,24 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       // Wait for metrics to be calculated
       val foldMetrics = try {
         foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
-      } finally {
-        subTaskFailed = true
-        Thread.sleep(1000)
-        val sparkContext = sparkSession.sparkContext
-        sparkContext.cancelJobGroup(
-          sparkContext.getLocalProperty(sparkContext.SPARK_JOB_GROUP_ID)
-        )
       }
-
-      // Unpersist training & validation set once all metrics have been produced
-      trainingDataset.unpersist()
-      validationDataset.unpersist()
+      catch {
+        case e: Throwable =>
+          subTaskFailed = true
+          throw e
+      }
+      finally {
+        if (subTaskFailed) {
+          Thread.sleep(1000)
+          val sparkContext = sparkSession.sparkContext
+          sparkContext.cancelJobGroup(
+            sparkContext.getLocalProperty(sparkContext.SPARK_JOB_GROUP_ID)
+          )
+        }
+        // Unpersist training & validation set once all metrics have been produced
+        trainingDataset.unpersist()
+        validationDataset.unpersist()
+      }
       foldMetrics
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
 
