@@ -163,6 +163,7 @@ private[kafka010] class KafkaSource(
       // Pass same curret offsets as output to skip trigger
       KafkaSourceOffset(currentOffsets.get)
     } else {
+      lastTriggerMillis = System.currentTimeMillis()
       val offsets = limit match {
         case rows: ReadMaxRows =>
           if (currentPartitionOffsets.isEmpty) {

@@ -118,6 +118,7 @@ private[kafka010] class KafkaMicroBatchStream(
       // Pass same curret offsets as output to skip trigger
       start
     } else {
+      lastTriggerMillis = System.currentTimeMillis()
       endPartitionOffsets = KafkaSourceOffset(readLimit match {
         case rows: ReadMaxRows =>
           rateLimit(rows.maxRows(), startPartitionOffsets, latestPartitionOffsets)
