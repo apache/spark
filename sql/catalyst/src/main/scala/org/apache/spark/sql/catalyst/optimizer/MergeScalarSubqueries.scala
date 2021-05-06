@@ -100,7 +100,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       plan: LogicalPlan,
       mergedSubqueries: ArrayBuffer[LogicalPlan]): (SubqueryReference, Int) = {
     mergedSubqueries.zipWithIndex.collectFirst {
-      Function.unlift { case (s, i) => mergePlans(plan, s).map(_ -> i) }
+      Function.unlift { case (s, i) => tryMergePlans(plan, s).map(_ -> i) }
     }.map { case ((mergedPlan, outputMap), i) =>
       mergedSubqueries(i) = mergedPlan
       SubqueryReference(i, mergedSubqueries) ->
@@ -111,31 +111,31 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def mergePlans(
+  private def tryMergePlans(
       newPlan: LogicalPlan,
       existingPlan: LogicalPlan): Option[(LogicalPlan, AttributeMap[Attribute])] = {
     (newPlan, existingPlan) match {
       case (np, ep) if np.canonicalized == ep.canonicalized =>
         Some(ep -> AttributeMap(np.output.zip(ep.output)))
       case (np: Project, ep: Project) =>
-        mergePlans(np.child, ep.child).map { case (mergedChild, outputMap) =>
+        tryMergePlans(np.child, ep.child).map { case (mergedChild, outputMap) =>
           val newProjectList = replaceAttributes(np.projectList, outputMap)
           val newOutputMap = createOutputMap(np.projectList, newProjectList)
           Project(distinctExpressions(ep.projectList ++ newProjectList), mergedChild) ->
             newOutputMap
         }
       case (np, ep: Project) =>
-        mergePlans(np, ep.child).map { case (mergedChild, outputMap) =>
+        tryMergePlans(np, ep.child).map { case (mergedChild, outputMap) =>
           Project(distinctExpressions(ep.projectList ++ outputMap.values), mergedChild) -> outputMap
         }
       case (np: Project, ep) =>
-        mergePlans(np.child, ep).map { case (mergedChild, outputMap) =>
+        tryMergePlans(np.child, ep).map { case (mergedChild, outputMap) =>
           val newProjectList = replaceAttributes(np.projectList, outputMap)
           val newOutputMap = createOutputMap(np.projectList, newProjectList)
           Project(distinctExpressions(ep.output ++ newProjectList), mergedChild) -> newOutputMap
         }
       case (np: Aggregate, ep: Aggregate) =>
-        mergePlans(np.child, ep.child).flatMap { case (mergedChild, outputMap) =>
+        tryMergePlans(np.child, ep.child).flatMap { case (mergedChild, outputMap) =>
           val newGroupingExpression = replaceAttributes(np.groupingExpressions, outputMap)
           if (ExpressionSet(newGroupingExpression) == ExpressionSet(ep.groupingExpressions)) {
             val newAggregateExpressions = replaceAttributes(np.aggregateExpressions, outputMap)
