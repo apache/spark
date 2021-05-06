@@ -483,8 +483,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * 4. Otherwise, `this` and `that` are considered as conflicting schemas and an exception would be
    *    thrown.
    */
-  private[sql] def merge(that: StructType): StructType =
-    StructType.merge(this, that).asInstanceOf[StructType]
+  private[sql] def merge(that: StructType, resolver: Resolver = _ == _): StructType =
+    StructType.merge(resolver)(this, that).asInstanceOf[StructType]
 
   override private[spark] def asNullable: StructType = {
     val newFields = fields.map {
@@ -555,32 +555,31 @@ object StructType extends AbstractDataType {
       case _ => dt
     }
 
-  private[sql] def merge(left: DataType, right: DataType): DataType =
+  private[sql] def merge(resolver: Resolver)(left: DataType, right: DataType): DataType =
     (left, right) match {
       case (ArrayType(leftElementType, leftContainsNull),
       ArrayType(rightElementType, rightContainsNull)) =>
         ArrayType(
-          merge(leftElementType, rightElementType),
+          merge(resolver)(leftElementType, rightElementType),
           leftContainsNull || rightContainsNull)
 
       case (MapType(leftKeyType, leftValueType, leftContainsNull),
       MapType(rightKeyType, rightValueType, rightContainsNull)) =>
         MapType(
-          merge(leftKeyType, rightKeyType),
-          merge(leftValueType, rightValueType),
+          merge(resolver)(leftKeyType, rightKeyType),
+          merge(resolver)(leftValueType, rightValueType),
           leftContainsNull || rightContainsNull)
 
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = mutable.ArrayBuffer.empty[StructField]
 
-        val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
-            rightMapped.get(leftName)
+            rightFields.find(f => resolver(leftName, f.name))
               .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
                 try {
                   leftField.copy(
-                    dataType = merge(leftType, rightType),
+                    dataType = merge(resolver)(leftType, rightType),
                     nullable = leftNullable || rightNullable)
                 } catch {
                   case NonFatal(e) =>
@@ -593,12 +592,9 @@ object StructType extends AbstractDataType {
               .foreach(newFields += _)
         }
 
-        val leftMapped = fieldsMap(leftFields)
         rightFields
-          .filterNot(f => leftMapped.get(f.name).nonEmpty)
-          .foreach { f =>
-            newFields += f
-          }
+          .filter(f => leftFields.find(lf => resolver(f.name, lf.name)).isEmpty)
+          .foreach(newFields += _)
 
         StructType(newFields.toSeq)
 

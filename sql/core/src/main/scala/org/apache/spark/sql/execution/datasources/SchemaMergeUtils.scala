@@ -60,6 +60,7 @@ object SchemaMergeUtils extends Logging {
       sparkSession.sparkContext.defaultParallelism)
 
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+    val resolver = sparkSession.sessionState.conf.resolver
 
     // Issues a Spark job to read Parquet/ORC schema in parallel.
     val partiallyMergedSchemas =
@@ -80,7 +81,7 @@ object SchemaMergeUtils extends Logging {
             var mergedSchema = schemas.head
             schemas.tail.foreach { schema =>
               try {
-                mergedSchema = mergedSchema.merge(schema)
+                mergedSchema = mergedSchema.merge(schema, resolver)
               } catch { case cause: SparkException =>
                 throw new SparkException(
                   s"Failed merging schema:\n${schema.treeString}", cause)
@@ -96,7 +97,7 @@ object SchemaMergeUtils extends Logging {
       var finalSchema = partiallyMergedSchemas.head
       partiallyMergedSchemas.tail.foreach { schema =>
         try {
-          finalSchema = finalSchema.merge(schema)
+          finalSchema = finalSchema.merge(schema, resolver)
         } catch { case cause: SparkException =>
           throw new SparkException(
             s"Failed merging schema:\n${schema.treeString}", cause)
