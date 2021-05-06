@@ -354,7 +354,8 @@ case class SortMergeJoinExec(
   }
 
   private lazy val ((streamedPlan, streamedKeys), (bufferedPlan, bufferedKeys)) = joinType match {
-    case _: InnerLike => ((left, leftKeys), (right, rightKeys))
+    case _: InnerLike | LeftOuter => ((left, leftKeys), (right, rightKeys))
+    case RightOuter => ((right, rightKeys), (left, leftKeys))
     case x =>
       throw new IllegalArgumentException(
         s"SortMergeJoin.streamedPlan/bufferedPlan should not take $x as the JoinType")
@@ -363,8 +364,9 @@ case class SortMergeJoinExec(
   private lazy val streamedOutput = streamedPlan.output
   private lazy val bufferedOutput = bufferedPlan.output
 
-  override def supportCodegen: Boolean = {
-    joinType.isInstanceOf[InnerLike]
+  override def supportCodegen: Boolean = joinType match {
+    case _: InnerLike | LeftOuter | RightOuter => true
+    case _ => false
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -431,6 +433,41 @@ case class SortMergeJoinExec(
     // Copy the streamed keys as class members so they could be used in next function call.
     val matchedKeyVars = copyKeys(ctx, streamedKeyVars)
 
+    // Handle the case when streamed rows has any NULL keys.
+    val handleStreamedAnyNull = joinType match {
+      case _: InnerLike =>
+        // Skip streamed row.
+        s"""
+           |$streamedRow = null;
+           |continue;
+         """.stripMargin
+      case LeftOuter | RightOuter =>
+        // Eagerly return streamed row. Only call `matches.clear()` when `matches.isEmpty()` is
+        // false, to reduce unnecessary computation.
+        s"""
+           |if (!$matches.isEmpty()) {
+           |  $matches.clear();
+           |}
+           |return false;
+         """.stripMargin
+      case x =>
+        throw new IllegalArgumentException(
+          s"SortMergeJoin.genScanner should not take $x as the JoinType")
+    }
+
+    // Handle the case when streamed keys less than buffered keys.
+    val handleStreamedLessThanBuffered = joinType match {
+      case _: InnerLike =>
+        // Skip streamed row.
+        s"$streamedRow = null;"
+      case LeftOuter | RightOuter =>
+        // Eagerly return with streamed row.
+        "return false;"
+      case x =>
+        throw new IllegalArgumentException(
+          s"SortMergeJoin.genScanner should not take $x as the JoinType")
+    }
+
     ctx.addNewFunction("findNextJoinRows",
       s"""
          |private boolean findNextJoinRows(
@@ -443,8 +480,7 @@ case class SortMergeJoinExec(
          |    $streamedRow = (InternalRow) streamedIter.next();
          |    ${streamedKeyVars.map(_.code).mkString("\n")}
          |    if ($streamedAnyNull) {
-         |      $streamedRow = null;
-         |      continue;
+         |      $handleStreamedAnyNull
          |    }
          |    if (!$matches.isEmpty()) {
          |      ${genComparison(ctx, streamedKeyVars, matchedKeyVars)}
@@ -475,15 +511,18 @@ case class SortMergeJoinExec(
          |        if (!$matches.isEmpty()) {
          |          ${matchedKeyVars.map(_.code).mkString("\n")}
          |          return true;
+         |        } else {
+         |          $handleStreamedLessThanBuffered
          |        }
-         |        $streamedRow = null;
          |      } else {
          |        $matches.add((UnsafeRow) $bufferedRow);
          |        $bufferedRow = null;
          |      }
          |    } while ($streamedRow != null);
          |  }
-         |  return false; // unreachable
+         |
+         |  throw new IllegalStateException("Executed unreachable code path in findNextJoinRows");
+         |  return false;
          |}
        """.stripMargin, inlineToOuterClass = true)
 
@@ -501,7 +540,7 @@ case class SortMergeJoinExec(
       ctx: CodegenContext,
       streamedRow: String): (Seq[ExprCode], Seq[String]) = {
     ctx.INPUT_ROW = streamedRow
-    left.output.zipWithIndex.map { case (a, i) =>
+    streamedPlan.output.zipWithIndex.map { case (a, i) =>
       val value = ctx.freshName("value")
       val valueCode = CodeGenerator.getValue(streamedRow, a.dataType, i.toString)
       val javaType = CodeGenerator.javaType(a.dataType)
@@ -569,7 +608,15 @@ case class SortMergeJoinExec(
 
     val iterator = ctx.freshName("iterator")
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val resultVars = streamedVars ++ bufferedVars
+    val resultVars = joinType match {
+      case _: InnerLike | LeftOuter =>
+        streamedVars ++ bufferedVars
+      case RightOuter =>
+        bufferedVars ++ streamedVars
+      case x =>
+        throw new IllegalArgumentException(
+          s"SortMergeJoin.doProduce should not take $x as the JoinType")
+    }
 
     val (beforeLoop, condCheck) = if (condition.isDefined) {
       // Split the code of creating variables based on whether it's used by condition or not.
@@ -580,21 +627,27 @@ case class SortMergeJoinExec(
       ctx.currentVars = resultVars
       val cond = BindReferences.bindReference(condition.get, output).genCode(ctx)
       // evaluate the columns those used by condition before loop
-      val before = s"""
+      val before =
+        s"""
            |boolean $loaded = false;
            |$streamedBefore
          """.stripMargin
 
-      val checking = s"""
-         |$bufferedBefore
-         |${cond.code}
-         |if (${cond.isNull} || !${cond.value}) continue;
-         |if (!$loaded) {
-         |  $loaded = true;
-         |  $streamedAfter
-         |}
-         |$bufferedAfter
-     """.stripMargin
+      val checking =
+        s"""
+           |$bufferedBefore
+           |if ($bufferedRow != null) {
+           |  ${cond.code}
+           |  if (${cond.isNull} || !${cond.value}) {
+           |    continue;
+           |  }
+           |}
+           |if (!$loaded) {
+           |  $loaded = true;
+           |  $streamedAfter
+           |}
+           |$bufferedAfter
+         """.stripMargin
       (before, checking)
     } else {
       (evaluateVariables(streamedVars), "")
@@ -603,21 +656,55 @@ case class SortMergeJoinExec(
     val thisPlan = ctx.addReferenceObj("plan", this)
     val eagerCleanup = s"$thisPlan.cleanupResources();"
 
-    s"""
-       |while (findNextJoinRows($streamedInput, $bufferedInput)) {
-       |  ${streamedVarDecl.mkString("\n")}
-       |  ${beforeLoop.trim}
-       |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
-       |  while ($iterator.hasNext()) {
-       |    InternalRow $bufferedRow = (InternalRow) $iterator.next();
-       |    ${condCheck.trim}
-       |    $numOutput.add(1);
-       |    ${consume(ctx, resultVars)}
-       |  }
-       |  if (shouldStop()) return;
-       |}
-       |$eagerCleanup
+    lazy val innerJoin =
+      s"""
+         |while (findNextJoinRows($streamedInput, $bufferedInput)) {
+         |  ${streamedVarDecl.mkString("\n")}
+         |  ${beforeLoop.trim}
+         |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
+         |  while ($iterator.hasNext()) {
+         |    InternalRow $bufferedRow = (InternalRow) $iterator.next();
+         |    ${condCheck.trim}
+         |    $numOutput.add(1);
+         |    ${consume(ctx, resultVars)}
+         |  }
+         |  if (shouldStop()) return;
+         |}
+         |$eagerCleanup
      """.stripMargin
+
+    lazy val outerJoin = {
+      val foundMatch = ctx.freshName("foundMatch")
+      s"""
+         |while ($streamedInput.hasNext()) {
+         |  findNextJoinRows($streamedInput, $bufferedInput);
+         |  ${streamedVarDecl.mkString("\n")}
+         |  ${beforeLoop.trim}
+         |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
+         |  boolean $foundMatch = false;
+         |
+         |  // the last iteration of this loop is to emit an empty row if there is no matched rows.
+         |  while ($iterator.hasNext() || !$foundMatch) {
+         |    InternalRow $bufferedRow = $iterator.hasNext() ?
+         |      (InternalRow) $iterator.next() : null;
+         |    ${condCheck.trim}
+         |    $foundMatch = true;
+         |    $numOutput.add(1);
+         |    ${consume(ctx, resultVars)}
+         |  }
+         |  if (shouldStop()) return;
+         |}
+         |$eagerCleanup
+       """.stripMargin
+    }
+
+    joinType match {
+      case _: InnerLike => innerJoin
+      case LeftOuter | RightOuter => outerJoin
+      case x =>
+        throw new IllegalArgumentException(
+          s"SortMergeJoin.doProduce should not take $x as the JoinType")
+    }
   }
 
   override protected def withNewChildrenInternal(
