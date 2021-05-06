@@ -59,7 +59,7 @@ public class JavaLongAdd implements UnboundFunction {
     return "long_add";
   }
 
-  public abstract static class JavaLongAddBase implements ScalarFunction<Long> {
+  private abstract static class JavaLongAddBase implements ScalarFunction<Long> {
     private final boolean isResultNullable;
 
     public JavaLongAddBase(boolean isResultNullable) {
@@ -86,6 +86,7 @@ public class JavaLongAdd implements UnboundFunction {
     public JavaLongAddDefault(boolean isResultNullable) {
       super(isResultNullable);
     }
+
     @Override
     public String name() {
       return "long_add_default";

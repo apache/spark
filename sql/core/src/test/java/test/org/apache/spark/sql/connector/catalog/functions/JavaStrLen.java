@@ -106,6 +106,8 @@ public class JavaStrLen implements UnboundFunction {
     }
   }
 
+  // even though the static magic method is present, it has incorrect parameter type and so Spark
+  // should fallback to the non-static magic method
   public static class JavaStrLenBadStaticMagic extends JavaStrLenBase {
     public static int invoke(String str) {
       return str.length();
