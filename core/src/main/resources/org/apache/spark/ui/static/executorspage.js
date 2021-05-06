@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI, formatBytes, formatDuration, formatLogsCells */
-/* global getStandAloneAppId, jQuery, setDataTableDefaults */
+/* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
+/* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
+/* global jQuery, setDataTableDefaults */
 
 var threadDumpEnabled = false;
 
