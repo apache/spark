@@ -363,34 +363,6 @@ ctes
     : WITH namedQuery (',' namedQuery)*
     ;
 
-showNamespacesAction
-    : SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?
-    ;
-
-showTablesAction
-    : SHOW TABLES ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?
-    ;
-
-showTblPropertiesAction
-    : SHOW TBLPROPERTIES table=multipartIdentifier ('(' key=tablePropertyKey ')')?
-    ;
-
-showPartitionsAction
-    : SHOW PARTITIONS multipartIdentifier partitionSpec?
-    ;
-
-showColumnsAction
-    : SHOW COLUMNS (FROM | IN) table=multipartIdentifier ((FROM | IN) ns=multipartIdentifier)?
-    ;
-
-showViewsAction
-    : SHOW VIEWS ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?
-    ;
-
-showFunctionsAction
-    : SHOW identifier? FUNCTIONS (LIKE? (multipartIdentifier | pattern=STRING))?
-    ;
-
 ddlStatementForQuery
     : SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?              #showNamespaces
     | SHOW TABLES ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?                                #showTables

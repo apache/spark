@@ -4261,10 +4261,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
     val (userScope, systemScope) = Option(ctx.identifier)
       .map(_.getText.toLowerCase(Locale.ROOT)) match {
-      case None | Some("all") => (true, true)
-      case Some("system") => (false, true)
-      case Some("user") => (true, false)
-      case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
+        case None | Some("all") => (true, true)
+        case Some("system") => (false, true)
+        case Some("user") => (true, false)
+        case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
     }
     val pattern = Option(ctx.pattern).map(string(_))
     val unresolvedFuncOpt = Option(ctx.multipartIdentifier)
