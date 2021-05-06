@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types._
@@ -66,6 +67,8 @@ trait ObjectProducer extends LogicalPlan {
 trait ObjectConsumer extends UnaryNode {
   assert(child.output.length == 1)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(OBJECT_CONSUMER)
+
   // This operator always need all columns of its child, even it doesn't reference to.
   @transient
   override lazy val references: AttributeSet = child.outputSet
@@ -80,6 +83,7 @@ case class DeserializeToObject(
     deserializer: Expression,
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
+  final override val nodePatterns: Seq[TreePattern] = Seq(DESERIALIZE_TO_OBJECT)
   override protected def withNewChildInternal(newChild: LogicalPlan): DeserializeToObject =
     copy(child = newChild)
 }
@@ -256,6 +260,8 @@ case class TypedFilter(
 
   override def output: Seq[Attribute] = child.output
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(TYPED_FILTER)
+
   def withObjectProducerChild(obj: LogicalPlan): Filter = {
     assert(obj.output.length == 1)
     Filter(typedCondition(obj.output.head), obj)
@@ -353,6 +359,8 @@ case class AppendColumns(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output ++ newColumns
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(APPEND_COLUMNS)
 
   def newColumns: Seq[Attribute] = serializer.map(_.toAttribute)
 
