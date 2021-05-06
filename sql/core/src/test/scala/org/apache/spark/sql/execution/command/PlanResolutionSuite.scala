@@ -26,11 +26,11 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, LocalTempView, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
@@ -2192,27 +2192,13 @@ class PlanResolutionSuite extends AnalysisTest {
     assert(desc.comment == Some("no comment"))
   }
 
-  test("SPARK-34701: children/innerChildren should be mutually exclusive for " +
-    "AlterViewAsCommand/CreateViewCommand") {
-    def verifyChildren(plan: LogicalPlan, isAnalyzed: Boolean): Unit = {
-      if (isAnalyzed) {
-        assert(plan.innerChildren.length == 1)
-        assert(plan.children.isEmpty)
-      } else {
-        assert(plan.innerChildren.isEmpty)
-        assert(plan.children.length == 1)
-      }
-    }
-    Seq(true, false).foreach { isAnalyzed =>
-      val ident = TableIdentifier("v")
-      verifyChildren(
-        AlterViewAsCommand(ident, "SELECT 1", null, isAnalyzed),
-        isAnalyzed)
-      verifyChildren(
-        CreateViewCommand(
-          ident, Nil, None, Map(), None, null, false, true, LocalTempView, isAnalyzed),
-        isAnalyzed)
-    }
+  test("SPARK-34701: children/innerChildren should be mutually exclusive for AnalysisOnlyCommand") {
+    val cmdNotAnalyzed = DummyAnalysisOnlyCommand(isAnalyzed = false, childrenToAnalyze = Seq(null))
+    assert(cmdNotAnalyzed.innerChildren.isEmpty)
+    assert(cmdNotAnalyzed.children.length == 1)
+    val cmdAnalyzed = cmdNotAnalyzed.markAsAnalyzed()
+    assert(cmdAnalyzed.innerChildren.length == 1)
+    assert(cmdAnalyzed.children.isEmpty)
   }
 
   // TODO: add tests for more commands.
@@ -2222,5 +2208,15 @@ object AsDataSourceV2Relation {
   def unapply(plan: LogicalPlan): Option[DataSourceV2Relation] = plan match {
     case SubqueryAlias(_, r: DataSourceV2Relation) => Some(r)
     case _ => None
+  }
+}
+
+case class DummyAnalysisOnlyCommand(
+    isAnalyzed: Boolean,
+    childrenToAnalyze: Seq[LogicalPlan]) extends AnalysisOnlyCommand {
+  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    copy(childrenToAnalyze = newChildren)
   }
 }
