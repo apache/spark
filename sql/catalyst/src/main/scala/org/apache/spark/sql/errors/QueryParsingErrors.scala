@@ -228,7 +228,7 @@ object QueryParsingErrors {
     new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
   }
 
-  def fromOrInNotAllowedInShowDatabasesError(ctx: ShowNamespacesActionContext): Throwable = {
+  def fromOrInNotAllowedInShowDatabasesError(ctx: ShowNamespacesContext): Throwable = {
     new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
   }
 
@@ -369,5 +369,9 @@ object QueryParsingErrors {
 
   def invalidGroupingSetError(element: String, ctx: GroupingAnalyticsContext): Throwable = {
     new ParseException(s"Empty set in $element grouping sets is not supported.", ctx)
+  }
+
+  def unsupportedDdlStatementForQueryError(ctx: DdlStatementForQueryContext): Throwable = {
+    new ParseException("Unsupported DdlStatementForQueryContext", ctx)
   }
 }

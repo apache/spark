@@ -117,7 +117,7 @@ statement
         SET locationSpec                                               #setNamespaceLocation
     | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
-    | showNamespacesAction                                             #showNamespaces
+    | ddlStatementForQuery                                             #ddlQuery
     | createTableHeader ('(' colTypeList ')')? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
@@ -196,14 +196,8 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? multipartIdentifier        #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
-    | showTablesAction                                                 #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTableExtended
-    | showTblPropertiesAction                                          #showTblProperties
-    | showColumnsAction                                                #showColumns
-    | showViewsAction                                                  #showViews
-    | showPartitionsAction                                             #showPartitions
-    | showFunctionsAction                                              #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
@@ -398,13 +392,13 @@ showFunctionsAction
     ;
 
 ddlStatementForQuery
-    : showNamespacesAction
-    | showTablesAction
-    | showTblPropertiesAction
-    | showPartitionsAction
-    | showColumnsAction
-    | showViewsAction
-    | showFunctionsAction
+    : SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?              #showNamespaces
+    | SHOW TABLES ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?                                #showTables
+    | SHOW TBLPROPERTIES table=multipartIdentifier ('(' key=tablePropertyKey ')')?                          #showTblProperties
+    | SHOW PARTITIONS multipartIdentifier partitionSpec?                                                    #showPartitions
+    | SHOW COLUMNS (FROM | IN) table=multipartIdentifier ((FROM | IN) ns=multipartIdentifier)?              #showColumns
+    | SHOW VIEWS ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?                                 #showViews
+    | SHOW identifier? FUNCTIONS (LIKE? (multipartIdentifier | pattern=STRING))?                            #showFunctions
     ;
 
 namedQuery

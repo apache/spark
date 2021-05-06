@@ -156,14 +156,13 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(remainder(showDbsContext) == "")
 
     assert(remainder(setConfContext.SET.getSymbol) == " example.setting.name=setting.value")
-    assert(remainder(showFuncContext.showFunctionsAction.FUNCTIONS.getSymbol) == " foo.bar")
+    assert(remainder(showFuncContext.FUNCTIONS.getSymbol) == " foo.bar")
     assert(remainder(descFuncContext.EXTENDED.getSymbol) == " bar")
-    assert(remainder(showDbsContext.showNamespacesAction.LIKE.getSymbol) ==
-      " 'identifier_with_wildcards'")
+    assert(remainder(showDbsContext.LIKE.getSymbol) == " 'identifier_with_wildcards'")
   }
 
   test("string") {
-    assert(string(showDbsContext.showNamespacesAction.pattern) == "identifier_with_wildcards")
+    assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
     assert(string(createDbContext.commentSpec().get(0).STRING()) == "database_comment")
 
     assert(string(createDbContext.locationSpec.asScala.head.STRING) == "/home/user/db")
