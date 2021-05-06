@@ -153,8 +153,9 @@ private[kafka010] class KafkaSource(
     val latest = kafkaReader.fetchLatestOffsets(currentOffsets)
 
     // checking if we need to skip batch based on minoffsetPerTrigger criteria
-    val skipBatch = if (minOffsetPerTrigger.isDefined) delayBatch(latest, currentOffsets.get)
-    else false
+    val skipBatch = if (minOffsetPerTrigger.isDefined) {
+      delayBatch(latest, currentOffsets.get)
+    } else false
 
     if (skipBatch) {
       logDebug(
