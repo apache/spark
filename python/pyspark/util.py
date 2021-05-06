@@ -265,14 +265,18 @@ def _parse_memory(s):
 
 
 def inheritable_thread_target(f):
-    @functools.wraps(f)
-    def wrapped_f(*args, **kwargs):
-        from pyspark import SparkContext
-        if isinstance(SparkContext._gateway, ClientServer):
-            sc = SparkContext._active_spark_context
+    from pyspark import SparkContext
+    if isinstance(SparkContext._gateway, ClientServer):
+        # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+        sc = SparkContext._active_spark_context
+
+        # Get local properties from main thread
+        properties = sc._jsc.sc().getLocalProperties().clone()
+
+        @functools.wraps(f)
+        def wrapped_f(*args, **kwargs):
             try:
-                # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
-                properties = sc._jsc.sc().getLocalProperties().clone()
+                # Set local properties in child thread.
                 sc._jsc.sc().setLocalProperties(properties)
                 return f(*args, **kwargs)
             finally:
@@ -287,12 +291,12 @@ def inheritable_thread_target(f):
                                 del connections[i]
                                 break
                         else:
-                            # Just in case the connection was not closed but removed from the queue.
+                            # Just in case the connection was not closed but removed from the
+                            # queue.
                             thread_connection.close()
-        else:
-            return f(*args, **kwargs)
-
-    return wrapped_f
+        return wrapped_f
+    else:
+        return f
 
 
 class InheritableThread(threading.Thread):
