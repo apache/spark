@@ -147,7 +147,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     // Fit models in a Future for training in parallel
     instr.logDebug(s"Train split with multiple sets of parameters.")
 
-    var subTaskFailed = false
+    @volatile var subTaskFailed = false
     val metricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
       Future[Double] {
         if (subTaskFailed) {

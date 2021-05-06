@@ -20,11 +20,12 @@ import sys
 import itertools
 import random
 import math
+import time
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.common import inherit_doc, _py2java, _java2py
 from pyspark.ml.evaluation import Evaluator
@@ -730,13 +731,34 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
             train = datasets[i][0].cache()
 
             tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
-            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-                metrics[j] += (metric / nFolds)
-                if collectSubModelsParam:
-                    subModels[i][j] = subModel
 
-            validation.unpersist()
-            train.unpersist()
+            sub_task_failed = False
+
+            @inheritable_thread_target
+            def run_task(task):
+                if sub_task_failed:
+                    raise RuntimeError("Terminate this task because one of other task failed.")
+                return task()
+
+            try:
+                for j, metric, subModel in pool.imap_unordered(run_task, tasks):
+                    metrics[j] += (metric / nFolds)
+                    if collectSubModelsParam:
+                        subModels[i][j] = subModel
+            except:
+                sub_task_failed = True
+                raise
+            finally:
+                if sub_task_failed:
+                    try:
+                        time.sleep(1)
+                        sc = dataset._sc
+                        sc.cancelJobGroup(sc.getLocalProperty("spark.jobGroup.id"))
+                    except:
+                        pass
+
+                train.unpersist()
+                validation.unpersist()
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
@@ -1264,13 +1286,34 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
         tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
         metrics = [None] * numModels
-        for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-            metrics[j] = metric
-            if collectSubModelsParam:
-                subModels[j] = subModel
 
-        train.unpersist()
-        validation.unpersist()
+        sub_task_failed = False
+
+        @inheritable_thread_target
+        def run_task(task):
+            if sub_task_failed:
+                raise RuntimeError("Terminate this task because one of other task failed.")
+            return task()
+
+        try:
+            for j, metric, subModel in pool.imap_unordered(run_task, tasks):
+                metrics[j] = metric
+                if collectSubModelsParam:
+                    subModels[j] = subModel
+        except:
+            sub_task_failed = True
+            raise
+        finally:
+            if sub_task_failed:
+                try:
+                    time.sleep(1)
+                    sc = dataset._sc
+                    sc.cancelJobGroup(sc.getLocalProperty("spark.jobGroup.id"))
+                except:
+                    pass
+
+            train.unpersist()
+            validation.unpersist()
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)

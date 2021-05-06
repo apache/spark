@@ -168,7 +168,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val validationDataset = sparkSession.createDataFrame(validation, schemaWithoutFold).cache()
       instr.logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
-      var subTaskFailed = false
+      @volatile var subTaskFailed = false
       // Fit models in a Future for training in parallel
       val foldMetricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
         Future[Double] {

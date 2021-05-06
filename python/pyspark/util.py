@@ -264,7 +264,7 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def inheritable_thread(f):
+def inheritable_thread_target(f):
     @functools.wraps(f)
     def wrapped_f(*args, **kwargs):
         from pyspark import SparkContext
@@ -318,7 +318,7 @@ class InheritableThread(threading.Thread):
     """
     def __init__(self, target, *args, **kwargs):
         super(InheritableThread, self).__init__(
-            target=inheritable_thread(target), *args, **kwargs
+            target=inheritable_thread_target(target), *args, **kwargs
         )
 
 
