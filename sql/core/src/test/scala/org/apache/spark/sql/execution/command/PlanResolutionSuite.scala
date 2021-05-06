@@ -26,7 +26,7 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, LocalTempView, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
@@ -2190,6 +2190,29 @@ class PlanResolutionSuite extends AnalysisTest {
     assert(desc.storage.properties == Map("k1" -> "v1"))
     assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
     assert(desc.comment == Some("no comment"))
+  }
+
+  test("SPARK-34701: children/innerChildren should be mutually exclusive for " +
+    "AlterViewAsCommand/CreateViewCommand") {
+    def verifyChildren(plan: LogicalPlan, isAnalyzed: Boolean): Unit = {
+      if (isAnalyzed) {
+        assert(plan.innerChildren.length == 1)
+        assert(plan.children.isEmpty)
+      } else {
+        assert(plan.innerChildren.isEmpty)
+        assert(plan.children.length == 1)
+      }
+    }
+    Seq(true, false).foreach { isAnalyzed =>
+      val ident = TableIdentifier("v")
+      verifyChildren(
+        AlterViewAsCommand(ident, "SELECT 1", null, isAnalyzed),
+        isAnalyzed)
+      verifyChildren(
+        CreateViewCommand(
+          ident, Nil, None, Map(), None, null, false, true, LocalTempView, isAnalyzed),
+        isAnalyzed)
+    }
   }
 
   // TODO: add tests for more commands.

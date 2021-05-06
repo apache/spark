@@ -77,7 +77,7 @@ case class CreateViewCommand(
     copy(plan = newChildren.head)
   }
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(plan)
+  override def innerChildren: Seq[QueryPlan[_]] = if (isAnalyzed) Seq(plan) else Nil
 
   // `plan` needs to be analyzed, but shouldn't be optimized so that caching works correctly.
   override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
@@ -256,7 +256,7 @@ case class AlterViewAsCommand(
     copy(query = newChildren.head)
   }
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override def innerChildren: Seq[QueryPlan[_]] = if (isAnalyzed) Seq(query) else Nil
 
   override def childrenToAnalyze: Seq[LogicalPlan] = query :: Nil
 
