@@ -50,64 +50,43 @@ object FunctionBenchmark extends SqlBasedBenchmark {
     val N = 500L * 1000 * 1000
     Seq(true, false).foreach { codegenEnabled =>
       Seq(true, false).foreach { resultNullable =>
-        javaScalarFunctionBenchmark(N, codegenEnabled = codegenEnabled,
-          resultNullable = resultNullable)
-      }
-    }
-    Seq(true, false).foreach { codegenEnabled =>
-      Seq(true, false).foreach { resultNullable =>
-        scalaScalarFunctionBenchmark(N, codegenEnabled = codegenEnabled,
+        scalarFunctionBenchmark(N, codegenEnabled = codegenEnabled,
           resultNullable = resultNullable)
       }
     }
   }
 
-  private def javaScalarFunctionBenchmark(
+  private def scalarFunctionBenchmark(
       N: Long,
       codegenEnabled: Boolean,
       resultNullable: Boolean): Unit = {
     withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
-      createFunction("long_add_default", new JavaLongAdd(new JavaLongAddDefault(resultNullable)))
-      createFunction("long_add_magic", new JavaLongAdd(new JavaLongAddMagic(resultNullable)))
-      createFunction("long_add_static_magic",
+      createFunction("java_long_add_default",
+        new JavaLongAdd(new JavaLongAddDefault(resultNullable)))
+      createFunction("java_long_add_magic", new JavaLongAdd(new JavaLongAddMagic(resultNullable)))
+      createFunction("java_long_add_static_magic",
         new JavaLongAdd(new JavaLongAddStaticMagic(resultNullable)))
-
-      runBenchmark(N, "Java scalar function (long + long) -> long", codegenEnabled, resultNullable,
-        "long_add_default", "long_add_magic", "long_add_static_magic")
-    }
-  }
-
-  private def scalaScalarFunctionBenchmark(
-      N: Long,
-      codegenEnabled: Boolean,
-      resultNullable: Boolean): Unit = {
-    withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
-      createFunction("long_add_default",
+      createFunction("scala_long_add_default",
         LongAddUnbound(new LongAddWithProduceResult(resultNullable)))
-      createFunction("long_add_magic", LongAddUnbound(new LongAddWithMagic(resultNullable)))
+      createFunction("scala_long_add_magic", LongAddUnbound(new LongAddWithMagic(resultNullable)))
 
-      runBenchmark(N, "scalar function (long + long) -> long", codegenEnabled, resultNullable,
-        "long_add_default", "long_add_magic")
-    }
-  }
-
-  private def runBenchmark(
-      N: Long,
-      shortName: String,
-      codegenEnabled: Boolean,
-      resultNullable: Boolean,
-      functions: String*): Unit = {
-    val codeGenFactoryMode = if (codegenEnabled) FALLBACK else NO_CODEGEN
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
-      SQLConf.CODEGEN_FACTORY_MODE.key -> codeGenFactoryMode.toString) {
-      val name = s"$shortName result_nullable = $resultNullable codegen = $codegenEnabled"
-      val benchmark = new Benchmark(name, N, output = output)
-      functions.foreach { name =>
-        benchmark.addCase(s"with $name", numIters = 3) { _ =>
-          spark.range(N).selectExpr(s"$catalogName.$name(id, id)").noop()
+      val codeGenFactoryMode = if (codegenEnabled) FALLBACK else NO_CODEGEN
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codeGenFactoryMode.toString) {
+        val name = s"scalar function (long + long) -> long, result_nullable = $resultNullable " +
+            s"codegen = $codegenEnabled"
+        val benchmark = new Benchmark(name, N, output = output)
+        benchmark.addCase(s"with native_long_add", numIters = 3) { _ =>
+          spark.range(N).selectExpr("id + id").noop()
         }
+        Seq("java_long_add_default", "java_long_add_magic", "java_long_add_static_magic",
+            "scala_long_add_default", "scala_long_add_magic").foreach { functionName =>
+          benchmark.addCase(s"with $functionName", numIters = 3) { _ =>
+            spark.range(N).selectExpr(s"$catalogName.$functionName(id, id)").noop()
+          }
+        }
+        benchmark.run()
       }
-      benchmark.run()
     }
   }
 
