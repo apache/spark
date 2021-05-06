@@ -134,13 +134,18 @@ private[sql] class SharedState(
     val externalCatalog = SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
       SharedState.externalCatalogClassName(conf), conf, hadoopConf)
 
-    val defaultDbDefinition = CatalogDatabase(
-      SessionCatalog.DEFAULT_DATABASE,
-      "default database",
-      CatalogUtils.stringToURI(conf.get(WAREHOUSE_PATH)),
-      Map())
     // Create default database if it doesn't exist
+    // If database name not equals 'default', throw exception
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
+      if ("default" != SessionCatalog.DEFAULT_DATABASE) {
+        throw new SparkException(s"Default catalog database '${SessionCatalog.DEFAULT_DATABASE}' " +
+          s"not exist, please change default database to 'default' and create it first.")
+      }
+      val defaultDbDefinition = CatalogDatabase(
+        SessionCatalog.DEFAULT_DATABASE,
+        "default database",
+        CatalogUtils.stringToURI(conf.get(WAREHOUSE_PATH)),
+        Map())
       // There may be another Spark application creating default database at the same time, here we
       // set `ignoreIfExists = true` to avoid `DatabaseAlreadyExists` exception.
       externalCatalog.createDatabase(defaultDbDefinition, ignoreIfExists = true)

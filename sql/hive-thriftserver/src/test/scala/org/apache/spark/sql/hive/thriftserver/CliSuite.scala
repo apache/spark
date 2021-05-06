@@ -164,7 +164,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         }
       }
     }
-
     val process = new ProcessBuilder(command: _*).start()
 
     val stdinWriter = new OutputStreamWriter(process.getOutputStream, StandardCharsets.UTF_8)
@@ -610,5 +609,20 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(2.minute,
       Seq("--conf", s"${BUILTIN_HIVE_VERSION.key}=$builtinHiveVersion"))(
       s"set ${BUILTIN_HIVE_VERSION.key};" -> builtinHiveVersion, "SET -v;" -> builtinHiveVersion)
+  }
+
+  test("SPARK-35242: Support change catalog default database for spark") {
+    // Create db and table first
+    runCliWithin(2.minute,
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}"))(
+      "create database spark_35242;" -> "",
+    "use spark_35242;" -> "",
+    "CREATE TABLE spark_test(key INT, val STRING);" -> "")
+
+    // Set default db
+    runCliWithin(2.minute,
+      Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}",
+          "--conf", s"${StaticSQLConf.CATALOG_DEFAULT_DATABASE.key}=spark_35242"))(
+      "show tables;" -> "spark_test")
   }
 }

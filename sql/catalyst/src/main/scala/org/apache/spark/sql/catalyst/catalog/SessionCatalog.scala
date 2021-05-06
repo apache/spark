@@ -48,7 +48,7 @@ import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.Utils
 
 object SessionCatalog {
-  val DEFAULT_DATABASE = "default"
+  val DEFAULT_DATABASE = SQLConf.get.defaultDatabase
 }
 
 /**
@@ -67,8 +67,8 @@ class SessionCatalog(
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
-    cacheTTL: Long = SQLConf.get.metadataCacheTTL) extends SQLConfHelper with Logging {
-  import SessionCatalog._
+    cacheTTL: Long = SQLConf.get.metadataCacheTTL,
+    defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {
   import CatalogTypes.TablePartitionSpec
 
   // For testing only.
@@ -86,7 +86,8 @@ class SessionCatalog(
       new CatalystSqlParser(),
       DummyFunctionResourceLoader,
       conf.tableRelationCacheSize,
-      conf.metadataCacheTTL)
+      conf.metadataCacheTTL,
+      conf.defaultDatabase)
   }
 
   // For testing only.
@@ -127,7 +128,7 @@ class SessionCatalog(
   // check whether the temporary view or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
+  protected var currentDb: String = formatDatabaseName(defaultDatabase)
 
   private val validNameFormat = "([\\w_]+)".r
 
@@ -262,7 +263,7 @@ class SessionCatalog(
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = formatDatabaseName(db)
-    if (dbName == DEFAULT_DATABASE) {
+    if (dbName == defaultDatabase) {
       throw QueryCompilationErrors.cannotDropDefaultDatabaseError
     }
     if (cascade && databaseExists(dbName)) {
@@ -1696,15 +1697,15 @@ class SessionCatalog(
    * This is mainly used for tests.
    */
   def reset(): Unit = synchronized {
-    setCurrentDatabase(DEFAULT_DATABASE)
-    externalCatalog.setCurrentDatabase(DEFAULT_DATABASE)
-    listDatabases().filter(_ != DEFAULT_DATABASE).foreach { db =>
+    setCurrentDatabase(defaultDatabase)
+    externalCatalog.setCurrentDatabase(defaultDatabase)
+    listDatabases().filter(_ != defaultDatabase).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
-    listTables(DEFAULT_DATABASE).foreach { table =>
+    listTables(defaultDatabase).foreach { table =>
       dropTable(table, ignoreIfNotExists = false, purge = false)
     }
-    listFunctions(DEFAULT_DATABASE).map(_._1).foreach { func =>
+    listFunctions(defaultDatabase).map(_._1).foreach { func =>
       if (func.database.isDefined) {
         dropFunction(func, ignoreIfNotExists = false)
       } else {
