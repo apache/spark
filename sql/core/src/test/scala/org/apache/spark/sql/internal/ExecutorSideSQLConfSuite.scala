@@ -105,7 +105,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
       withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString) {
         // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.
         val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
-          .queryExecution.executedPlan, spark)
+          .queryExecution.executedPlan)
         assert(res.length == 2)
         assert(res.forall { case (_, code, _) =>
           (code.contains("* Codegened pipeline") == flag) &&

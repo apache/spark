@@ -43,7 +43,7 @@ abstract class DebuggingSuiteBase extends SharedSparkSession {
 
   test("debugCodegen") {
     val res = codegenString(spark.range(10).groupBy(col("id") * 2).count()
-      .queryExecution.executedPlan, spark)
+      .queryExecution.executedPlan)
     assert(res.contains("Subtree 1 / 2"))
     assert(res.contains("Subtree 2 / 2"))
     assert(res.contains("Object[]"))
@@ -51,7 +51,7 @@ abstract class DebuggingSuiteBase extends SharedSparkSession {
 
   test("debugCodegenStringSeq") {
     val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
-      .queryExecution.executedPlan, spark)
+      .queryExecution.executedPlan)
     assert(res.length == 2)
     assert(res.forall{ case (subtree, code, _) =>
       subtree.contains("Range") && code.contains("Object[]")})
@@ -80,14 +80,14 @@ abstract class DebuggingSuiteBase extends SharedSparkSession {
     Seq(true, false).foreach { useInnerClass =>
       val plan = WholeStageCodegenExec(DummyCodeGeneratorPlan(useInnerClass))(codegenStageId = 0)
 
-      val genCodes = codegenStringSeq(plan, spark)
+      val genCodes = codegenStringSeq(plan)
       assert(genCodes.length == 1)
       val (_, _, codeStats) = genCodes.head
       val expectedNumInnerClasses = if (useInnerClass) 1 else 0
       assert(codeStats.maxMethodCodeSize > 0 && codeStats.maxConstPoolSize > 0 &&
         codeStats.numInnerClasses == expectedNumInnerClasses)
 
-      val debugCodegenStr = codegenString(plan, spark)
+      val debugCodegenStr = codegenString(plan)
       assert(debugCodegenStr.contains("maxMethodCodeSize:"))
       assert(debugCodegenStr.contains("maxConstantPoolSize:"))
       assert(debugCodegenStr.contains("numInnerClasses:"))
