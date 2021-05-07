@@ -280,7 +280,7 @@ private[spark] class DAGScheduler(
     }
 
   private val shuffleMergeFinalizeScheduler =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("shuffle-merge-finalizer")
+    ThreadUtils.newDaemonThreadPoolScheduledExecutor("shuffle-merge-finalizer", 8)
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -2024,8 +2024,6 @@ private[spark] class DAGScheduler(
    * Schedules shuffle merge finalize.
    */
   private[scheduler] def scheduleShuffleMergeFinalize(stage: ShuffleMapStage): Unit = {
-    // TODO Use the default single threaded scheduler or extend ThreadUtils to
-    // TODO support the multi-threaded scheduler?
     logInfo(("%s (%s) scheduled for finalizing" +
       " shuffle merge in %s s").format(stage, stage.name, shuffleMergeFinalizeWaitSec))
     shuffleMergeFinalizeScheduler.schedule(
