@@ -176,12 +176,12 @@ case class ExpandExec(
           val boundExpr = BindReferences.bindReference(exprs(col), attributeSeq)
           val ev = boundExpr.genCode(ctx)
           val inputVars = CodeGenerator.getLocalInputVariableValues(ctx, boundExpr)._1.toSeq
-          val argList = inputVars.map { v =>
-            s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
-          }
           val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars)
           if (CodeGenerator.isValidParamLength(paramLength)) {
             val switchCaseFunc = ctx.freshName("switchCaseCode")
+            val argList = inputVars.map { v =>
+              s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
+            }
             ctx.addNewFunction(switchCaseFunc,
               s"""
                  |private void $switchCaseFunc(${argList.mkString(", ")}) {
