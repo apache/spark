@@ -49,15 +49,21 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     }
 
     val shuffleStageInfos = collectShuffleStageInfos(plan)
+    val shuffles = shuffleStageInfos.map(_.shuffleStage.shuffle)
     // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
-    if (!shuffleStageInfos.forall(s => supportCoalesce(s.shuffleStage.shuffle))) {
+    if (!shuffles.forall(supportCoalesce)) {
       plan
     } else {
-      // We fall back to Spark default parallelism if the minimum number of coalesced partitions
-      // is not set, so to avoid perf regressions compared to no coalescing.
-      val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
-        .getOrElse(session.sparkContext.defaultParallelism)
+      val minPartitionNum = if (shuffles.forall(_.shuffleOrigin == REPARTITION_BY_NONE)) {
+        // Try to coalesce shuffle partition as much as possible for REPARTITION_BY_NONE.
+        1
+      } else {
+        // We fall back to Spark default parallelism if the minimum number of coalesced partitions
+        // is not set, so to avoid perf regressions compared to no coalescing.
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+          .getOrElse(session.sparkContext.defaultParallelism)
+      }
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
         shuffleStageInfos.map(_.shuffleStage.mapStats),
         shuffleStageInfos.map(_.partitionSpecs),
