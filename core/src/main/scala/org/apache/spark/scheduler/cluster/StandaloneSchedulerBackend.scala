@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.util.Locale
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
 
