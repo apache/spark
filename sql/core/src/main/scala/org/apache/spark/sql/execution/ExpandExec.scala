@@ -189,7 +189,7 @@ case class ExpandExec(
       }
 
       val splitThreshold = SQLConf.get.methodSplitThreshold
-      val inputVars = inputVarSets.reduce(_ ++ _)
+      val inputVars = inputVarSets.foldLeft(Set.empty[VariableValue])(_ ++ _)
       val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars.toSeq)
       val maybeSplitUpdateCode = if (CodeGenerator.isValidParamLength(paramLength) &&
           exprCodesWithIndices.map(_._2.code.length).sum > splitThreshold) {
