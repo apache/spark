@@ -370,8 +370,4 @@ object QueryParsingErrors {
   def invalidGroupingSetError(element: String, ctx: GroupingAnalyticsContext): Throwable = {
     new ParseException(s"Empty set in $element grouping sets is not supported.", ctx)
   }
-
-  def unsupportedDdlStatementForQueryError(ctx: DdlStatementForQueryContext): Throwable = {
-    new ParseException("Unsupported DdlStatementForQueryContext", ctx)
-  }
 }
