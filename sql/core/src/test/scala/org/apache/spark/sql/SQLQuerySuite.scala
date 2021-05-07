@@ -4101,7 +4101,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("abcdedg") {
+  test("SPARK-35331: Fix resolving original expression in RepartitionByExpression after aliased") {
     Seq("CLUSTER", "DISTRIBUTE").foreach { keyword =>
       Seq("a", "substr(a, 0, 3)").foreach { expr =>
         val clause = keyword + " by " + expr
