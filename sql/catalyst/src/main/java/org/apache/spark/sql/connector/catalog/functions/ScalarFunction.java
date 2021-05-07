@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.DataType;
  * <p>
  * In addition, for stateless Java functions, users can optionally define the
  * {@link #MAGIC_METHOD_NAME} as a static method, which further avoids certain runtime costs such
- * as nullness check on the method receiver, potential Java dynamic dispatch, etc.
+ * as Java dynamic dispatch.
  * <p>
  * For example, a scalar UDF for adding two integers can be defined as follow with the magic
  * method approach:
