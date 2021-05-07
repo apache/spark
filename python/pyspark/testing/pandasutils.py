@@ -70,7 +70,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
     def tearDownClass(cls):
         # We don't stop Spark session to reuse across all tests.
         # The Spark session will be started and stopped at PyTest session level.
-        # Please see databricks/koalas/conftest.py.
+        # Please see pyspark/pandas/conftest.py.
         pass
 
     def assertPandasEqual(self, left, right, check_exact=True):
