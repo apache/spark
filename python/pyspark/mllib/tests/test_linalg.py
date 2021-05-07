@@ -26,7 +26,7 @@ from pyspark.mllib.linalg import (  # type: ignore[attr-defined]
     Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
 )
-from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix
+from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix, IndexedRow
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.sql import Row
 from pyspark.testing.mllibutils import MLlibTestCase
@@ -451,6 +451,17 @@ class VectorUDTTests(MLlibTestCase):
         self.assertEqual(matrix.numCols(), 1)
         with self.assertRaises(IllegalArgumentException):
             IndexedRowMatrix(df.drop("_1"))
+
+    def test_row_matrix_invalid_type(self):
+        rows = self.sc.parallelize([[1, 2, 3], [4, 5, 6]])
+        invalid_type = ""
+        matrix = RowMatrix(rows)
+        self.assertRaises(TypeError, matrix.multiply, invalid_type)
+
+        irows = self.sc.parallelize([IndexedRow(0, [1, 2, 3]),
+                                     IndexedRow(1, [4, 5, 6])])
+        imatrix = IndexedRowMatrix(irows)
+        self.assertRaises(TypeError, imatrix.multiply, invalid_type)
 
 
 class MatrixUDTTests(MLlibTestCase):

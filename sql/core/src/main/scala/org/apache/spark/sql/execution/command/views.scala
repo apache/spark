@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
@@ -76,8 +75,6 @@ case class CreateViewCommand(
     assert(!isAnalyzed)
     copy(plan = newChildren.head)
   }
-
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(plan)
 
   // `plan` needs to be analyzed, but shouldn't be optimized so that caching works correctly.
   override def childrenToAnalyze: Seq[LogicalPlan] = plan :: Nil
@@ -255,8 +252,6 @@ case class AlterViewAsCommand(
     assert(!isAnalyzed)
     copy(query = newChildren.head)
   }
-
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def childrenToAnalyze: Seq[LogicalPlan] = query :: Nil
 

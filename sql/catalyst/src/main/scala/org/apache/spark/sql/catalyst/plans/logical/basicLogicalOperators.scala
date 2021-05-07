@@ -70,6 +70,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(PROJECT)
+
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg
@@ -238,6 +240,8 @@ case class Except(
   override def output: Seq[Attribute] = left.output
 
   override def metadataOutput: Seq[Attribute] = Nil
+
+  final override val nodePatterns : Seq[TreePattern] = Seq(EXCEPT)
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
 
@@ -813,6 +817,8 @@ case class Aggregate(
     }
   }
 
+  final override val nodePatterns : Seq[TreePattern] = Seq(AGGREGATE)
+
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
@@ -832,6 +838,8 @@ case class Window(
     child.output ++ windowExpressions.map(_.toAttribute)
 
   override def producedAttributes: AttributeSet = windowOutputSet
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW)
 
   def windowOutputSet: AttributeSet = AttributeSet(windowExpressions.map(_.toAttribute))
 
@@ -1040,6 +1048,8 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderP
     }
   }
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
     copy(child = newChild)
 }
@@ -1059,6 +1069,8 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
       case _ => None
     }
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LocalLimit =
     copy(child = newChild)

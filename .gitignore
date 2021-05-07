@@ -54,6 +54,7 @@ sql/docs
 sql/site
 lib_managed/
 lint-r-report.log
+lint-js-report.log
 log/
 logs/
 out/
@@ -105,3 +106,6 @@ spark-warehouse/
 
 # For SBT
 .jvmopts
+
+# For Node.js
+node_modules

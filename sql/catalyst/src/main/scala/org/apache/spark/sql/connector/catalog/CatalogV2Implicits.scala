@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -39,8 +39,7 @@ private[sql] object CatalogV2Implicits {
   implicit class BucketSpecHelper(spec: BucketSpec) {
     def asTransform: BucketTransform = {
       if (spec.sortColumnNames.nonEmpty) {
-        throw new AnalysisException(
-          s"Cannot convert bucketing with sort columns to a transform: $spec")
+        throw QueryCompilationErrors.cannotConvertBucketWithSortColumnsToTransformError(spec)
       }
 
       val references = spec.bucketColumnNames.map(col => reference(Seq(col)))
@@ -53,14 +52,13 @@ private[sql] object CatalogV2Implicits {
       val (idTransforms, nonIdTransforms) = transforms.partition(_.isInstanceOf[IdentityTransform])
 
       if (nonIdTransforms.nonEmpty) {
-        throw new AnalysisException("Transforms cannot be converted to partition columns: " +
-            nonIdTransforms.map(_.describe).mkString(", "))
+        throw QueryCompilationErrors.cannotConvertTransformsToPartitionColumnsError(nonIdTransforms)
       }
 
       idTransforms.map(_.asInstanceOf[IdentityTransform]).map(_.reference).map { ref =>
         val parts = ref.fieldNames
         if (parts.size > 1) {
-          throw new AnalysisException(s"Cannot partition by nested column: $ref")
+          throw QueryCompilationErrors.cannotPartitionByNestedColumnError(ref)
         } else {
           parts(0)
         }
@@ -73,15 +71,14 @@ private[sql] object CatalogV2Implicits {
       case tableCatalog: TableCatalog =>
         tableCatalog
       case _ =>
-        throw new AnalysisException(s"Cannot use catalog ${plugin.name}: not a TableCatalog")
+        throw QueryCompilationErrors.cannotUseCatalogError(plugin, "not a TableCatalog")
     }
 
     def asNamespaceCatalog: SupportsNamespaces = plugin match {
       case namespaceCatalog: SupportsNamespaces =>
         namespaceCatalog
       case _ =>
-        throw new AnalysisException(
-          s"Cannot use catalog ${plugin.name}: does not support namespaces")
+        throw QueryCompilationErrors.cannotUseCatalogError(plugin, "does not support namespaces")
     }
 
     def isFunctionCatalog: Boolean = plugin match {
@@ -93,8 +90,7 @@ private[sql] object CatalogV2Implicits {
       case functionCatalog: FunctionCatalog =>
         functionCatalog
       case _ =>
-        throw new AnalysisException(
-          s"Cannot use catalog '${plugin.name}': not a FunctionCatalog")
+        throw QueryCompilationErrors.cannotUseCatalogError(plugin, "not a FunctionCatalog")
     }
   }
 
@@ -128,22 +124,22 @@ private[sql] object CatalogV2Implicits {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
       case _ =>
-        throw new AnalysisException(
-          s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
+        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
+          quoted, "TableIdentifier")
     }
 
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
       case _ =>
-        throw new AnalysisException(
-          s"$quoted is not a valid FunctionIdentifier as it has more than 2 name parts.")
+        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
+          quoted, "FunctionIdentifier")
     }
   }
 
   implicit class MultipartIdentifierHelper(parts: Seq[String]) {
     if (parts.isEmpty) {
-      throw new AnalysisException("multi-part identifier cannot be empty.")
+      throw QueryCompilationErrors.emptyMultipartIdentifierError()
     }
 
     def asIdentifier: Identifier = Identifier.of(parts.init.toArray, parts.last)
@@ -152,16 +148,16 @@ private[sql] object CatalogV2Implicits {
       case Seq(tblName) => TableIdentifier(tblName)
       case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
       case _ =>
-        throw new AnalysisException(
-          s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
+        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
+          quoted, "TableIdentifier")
     }
 
     def asFunctionIdentifier: FunctionIdentifier = parts match {
       case Seq(funcName) => FunctionIdentifier(funcName)
       case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
       case _ =>
-        throw new AnalysisException(
-          s"$quoted is not a valid FunctionIdentifier as it has more than 2 name parts.")
+        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
+          quoted, "FunctionIdentifier")
     }
 
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")
