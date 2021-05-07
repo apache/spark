@@ -31,7 +31,7 @@ import org.mockito.Mockito.{mock, times, verify, when}
 import org.mockito.stubbing.Answer
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExternalBlockStoreClient}
@@ -862,3 +862,4 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(mergedBlock.size === inputBlocks.map(_.size).sum)
   }
 }
+
