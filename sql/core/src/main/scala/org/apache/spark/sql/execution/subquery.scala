@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression,
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{IN_SUBQUERY, MULTI_SCALAR_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{IN_SUBQUERY, SCALAR_SUBQUERY}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 
@@ -89,53 +89,6 @@ case class ScalarSubquery(
       assert(rows(0).numFields == 1,
         s"Expects 1 field, but got ${rows(0).numFields}; something went wrong in analysis")
       result = rows(0).get(0, dataType)
-    } else {
-      // If there is no rows returned, the result should be null.
-      result = null
-    }
-    updated = true
-  }
-
-  override def eval(input: InternalRow): Any = {
-    require(updated, s"$this has not finished")
-    result
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    require(updated, s"$this has not finished")
-    Literal.create(result, dataType).doGenCode(ctx, ev)
-  }
-}
-
-/**
- * A subquery that is capable to return multiple scalar values.
- */
-case class MultiScalarSubqueryExec(
-    plan: BaseSubqueryExec,
-    exprId: ExprId)
-  extends ExecSubqueryExpression with LeafLike[Expression] {
-
-  override def dataType: DataType = plan.schema
-  override def nullable: Boolean = true
-  override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
-  override def withNewPlan(query: BaseSubqueryExec): MultiScalarSubqueryExec = copy(plan = query)
-
-  override def semanticEquals(other: Expression): Boolean = other match {
-    case s: MultiScalarSubqueryExec => plan.sameResult(s.plan)
-    case _ => false
-  }
-
-  // the first column in first row from `query`.
-  @volatile private var result: Any = _
-  @volatile private var updated: Boolean = false
-
-  def updateResult(): Unit = {
-    val rows = plan.executeCollect()
-    if (rows.length > 1) {
-      sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
-    }
-    if (rows.length == 1) {
-      result = rows(0)
     } else {
       // If there is no rows returned, the result should be null.
       result = null
@@ -224,19 +177,12 @@ case class InSubqueryExec(
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
-    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY,
-      MULTI_SCALAR_SUBQUERY, IN_SUBQUERY)) {
+    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY)) {
       case subquery: expressions.ScalarSubquery =>
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
         ScalarSubquery(
           SubqueryExec.createForScalarSubquery(
             s"scalar-subquery#${subquery.exprId.id}", executedPlan),
-          subquery.exprId)
-      case subquery: expressions.MultiScalarSubquery =>
-        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
-        MultiScalarSubqueryExec(
-          SubqueryExec.createForScalarSubquery(
-            s"multi-scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
       case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
         val expr = if (values.length == 1) {

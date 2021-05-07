@@ -48,7 +48,6 @@ object TreePattern extends Enumeration  {
   val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value
   val MAP_OBJECTS: Value = Value
-  val MULTI_SCALAR_SUBQUERY: Value = Value
   val NOT: Value = Value
   val NULL_CHECK: Value = Value
   val NULL_LITERAL: Value = Value

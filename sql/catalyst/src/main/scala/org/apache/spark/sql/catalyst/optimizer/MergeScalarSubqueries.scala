@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{MULTI_SCALAR_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 
 /**
  * This rule tries to merge multiple non-correlated [[ScalarSubquery]]s into a
@@ -72,8 +72,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{MULTI_SCALAR_SUBQUERY, S
 object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.scalarSubqueryMergeEabled && conf.subqueryReuseEnabled) {
-      val mergedSubqueries = ArrayBuffer.empty[LogicalPlan]
-      removeReferences(mergeAndInsertReferences(plan, mergedSubqueries), mergedSubqueries)
+      val mergedSubqueries = ArrayBuffer.empty[Project]
+      removeReferences(mergeAndInsertReferences(plan, mergedSubqueries))
     } else {
       plan
     }
@@ -81,17 +81,19 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   private def mergeAndInsertReferences(
       plan: LogicalPlan,
-      mergedSubqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
-    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY), ruleId) {
-      case s: ScalarSubquery if s.children.isEmpty =>
-        val (mergedPlan, ordinal) = mergeAndGetReference(s.plan, mergedSubqueries)
-        GetStructField(MultiScalarSubquery(mergedPlan, s.exprId), ordinal)
+      mergedSubqueries: ArrayBuffer[Project]): LogicalPlan = {
+    plan.transformWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY), ruleId) {
+      case o => o.transformExpressionsUpWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY), ruleId) {
+        case s: ScalarSubquery if s.children.isEmpty =>
+          val (mergedPlan, ordinal) = mergeAndGetReference(s.plan, mergedSubqueries)
+          GetStructField(s.copy(plan = mergedPlan), ordinal)
+      }
     }
   }
 
   case class SubqueryReference(
       index: Int,
-      mergedSubqueries: ArrayBuffer[LogicalPlan]) extends LeafNode {
+      mergedSubqueries: ArrayBuffer[Project]) extends LeafNode {
     override def stringArgs: Iterator[Any] = Iterator(index)
 
     override def output: Seq[Attribute] = mergedSubqueries(index).output
@@ -99,17 +101,23 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   private def mergeAndGetReference(
       plan: LogicalPlan,
-      mergedSubqueries: ArrayBuffer[LogicalPlan]): (SubqueryReference, Int) = {
+      mergedSubqueries: ArrayBuffer[Project]): (SubqueryReference, Int) = {
     mergedSubqueries.zipWithIndex.collectFirst {
-      Function.unlift { case (s, i) => tryMergePlans(plan, s).map(_ -> i) }
-    }.map { case ((mergedPlan, outputMap), i) =>
-      mergedSubqueries(i) = mergedPlan
-      SubqueryReference(i, mergedSubqueries) ->
-        mergedPlan.output.indexOf(outputMap(plan.output.head))
+      Function.unlift { case (header, i) => tryMergePlans(plan, header.child).map((header, _, i)) }
+    }.map { case (header, (mergedPlan, outputMap), i) =>
+      if (mergedPlan.output.size > header.child.output.size) {
+        mergedSubqueries(i) = createHeader(mergedPlan)
+      }
+      val ordinal = mergedPlan.output.indexOf(outputMap(plan.output.head))
+      SubqueryReference(i, mergedSubqueries) -> ordinal
     }.getOrElse {
-      mergedSubqueries += plan
+      mergedSubqueries += createHeader(plan)
       SubqueryReference(mergedSubqueries.length - 1, mergedSubqueries) -> 0
     }
+  }
+
+  private def createHeader(plan: LogicalPlan) = {
+    Project(Seq(Alias(CreateStruct(plan.output), "mergedValue")()), plan)
   }
 
   private def tryMergePlans(
@@ -191,16 +199,14 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
-  private def removeReferences(
-      plan: LogicalPlan,
-      mergedSubqueries: ArrayBuffer[LogicalPlan]): LogicalPlan = {
-    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(MULTI_SCALAR_SUBQUERY), ruleId) {
-      case gsf @ GetStructField(mss @ MultiScalarSubquery(sr: SubqueryReference, _), _, _) =>
-        val dereferencedPlan = removeReferences(mergedSubqueries(sr.index), mergedSubqueries)
-        if (dereferencedPlan.outputSet.size > 1) {
-          gsf.copy(child = mss.copy(plan = dereferencedPlan))
+  private def removeReferences(plan: LogicalPlan): LogicalPlan = {
+    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY), ruleId) {
+      case gsf @ GetStructField(ss @ ScalarSubquery(sr: SubqueryReference, _, _), _, _) =>
+        val header = sr.mergedSubqueries(sr.index)
+        if (header.child.output.size > 1) {
+          gsf.copy(child = ss.copy(plan = header))
         } else {
-          ScalarSubquery(dereferencedPlan, exprId = mss.exprId)
+          ss.copy(plan = header.child)
         }
     }
   }

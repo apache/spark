@@ -22,9 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, LIST_SUBQUERY,
-  MULTI_SCALAR_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY, TreePattern}
+  PLAN_EXPRESSION, SCALAR_SUBQUERY, TreePattern}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 
@@ -266,33 +265,6 @@ object ScalarSubquery {
       case _ => false
     }.isDefined
   }
-}
-
-/**
- * A subquery that is capable to return multiple scalar values.
- */
-case class MultiScalarSubquery(
-    plan: LogicalPlan,
-    exprId: ExprId = NamedExpression.newExprId)
-  extends SubqueryExpression(plan, Seq.empty, exprId) with LeafLike[Expression] with Unevaluable {
-  override def dataType: DataType = {
-    assert(plan.schema.nonEmpty, "Multi-column scalar subquery should have columns")
-    plan.schema
-  }
-
-  override def nullable: Boolean = true
-
-  override def withNewPlan(plan: LogicalPlan): MultiScalarSubquery = copy(plan = plan)
-
-  override def toString: String = s"multi-scalar-subquery#${exprId.id}"
-
-  override lazy val canonicalized: Expression = {
-    MultiScalarSubquery(
-      plan.canonicalized,
-      ExprId(0))
-  }
-
-  final override def nodePatternsInternal: Seq[TreePattern] = Seq(MULTI_SCALAR_SUBQUERY)
 }
 
 /**

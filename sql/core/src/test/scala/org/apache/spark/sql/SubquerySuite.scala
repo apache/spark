@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, MultiScalarSubqueryExec, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
@@ -1853,8 +1853,6 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
         var countSubqueryExec = 0
         var countReuseSubqueryExec = 0
-        var multiSubqueryExec = 0
-        var countReuseMultiSubqueryExec = 0
         df.queryExecution.executedPlan.transformAllExpressions {
           case s @ ScalarSubquery(_: SubqueryExec, _) =>
             countSubqueryExec += 1
@@ -1862,25 +1860,15 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           case s @ ScalarSubquery(_: ReusedSubqueryExec, _) =>
             countReuseSubqueryExec += 1
             s
-          case s @ MultiScalarSubqueryExec(_: SubqueryExec, _) =>
-            multiSubqueryExec += 1
-            s
-          case s @ MultiScalarSubqueryExec(_: ReusedSubqueryExec, _) =>
-            countReuseMultiSubqueryExec += 1
-            s
         }
 
         if (reuse) {
-          assert(countSubqueryExec == 0 && countReuseSubqueryExec == 0,
-            "Unexpected ScalarSubquery in the plan")
-          assert(multiSubqueryExec == 1, "Missing or unexpected MultiScalarSubquery in the plan")
-          assert(countReuseMultiSubqueryExec == 2,
+          assert(countSubqueryExec == 1, "Missing or unexpected MultiScalarSubquery in the plan")
+          assert(countReuseSubqueryExec == 2,
             "Missing or unexpected reused MultiScalarSubquery in the plan")
         } else {
           assert(countSubqueryExec == 3, "Missing or unexpected ScalarSubquery in the plan")
           assert(countReuseSubqueryExec == 0, "Unexpected reused ScalarSubquery in the plan")
-          assert(multiSubqueryExec == 0 && countReuseMultiSubqueryExec == 0,
-            "Unexpected reused MultiScalarSubquery in the plan")
         }
       }
     }

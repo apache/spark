@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningExpression, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY,
-  MULTI_SCALAR_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY}
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{BaseSubqueryExec, InSubqueryExec, SparkPlan}
 
@@ -30,12 +29,9 @@ case class PlanAdaptiveSubqueries(
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressionsWithPruning(
-      _.containsAnyPattern(SCALAR_SUBQUERY, MULTI_SCALAR_SUBQUERY, IN_SUBQUERY,
-        DYNAMIC_PRUNING_SUBQUERY)) {
+      _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
       case expressions.ScalarSubquery(_, _, exprId) =>
         execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
-      case expressions.MultiScalarSubquery(_, exprId) =>
-        execution.MultiScalarSubqueryExec(subqueryMap(exprId.id), exprId)
       case expressions.InSubquery(values, ListQuery(_, _, exprId, _)) =>
         val expr = if (values.length == 1) {
           values.head
