@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -171,43 +169,49 @@ case class ExpandExec(
 
     // Part 2: switch/case statements
     val cases = projections.zipWithIndex.map { case (exprs, row) =>
-      val updateCode = mutable.ArrayBuffer[String]()
-      exprs.indices.foreach { col =>
+      val (exprCodesWithIndices, inputVarSets) = exprs.indices.flatMap { col =>
         if (!sameOutput(col)) {
           val boundExpr = BindReferences.bindReference(exprs(col), attributeSeq)
-          val ev = boundExpr.genCode(ctx)
-          val inputVars = CodeGenerator.getLocalInputVariableValues(ctx, boundExpr)._1.toSeq
-          val splitThreshold = SQLConf.get.methodSplitThreshold
-          val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars)
-          if (ev.code.length > splitThreshold && CodeGenerator.isValidParamLength(paramLength)) {
-            val switchCaseFunc = ctx.freshName("switchCaseCode")
-            val argList = inputVars.map { v =>
-              s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
-            }
-            ctx.addNewFunction(switchCaseFunc,
-              s"""
-                 |private void $switchCaseFunc(${argList.mkString(", ")}) {
-                 |  ${ev.code}
-                 |  ${outputColumns(col).isNull} = ${ev.isNull};
-                 |  ${outputColumns(col).value} = ${ev.value};
-                 |}
-               """.stripMargin)
-
-            updateCode += s"$switchCaseFunc(${inputVars.map(_.variableName).mkString(", ")});"
-          } else {
-            updateCode +=
-              s"""
-                 |${ev.code}
-                 |${outputColumns(col).isNull} = ${ev.isNull};
-                 |${outputColumns(col).value} = ${ev.value};
-               """.stripMargin
-          }
+          val exprCode = boundExpr.genCode(ctx)
+          val inputVars = CodeGenerator.getLocalInputVariableValues(ctx, boundExpr)._1
+          Some(((col, exprCode), inputVars))
+        } else {
+          None
         }
+      }.unzip
+
+      val updateCode = exprCodesWithIndices.map { case (col, ev) =>
+        s"""
+           |${ev.code}
+           |${outputColumns(col).isNull} = ${ev.isNull};
+           |${outputColumns(col).value} = ${ev.value};
+         """.stripMargin
+      }
+
+      val splitThreshold = SQLConf.get.methodSplitThreshold
+      val inputVars = inputVarSets.reduce(_ ++ _)
+      val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars.toSeq)
+      val maybeSplitUpdateCode = if (CodeGenerator.isValidParamLength(paramLength) &&
+          exprCodesWithIndices.map(_._2.code.length).sum > splitThreshold) {
+        val switchCaseFunc = ctx.freshName("switchCaseCode")
+        val argList = inputVars.map { v =>
+          s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
+        }
+        ctx.addNewFunction(switchCaseFunc,
+          s"""
+             |private void $switchCaseFunc(${argList.mkString(", ")}) {
+             |  ${updateCode.mkString("\n")}
+             |}
+           """.stripMargin)
+
+        s"$switchCaseFunc(${inputVars.map(_.variableName).mkString(", ")});"
+      } else {
+        updateCode.mkString("\n")
       }
 
       s"""
          |case $row:
-         |  ${updateCode.mkString("\n")}
+         |  $maybeSplitUpdateCode
          |  break;
        """.stripMargin
     }
