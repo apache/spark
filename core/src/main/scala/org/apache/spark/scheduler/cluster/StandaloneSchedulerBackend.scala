@@ -236,13 +236,6 @@ private[spark] class StandaloneSchedulerBackend(
     }
   }
 
-  override def getDriverLogUrls: Option[Map[String, String]] = {
-    val prefix = "SPARK_DRIVER_LOG_URL_"
-    val driverLogUrls = sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2)).toMap
-    if (driverLogUrls.nonEmpty) Some(driverLogUrls) else None
-  }
-
   private def waitForRegistration() = {
     registrationBarrier.acquire()
   }
