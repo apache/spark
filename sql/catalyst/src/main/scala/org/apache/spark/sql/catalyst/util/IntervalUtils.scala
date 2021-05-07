@@ -99,7 +99,7 @@ object IntervalUtils {
     result
   }
 
-  private val unquotedYearMonthRegex = "([+|-])?(\\d+)-(\\d+)".r
+  private val unquotedYearMonthRegex = "([+|-])?(\\d+)-(\\d+)"
   private val quotedYearMonthPattern = (s"^$unquotedYearMonthRegex$$").r
   private val yearMonthLiteralPattern =
     (s"(?i)^INTERVAL\\s+([+|-])?'$unquotedYearMonthRegex'\\s+YEAR\\s+TO\\s+MONTH$$").r
