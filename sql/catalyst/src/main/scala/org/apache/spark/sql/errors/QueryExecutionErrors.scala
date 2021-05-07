@@ -21,6 +21,7 @@ import java.io.{FileNotFoundException, IOException}
 import java.net.URISyntaxException
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.DateTimeException
+import java.util.ConcurrentModificationException
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.CompileException
@@ -822,5 +823,14 @@ object QueryExecutionErrors {
   def cannotMergeIncompatibleDataTypesError(left: DataType, right: DataType): Throwable = {
     new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
       s" and ${right.catalogString}")
+  }
+
+  def registeringStreamingQueryListenerError(e: Exception): Throwable = {
+    new SparkException("Exception when registering StreamingQueryListener", e)
+  }
+
+  def concurrentQueryInstanceError(): Throwable = {
+    new ConcurrentModificationException(
+      "Another instance of this query was just started by a concurrent session.")
   }
 }

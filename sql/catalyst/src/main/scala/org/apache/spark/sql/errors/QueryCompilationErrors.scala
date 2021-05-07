@@ -1351,4 +1351,58 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"Ambiguous field name: $fieldName. Found multiple columns that can match: $names")
   }
+
+  def operateHiveDataSourceDirectlyError(operation: String): Throwable = {
+    new AnalysisException("Hive data source can only be used with tables, you can not " +
+      s"$operation files of Hive data source directly.")
+  }
+
+  def setPathOptionAndCallWithPathParameterError(method: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |There is a 'path' option set and $method() is called with a path
+         |parameter. Either remove the path option, or call $method() without the parameter.
+         |To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def userSpecifiedSchemaWithTextFileError(): Throwable = {
+    new AnalysisException("User specified schema not supported with `textFile`")
+  }
+
+  def tempViewNotSupportStreamingWriteError(viewName: String): Throwable = {
+    new AnalysisException(s"Temporary view $viewName doesn't support streaming write")
+  }
+
+  def streamingIntoViewNotSupportedError(viewName: String): Throwable = {
+    new AnalysisException(s"Streaming into views $viewName is not supported.")
+  }
+
+  def inputSourceDiffersFromDataSourceProviderError(
+      source: String, tableName: String, table: CatalogTable): Throwable = {
+    new AnalysisException(s"The input source($source) is different from the table " +
+      s"$tableName's data source provider(${table.provider.get}).")
+  }
+
+  def tableNotSupportStreamingWriteError(tableName: String, t: Table): Throwable = {
+    new AnalysisException(s"Table $tableName doesn't support streaming write - $t")
+  }
+
+  def queryNameNotSpecifiedForMemorySinkError(): Throwable = {
+    new AnalysisException("queryName must be specified for memory sink")
+  }
+
+  def sourceNotSupportedWithContinuousTriggerError(source: String): Throwable = {
+    new AnalysisException(s"'$source' is not supported with continuous trigger")
+  }
+
+  def columnNotFoundInExistingColumnsError(
+      columnType: String, columnName: String, validColumnNames: Seq[String]): Throwable = {
+    new AnalysisException(s"$columnType column $columnName not found in " +
+      s"existing columns (${validColumnNames.mkString(", ")})")
+  }
+
+  def operationNotSupportPartitioningError(operation: String): Throwable = {
+    new AnalysisException(s"'$operation' does not support partitioning")
+  }
 }
