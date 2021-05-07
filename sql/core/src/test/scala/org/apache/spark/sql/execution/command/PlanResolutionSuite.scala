@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunc
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
@@ -2192,6 +2192,15 @@ class PlanResolutionSuite extends AnalysisTest {
     assert(desc.comment == Some("no comment"))
   }
 
+  test("SPARK-34701: children/innerChildren should be mutually exclusive for AnalysisOnlyCommand") {
+    val cmdNotAnalyzed = DummyAnalysisOnlyCommand(isAnalyzed = false, childrenToAnalyze = Seq(null))
+    assert(cmdNotAnalyzed.innerChildren.isEmpty)
+    assert(cmdNotAnalyzed.children.length == 1)
+    val cmdAnalyzed = cmdNotAnalyzed.markAsAnalyzed()
+    assert(cmdAnalyzed.innerChildren.length == 1)
+    assert(cmdAnalyzed.children.isEmpty)
+  }
+
   // TODO: add tests for more commands.
 }
 
@@ -2199,5 +2208,15 @@ object AsDataSourceV2Relation {
   def unapply(plan: LogicalPlan): Option[DataSourceV2Relation] = plan match {
     case SubqueryAlias(_, r: DataSourceV2Relation) => Some(r)
     case _ => None
+  }
+}
+
+case class DummyAnalysisOnlyCommand(
+    isAnalyzed: Boolean,
+    childrenToAnalyze: Seq[LogicalPlan]) extends AnalysisOnlyCommand {
+  override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    copy(childrenToAnalyze = newChildren)
   }
 }
