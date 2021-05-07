@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
-import org.apache.spark.sql.catalyst.trees.TreePattern.{NULL_CHECK, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -669,6 +669,8 @@ case class LambdaVariable(
 
   private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_VARIABLE)
+
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
     assert(input.numFields == 1,
@@ -780,6 +782,8 @@ case class MapObjects private(
   override def first: Expression = loopVar
   override def second: Expression = lambdaFunction
   override def third: Expression = inputData
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MAP_OBJECTS)
 
   // The data with UserDefinedType are actually stored with the data type of its sqlType.
   // When we want to apply MapObjects on it, we have to use it.
