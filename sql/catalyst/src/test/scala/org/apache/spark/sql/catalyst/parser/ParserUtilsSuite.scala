@@ -32,7 +32,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   val showFuncContext = buildContext("show functions foo.bar") { parser =>
-    parser.statement().asInstanceOf[ShowFunctionsContext]
+    parser.statement().children.get(0).asInstanceOf[ShowFunctionsContext]
   }
 
   val descFuncContext = buildContext("describe function extended bar") { parser =>
@@ -40,7 +40,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   val showDbsContext = buildContext("show databases like 'identifier_with_wildcards'") { parser =>
-    parser.statement().asInstanceOf[ShowNamespacesContext]
+    parser.statement().children.get(0).asInstanceOf[ShowNamespacesContext]
   }
 
   val createDbContext = buildContext(
