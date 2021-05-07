@@ -526,10 +526,10 @@ private class BufferedRowsReader(
     val index = schema.fieldIndex(field.name)
     field.dataType match {
       case StructType(fields) =>
-        val childRow = row.toSeq(schema)(index).asInstanceOf[InternalRow]
-        if (childRow == null) {
+        if (row.isNullAt(index)) {
           return null
         }
+        val childRow = row.toSeq(schema)(index).asInstanceOf[InternalRow]
         val childSchema = schema(index).dataType.asInstanceOf[StructType]
         val resultValue = new Array[Any](fields.length)
         fields.zipWithIndex.foreach { case (childField, idx) =>
