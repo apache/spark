@@ -78,7 +78,7 @@ class UtilsTest(PandasOnSparkTestCase, SQLTestUtils):
         # This should fail because we are explicitly setting a non-boolean value
         koalas = "true"
         with self.assertRaisesRegex(
-            ValueError, 'For argument "koalas" expected type bool, received type str.'
+            TypeError, 'For argument "koalas" expected type bool, received type str.'
         ):
             validate_bool_kwarg(koalas, "koalas")
 

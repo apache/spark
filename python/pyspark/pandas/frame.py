@@ -771,7 +771,7 @@ class DataFrame(Frame, Generic[T]):
         if not isinstance(other, DataFrame) and (
             isinstance(other, IndexOpsMixin) or is_sequence(other)
         ):
-            raise ValueError(
+            raise TypeError(
                 "%s with a sequence is currently not supported; "
                 "however, got %s." % (op, type(other).__name__)
             )
@@ -2936,7 +2936,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import first_series
 
         if not is_name_like_value(key):
-            raise ValueError("'key' should be a scalar value or tuple that contains scalar values")
+            raise TypeError("'key' should be a scalar value or tuple that contains scalar values")
 
         if level is not None and is_name_like_tuple(key):
             raise KeyError(key)
@@ -3301,7 +3301,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ]
             kdf[tmp_cond_col_names] = cond
         else:
-            raise ValueError("type of cond must be a DataFrame or Series")
+            raise TypeError("type of cond must be a DataFrame or Series")
 
         tmp_other_col_names = [
             tmp_other_col_name(name_like_string(label)) for label in self._internal.column_labels
@@ -3431,7 +3431,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import Series
 
         if not isinstance(cond, (DataFrame, Series)):
-            raise ValueError("type of cond must be a DataFrame or Series")
+            raise TypeError("type of cond must be a DataFrame or Series")
 
         cond_inversed = cond._apply_series_op(lambda kser: ~kser)
         return self.where(cond_inversed, other)
@@ -3997,7 +3997,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         assert allow_duplicates is False
 
         if not is_name_like_value(column):
-            raise ValueError(
+            raise TypeError(
                 '"column" should be a scalar value or tuple that contains scalar values'
             )
 
@@ -4289,7 +4289,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         elif isinstance(decimals, int):
             decimals = {k: decimals for k in self._internal.column_labels}
         else:
-            raise ValueError("decimals must be an integer, a dict-like or a Series")
+            raise TypeError("decimals must be an integer, a dict-like or a Series")
 
         def op(kser):
             label = kser._column_label
@@ -5660,7 +5660,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         will output the original DataFrame, simply ignoring the incompatible types.
         """
         if is_list_like(lower) or is_list_like(upper):
-            raise ValueError(
+            raise TypeError(
                 "List-like value are not supported for 'lower' and 'upper' at the " + "moment"
             )
 
@@ -5941,12 +5941,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         small  5.5  2.333333  17  13
         """
         if not is_name_like_value(columns):
-            raise ValueError("columns should be one column name.")
+            raise TypeError("columns should be one column name.")
 
         if not is_name_like_value(values) and not (
             isinstance(values, list) and all(is_name_like_value(v) for v in values)
         ):
-            raise ValueError("values should be one column or list of columns.")
+            raise TypeError("values should be one column or list of columns.")
 
         if not isinstance(aggfunc, str) and (
             not isinstance(aggfunc, dict)
@@ -5954,7 +5954,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 is_name_like_value(key) and isinstance(value, str) for key, value in aggfunc.items()
             )
         ):
-            raise ValueError(
+            raise TypeError(
                 "aggfunc must be a dict mapping from column name "
                 "to aggregate functions (string)."
             )
@@ -6031,7 +6031,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 .agg(*agg_cols)
             )
         else:
-            raise ValueError("index should be a None or a list of columns.")
+            raise TypeError("index should be a None or a list of columns.")
 
         if fill_value is not None and isinstance(fill_value, (int, float)):
             sdf = sdf.fillna(fill_value)
@@ -7940,7 +7940,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  3  4
         """
         if isinstance(other, ps.Series):
-            raise ValueError("DataFrames.append() does not support appending Series to DataFrames")
+            raise TypeError("DataFrames.append() does not support appending Series to DataFrames")
         if sort:
             raise NotImplementedError("The 'sort' parameter is currently not supported")
 
@@ -10726,7 +10726,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise NotImplementedError('axis should be either 0 or "index" currently.')
 
         if not isinstance(accuracy, int):
-            raise ValueError(
+            raise TypeError(
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
@@ -10735,7 +10735,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         for v in q if isinstance(q, list) else [q]:
             if not isinstance(v, float):
-                raise ValueError(
+                raise TypeError(
                     "q must be a float or an array of floats; however, [%s] found." % type(v)
                 )
             if v < 0.0 or v > 1.0:
@@ -10904,9 +10904,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0  1  10   10
         """
         if isinstance(self.columns, pd.MultiIndex):
-            raise ValueError("Doesn't support for MultiIndex columns")
+            raise TypeError("Doesn't support for MultiIndex columns")
         if not isinstance(expr, str):
-            raise ValueError(
+            raise TypeError(
                 "expr must be a string to be evaluated, {} given".format(type(expr).__name__)
             )
         inplace = validate_bool_kwarg(inplace, "inplace")
@@ -11012,7 +11012,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         axis = validate_axis(axis)
         if not is_list_like(indices) or isinstance(indices, (dict, set)):
-            raise ValueError("`indices` must be a list-like except dict or set")
+            raise TypeError("`indices` must be a list-like except dict or set")
         if axis == 0:
             return cast(DataFrame, self.iloc[indices, :])
         else:
@@ -11098,7 +11098,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import first_series
 
         if isinstance(self.columns, pd.MultiIndex):
-            raise ValueError("`eval` is not supported for multi-index columns")
+            raise TypeError("`eval` is not supported for multi-index columns")
         inplace = validate_bool_kwarg(inplace, "inplace")
         should_return_series = False
         series_name = None
@@ -11179,7 +11179,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.series import Series
 
         if not is_name_like_value(column):
-            raise ValueError("column must be a scalar")
+            raise TypeError("column must be a scalar")
 
         kdf = DataFrame(self._internal.resolved_copy)  # type: "DataFrame"
         kser = kdf[column]
