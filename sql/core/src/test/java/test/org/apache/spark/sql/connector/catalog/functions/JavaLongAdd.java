@@ -105,7 +105,7 @@ public class JavaLongAdd implements UnboundFunction {
 
     @Override
     public String name() {
-      return "add_long_magic";
+      return "long_add_magic";
     }
 
     public long invoke(long left, long right) {

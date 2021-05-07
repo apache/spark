@@ -38,12 +38,12 @@ import org.apache.spark.sql.types.{DataType, LongType, StructType}
  *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *      Results will be written to "benchmarks/FunctionBenchmark-results.txt".
+ *      Results will be written to "benchmarks/V2FunctionBenchmark-results.txt".
  * }}}
  * '''NOTE''': to update the result of this benchmark, please use Github benchmark action:
  *   https://spark.apache.org/developer-tools.html#github-workflow-benchmarks
  */
-object FunctionBenchmark extends SqlBasedBenchmark {
+object V2FunctionBenchmark extends SqlBasedBenchmark {
   val catalogName: String = "benchmark_catalog"
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
@@ -76,12 +76,12 @@ object FunctionBenchmark extends SqlBasedBenchmark {
         val name = s"scalar function (long + long) -> long, result_nullable = $resultNullable " +
             s"codegen = $codegenEnabled"
         val benchmark = new Benchmark(name, N, output = output)
-        benchmark.addCase(s"with native_long_add", numIters = 3) { _ =>
+        benchmark.addCase(s"native_long_add", numIters = 3) { _ =>
           spark.range(N).selectExpr("id + id").noop()
         }
         Seq("java_long_add_default", "java_long_add_magic", "java_long_add_static_magic",
             "scala_long_add_default", "scala_long_add_magic").foreach { functionName =>
-          benchmark.addCase(s"with $functionName", numIters = 3) { _ =>
+          benchmark.addCase(s"$functionName", numIters = 3) { _ =>
             spark.range(N).selectExpr(s"$catalogName.$functionName(id, id)").noop()
           }
         }
