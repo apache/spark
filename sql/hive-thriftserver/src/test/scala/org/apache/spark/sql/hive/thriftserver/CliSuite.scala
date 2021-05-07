@@ -164,6 +164,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         }
       }
     }
+
     val process = new ProcessBuilder(command: _*).start()
 
     val stdinWriter = new OutputStreamWriter(process.getOutputStream, StandardCharsets.UTF_8)
@@ -616,8 +617,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(2.minute,
       Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}"))(
       "create database spark_35242;" -> "",
-    "use spark_35242;" -> "",
-    "CREATE TABLE spark_test(key INT, val STRING);" -> "")
+      "use spark_35242;" -> "",
+      "CREATE TABLE spark_test(key INT, val STRING);" -> "")
 
     // Set default db
     runCliWithin(2.minute,
