@@ -97,6 +97,7 @@ abstract class DebuggingSuiteBase extends SharedSparkSession {
   }
 }
 
+// Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class DebuggingSuite extends DebuggingSuiteBase with DisableAdaptiveExecutionSuite {
 
   test("SPARK-28537: DebugExec cannot debug broadcast related queries") {
