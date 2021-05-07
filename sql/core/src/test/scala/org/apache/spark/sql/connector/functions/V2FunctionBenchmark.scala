@@ -21,13 +21,17 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd
 import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.{JavaLongAddDefault, JavaLongAddMagic, JavaLongAddStaticMagic}
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, NumericType, StructType}
 
 /**
  * Benchmark to measure DataSourceV2 UDF performance
@@ -77,7 +81,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
             s"codegen = $codegenEnabled"
         val benchmark = new Benchmark(name, N, output = output)
         benchmark.addCase(s"native_long_add", numIters = 3) { _ =>
-          spark.range(N).selectExpr("id + id").noop()
+          spark.range(N).select(Column(NativeAdd($"id".expr, $"id".expr, resultNullable))).noop()
         }
         Seq("java_long_add_default", "java_long_add_magic", "java_long_add_static_magic",
             "scala_long_add_default", "scala_long_add_magic").foreach { functionName =>
@@ -94,6 +98,24 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
     val catalog = spark.sessionState.catalogManager.catalog(catalogName)
     val ident = Identifier.of(Array.empty, name)
     catalog.asInstanceOf[InMemoryCatalog].createFunction(ident, fn)
+  }
+
+  case class NativeAdd(
+      left: Expression,
+      right: Expression,
+      override val nullable: Boolean) extends BinaryArithmetic {
+    override protected val failOnError: Boolean = true
+    override def inputType: AbstractDataType = NumericType
+    override def symbol: String = "+"
+    override def exactMathMethod: Option[String] = Some("addExact")
+
+    private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
+    protected override def nullSafeEval(input1: Any, input2: Any): Any =
+      numeric.plus(input1, input2)
+
+    override protected def withNewChildrenInternal(
+        newLeft: Expression,
+        newRight: Expression): NativeAdd = copy(left = newLeft, right = newRight)
   }
 
   case class LongAddUnbound(impl: ScalarFunction[Long]) extends UnboundFunction {
