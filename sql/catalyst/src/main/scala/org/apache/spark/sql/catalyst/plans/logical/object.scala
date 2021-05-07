@@ -67,8 +67,6 @@ trait ObjectProducer extends LogicalPlan {
 trait ObjectConsumer extends UnaryNode {
   assert(child.output.length == 1)
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(OBJECT_CONSUMER)
-
   // This operator always need all columns of its child, even it doesn't reference to.
   @transient
   override lazy val references: AttributeSet = child.outputSet
@@ -97,6 +95,8 @@ case class SerializeFromObject(
     child: LogicalPlan) extends ObjectConsumer {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(SERIALIZE_FROM_OBJECT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): SerializeFromObject =
     copy(child = newChild)

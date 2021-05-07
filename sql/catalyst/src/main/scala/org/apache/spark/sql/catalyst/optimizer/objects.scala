@@ -212,7 +212,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAllPatterns(OBJECT_CONSUMER, PROJECT), ruleId) {
+    _.containsAllPatterns(SERIALIZE_FROM_OBJECT, PROJECT), ruleId) {
     case p @ Project(_, s: SerializeFromObject) =>
       // Prunes individual serializer if it is not used at all by above projection.
       val usedRefs = p.references
