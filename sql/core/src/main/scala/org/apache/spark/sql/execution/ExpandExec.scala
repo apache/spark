@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Apply all of the GroupExpressions to every input row, hence we will get
@@ -176,8 +177,9 @@ case class ExpandExec(
           val boundExpr = BindReferences.bindReference(exprs(col), attributeSeq)
           val ev = boundExpr.genCode(ctx)
           val inputVars = CodeGenerator.getLocalInputVariableValues(ctx, boundExpr)._1.toSeq
+          val splitThreshold = SQLConf.get.methodSplitThreshold
           val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVars)
-          if (CodeGenerator.isValidParamLength(paramLength)) {
+          if (ev.code.length > splitThreshold && CodeGenerator.isValidParamLength(paramLength)) {
             val switchCaseFunc = ctx.freshName("switchCaseCode")
             val argList = inputVars.map { v =>
               s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}"
