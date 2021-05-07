@@ -414,16 +414,29 @@ case class Invoke(
       """
     }
 
+    val mainEvalCode =
+      code"""
+         |$argCode
+         |${ev.isNull} = $resultIsNull;
+         |if (!${ev.isNull}) {
+         |  $evaluate
+         |}
+         |""".stripMargin
+
+    val evalWithNullCheck = if (targetObject.nullable) {
+      code"""
+         |if (!${obj.isNull}) {
+         |  $mainEvalCode
+         |}
+         |""".stripMargin
+    } else {
+      mainEvalCode
+    }
+
     val code = obj.code + code"""
       boolean ${ev.isNull} = true;
       $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      if (!${obj.isNull}) {
-        $argCode
-        ${ev.isNull} = $resultIsNull;
-        if (!${ev.isNull}) {
-          $evaluate
-        }
-      }
+      $evalWithNullCheck
      """
     ev.copy(code = code)
   }
