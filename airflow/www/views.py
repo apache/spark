@@ -2080,6 +2080,70 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
             external_log_name=external_log_name,
         )
 
+    @expose('/calendar')
+    @auth.has_access(
+        [
+            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG),
+            (permissions.ACTION_CAN_READ, permissions.RESOURCE_TASK_INSTANCE),
+        ]
+    )
+    @gzipped  # pylint: disable=too-many-locals
+    @action_logging  # pylint: disable=too-many-locals
+    def calendar(self):
+        """Get DAG runs as calendar"""
+        dag_id = request.args.get('dag_id')
+        dag = current_app.dag_bag.get_dag(dag_id)
+        if not dag:
+            flash(f'DAG "{dag_id}" seems to be missing from DagBag.', "error")
+            return redirect(url_for('Airflow.index'))
+
+        root = request.args.get('root')
+        if root:
+            dag = dag.sub_dag(task_ids_or_regex=root, include_downstream=False, include_upstream=True)
+
+        with create_session() as session:
+            dag_states = (
+                session.query(
+                    func.date(DagRun.execution_date).label('date'),
+                    DagRun.state,
+                    func.count('*').label('count'),
+                )
+                .filter(DagRun.dag_id == dag.dag_id)
+                .group_by(func.date(DagRun.execution_date), DagRun.state)
+                .order_by(func.date(DagRun.execution_date).asc())
+                .all()
+            )
+
+        dag_states = [
+            {
+                # DATE() in SQLite and MySQL behave differently:
+                # SQLite returns a string, MySQL returns a date.
+                'date': dr.date if isinstance(dr.date, str) else dr.date.isoformat(),
+                'state': dr.state,
+                'count': dr.count,
+            }
+            for dr in dag_states
+        ]
+
+        data = {
+            'dag_states': dag_states,
+            'start_date': (dag.start_date or DateTime.utcnow()).date().isoformat(),
+            'end_date': (dag.end_date or DateTime.utcnow()).date().isoformat(),
+        }
+
+        doc_md = wwwutils.wrapped_markdown(getattr(dag, 'doc_md', None))
+
+        # avoid spaces to reduce payload size
+        data = htmlsafe_json_dumps(data, separators=(',', ':'))
+
+        return self.render_template(
+            'airflow/calendar.html',
+            dag=dag,
+            doc_md=doc_md,
+            data=data,
+            root=root,
+        )
+
     @expose('/graph')
     @auth.has_access(
         [
