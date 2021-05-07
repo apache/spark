@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
@@ -192,11 +192,11 @@ private[sql] trait LookupCatalog extends Logging {
           ident.namespace match {
             case Array(db) => FunctionIdentifier(ident.name, Some(db))
             case _ =>
-              throw new AnalysisException(s"Unsupported function name '$ident'")
+              throw QueryCompilationErrors.unsupportedFunctionNameError(ident.toString)
           }
         }
 
-      case _ => throw new AnalysisException("function is only supported in v1 catalog")
+      case _ => throw QueryCompilationErrors.functionUnsupportedInV2CatalogError()
     }
   }
 }
