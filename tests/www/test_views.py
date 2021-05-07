@@ -280,7 +280,7 @@ class TestAirflowBaseViews(TestBase):
         )
 
     def test_index(self):
-        with assert_queries_count(43):
+        with assert_queries_count(44):
             resp = self.client.get('/', follow_redirects=True)
         self.check_content_in_response('DAGs', resp)
 
@@ -826,6 +826,12 @@ class TestAirflowBaseViews(TestBase):
         url = 'graph?dag_id=example_bash_operator'
         resp = self.client.get(url, follow_redirects=True)
         self.check_content_in_response('runme_1', resp)
+
+    def test_dag_dependencies(self):
+        url = 'dag-dependencies'
+        resp = self.client.get(url, follow_redirects=True)
+        self.check_content_in_response('child_task1', resp)
+        self.check_content_in_response('test_trigger_dagrun', resp)
 
     def test_last_dagruns(self):
         resp = self.client.post('last_dagruns', follow_redirects=True)
