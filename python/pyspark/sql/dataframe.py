@@ -2914,10 +2914,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def withColumns(self, colsMap):
         """
         Returns a new :class:`DataFrame` by adding multiple columns or replacing the
-        existing columns that has the same name.
+        existing columns that has the same names.
 
-        The colsMap is a map of column name and column, the column must only refer to attribute
-        supplied by this Dataset. It is an error to add columns that refers to some other Dataset.
+        The colsMap is a map of column name and column, the column must only refer to attributes
+        supplied by this Dataset. It is an error to add columns that refer to some other Dataset.
 
         .. versionadded:: 3.2.0
            Added support for multiple columns adding

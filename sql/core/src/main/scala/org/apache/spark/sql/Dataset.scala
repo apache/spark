@@ -2489,8 +2489,7 @@ class Dataset[T] private[sql](
    * @since 3.2.0
    */
   def withColumns(colsMap: Map[String, Column]): DataFrame = {
-    val colNames = colsMap.flatMap{ case (colName, _) => Seq(colName) }.toSeq
-    val newCols = colsMap.flatMap{ case (_, col) => Seq(col) }.toSeq
+    val (colNames, newCols) = colsMap.toSeq.unzip
     withColumns(colNames, newCols)
   }
 
