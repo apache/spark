@@ -21,9 +21,9 @@ import warnings
 from pyspark.sql import functions as F
 from pyspark.sql.types import TimestampType
 
-from pyspark.pandass.base import IndexOpsMixin
-from pyspark.pandass.data_type_ops.base import DataTypeOps
-from pyspark.pandass.typedef import as_spark_type
+from pyspark.pandas.base import IndexOpsMixin
+from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.typedef import as_spark_type
 
 
 class DatetimeOps(DataTypeOps):

@@ -2355,7 +2355,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Negative
         kdf = ps.DataFrame({"a": ["x"], "b": [1]})
-        ks_err_msg = "substraction can not be applied to string series or literals"
+        ks_err_msg = "subtraction can not be applied to string series or literals"
 
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: kdf["a"] - kdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: kdf["b"] - kdf["a"])
