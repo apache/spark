@@ -177,6 +177,8 @@ private[client] sealed abstract class Shim {
 
   def getMSC(hive: Hive): IMetaStoreClient
 
+  def getHive(hiveConf: HiveConf): Hive
+
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
   }
@@ -198,6 +200,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getMSC(hive: Hive): IMetaStoreClient = {
     getMSCMethod.invoke(hive).asInstanceOf[IMetaStoreClient]
   }
+
+  override def getHive(hiveConf: HiveConf): Hive = Hive.get(hiveConf)
 
   private lazy val startMethod =
     findStaticMethod(
@@ -1316,6 +1320,13 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
   override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
     alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContextInAlterTable)
   }
+
+  // HIVE-10319 introduced a new HMS thrift API `get_all_functions` which is used by
+  // `Hive.get` since version 2.1.0, when it loads all Hive permanent functions during
+  // initialization. This breaks compatibility with HMS server of lower versions.
+  // To mitigate here we use `Hive.getWithFastCheck` instead which skips loading the permanent
+  // functions and therefore avoids calling `get_all_functions`.
+  override def getHive(hiveConf: HiveConf): Hive = Hive.getWithFastCheck(hiveConf, false)
 }
 
 private[client] class Shim_v2_2 extends Shim_v2_1
