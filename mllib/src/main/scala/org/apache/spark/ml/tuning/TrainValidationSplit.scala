@@ -180,7 +180,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     finally {
       if (subTaskFailed) {
         Thread.sleep(1000)
-        val sparkContext = sparkSession.sparkContext
+        val sparkContext = dataset.sparkSession.sparkContext
         sparkContext.cancelJobGroup(
           sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
         )
