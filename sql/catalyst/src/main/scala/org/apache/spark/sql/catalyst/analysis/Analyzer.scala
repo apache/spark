@@ -115,6 +115,8 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                              if `t` was a permanent table when the current view was created, it
  *                              should still be a permanent table when resolving the current view,
  *                              even if a temp view `t` has been created.
+ * @param outerReferences the attribute from the outer query, that are used to resolve columns in
+ *                        the correlated subqueries.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
@@ -122,7 +124,8 @@ case class AnalysisContext(
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
-    referredTempFunctionNames: Seq[String] = Seq.empty)
+    referredTempFunctionNames: Seq[String] = Seq.empty,
+    outerReferences: Seq[Attribute] = Seq.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -149,6 +152,15 @@ object AnalysisContext {
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
       viewDesc.viewReferredTempFunctionNames)
+    set(context)
+    try f finally { set(originContext) }
+  }
+
+  def withOuterReference[A](refs: Seq[Attribute])(f: => A): A = {
+    val originContext = value.get()
+    // TODO: support deeply nested correlated subquery and inherent outer references from the
+    //       parent context.
+    val context = originContext.copy(outerReferences = refs)
     set(context)
     try f finally { set(originContext) }
   }
@@ -1695,6 +1707,10 @@ class Analyzer(override val catalogManager: CatalogManager)
               // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
               case Alias(child, _) if !isTopLevel => child
               case other => other
+            }.orElse {
+              AnalysisContext.get.outerReferences.resolve(nameParts, resolver).map(_.transform {
+                case a: Attribute => OuterReference(a)
+              })
             }.getOrElse(u)
           }
           logDebug(s"Resolving $u to $result")
@@ -2242,33 +2258,10 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
-    /**
-     * Resolve the correlated expressions in a subquery by using the an outer plans' references. All
-     * resolved outer references are wrapped in an [[OuterReference]]
-     */
-    private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
-      plan resolveOperatorsDown {
-        case q: LogicalPlan if q.childrenResolved && !q.resolved =>
-          q transformExpressions {
-            case u @ UnresolvedAttribute(nameParts) =>
-              withPosition(u) {
-                try {
-                  outer.resolve(nameParts, resolver) match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
-                    case None => u
-                  }
-                } catch {
-                  case _: AnalysisException => u
-                }
-              }
-          }
-      }
-    }
 
     /**
-     * Resolves the subquery plan that is referenced in a subquery expression. The normal
-     * attribute references are resolved using regular analyzer and the outer references are
-     * resolved from the outer plans using the resolveOuterReferences method.
+     * Resolves the subquery plan that is referenced in a subquery expression. We recursively
+     * execute the Analyzer to resolve the subquery plan, with the outer references in the context,
      *
      * Outer references from the correlated predicates are updated as children of
      * Subquery expression.
@@ -2277,29 +2270,16 @@ class Analyzer(override val catalogManager: CatalogManager)
         e: SubqueryExpression,
         plans: Seq[LogicalPlan])(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      // Step 1: Resolve the outer expressions.
-      var previous: LogicalPlan = null
-      var current = e.plan
-      do {
-        // Try to resolve the subquery plan using the regular analyzer.
-        previous = current
-        current = executeSameContext(current)
-
-        // Use the outer references to resolve the subquery plan if it isn't resolved yet.
-        val i = plans.iterator
-        val afterResolve = current
-        while (!current.resolved && current.fastEquals(afterResolve) && i.hasNext) {
-          current = resolveOuterReferences(current, i.next())
+      AnalysisContext.withOuterReference(plans.flatMap(_.output)) {
+        val res = executeSameContext(e.plan)
+        // If the subquery plan is fully resolved, pull the outer references and record
+        // them as children of SubqueryExpression.
+        if (res.resolved) {
+          // Record the outer references as children of subquery expression.
+          f(res, SubExprUtils.getOuterReferences(res))
+        } else {
+          e.withNewPlan(res)
         }
-      } while (!current.resolved && !current.fastEquals(previous))
-
-      // Step 2: If the subquery plan is fully resolved, pull the outer references and record
-      // them as children of SubqueryExpression.
-      if (current.resolved) {
-        // Record the outer references as children of subquery expression.
-        f(current, SubExprUtils.getOuterReferences(current))
-      } else {
-        e.withNewPlan(current)
       }
     }
 
