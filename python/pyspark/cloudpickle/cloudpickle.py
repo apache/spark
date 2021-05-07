@@ -88,7 +88,7 @@ else:
 DEFAULT_PROTOCOL = pickle.HIGHEST_PROTOCOL
 
 # Track the provenance of reconstructed dynamic classes to make it possible to
-# reconstruct instances from the matching singleton class definition when
+# recontruct instances from the matching singleton class definition when
 # appropriate and preserve the usual "isinstance" semantics of Python objects.
 _DYNAMIC_CLASS_TRACKER_BY_CLASS = weakref.WeakKeyDictionary()
 _DYNAMIC_CLASS_TRACKER_BY_ID = weakref.WeakValueDictionary()
@@ -236,7 +236,7 @@ def _extract_code_globals(co):
         out_names = {names[oparg] for _, oparg in _walk_global_ops(co)}
 
         # Declaring a function inside another one using the "def ..."
-        # syntax generates a constant code object corresponding to the one
+        # syntax generates a constant code object corresonding to the one
         # of the nested function's As the nested function may itself need
         # global variables, we need to introspect its code, extract its
         # globals, (look for code object in it's co_consts attribute..) and
@@ -457,7 +457,7 @@ if sys.version_info[:2] < (3, 7):  # pragma: no branch
         is_typing = getattr(obj, '__origin__', None) is not None
 
         # typing_extensions.Literal
-        is_literal = getattr(obj, '__values__', None) is not None
+        is_litteral = getattr(obj, '__values__', None) is not None
 
         # typing_extensions.Final
         is_final = getattr(obj, '__type__', None) is not None
@@ -469,7 +469,7 @@ if sys.version_info[:2] < (3, 7):  # pragma: no branch
             getattr(obj, '__result__', None) is not None and
             getattr(obj, '__args__', None) is not None
         )
-        return any((is_typing, is_literal, is_final, is_union, is_tuple,
+        return any((is_typing, is_litteral, is_final, is_union, is_tuple,
                     is_callable))
 
     def _create_parametrized_type_hint(origin, args):
@@ -699,7 +699,7 @@ def _make_skel_func(code, cell_count, base_globals=None):
     """
     # This function is deprecated and should be removed in cloudpickle 1.7
     warnings.warn(
-        "A pickle file created using an old (<=1.4.1) version of cloudpickle "
+        "A pickle file created using an old (<=1.4.1) version of cloudpicke "
         "is currently being loaded. This is not supported by cloudpickle and "
         "will break in cloudpickle 1.7", category=UserWarning
     )
@@ -828,3 +828,15 @@ def _get_bases(typ):
         # For regular class objects
         bases_attr = '__bases__'
     return getattr(typ, bases_attr)
+
+
+def _make_dict_keys(obj):
+    return dict.fromkeys(obj).keys()
+
+
+def _make_dict_values(obj):
+    return {i: _ for i, _ in enumerate(obj)}.values()
+
+
+def _make_dict_items(obj):
+    return obj.items()

@@ -283,6 +283,8 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       .add("c14", "timestamp", nullable = false, "14")
       .add("c15", "struct<X: bigint,Y: double>", nullable = true, "15")
       .add("c16", "binary", nullable = false, "16")
+      .add("c17", "char(255)", nullable = true, "17")
+      .add("c18", "varchar(1024)", nullable = false, "18")
 
     val ddl =
       s"""
@@ -299,7 +301,8 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
       import java.sql.Types._
       val expectedJavaTypes = Seq(BOOLEAN, TINYINT, SMALLINT, INTEGER, BIGINT, FLOAT, DOUBLE,
-        DECIMAL, DECIMAL, VARCHAR, ARRAY, ARRAY, JAVA_OBJECT, DATE, TIMESTAMP, STRUCT, BINARY)
+        DECIMAL, DECIMAL, VARCHAR, ARRAY, ARRAY, JAVA_OBJECT, DATE, TIMESTAMP, STRUCT, BINARY,
+        CHAR, VARCHAR)
 
       var pos = 0
 
@@ -313,7 +316,8 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
         val colSize = rowSet.getInt("COLUMN_SIZE")
         schema(pos).dataType match {
-          case StringType | BinaryType | _: ArrayType | _: MapType => assert(colSize === 0)
+          case StringType | BinaryType | _: ArrayType | _: MapType | _: VarcharType =>
+            assert(colSize === 0)
           case o => assert(colSize === o.defaultSize)
         }
 
@@ -342,7 +346,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         pos += 1
       }
 
-      assert(pos === 17, "all columns should have been verified")
+      assert(pos === 19, "all columns should have been verified")
     }
   }
 
@@ -362,6 +366,60 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.OTHER)
         assert(rowSet.getString("TYPE_NAME").equalsIgnoreCase(CalendarIntervalType.sql))
         assert(rowSet.getInt("COLUMN_SIZE") === CalendarIntervalType.defaultSize)
+        assert(rowSet.getInt("DECIMAL_DIGITS") === 0)
+        assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
+        assert(rowSet.getInt("NULLABLE") === 0)
+        assert(rowSet.getString("REMARKS") === "")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
+        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
+      }
+    }
+  }
+
+  test("SPARK-35085: Get columns operation should handle ANSI interval column properly") {
+    val viewName1 = "view_interval1"
+    val yearMonthDDL =
+      s"CREATE GLOBAL TEMP VIEW $viewName1 as select interval '1-1' year to month as i"
+
+    withJdbcStatement(viewName1) { statement =>
+      statement.execute(yearMonthDDL)
+      val data = statement.getConnection.getMetaData
+      val rowSet = data.getColumns("", "global_temp", viewName1, null)
+      while (rowSet.next()) {
+        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName1)
+        assert(rowSet.getString("COLUMN_NAME") === "i")
+        assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.OTHER)
+        assert(rowSet.getString("TYPE_NAME").equalsIgnoreCase(YearMonthIntervalType.sql))
+        assert(rowSet.getInt("COLUMN_SIZE") === YearMonthIntervalType.defaultSize)
+        assert(rowSet.getInt("DECIMAL_DIGITS") === 0)
+        assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
+        assert(rowSet.getInt("NULLABLE") === 0)
+        assert(rowSet.getString("REMARKS") === "")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
+        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
+      }
+    }
+
+    val viewName2 = "view_interval2"
+    val dayTimeDDL =
+      s"CREATE GLOBAL TEMP VIEW $viewName2 as select interval '1 2:3:4.001' day to second as i"
+
+    withJdbcStatement(viewName2) { statement =>
+      statement.execute(dayTimeDDL)
+      val data = statement.getConnection.getMetaData
+      val rowSet = data.getColumns("", "global_temp", viewName2, null)
+      while (rowSet.next()) {
+        assert(rowSet.getString("TABLE_CAT") === null)
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName2)
+        assert(rowSet.getString("COLUMN_NAME") === "i")
+        assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.OTHER)
+        assert(rowSet.getString("TYPE_NAME").equalsIgnoreCase(DayTimeIntervalType.sql))
+        assert(rowSet.getInt("COLUMN_SIZE") === DayTimeIntervalType.defaultSize)
         assert(rowSet.getInt("DECIMAL_DIGITS") === 0)
         assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
         assert(rowSet.getInt("NULLABLE") === 0)

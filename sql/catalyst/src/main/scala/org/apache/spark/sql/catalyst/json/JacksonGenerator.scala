@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.json
 import java.io.Writer
 
 import com.fasterxml.jackson.core._
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
@@ -73,7 +74,13 @@ private[sql] class JacksonGenerator(
 
   private val gen = {
     val generator = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
-    if (options.pretty) generator.useDefaultPrettyPrinter() else generator
+    if (options.pretty) {
+      generator.setPrettyPrinter(new DefaultPrettyPrinter(""))
+    }
+    if (options.writeNonAsciiCharacterAsCodePoint) {
+      generator.setHighestNonEscapedChar(0x7F)
+    }
+    generator
   }
 
   private val lineSeparator: String = options.lineSeparatorInWrite

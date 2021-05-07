@@ -24,6 +24,106 @@ from pyspark.java_gateway import launch_gateway
 ExpressionInfo = namedtuple(
     "ExpressionInfo", "className name usage arguments examples note since deprecated")
 
+_virtual_operator_infos = [
+    ExpressionInfo(
+        className="",
+        name="!=",
+        usage="expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`, " +
+              "or false otherwise.",
+        arguments="\n    Arguments:\n      " +
+                  """* expr1, expr2 - the two expressions must be same type or can be casted to
+                       a common type, and must be a type that can be used in equality comparison.
+                       Map type is not supported. For complex types such array/struct,
+                       the data types of fields must be orderable.""",
+        examples="\n    Examples:\n      " +
+                 "> SELECT 1 != 2;\n      " +
+                 " true\n      " +
+                 "> SELECT 1 != '2';\n      " +
+                 " true\n      " +
+                 "> SELECT true != NULL;\n      " +
+                 " NULL\n      " +
+                 "> SELECT NULL != NULL;\n      " +
+                 " NULL",
+        note="",
+        since="1.0.0",
+        deprecated=""),
+    ExpressionInfo(
+        className="",
+        name="<>",
+        usage="expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`, " +
+              "or false otherwise.",
+        arguments="\n    Arguments:\n      " +
+                  """* expr1, expr2 - the two expressions must be same type or can be casted to
+                       a common type, and must be a type that can be used in equality comparison.
+                       Map type is not supported. For complex types such array/struct,
+                       the data types of fields must be orderable.""",
+        examples="\n    Examples:\n      " +
+                 "> SELECT 1 != 2;\n      " +
+                 " true\n      " +
+                 "> SELECT 1 != '2';\n      " +
+                 " true\n      " +
+                 "> SELECT true != NULL;\n      " +
+                 " NULL\n      " +
+                 "> SELECT NULL != NULL;\n      " +
+                 " NULL",
+        note="",
+        since="1.0.0",
+        deprecated=""),
+    ExpressionInfo(
+        className="",
+        name="between",
+        usage="expr1 [NOT] BETWEEN expr2 AND expr3 - " +
+              "evaluate if `expr1` is [not] in between `expr2` and `expr3`.",
+        arguments="",
+        examples="\n    Examples:\n      " +
+                 "> SELECT col1 FROM VALUES 1, 3, 5, 7 WHERE col1 BETWEEN 2 AND 5;\n      " +
+                 " 3\n      " +
+                 " 5",
+        note="",
+        since="1.0.0",
+        deprecated=""),
+    ExpressionInfo(
+        className="",
+        name="case",
+        usage="CASE expr1 WHEN expr2 THEN expr3 " +
+              "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
+              "When `expr1` = `expr2`, returns `expr3`; " +
+              "when `expr1` = `expr4`, return `expr5`; else return `expr6`.",
+        arguments="\n    Arguments:\n      " +
+                  "* expr1 - the expression which is one operand of comparison.\n      " +
+                  "* expr2, expr4 - the expressions each of which is the other " +
+                  "  operand of comparison.\n      " +
+                  "* expr3, expr5, expr6 - the branch value expressions and else value expression" +
+                  "  should all be same type or coercible to a common type.",
+        examples="\n    Examples:\n      " +
+                 "> SELECT CASE col1 WHEN 1 THEN 'one' " +
+                 "WHEN 2 THEN 'two' ELSE '?' END FROM VALUES 1, 2, 3;\n      " +
+                 " one\n      " +
+                 " two\n      " +
+                 " ?\n      " +
+                 "> SELECT CASE col1 WHEN 1 THEN 'one' " +
+                 "WHEN 2 THEN 'two' END FROM VALUES 1, 2, 3;\n      " +
+                 " one\n      " +
+                 " two\n      " +
+                 " NULL",
+        note="",
+        since="1.0.1",
+        deprecated=""),
+    ExpressionInfo(
+        className="",
+        name="||",
+        usage="expr1 || expr2 - Returns the concatenation of `expr1` and `expr2`.",
+        arguments="",
+        examples="\n    Examples:\n      " +
+                 "> SELECT 'Spark' || 'SQL';\n      " +
+                 " SparkSQL\n      " +
+                 "> SELECT array(1, 2, 3) || array(4, 5) || array(6);\n      " +
+                 " [1,2,3,4,5,6]",
+        note="\n    || for arrays is available since 2.4.0.\n",
+        since="2.3.0",
+        deprecated="")
+]
+
 
 def _list_function_infos(jvm):
     """
@@ -32,7 +132,7 @@ def _list_function_infos(jvm):
     """
 
     jinfos = jvm.org.apache.spark.sql.api.python.PythonSQLUtils.listBuiltinFunctionInfos()
-    infos = []
+    infos = _virtual_operator_infos
     for jinfo in jinfos:
         name = jinfo.getName()
         usage = jinfo.getUsage()
@@ -195,6 +295,7 @@ def generate_sql_api_markdown(jvm, path):
     """
 
     with open(path, 'w') as mdfile:
+        mdfile.write("# Built-in Functions\n\n")
         for info in _list_function_infos(jvm):
             name = info.name
             usage = _make_pretty_usage(info.usage)

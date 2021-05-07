@@ -272,7 +272,7 @@ private[storage] class BlockManagerDecommissioner(
         migrationPeers.get(peer).foreach(_.running = false)
     }
     // If we don't have anyone to migrate to give up
-    if (migrationPeers.values.find(_.running == true).isEmpty) {
+    if (!migrationPeers.values.exists(_.running)) {
       stoppedShuffle = true
     }
     // If we found any new shuffles to migrate or otherwise have not migrated everything.

@@ -38,14 +38,14 @@ import org.apache.spark.sql.types._
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
 private[avro] class AvroOutputWriter(
-    path: String,
+    val path: String,
     context: TaskAttemptContext,
     schema: StructType,
     avroSchema: Schema) extends OutputWriter {
 
   // Whether to rebase datetimes from Gregorian to Julian calendar in write
   private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
-    SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE))
+    SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE))
 
   // The input rows will never be null.
   private lazy val serializer =

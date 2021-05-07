@@ -23,6 +23,7 @@ import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionExce
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -120,15 +121,14 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 case class ExpressionProxy(
     child: Expression,
     id: Int,
-    runtime: SubExprEvaluationRuntime) extends Expression {
+    runtime: SubExprEvaluationRuntime) extends UnaryExpression {
 
   final override def dataType: DataType = child.dataType
   final override def nullable: Boolean = child.nullable
-  final override def children: Seq[Expression] = child :: Nil
 
   // `ExpressionProxy` is for interpreted expression evaluation only. So cannot `doGenCode`.
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   def proxyEval(input: InternalRow = null): Any = child.eval(input)
 
@@ -140,6 +140,9 @@ case class ExpressionProxy(
   }
 
   override def hashCode(): Int = this.id.hashCode()
+
+  override protected def withNewChildInternal(newChild: Expression): ExpressionProxy =
+    copy(child = newChild)
 }
 
 /**

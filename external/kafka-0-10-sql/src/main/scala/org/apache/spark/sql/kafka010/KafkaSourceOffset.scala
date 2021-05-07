@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.PartitionOffset
 import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
 
@@ -62,4 +63,17 @@ private[kafka010] object KafkaSourceOffset {
    */
   def apply(offset: SerializedOffset): KafkaSourceOffset =
     KafkaSourceOffset(JsonUtils.partitionOffsets(offset.json))
+
+  /**
+   * Returns [[KafkaSourceOffset]] from a streaming.Offset
+   */
+  def apply(offset: streaming.Offset): KafkaSourceOffset = {
+    offset match {
+      case k: KafkaSourceOffset => k
+      case so: SerializedOffset => apply(so)
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Invalid conversion from offset of ${offset.getClass} to KafkaSourceOffset")
+    }
+  }
 }

@@ -26,7 +26,7 @@ import org.apache.log4j.spi.LoggingEvent
 import scala.annotation.tailrec
 import org.apache.commons.io.FileUtils
 import org.apache.log4j.{Appender, AppenderSkeleton, Level, Logger}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Outcome}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
 import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -160,6 +160,8 @@ abstract class SparkFunSuite
     }
   }
 
+  protected def logForFailedTest(): Unit = {}
+
   /**
    * Log the suite name and the test name before and after each test.
    *
@@ -173,7 +175,13 @@ abstract class SparkFunSuite
     val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
     try {
       logInfo(s"\n\n===== TEST OUTPUT FOR $shortSuiteName: '$testName' =====\n")
-      test()
+      val outcome = test()
+      outcome match {
+        case _: Failed =>
+          logForFailedTest()
+        case _ =>
+      }
+      outcome
     } finally {
       logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
     }

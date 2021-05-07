@@ -26,9 +26,11 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
+import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.{defaultCompressThreshold, Stats}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -75,7 +77,8 @@ case class ApproximatePercentile(
     accuracyExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes {
+  extends TypedImperativeAggregate[PercentileDigest] with ImplicitCastInputTypes
+  with TernaryLike[Expression] {
 
   def this(child: Expression, percentageExpression: Expression, accuracyExpression: Expression) = {
     this(child, percentageExpression, accuracyExpression, 0, 0)
@@ -139,7 +142,7 @@ case class ApproximatePercentile(
         case TimestampType => value.asInstanceOf[Long].toDouble
         case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
         case other: DataType =>
-          throw new UnsupportedOperationException(s"Unexpected data type ${other.catalogString}")
+          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }
       buffer.add(doubleValue)
     }
@@ -164,7 +167,7 @@ case class ApproximatePercentile(
       case DoubleType => doubleResult
       case _: DecimalType => doubleResult.map(Decimal(_))
       case other: DataType =>
-        throw new UnsupportedOperationException(s"Unexpected data type ${other.catalogString}")
+        throw QueryExecutionErrors.dataTypeUnexpectedError(other)
     }
     if (result.length == 0) {
       null
@@ -181,7 +184,9 @@ case class ApproximatePercentile(
   override def withNewInputAggBufferOffset(newOffset: Int): ApproximatePercentile =
     copy(inputAggBufferOffset = newOffset)
 
-  override def children: Seq[Expression] = Seq(child, percentageExpression, accuracyExpression)
+  override def first: Expression = child
+  override def second: Expression = percentageExpression
+  override def third: Expression = accuracyExpression
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -203,6 +208,10 @@ case class ApproximatePercentile(
   override def deserialize(bytes: Array[Byte]): PercentileDigest = {
     ApproximatePercentile.serializer.deserialize(bytes)
   }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): ApproximatePercentile =
+    copy(child = newFirst, percentageExpression = newSecond, accuracyExpression = newThird)
 }
 
 object ApproximatePercentile {

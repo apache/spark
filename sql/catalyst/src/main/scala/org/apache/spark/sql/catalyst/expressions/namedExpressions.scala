@@ -23,8 +23,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.ImmutableBitSet
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -162,7 +167,7 @@ case class Alias(child: Expression, name: String)(
   /** Just a simple passthrough for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw new IllegalStateException("Alias.doGenCode should not be called.")
+    throw QueryExecutionErrors.doGenCodeOfAliasShouldNotBeCalledError
   }
 
   override def dataType: DataType = child.dataType
@@ -221,9 +226,18 @@ case class Alias(child: Expression, name: String)(
   }
 
   override def sql: String = {
-    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
-    s"${child.sql} AS $qualifierPrefix${quoteIdentifier(name)}"
+    val qualifierPrefix =
+      if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
+    s"${child.sql} AS $qualifierPrefix${quoteIfNeeded(name)}"
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Alias =
+    copy(child = newChild)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
+}
+
+// Singleton tree pattern BitSet for all AttributeReference instances.
+object AttributeReferenceTreeBits {
+  val bits: BitSet = new ImmutableBitSet(TreePattern.maxId, ATTRIBUTE_REFERENCE.id)
 }
 
 /**
@@ -247,6 +261,8 @@ case class AttributeReference(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
+
+  override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
 
   /**
    * Returns true iff the expression id is the same for both attributes.
@@ -346,8 +362,9 @@ case class AttributeReference(
   }
 
   override def sql: String = {
-    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
-    s"$qualifierPrefix${quoteIdentifier(name)}"
+    val qualifierPrefix =
+      if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
+    s"$qualifierPrefix${quoteIfNeeded(name)}"
   }
 }
 
@@ -400,6 +417,7 @@ case class OuterReference(e: NamedExpression)
   override def exprId: ExprId = e.exprId
   override def toAttribute: Attribute = e.toAttribute
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
+  final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE)
 }
 
 object VirtualColumn {

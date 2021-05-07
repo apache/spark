@@ -36,7 +36,7 @@ import org.apache.mesos.protobuf.GeneratedMessageV3
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
-import org.apache.spark.deploy.mesos.{config => mesosConfig}
+import org.apache.spark.deploy.mesos.{config => mesosConfig, MesosDriverDescription}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{Status => _, _}
 import org.apache.spark.util.Utils
@@ -403,6 +403,21 @@ trait MesosSchedulerUtils extends Logging {
     sc.conf.get(mesosConfig.EXECUTOR_MEMORY_OVERHEAD).getOrElse(
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory
+  }
+
+  /**
+   * Return the amount of memory to allocate to each driver, taking into account
+   * container overheads.
+   *
+   * @param driverDesc used to get driver memory
+   * @return memory requirement defined as `DRIVER_MEMORY_OVERHEAD` if set in the config,
+   *         otherwise the larger of `MEMORY_OVERHEAD_MINIMUM (=384MB)` or
+   *         `MEMORY_OVERHEAD_FRACTION (=0.1) * driverMemory`
+   */
+  def driverContainerMemory(driverDesc: MesosDriverDescription): Int = {
+    val defaultMem = math.max(MEMORY_OVERHEAD_FRACTION * driverDesc.mem, MEMORY_OVERHEAD_MINIMUM)
+    driverDesc.conf.get(mesosConfig.DRIVER_MEMORY_OVERHEAD).getOrElse(defaultMem.toInt) +
+      driverDesc.mem
   }
 
   def setupUris(uris: Seq[String],

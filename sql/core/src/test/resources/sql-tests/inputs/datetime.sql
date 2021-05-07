@@ -172,3 +172,10 @@ select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
 select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
 select cast("Unparseable" as timestamp);
 select cast("Unparseable" as date);
+
+-- next_day
+select next_day("2015-07-23", "Mon");
+select next_day("2015-07-23", "xx");
+select next_day("xx", "Mon");
+select next_day(null, "Mon");
+select next_day(null, "xx");

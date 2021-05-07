@@ -17,21 +17,13 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
-class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSparkSession {
-  override def version: String = "V2"
-  override def catalog: String = "test_catalog"
-  override def defaultUsing: String = "USING _"
-
-  override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
-    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
-
+/**
+ * The class contains tests for the `SHOW PARTITIONS` command to check V2 table catalogs.
+ */
+class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSuiteBase {
   test("a table does not support partitioning") {
     val table = s"non_part_$catalog.tab1"
     withTable(table) {
@@ -41,8 +33,15 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $table")
       }.getMessage
-      assert(errMsg.contains(
-        "SHOW PARTITIONS cannot run for a table which does not support partitioning"))
+      assert(errMsg.contains(s"Table $table does not support partition management"))
+    }
+  }
+
+  test("SPARK-33889, SPARK-33904: null and empty string as partition values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createNullPartTable(t, "parquet")
+      runShowPartitionsSql(s"SHOW PARTITIONS $t", Row("part=") :: Row("part=null") :: Nil)
+      checkAnswer(spark.table(t), Row(0, "") :: Row(1, null) :: Nil)
     }
   }
 }

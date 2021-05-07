@@ -30,7 +30,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.kafka010.{FETCHED_DATA_CACHE_EVICTOR_THREAD_RUN_INTERVAL, FETCHED_DATA_CACHE_TIMEOUT}
-import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.CacheKey
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.{AvailableOffsetRange, CacheKey}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ManualClock
 
@@ -69,7 +69,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
     assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 10)
 
     dataList.map { case (_, data) =>
-      data.withNewPoll(testRecords(0, 5).listIterator, 5)
+      data.withNewPoll(testRecords(0, 5).listIterator, 5, AvailableOffsetRange(0, 4))
     }
 
     dataList.foreach { case (key, data) =>
@@ -91,7 +91,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
     val cacheKey = CacheKey("testgroup", new TopicPartition("topic", 0))
 
     val data = dataPool.acquire(cacheKey, 0)
-    data.withNewPoll(testRecords(0, 5).listIterator, 5)
+    data.withNewPoll(testRecords(0, 5).listIterator, 5, AvailableOffsetRange(0, 4))
 
     (0 to 3).foreach { _ => data.next() }
 
@@ -130,14 +130,14 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
     assert(getCache(dataPool)(cacheKey)(1).inUse)
 
     // reading from task 1
-    dataFromTask1.withNewPoll(testRecords(0, 5).listIterator, 5)
+    dataFromTask1.withNewPoll(testRecords(0, 5).listIterator, 5, AvailableOffsetRange(0, 4))
 
     (0 to 3).foreach { _ => dataFromTask1.next() }
 
     dataPool.release(cacheKey, dataFromTask1)
 
     // reading from task 2
-    dataFromTask2.withNewPoll(testRecords(0, 30).listIterator, 30)
+    dataFromTask2.withNewPoll(testRecords(0, 30).listIterator, 30, AvailableOffsetRange(0, 29))
 
     (0 to 5).foreach { _ => dataFromTask2.next() }
 
@@ -189,7 +189,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
     assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 10)
 
     dataList.map { case (_, data) =>
-      data.withNewPoll(testRecords(0, 5).listIterator, 5)
+      data.withNewPoll(testRecords(0, 5).listIterator, 5, AvailableOffsetRange(0, 4))
     }
 
     val dataToEvict = dataList.take(3)

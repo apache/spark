@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 
 /**
  * A trait that provides functionality to handle aliases in the `outputExpressions`.
@@ -44,7 +44,7 @@ trait AliasAwareOutputExpression extends UnaryExecNode {
  */
 trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
-    if (hasAlias) {
+    val normalizedOutputPartitioning = if (hasAlias) {
       child.outputPartitioning match {
         case e: Expression =>
           normalizeExpression(e).asInstanceOf[Partitioning]
@@ -52,6 +52,24 @@ trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
       }
     } else {
       child.outputPartitioning
+    }
+
+    flattenPartitioning(normalizedOutputPartitioning).filter {
+      case hashPartitioning: HashPartitioning => hashPartitioning.references.subsetOf(outputSet)
+      case _ => true
+    } match {
+      case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+      case Seq(singlePartitioning) => singlePartitioning
+      case seqWithMultiplePartitionings => PartitioningCollection(seqWithMultiplePartitionings)
+    }
+  }
+
+  private def flattenPartitioning(partitioning: Partitioning): Seq[Partitioning] = {
+    partitioning match {
+      case PartitioningCollection(childPartitionings) =>
+        childPartitionings.flatMap(flattenPartitioning)
+      case rest =>
+        rest +: Nil
     }
   }
 }

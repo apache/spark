@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Physical plan node for renaming a table.
@@ -27,14 +30,34 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 case class RenameTableExec(
     catalog: TableCatalog,
     oldIdent: Identifier,
-    newIdent: Identifier) extends V2CommandExec {
+    newIdent: Identifier,
+    invalidateCache: () => Option[StorageLevel],
+    cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
+  extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    catalog.invalidateTable(oldIdent)
-    catalog.renameTable(oldIdent, newIdent)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
+    val optOldStorageLevel = invalidateCache()
+    catalog.invalidateTable(oldIdent)
+
+    // If new identifier consists of a table name only, the table should be renamed in place.
+    // Such behavior matches to the v1 implementation of table renaming in Spark and other DBMSs.
+    val qualifiedNewIdent = if (newIdent.namespace.isEmpty) {
+      Identifier.of(oldIdent.namespace, newIdent.name)
+    } else newIdent
+    catalog.renameTable(oldIdent, qualifiedNewIdent)
+
+    optOldStorageLevel.foreach { oldStorageLevel =>
+      val tbl = catalog.loadTable(qualifiedNewIdent)
+      val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(qualifiedNewIdent))
+      cacheTable(
+        sqlContext.sparkSession,
+        newRelation,
+        Some(qualifiedNewIdent.quoted), oldStorageLevel)
+    }
     Seq.empty
   }
 }

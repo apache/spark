@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TreePattern}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
@@ -91,4 +92,8 @@ case class LocalRelation(
       " AS " + inlineTableName +
       output.map(_.name).mkString("(", ", ", ")")
   }
+
+  override def maxRows: Option[Long] = Some(data.length.toLong)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(LOCAL_RELATION)
 }

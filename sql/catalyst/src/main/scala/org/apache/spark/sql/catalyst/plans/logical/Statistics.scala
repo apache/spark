@@ -47,11 +47,14 @@ object Statistics {
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
  * @param attributeStats Statistics for Attributes.
+ * @param isRuntime Whether the statistics is inferred from query stage runtime statistics during
+ *                  adaptive query execution.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil)) {
+    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
+    isRuntime: Boolean = false) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
 

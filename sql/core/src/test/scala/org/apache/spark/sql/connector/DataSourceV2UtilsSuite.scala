@@ -37,8 +37,8 @@ class DataSourceV2UtilsSuite extends SparkFunSuite {
     val source = new DataSourceV2WithSessionConfig
     val confs = DataSourceV2Utils.extractSessionConfigs(source, conf)
     assert(confs.size == 2)
-    assert(confs.keySet.filter(_.startsWith("spark.datasource")).size == 0)
-    assert(confs.keySet.filter(_.startsWith("not.exist.prefix")).size == 0)
+    assert(!confs.keySet.exists(_.startsWith("spark.datasource")))
+    assert(!confs.keySet.exists(_.startsWith("not.exist.prefix")))
     assert(confs.keySet.contains("foo.bar"))
     assert(confs.keySet.contains("whateverConfigName"))
   }

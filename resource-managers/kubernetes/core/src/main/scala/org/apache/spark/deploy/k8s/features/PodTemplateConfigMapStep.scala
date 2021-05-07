@@ -22,9 +22,12 @@ import java.nio.charset.StandardCharsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.util.DependencyUtils.downloadFile
+import org.apache.spark.util.Utils
 
 private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
@@ -75,7 +78,10 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (hasTemplate) {
       val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
-      val podTemplateString = Files.toString(new File(podTemplateFile), StandardCharsets.UTF_8)
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf.sparkConf)
+      val uri = downloadFile(podTemplateFile, Utils.createTempDir(), conf.sparkConf, hadoopConf)
+      val file = new java.net.URI(uri).getPath
+      val podTemplateString = Files.toString(new File(file), StandardCharsets.UTF_8)
       Seq(new ConfigMapBuilder()
           .withNewMetadata()
             .withName(configmapName)

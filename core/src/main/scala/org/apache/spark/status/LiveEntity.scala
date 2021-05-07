@@ -393,14 +393,13 @@ private class LiveExecutorStageSummary(
 
 }
 
-private class LiveStage extends LiveEntity {
+private class LiveStage(var info: StageInfo) extends LiveEntity {
 
   import LiveEntityHelpers._
 
   var jobs = Seq[LiveJob]()
   var jobIds = Set[Int]()
 
-  var info: StageInfo = null
   var status = v1.StageStatus.PENDING
 
   var description: Option[String] = None
@@ -430,7 +429,7 @@ private class LiveStage extends LiveEntity {
 
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false
-  var savedTasks = new AtomicInteger(0)
+  val savedTasks = new AtomicInteger(0)
 
   def executorSummary(executorId: String): LiveExecutorStageSummary = {
     executorSummaries.getOrElseUpdate(executorId,
@@ -493,7 +492,9 @@ private class LiveStage extends LiveEntity {
       executorSummary = None,
       killedTasksSummary = killedSummary,
       resourceProfileId = info.resourceProfileId,
-      Some(peakExecutorMetrics).filter(_.isSet))
+      peakExecutorMetrics = Some(peakExecutorMetrics).filter(_.isSet),
+      taskMetricsDistributions = None,
+      executorMetricsDistributions = None)
   }
 
   override protected def doUpdate(): Any = {
@@ -912,4 +913,28 @@ private class RDDPartitionSeq extends Seq[v1.RDDPartitionInfo] {
     }
   }
 
+}
+
+private[spark] class LiveMiscellaneousProcess(val processId: String,
+    creationTime: Long) extends LiveEntity {
+
+  var hostPort: String = null
+  var isActive = true
+  var totalCores = 0
+  val addTime = new Date(creationTime)
+  var removeTime: Date = null
+  var processLogs = Map[String, String]()
+
+  override protected def doUpdate(): Any = {
+
+    val info = new v1.ProcessSummary(
+      processId,
+      hostPort,
+      isActive,
+      totalCores,
+      addTime,
+      Option(removeTime),
+      processLogs)
+    new ProcessSummaryWrapper(info)
+  }
 }
