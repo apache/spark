@@ -150,6 +150,11 @@ final class ShuffleBlockFetcherIterator(
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
 
   /**
+   * The max number of a block could retry due to Netty OOM before throwing the fetch failure.
+   */
+  private val maxAttemptsOnNettyOOM = SparkEnv.get.conf.get(SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM)
+
+  /**
    * Count the retry times for the blocks due to Netty OOM. The block will stop retry if
    * retry times has exceeded the [[maxAttemptsOnNettyOOM]].
    */
@@ -969,11 +974,6 @@ object ShuffleBlockFetcherIterator {
    * complete fetch request).
    */
   val isNettyOOMOnShuffle = new AtomicBoolean(false)
-
-  /**
-   * The max number of a block could retry due to Netty OOM before throwing the fetch failure.
-   */
-  val maxAttemptsOnNettyOOM: Int = SparkEnv.get.conf.get(SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM)
 
   def resetNettyOOMFlagIfPossible(freeMemoryLowerBound: Long): Unit = {
     if (isNettyOOMOnShuffle.get() && NettyUtils.freeDirectMemory() >= freeMemoryLowerBound) {
