@@ -31,6 +31,7 @@ object TreePattern extends Enumeration  {
   val CAST: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
+  val COMMAND: Value = Value
   val CREATE_NAMED_STRUCT: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value

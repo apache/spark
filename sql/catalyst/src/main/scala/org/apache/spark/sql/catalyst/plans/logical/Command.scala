@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, TreePattern}
 
 /**
  * A logical node that represents a non-query command to be executed by the system.  For example,
@@ -32,6 +33,7 @@ trait Command extends LogicalPlan {
   // is created. That said, the statistics of a command is useless. Here we just return a dummy
   // statistics to avoid unnecessary statistics calculation of command's children.
   override def stats: Statistics = Statistics.DUMMY
+  final override val nodePatterns: Seq[TreePattern] = Seq(COMMAND)
 }
 
 trait LeafCommand extends Command with LeafLike[LogicalPlan]
