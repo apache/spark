@@ -17,7 +17,6 @@ package org.apache.spark.shuffle
 
 import java.nio.ByteBuffer
 import java.util.concurrent.{CompletableFuture, TimeUnit}
-
 import net.jpountz.lz4.LZ4Factory
 import org.apache.spark.ShuffleDependency
 import org.apache.spark.internal.Logging
@@ -25,8 +24,8 @@ import org.apache.spark.remoteshuffle.clients.ShuffleDataWriter
 import org.apache.spark.remoteshuffle.common.{AppTaskAttemptId, ServerList}
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidStateException
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.internal.{BufferManagerOptions, RecordCombinedSerializationBuffer, RecordPlainSerializationBuffer, RecordSerializationBuffer, RssUtils, WriteBufferManager}
+import org.apache.spark.serializer.{KryoSerializer, KryoSerializerInstance, Serializer}
+import org.apache.spark.shuffle.internal.{BufferManagerOptions, KyroWriteBufferManager, RecordCombinedSerializationBuffer, RecordPlainSerializationBuffer, RecordSerializationBuffer, RssUtils, WriteBufferManager}
 
 class RssShuffleWriter[K, V, C](
                                  rssServers: ServerList,
@@ -57,14 +56,29 @@ class RssShuffleWriter[K, V, C](
 
   private val bufferManager: RecordSerializationBuffer[K, V] = {
     if (!bufferOptions.supportAggregate) {
-      logInfo(s"Create WriteBufferManager with spill size ${bufferOptions.bufferSpillThreshold}")
-      new WriteBufferManager[K, V](
-        serializer = serializer,
-        bufferSize = bufferOptions.individualBufferSize,
-        maxBufferSize = bufferOptions.individualBufferMax,
-        spillSize = bufferOptions.bufferSpillThreshold,
-        numPartitions = numPartitions,
-        createCombiner = createCombiner)
+      serializer match {
+        case k: KryoSerializer =>
+          logInfo(s"Create KyroWriteBufferManager with spill size " +
+            s"${bufferOptions.bufferSpillThreshold}")
+          new KyroWriteBufferManager[K, V](
+            serializerInstance = k.newInstance().asInstanceOf[KryoSerializerInstance],
+            bufferSize = bufferOptions.individualBufferSize,
+            maxBufferSize = bufferOptions.individualBufferMax,
+            spillSize = bufferOptions.bufferSpillThreshold,
+            numPartitions = numPartitions,
+            createCombiner = createCombiner)
+        case _ =>
+          logInfo(s"Create WriteBufferManager with spill size " +
+            s"${bufferOptions.bufferSpillThreshold}")
+          new WriteBufferManager[K, V](
+            serializer = serializer,
+            bufferSize = bufferOptions.individualBufferSize,
+            maxBufferSize = bufferOptions.individualBufferMax,
+            spillSize = bufferOptions.bufferSpillThreshold,
+            numPartitions = numPartitions,
+            createCombiner = createCombiner)
+      }
+
     } else {
       if (shuffleDependency.aggregator.isEmpty) {
         logInfo(s"Create RecordPlainSerializationBuffer with spill " +

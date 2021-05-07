@@ -18,74 +18,68 @@ package org.apache.spark.shuffle.internal
 import com.esotericsoftware.kryo.io.Output
 import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidDataException
-import org.apache.spark.serializer.{SerializationStream, Serializer}
+import org.apache.spark.serializer._
 
 import java.io.ByteArrayOutputStream
 import scala.collection.mutable
 import scala.collection.mutable.Map
 
-case class BufferManagerOptions(individualBufferSize: Int, individualBufferMax: Int,
-                                bufferSpillThreshold: Int, supportAggregate: Boolean)
-
-case class WriterBufferManagerValue(serializeStream: SerializationStream,
-                                    output: ByteArrayOutputStream)
-
-class WriteBufferManager[K, V](serializer: Serializer,
-                         bufferSize: Int,
-                         maxBufferSize: Int,
-                         spillSize: Int,
-                         numPartitions: Int,
-                         createCombiner: Option[V => Any] = None)
+/*
+ * This class is specially optimized for Kyro serializer to reduce memory copy.
+ */
+class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
+                                   bufferSize: Int,
+                                   maxBufferSize: Int,
+                                   spillSize: Int,
+                                   numPartitions: Int,
+                                   createCombiner: Option[V => Any] = None)
     extends RecordSerializationBuffer[K, V]
     with Logging {
-  private val partitionBuffers: Array[WriterBufferManagerValue] =
-    new Array[WriterBufferManagerValue](numPartitions)
+  private val partitionBuffers: Array[RssKryoSerializationStream] =
+    new Array[RssKryoSerializationStream](numPartitions)
 
   private var totalBytes = 0
-
-  private val serializerInstance = serializer.newInstance()
 
   def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte])] = {
     val key: Any = record._1
     val value: Any = createCombiner.map(_.apply(record._2)).getOrElse(record._2)
     var result: mutable.Buffer[(Int, Array[Byte])] = null
-    val v = partitionBuffers(partitionId)
-    if (v != null) {
-      val stream = v.serializeStream
-      val oldSize = v.output.size()
+    val stream = partitionBuffers(partitionId)
+    if (stream != null) {
+      val oldSize = stream.position()
       stream.writeKey(key)
       stream.writeValue(value)
-      val newSize = v.output.size()
-      if (newSize >= bufferSize) {
-        // partition buffer is full, add it to the result as spill data
-        if (result == null) {
-          result = mutable.Buffer[(Int, Array[Byte])]()
-        }
-        v.serializeStream.flush()
-        result.append((partitionId, v.output.toByteArray))
-        v.serializeStream.close()
-        partitionBuffers(partitionId) = null
-        totalBytes -= oldSize
-      } else {
-        totalBytes += (newSize - oldSize)
-      }
-    }
-    else {
-      val output = new ByteArrayOutputStream(bufferSize)
-      val stream = serializerInstance.serializeStream(output)
-      stream.writeKey(key)
-      stream.writeValue(value)
-      val newSize = output.size()
+      val newSize = stream.position()
       if (newSize >= bufferSize) {
         // partition buffer is full, add it to the result as spill data
         if (result == null) {
           result = mutable.Buffer[(Int, Array[Byte])]()
         }
         stream.flush()
-        result.append((partitionId, output.toByteArray))
-        stream.close()
+        result.append((partitionId, stream.toBytes))
+        stream.clear()
+        totalBytes -= oldSize
       } else {
-        partitionBuffers(partitionId) = WriterBufferManagerValue(stream, output)
+        totalBytes += (newSize - oldSize)
+      }
+    }
+    else {
+      val stream = RssKryoSerializationStream.newStream(serializerInstance,
+        bufferSize, maxBufferSize)
+      stream.writeKey(key)
+      stream.writeValue(value)
+      val newSize = stream.position()
+      if (newSize >= bufferSize) {
+        // partition buffer is full, add it to the result as spill data
+        if (result == null) {
+          result = mutable.Buffer[(Int, Array[Byte])]()
+        }
+        stream.flush()
+        result.append((partitionId, stream.toBytes))
+        stream.clear()
+        partitionBuffers(partitionId) = stream
+      } else {
+        partitionBuffers(partitionId) = stream
         totalBytes = totalBytes + newSize
       }
     }
@@ -95,7 +89,7 @@ class WriteBufferManager[K, V](serializer: Serializer,
       if (result == null) {
         result = mutable.Buffer[(Int, Array[Byte])]()
       }
-      val allData = clear()
+      val allData = clearData()
       result.appendAll(allData)
     }
 
@@ -112,8 +106,8 @@ class WriteBufferManager[K, V](serializer: Serializer,
     while (i < partitionBuffers.length) {
       val t = partitionBuffers(i)
       if (t != null) {
-        flushStream(t.serializeStream, t.output)
-        sum += t.output.size()
+        flushStream(t)
+        sum += t.position()
       }
       i += 1
     }
@@ -125,15 +119,30 @@ class WriteBufferManager[K, V](serializer: Serializer,
   }
 
   def clear(): Seq[(Int, Array[Byte])] = {
+    val result = clearData()
+    var i = 0
+    while (i < partitionBuffers.length) {
+      val t = partitionBuffers(i)
+      if (t != null) {
+        t.close()
+        partitionBuffers(i) = null
+      }
+      i += 1
+    }
+    result
+  }
+
+  private def clearData(): Seq[(Int, Array[Byte])] = {
     val result = mutable.Buffer[(Int, Array[Byte])]()
     var i = 0
     while (i < partitionBuffers.length) {
       val t = partitionBuffers(i)
       if (t != null) {
-        t.serializeStream.flush()
-        result.append((i, t.output.toByteArray))
-        t.serializeStream.close()
-        partitionBuffers(i) = null
+        if (t.position() > 0) {
+          t.flush()
+          result.append((i, t.toBytes))
+          t.clear()
+        }
       }
       i += 1
     }
@@ -141,10 +150,10 @@ class WriteBufferManager[K, V](serializer: Serializer,
     result
   }
 
-  private def flushStream(serializeStream: SerializationStream, output: ByteArrayOutputStream) = {
-    val oldPosition = output.size()
+  private def flushStream(serializeStream: RssKryoSerializationStream) = {
+    val oldPosition = serializeStream.position()
     serializeStream.flush()
-    val numBytes = output.size() - oldPosition
+    val numBytes = serializeStream.position() - oldPosition
     totalBytes += numBytes
   }
 }
