@@ -62,9 +62,8 @@ class DatetimeOpsTest(ReusedSQLTestCase, TestCasesUtils):
                         (self.pser - pser).dt.total_seconds().astype("int"),
                         (self.kser - kser).sort_index(),
                     )
-                # Disabled for datetime - categorical doesn't raise TypeError in CI jobs
-                # else:
-                #     self.assertRaises(TypeError, lambda: self.kser - kser)
+                else:
+                    self.assertRaises(TypeError, lambda: self.kser - kser)
 
     def test_mul(self):
         self.assertRaises(TypeError, lambda: self.kser * "x")

@@ -24,6 +24,12 @@ from pyspark.pandas.testing.utils import ReusedSQLTestCase
 
 
 class NumOpsTest(ReusedSQLTestCase, TestCasesUtils):
+    """Unit tests for arithmetic operations of numeric data types.
+
+    A few test cases are disabled because pandas-on-Spark returns float64 whereas pandas
+    returns float32.
+    The underlying reason is the respective Spark operations return DoubleType always.
+    """
     def test_add(self):
         for pser, kser in self.numeric_pser_kser_pairs:
             self.assert_eq(pser + pser, kser + kser)
@@ -72,7 +78,6 @@ class NumOpsTest(ReusedSQLTestCase, TestCasesUtils):
 
     def test_truediv(self):
         for pser, kser in self.numeric_pser_kser_pairs:
-            # FloatType is coverted to DoubleType
             if kser.dtype in [float, int, np.int32]:
                 self.assert_eq(pser / pser, kser / kser)
 
@@ -86,7 +91,6 @@ class NumOpsTest(ReusedSQLTestCase, TestCasesUtils):
 
     def test_floordiv(self):
         for pser, kser in self.numeric_pser_kser_pairs:
-            # DoubleType is returned always
             if kser.dtype == float:
                 self.assert_eq(pser // pser, kser // kser)
 
@@ -112,7 +116,6 @@ class NumOpsTest(ReusedSQLTestCase, TestCasesUtils):
 
     def test_pow(self):
         for pser, kser in self.numeric_pser_kser_pairs:
-            # DoubleType is returned always
             if kser.dtype == float:
                 self.assert_eq(pser ** pser, kser ** kser)
 
