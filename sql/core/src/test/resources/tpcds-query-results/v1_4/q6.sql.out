@@ -4,18 +4,18 @@
 struct<state:string,cnt:bigint>
 -- !query output
 VT	10
-MA	11
 NH	11
+MA	11
 NJ	14
+WY	16
 NV	16
 OR	16
-WY	16
 AK	20
 ME	22
 MD	26
 WA	29
-ID	31
 NM	31
+ID	31
 UT	36
 ND	38
 SC	41
@@ -26,9 +26,9 @@ FL	53
 LA	56
 PA	57
 NY	59
+WI	61
 AR	61
 CO	61
-WI	61
 MT	66
 MS	68
 OK	68

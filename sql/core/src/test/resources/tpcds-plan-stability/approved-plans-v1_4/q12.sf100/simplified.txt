@@ -1,6 +1,6 @@
 TakeOrderedAndProject [i_category,i_class,i_item_id,i_item_desc,revenueratio,i_current_price,itemrevenue]
   WholeStageCodegen (9)
-    Project [i_item_id,i_item_desc,i_category,i_class,i_current_price,itemrevenue,_w0,_we0]
+    Project [i_item_desc,i_category,i_class,i_current_price,itemrevenue,_w0,_we0,i_item_id]
       InputAdapter
         Window [_w1,i_class]
           WholeStageCodegen (8)

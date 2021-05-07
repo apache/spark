@@ -1,4 +1,4 @@
-TakeOrderedAndProject [customer_first_name,customer_id,customer_last_name]
+TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name]
   WholeStageCodegen (35)
     Project [customer_id,customer_first_name,customer_last_name]
       SortMergeJoin [customer_id,customer_id,year_total,year_total,year_total,year_total]

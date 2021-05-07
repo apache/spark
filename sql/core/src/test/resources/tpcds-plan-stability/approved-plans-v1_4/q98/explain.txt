@@ -1,29 +1,30 @@
 == Physical Plan ==
-* Sort (25)
-+- Exchange (24)
-   +- * Project (23)
-      +- Window (22)
-         +- * Sort (21)
-            +- Exchange (20)
-               +- * HashAggregate (19)
-                  +- Exchange (18)
-                     +- * HashAggregate (17)
-                        +- * Project (16)
-                           +- * BroadcastHashJoin Inner BuildRight (15)
-                              :- * Project (9)
-                              :  +- * BroadcastHashJoin Inner BuildRight (8)
-                              :     :- * Filter (3)
-                              :     :  +- * ColumnarToRow (2)
-                              :     :     +- Scan parquet default.store_sales (1)
-                              :     +- BroadcastExchange (7)
-                              :        +- * Filter (6)
-                              :           +- * ColumnarToRow (5)
-                              :              +- Scan parquet default.item (4)
-                              +- BroadcastExchange (14)
-                                 +- * Project (13)
-                                    +- * Filter (12)
-                                       +- * ColumnarToRow (11)
-                                          +- Scan parquet default.date_dim (10)
+* Project (26)
++- * Sort (25)
+   +- Exchange (24)
+      +- * Project (23)
+         +- Window (22)
+            +- * Sort (21)
+               +- Exchange (20)
+                  +- * HashAggregate (19)
+                     +- Exchange (18)
+                        +- * HashAggregate (17)
+                           +- * Project (16)
+                              +- * BroadcastHashJoin Inner BuildRight (15)
+                                 :- * Project (9)
+                                 :  +- * BroadcastHashJoin Inner BuildRight (8)
+                                 :     :- * Filter (3)
+                                 :     :  +- * ColumnarToRow (2)
+                                 :     :     +- Scan parquet default.store_sales (1)
+                                 :     +- BroadcastExchange (7)
+                                 :        +- * Filter (6)
+                                 :           +- * ColumnarToRow (5)
+                                 :              +- Scan parquet default.item (4)
+                                 +- BroadcastExchange (14)
+                                    +- * Project (13)
+                                       +- * Filter (12)
+                                          +- * ColumnarToRow (11)
+                                             +- Scan parquet default.date_dim (10)
 
 
 (1) Scan parquet default.store_sales
@@ -115,39 +116,43 @@ Input [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_pric
 Keys [5]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8]
 Functions [1]: [sum(UnscaledValue(ss_ext_sales_price#2))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_ext_sales_price#2))#18]
-Results [8]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#18,17,2) AS itemrevenue#19, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#18,17,2) AS _w0#20, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#18,17,2) AS _w1#21]
+Results [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#18,17,2) AS itemrevenue#19, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#18,17,2) AS _w0#20, MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#2))#18,17,2) AS _w1#21, i_item_id#6]
 
 (20) Exchange
-Input [8]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21]
+Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, i_item_id#6]
 Arguments: hashpartitioning(i_class#9, 5), ENSURE_REQUIREMENTS, [id=#22]
 
 (21) Sort [codegen id : 5]
-Input [8]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21]
+Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, i_item_id#6]
 Arguments: [i_class#9 ASC NULLS FIRST], false, 0
 
 (22) Window
-Input [8]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21]
+Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, i_item_id#6]
 Arguments: [sum(_w1#21) windowspecdefinition(i_class#9, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#23], [i_class#9]
 
 (23) Project [codegen id : 6]
-Output [7]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#20) * 100.00), DecimalType(21,2), true) as decimal(27,2))) / promote_precision(_we0#23)), DecimalType(38,17), true) AS revenueratio#24]
-Input [9]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, _we0#23]
+Output [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#20) * 100.00), DecimalType(21,2), true) as decimal(27,2))) / promote_precision(_we0#23)), DecimalType(38,17), true) AS revenueratio#24, i_item_id#6]
+Input [9]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, i_item_id#6, _we0#23]
 
 (24) Exchange
-Input [7]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24]
+Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24, i_item_id#6]
 Arguments: rangepartitioning(i_category#10 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_item_id#6 ASC NULLS FIRST, i_item_desc#7 ASC NULLS FIRST, revenueratio#24 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#25]
 
 (25) Sort [codegen id : 7]
-Input [7]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24]
+Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24, i_item_id#6]
 Arguments: [i_category#10 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_item_id#6 ASC NULLS FIRST, i_item_desc#7 ASC NULLS FIRST, revenueratio#24 ASC NULLS FIRST], true, 0
+
+(26) Project [codegen id : 7]
+Output [6]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24]
+Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24, i_item_id#6]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#3 IN dynamicpruning#4
-ReusedExchange (26)
+ReusedExchange (27)
 
 
-(26) ReusedExchange [Reuses operator id: 14]
+(27) ReusedExchange [Reuses operator id: 14]
 Output [1]: [d_date_sk#12]
 
 

@@ -1,6 +1,6 @@
-TakeOrderedAndProject [cnt,ca_state,state]
+TakeOrderedAndProject [cnt,state]
   WholeStageCodegen (8)
-    Project [state,cnt,ca_state]
+    Project [state,cnt]
       Filter [count(1)]
         HashAggregate [ca_state,count] [count(1),state,cnt,count(1),count]
           InputAdapter

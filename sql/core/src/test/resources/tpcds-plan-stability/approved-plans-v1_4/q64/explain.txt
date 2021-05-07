@@ -1013,11 +1013,11 @@ Input [25]: [product_name#104, item_sk#105, store_name#106, store_zip#107, b_str
 
 (188) Exchange
 Input [21]: [product_name#104, store_name#106, store_zip#107, b_street_number#108, b_streen_name#109, b_city#110, b_zip#111, c_street_number#112, c_street_name#113, c_city#114, c_zip#115, syear#116, cnt#117, s1#118, s2#119, s3#120, s1#208, s2#209, s3#210, syear#206, cnt#207]
-Arguments: rangepartitioning(product_name#104 ASC NULLS FIRST, store_name#106 ASC NULLS FIRST, cnt#207 ASC NULLS FIRST, s1#118 ASC NULLS FIRST, s1#208 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#212]
+Arguments: rangepartitioning(product_name#104 ASC NULLS FIRST, store_name#106 ASC NULLS FIRST, cnt#207 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#212]
 
 (189) Sort [codegen id : 54]
 Input [21]: [product_name#104, store_name#106, store_zip#107, b_street_number#108, b_streen_name#109, b_city#110, b_zip#111, c_street_number#112, c_street_name#113, c_city#114, c_zip#115, syear#116, cnt#117, s1#118, s2#119, s3#120, s1#208, s2#209, s3#210, syear#206, cnt#207]
-Arguments: [product_name#104 ASC NULLS FIRST, store_name#106 ASC NULLS FIRST, cnt#207 ASC NULLS FIRST, s1#118 ASC NULLS FIRST, s1#208 ASC NULLS FIRST], true, 0
+Arguments: [product_name#104 ASC NULLS FIRST, store_name#106 ASC NULLS FIRST, cnt#207 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
 

@@ -260,12 +260,12 @@ Right keys [5]: [i_category#41, i_brand#42, s_store_name#43, s_company_name#44, 
 Join condition: None
 
 (48) Project [codegen id : 23]
-Output [7]: [i_category#3, d_year#11, d_moy#12, avg_monthly_sales#25, sum_sales#22, sum_sales#37 AS psum#50, sum_sales#47 AS nsum#51]
+Output [10]: [i_category#3, i_brand#2, s_store_name#15, s_company_name#16, d_year#11, d_moy#12, avg_monthly_sales#25, sum_sales#22, sum_sales#37 AS psum#50, sum_sales#47 AS nsum#51]
 Input [16]: [i_category#3, i_brand#2, s_store_name#15, s_company_name#16, d_year#11, d_moy#12, sum_sales#22, avg_monthly_sales#25, rn#27, sum_sales#37, i_category#41, i_brand#42, s_store_name#43, s_company_name#44, sum_sales#47, rn#48]
 
 (49) TakeOrderedAndProject
-Input [7]: [i_category#3, d_year#11, d_moy#12, avg_monthly_sales#25, sum_sales#22, psum#50, nsum#51]
-Arguments: 100, [CheckOverflow((promote_precision(cast(sum_sales#22 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(22,6), true) ASC NULLS FIRST, d_moy#12 ASC NULLS FIRST], [i_category#3, d_year#11, d_moy#12, avg_monthly_sales#25, sum_sales#22, psum#50, nsum#51]
+Input [10]: [i_category#3, i_brand#2, s_store_name#15, s_company_name#16, d_year#11, d_moy#12, avg_monthly_sales#25, sum_sales#22, psum#50, nsum#51]
+Arguments: 100, [CheckOverflow((promote_precision(cast(sum_sales#22 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(22,6), true) ASC NULLS FIRST, s_store_name#15 ASC NULLS FIRST], [i_category#3, i_brand#2, s_store_name#15, s_company_name#16, d_year#11, d_moy#12, avg_monthly_sales#25, sum_sales#22, psum#50, nsum#51]
 
 ===== Subqueries =====
 

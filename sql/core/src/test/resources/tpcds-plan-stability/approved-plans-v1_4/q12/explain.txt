@@ -114,27 +114,27 @@ Input [6]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_pric
 Keys [5]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8]
 Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#2))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#2))#18]
-Results [8]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#2))#18,17,2) AS itemrevenue#19, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#2))#18,17,2) AS _w0#20, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#2))#18,17,2) AS _w1#21]
+Results [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#2))#18,17,2) AS itemrevenue#19, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#2))#18,17,2) AS _w0#20, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#2))#18,17,2) AS _w1#21, i_item_id#6]
 
 (20) Exchange
-Input [8]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21]
+Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, i_item_id#6]
 Arguments: hashpartitioning(i_class#9, 5), ENSURE_REQUIREMENTS, [id=#22]
 
 (21) Sort [codegen id : 5]
-Input [8]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21]
+Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, i_item_id#6]
 Arguments: [i_class#9 ASC NULLS FIRST], false, 0
 
 (22) Window
-Input [8]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21]
+Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, i_item_id#6]
 Arguments: [sum(_w1#21) windowspecdefinition(i_class#9, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#23], [i_class#9]
 
 (23) Project [codegen id : 6]
-Output [7]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#20) * 100.00), DecimalType(21,2), true) as decimal(27,2))) / promote_precision(_we0#23)), DecimalType(38,17), true) AS revenueratio#24]
-Input [9]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, _we0#23]
+Output [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#20) * 100.00), DecimalType(21,2), true) as decimal(27,2))) / promote_precision(_we0#23)), DecimalType(38,17), true) AS revenueratio#24, i_item_id#6]
+Input [9]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, _w0#20, _w1#21, i_item_id#6, _we0#23]
 
 (24) TakeOrderedAndProject
-Input [7]: [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24]
-Arguments: 100, [i_category#10 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_item_id#6 ASC NULLS FIRST, i_item_desc#7 ASC NULLS FIRST, revenueratio#24 ASC NULLS FIRST], [i_item_id#6, i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24]
+Input [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24, i_item_id#6]
+Arguments: 100, [i_category#10 ASC NULLS FIRST, i_class#9 ASC NULLS FIRST, i_item_id#6 ASC NULLS FIRST, i_item_desc#7 ASC NULLS FIRST, revenueratio#24 ASC NULLS FIRST], [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#19, revenueratio#24]
 
 ===== Subqueries =====
 

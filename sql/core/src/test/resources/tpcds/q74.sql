@@ -54,5 +54,5 @@ WHERE t_s_secyear.customer_id = t_s_firstyear.customer_id
   > CASE WHEN t_s_firstyear.year_total > 0
   THEN t_s_secyear.year_total / t_s_firstyear.year_total
     ELSE NULL END
-ORDER BY 2, 1, 3
+ORDER BY 1, 1, 1
 LIMIT 100
