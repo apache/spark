@@ -20,13 +20,15 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidDataException
 import org.apache.spark.serializer.{SerializationStream, Serializer}
 
+import java.io.ByteArrayOutputStream
 import scala.collection.mutable
 import scala.collection.mutable.Map
 
 case class BufferManagerOptions(individualBufferSize: Int, individualBufferMax: Int,
                                 bufferSpillThreshold: Int, supportAggregate: Boolean)
 
-case class WriterBufferManagerValue(serializeStream: SerializationStream, output: Output)
+case class WriterBufferManagerValue(serializeStream: SerializationStream,
+                                    output: ByteArrayOutputStream)
 
 class WriteBufferManager[K, V](serializer: Serializer,
                          bufferSize: Int,
@@ -39,6 +41,8 @@ class WriteBufferManager[K, V](serializer: Serializer,
   private val partitionBuffers: Array[WriterBufferManagerValue] =
     new Array[WriterBufferManagerValue](numPartitions)
 
+  private val outputPool = mutable.Buffer[ByteArrayOutputStream]()
+
   private var totalBytes = 0
 
   private val serializerInstance = serializer.newInstance()
@@ -50,17 +54,17 @@ class WriteBufferManager[K, V](serializer: Serializer,
     val v = partitionBuffers(partitionId)
     if (v != null) {
       val stream = v.serializeStream
-      val oldSize = v.output.position()
+      val oldSize = v.output.size()
       stream.writeKey(key)
       stream.writeValue(value)
-      val newSize = v.output.position()
+      val newSize = v.output.size()
       if (newSize >= bufferSize) {
         // partition buffer is full, add it to the result as spill data
         if (result == null) {
           result = mutable.Buffer[(Int, Array[Byte])]()
         }
         v.serializeStream.flush()
-        result.append((partitionId, v.output.toBytes))
+        result.append((partitionId, v.output.toByteArray))
         v.serializeStream.close()
         partitionBuffers(partitionId) = null
         totalBytes -= oldSize
@@ -69,18 +73,18 @@ class WriteBufferManager[K, V](serializer: Serializer,
       }
     }
     else {
-      val output = new Output(bufferSize, maxBufferSize)
+      val output = new ByteArrayOutputStream(bufferSize)
       val stream = serializerInstance.serializeStream(output)
       stream.writeKey(key)
       stream.writeValue(value)
-      val newSize = output.position()
+      val newSize = output.size()
       if (newSize >= bufferSize) {
         // partition buffer is full, add it to the result as spill data
         if (result == null) {
           result = mutable.Buffer[(Int, Array[Byte])]()
         }
         stream.flush()
-        result.append((partitionId, output.toBytes))
+        result.append((partitionId, output.toByteArray))
         stream.close()
       } else {
         partitionBuffers(partitionId) = WriterBufferManagerValue(stream, output)
@@ -111,7 +115,7 @@ class WriteBufferManager[K, V](serializer: Serializer,
       val t = partitionBuffers(i)
       if (t != null) {
         flushStream(t.serializeStream, t.output)
-        sum += t.output.position()
+        sum += t.output.size()
       }
       i += 1
     }
@@ -129,7 +133,7 @@ class WriteBufferManager[K, V](serializer: Serializer,
       val t = partitionBuffers(i)
       if (t != null) {
         t.serializeStream.flush()
-        result.append((i, t.output.toBytes))
+        result.append((i, t.output.toByteArray))
         t.serializeStream.close()
         partitionBuffers(i) = null
       }
@@ -139,10 +143,10 @@ class WriteBufferManager[K, V](serializer: Serializer,
     result
   }
 
-  private def flushStream(serializeStream: SerializationStream, output: Output) = {
-    val oldPosition = output.position()
+  private def flushStream(serializeStream: SerializationStream, output: ByteArrayOutputStream) = {
+    val oldPosition = output.size()
     serializeStream.flush()
-    val numBytes = output.position() - oldPosition
+    val numBytes = output.size() - oldPosition
     totalBytes += numBytes
   }
 }
