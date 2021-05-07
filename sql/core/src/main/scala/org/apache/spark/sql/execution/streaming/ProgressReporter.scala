@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.text.SimpleDateFormat
-import java.util.{Date, UUID}
+import java.util.{Date, Optional, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalP
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, SparkDataStream}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSourceMetrics, SparkDataStream}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
@@ -101,6 +101,8 @@ trait ProgressReporter extends Logging {
       isTriggerActive = false)
   }
 
+  private var latestStreamProgress: StreamProgress = _
+
   /** Returns the current status of the query. */
   def status: StreamingQueryStatus = currentStatus
 
@@ -136,6 +138,7 @@ trait ProgressReporter extends Logging {
     currentTriggerStartOffsets = from.mapValues(_.json).toMap
     currentTriggerEndOffsets = to.mapValues(_.json).toMap
     currentTriggerLatestOffsets = latest.mapValues(_.json).toMap
+    latestStreamProgress = to
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -175,6 +178,11 @@ trait ProgressReporter extends Logging {
 
     val sourceProgress = sources.distinct.map { source =>
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
+      val sourceMetrics = source match {
+        case withMetrics: ReportsSourceMetrics =>
+          withMetrics.metrics(Optional.ofNullable(latestStreamProgress.get(source).orNull))
+        case _ => Map[String, String]().asJava
+      }
       new SourceProgress(
         description = source.toString,
         startOffset = currentTriggerStartOffsets.get(source).orNull,
@@ -182,7 +190,8 @@ trait ProgressReporter extends Logging {
         latestOffset = currentTriggerLatestOffsets.get(source).orNull,
         numInputRows = numRecords,
         inputRowsPerSecond = numRecords / inputTimeSec,
-        processedRowsPerSecond = numRecords / processingTimeSec
+        processedRowsPerSecond = numRecords / processingTimeSec,
+        metrics = sourceMetrics
       )
     }
 

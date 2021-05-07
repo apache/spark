@@ -565,6 +565,33 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
          |""".stripMargin
     )
   }
+
+  test("SPARK-35133: explain codegen should work with AQE") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      withTempView("df") {
+        val df = spark.range(5).select(col("id").as("key"), col("id").as("value"))
+        df.createTempView("df")
+
+        val sqlText = "EXPLAIN CODEGEN SELECT key, MAX(value) FROM df GROUP BY key"
+        val expectedCodegenText = "Found 2 WholeStageCodegen subtrees."
+        val expectedNoCodegenText = "Found 0 WholeStageCodegen subtrees."
+        withNormalizedExplain(sqlText) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedNoCodegenText))
+        }
+
+        val aggDf = df.groupBy('key).agg(max('value))
+        withNormalizedExplain(aggDf, CodegenMode) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedNoCodegenText))
+        }
+
+        // trigger the final plan for AQE
+        aggDf.collect()
+        withNormalizedExplain(aggDf, CodegenMode) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedCodegenText))
+        }
+      }
+    }
+  }
 }
 
 case class ExplainSingleData(id: Int)

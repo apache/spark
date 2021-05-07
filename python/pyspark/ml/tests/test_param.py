@@ -30,6 +30,7 @@ from pyspark.ml.feature import Binarizer, Bucketizer, ElementwiseProduct, IndexT
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
+from pyspark.ml.regression import LinearRegressionModel, GeneralizedLinearRegressionModel
 from pyspark.ml.wrapper import JavaParams
 from pyspark.testing.mlutils import check_params, PySparkTestCase, SparkSessionTestCase
 
@@ -197,6 +198,10 @@ class ParamTests(SparkSessionTestCase):
         self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
         self.assertRaises(AttributeError, lambda: testParams._resolveParam(u"아"))
 
+        # Invalid type
+        invalid_type = 1
+        self.assertRaises(TypeError, testParams._resolveParam, invalid_type)
+
     def test_params(self):
         testParams = TestParams()
         maxIter = testParams.maxIter
@@ -331,6 +336,16 @@ class ParamTests(SparkSessionTestCase):
         result = binarizer.transform(dataset).select("my_default").collect()
         self.assertFalse(binarizer.isSet(binarizer.outputCol))
         self.assertEqual(result[0][0], 1.0)
+
+    def test_lr_evaluate_invaild_type(self):
+        lr = LinearRegressionModel()
+        invalid_type = ""
+        self.assertRaises(TypeError, lr.evaluate, invalid_type)
+
+    def test_glr_evaluate_invaild_type(self):
+        glr = GeneralizedLinearRegressionModel()
+        invalid_type = ""
+        self.assertRaises(TypeError, glr.evaluate, invalid_type)
 
 
 class DefaultValuesTests(PySparkTestCase):

@@ -5,6 +5,8 @@ struct<customer_preferred_cust_flag:string>
 -- !query output
 NULL
 NULL
+NULL
+NULL
 N
 N
 N
@@ -48,6 +50,10 @@ N
 N
 N
 N
+N
+N
+Y
+Y
 Y
 Y
 Y

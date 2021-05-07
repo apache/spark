@@ -1353,6 +1353,10 @@ private[spark] object QueryCompilationErrors {
       s"Ambiguous field name: $fieldName. Found multiple columns that can match: $names")
   }
 
+  def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
+    new AnalysisException("Cannot use interval type in the table schema.")
+  }
+
   def cannotConvertBucketWithSortColumnsToTransformError(spec: BucketSpec): Throwable = {
     new AnalysisException(
       s"Cannot convert bucketing with sort columns to a transform: $spec")
