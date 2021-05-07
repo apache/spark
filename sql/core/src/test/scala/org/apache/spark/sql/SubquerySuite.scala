@@ -1851,8 +1851,6 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |LIMIT 1
           """.stripMargin)
 
-        df.explain(true)
-
         var countSubqueryExec = 0
         var countReuseSubqueryExec = 0
         var multiSubqueryExec = 0
