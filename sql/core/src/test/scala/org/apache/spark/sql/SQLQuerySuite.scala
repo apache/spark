@@ -4100,6 +4100,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("abcdedg") {
+    Seq("CLUSTER", "DISTRIBUTE").foreach { keyword =>
+      Seq("a", "substr(a, 0, 3)").foreach { expr =>
+        val clause = keyword + " by " + expr
+        withClue(clause) {
+          checkAnswer(sql(s"select a b from values('123') t(a) $clause"), Row("123"))
+        }
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

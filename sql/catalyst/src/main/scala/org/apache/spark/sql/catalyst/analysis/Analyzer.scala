@@ -1885,6 +1885,15 @@ class Analyzer(override val catalogManager: CatalogManager)
           val newFilter = Filter(newCond.head, newChild)
           Project(child.output, newFilter)
         }
+
+      case r @ RepartitionByExpression(partitionExprs, child, _)
+          if (!r.resolved || r.missingInput.nonEmpty) && child.resolved =>
+        val (newPartitionExprs, newChild) = resolveExprsAndAddMissingAttrs(partitionExprs, child)
+        if (child.output == newChild.output) {
+          r.copy(newPartitionExprs, newChild)
+        } else {
+          Project(child.output, r.copy(newPartitionExprs, newChild))
+        }
     }
 
     /**
