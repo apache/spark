@@ -31,9 +31,9 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       Batch("MergeScalarSubqueries", Once, MergeScalarSubqueries) :: Nil
   }
 
-  test("Simple non-correlated scalar subquery merge") {
-    val testRelation = LocalRelation('a.int, 'b.int)
+  val testRelation = LocalRelation('a.int, 'b.int)
 
+  test("Simple non-correlated scalar subquery merge") {
     val subquery1 = testRelation
       .groupBy('b)(max('a))
     val subquery2 = testRelation
@@ -43,6 +43,25 @@ class MergeScalarSubqueriesSuite extends PlanTest {
 
     val multiSubquery = testRelation
       .groupBy('b)(max('a), sum('a)).analyze
+    val correctAnswer = testRelation
+      .select(GetStructField(MultiScalarSubquery(multiSubquery), 0).as("scalarsubquery()"),
+        GetStructField(MultiScalarSubquery(multiSubquery), 1).as("scalarsubquery()"))
+
+    // checkAnalysis is disabled because `Analizer` is not prepared for `MultiScalarSubquery` nodes
+    // as only `Optimizer` can insert such a node to the plan
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer, false)
+  }
+
+  test("Aggregate and group expression merge") {
+    val subquery1 = testRelation
+      .groupBy('b)(max('a))
+    val subquery2 = testRelation
+      .groupBy('b)('b)
+    val originalQuery = testRelation
+      .select(ScalarSubquery(subquery1), ScalarSubquery(subquery2))
+
+    val multiSubquery = testRelation
+      .groupBy('b)(max('a), 'b).analyze
     val correctAnswer = testRelation
       .select(GetStructField(MultiScalarSubquery(multiSubquery), 0).as("scalarsubquery()"),
         GetStructField(MultiScalarSubquery(multiSubquery), 1).as("scalarsubquery()"))
