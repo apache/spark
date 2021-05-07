@@ -31,6 +31,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
@@ -570,5 +571,44 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     // If Java 8 time API is enabled via the SQL config `spark.sql.datetime.java8API.enabled`,
     // the date formatter for `java.sql.LocalDate` must output negative years with sign.
     runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
+  }
+
+  test("SPARK-33100: Ignore a semicolon inside a bracketed comment in spark-sql") {
+    runCliWithin(4.minute)(
+      "/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      ";;/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      "/* SELECT 'test';*/;; SELECT 'test';" -> "test",
+      "SELECT 'test'; -- SELECT 'test';" -> "test",
+      "SELECT 'test'; /* SELECT 'test';*/;" -> "test",
+      "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
+      "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
+      "/*/* multi-level bracketed*/ SELECT 'test';" -> "test"
+    )
+  }
+
+  test("SPARK-33100: test sql statements with hint in bracketed comment") {
+    runCliWithin(2.minute)(
+      "CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES(1, 2) AS t1(k, v);" -> "",
+      "CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES(2, 1) AS t2(k, v);" -> "",
+      "EXPLAIN SELECT /*+ MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;" -> "SortMergeJoin",
+      "EXPLAIN SELECT /* + MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
+        -> "BroadcastHashJoin"
+    )
+  }
+
+  test("SPARK-35086: --verbose should be passed to Spark SQL CLI") {
+    runCliWithin(2.minute, Seq("--verbose"))(
+      "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2;" ->
+        "SELECT 'SPARK-35086' AS c1, '--verbose' AS c2"
+    )
+  }
+
+  test("SPARK-35102: Make spark.sql.hive.version meaningful and not deprecated") {
+    runCliWithin(1.minute,
+      Seq("--conf", "spark.sql.hive.version=0.1"),
+      Seq(s"please use ${HIVE_METASTORE_VERSION.key}"))("" -> "")
+    runCliWithin(2.minute,
+      Seq("--conf", s"${BUILTIN_HIVE_VERSION.key}=$builtinHiveVersion"))(
+      s"set ${BUILTIN_HIVE_VERSION.key};" -> builtinHiveVersion, "SET -v;" -> builtinHiveVersion)
   }
 }

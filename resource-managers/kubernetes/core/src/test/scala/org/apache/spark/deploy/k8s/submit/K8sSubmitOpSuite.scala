@@ -45,10 +45,10 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private var podOperations: PODS = _
 
   @Mock
-  private var driverPodOperations1: PodResource[Pod, DoneablePod] = _
+  private var driverPodOperations1: PodResource[Pod] = _
 
   @Mock
-  private var driverPodOperations2: PodResource[Pod, DoneablePod] = _
+  private var driverPodOperations2: PodResource[Pod] = _
 
   @Mock
   private var kubernetesClient: KubernetesClient = _
@@ -57,7 +57,7 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private var err: PrintStream = _
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.inNamespace(namespace)).thenReturn(podOperations)
     when(podOperations.delete(podList.asJava)).thenReturn(true)

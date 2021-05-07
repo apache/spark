@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.CreateTableStatement
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableProvider, V1Table, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -302,11 +302,21 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the given
-   * table as new data arrives. A new table will be created if the table not exists. The returned
-   * [[StreamingQuery]] object can be used to interact with the stream.
+   * table as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
+   * the stream.
+   *
+   * For v1 table, partitioning columns provided by `partitionBy` will be respected no matter the
+   * table exists or not. A new table will be created if the table not exists.
+   *
+   * For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will be
+   * respected only if the v2 table does not exist. Besides, the v2 table created by this API lacks
+   * some functionalities (e.g., customized properties, options, and serde info). If you need them,
+   * please create the v2 table manually before the execution to avoid creating a table with
+   * incomplete information.
    *
    * @since 3.1.0
    */
+  @Evolving
   @throws[TimeoutException]
   def toTable(tableName: String): StreamingQuery = {
     this.tableName = tableName
@@ -364,7 +374,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     tableInstance match {
-      case t: SupportsWrite if t.supports(STREAMING_WRITE) => startQuery(t, extraOptions)
+      case t: SupportsWrite if t.supports(STREAMING_WRITE) =>
+        startQuery(t, extraOptions, catalogAndIdent = Some(catalog.asTableCatalog, identifier))
       case t: V2TableWithV1Fallback =>
         writeToV1Table(t.v1Table)
       case t: V1Table =>
@@ -450,7 +461,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   private def startQuery(
       sink: Table,
       newOptions: CaseInsensitiveMap[String],
-      recoverFromCheckpoint: Boolean = true): StreamingQuery = {
+      recoverFromCheckpoint: Boolean = true,
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQuery = {
     val useTempCheckpointLocation = SOURCES_ALLOW_ONE_TIME_QUERY.contains(source)
 
     df.sparkSession.sessionState.streamingQueryManager.startQuery(
@@ -462,7 +474,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       outputMode,
       useTempCheckpointLocation = useTempCheckpointLocation,
       recoverFromCheckpointLocation = recoverFromCheckpoint,
-      trigger = trigger)
+      trigger = trigger,
+      catalogAndIdent = catalogAndIdent)
   }
 
   private def createV1Sink(optionsWithPath: CaseInsensitiveMap[String]): Sink = {
@@ -494,12 +507,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * :: Experimental ::
    *
    * (Scala-specific) Sets the output of the streaming query to be processed using the provided
-   * function. This is supported only the in the micro-batch execution modes (that is, when the
+   * function. This is supported only in the micro-batch execution modes (that is, when the
    * trigger is not continuous). In every micro-batch, the provided function will be called in
    * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
-   * The batchId can be used deduplicate and transactionally write the output
+   * The batchId can be used to deduplicate and transactionally write the output
    * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to exactly same for the same batchId (assuming all operations are deterministic in the query).
+   * to be exactly the same for the same batchId (assuming all operations are deterministic
+   * in the query).
    *
    * @since 2.4.0
    */
@@ -515,12 +529,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * :: Experimental ::
    *
    * (Java-specific) Sets the output of the streaming query to be processed using the provided
-   * function. This is supported only the in the micro-batch execution modes (that is, when the
+   * function. This is supported only in the micro-batch execution modes (that is, when the
    * trigger is not continuous). In every micro-batch, the provided function will be called in
    * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
-   * The batchId can be used deduplicate and transactionally write the output
+   * The batchId can be used to deduplicate and transactionally write the output
    * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to exactly same for the same batchId (assuming all operations are deterministic in the query).
+   * to be exactly the same for the same batchId (assuming all operations are deterministic
+   * in the query).
    *
    * @since 2.4.0
    */

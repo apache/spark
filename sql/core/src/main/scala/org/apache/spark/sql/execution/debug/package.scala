@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFor
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -107,12 +108,22 @@ package object debug {
    */
   def codegenStringSeq(plan: SparkPlan): Seq[(String, String, ByteCodeStats)] = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
-    plan transform {
-      case s: WholeStageCodegenExec =>
-        codegenSubtrees += s
-        s
-      case s => s
+
+    def findSubtrees(plan: SparkPlan): Unit = {
+      plan foreach {
+        case s: WholeStageCodegenExec =>
+          codegenSubtrees += s
+        case p: AdaptiveSparkPlanExec =>
+          // Find subtrees from current executed plan of AQE.
+          findSubtrees(p.executedPlan)
+        case s: QueryStageExec =>
+          findSubtrees(s.plan)
+        case s =>
+          s.subqueries.foreach(findSubtrees)
+      }
     }
+
+    findSubtrees(plan)
     codegenSubtrees.toSeq.sortBy(_.codegenStageId).map { subtree =>
       val (_, source) = subtree.doCodeGen()
       val codeStats = try {
@@ -283,5 +294,8 @@ package object debug {
     }
 
     override def supportsColumnar: Boolean = child.supportsColumnar
+
+    override protected def withNewChildInternal(newChild: SparkPlan): DebugExec =
+      copy(child = newChild)
   }
 }

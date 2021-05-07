@@ -177,6 +177,8 @@ private[client] sealed abstract class Shim {
 
   def getMSC(hive: Hive): IMetaStoreClient
 
+  def getHive(hiveConf: HiveConf): Hive
+
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
   }
@@ -198,6 +200,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getMSC(hive: Hive): IMetaStoreClient = {
     getMSCMethod.invoke(hive).asInstanceOf[IMetaStoreClient]
   }
+
+  override def getHive(hiveConf: HiveConf): Hive = Hive.get(hiveConf)
 
   private lazy val startMethod =
     findStaticMethod(
@@ -700,7 +704,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {
-        val extractables = values.toSeq.map(valueToLiteralString.lift)
+        val extractables = values.filter(_ != null).toSeq.map(valueToLiteralString.lift)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
@@ -715,7 +719,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {
-        val extractables = values.toSeq.map(valueToLiteralString.lift)
+        val extractables = values.filter(_ != null).toSeq.map(valueToLiteralString.lift)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
@@ -748,6 +752,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       values.map(value => s"$name = $value").mkString("(", " or ", ")")
     }
 
+    def convertNotInToAnd(name: String, values: Seq[String]): String = {
+      values.map(value => s"$name != $value").mkString("(", " and ", ")")
+    }
+
+    def hasNullLiteral(list: Seq[Expression]): Boolean = list.exists {
+      case Literal(null, _) => true
+      case _ => false
+    }
+
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
     val inSetThreshold = SQLConf.get.metastorePartitionPruningInSetThreshold
 
@@ -763,13 +776,25 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     def convert(expr: Expression): Option[String] = expr match {
+      case Not(InSet(_, values)) if values.size > inSetThreshold =>
+        None
+
+      case Not(In(_, list)) if hasNullLiteral(list) => None
+      case Not(InSet(_, list)) if list.contains(null) => None
+
       case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
+      case Not(In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values)))
+        if useAdvanced =>
+        Some(convertNotInToAnd(name, values))
+
       case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
         val dataType = child.dataType
-        val sortedValues = values.toSeq.sorted(TypeUtils.getInterpretedOrdering(dataType))
+        // Skip null here is safe, more details could see at ExtractableLiterals.
+        val sortedValues = values.filter(_ != null).toSeq
+          .sorted(TypeUtils.getInterpretedOrdering(dataType))
         convert(And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
           LessThanOrEqual(child, Literal(sortedValues.last, dataType))))
 
@@ -777,9 +802,17 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           if useAdvanced && child.dataType == DateType =>
         Some(convertInToOr(name, values))
 
+      case Not(InSet(child @ ExtractAttribute(SupportedAttribute(name)),
+        ExtractableDateValues(values))) if useAdvanced && child.dataType == DateType =>
+        Some(convertNotInToAnd(name, values))
+
       case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
+
+      case Not(InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values)))
+        if useAdvanced =>
+        Some(convertNotInToAnd(name, values))
 
       case op @ SpecialBinaryComparison(
           ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
@@ -1287,6 +1320,13 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
   override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
     alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContextInAlterTable)
   }
+
+  // HIVE-10319 introduced a new HMS thrift API `get_all_functions` which is used by
+  // `Hive.get` since version 2.1.0, when it loads all Hive permanent functions during
+  // initialization. This breaks compatibility with HMS server of lower versions.
+  // To mitigate here we use `Hive.getWithFastCheck` instead which skips loading the permanent
+  // functions and therefore avoids calling `get_all_functions`.
+  override def getHive(hiveConf: HiveConf): Hive = Hive.getWithFastCheck(hiveConf, false)
 }
 
 private[client] class Shim_v2_2 extends Shim_v2_1

@@ -23,31 +23,26 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, Trigger}
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, Utils}
 
 class MicroBatchExecution(
     sparkSession: SparkSession,
-    name: String,
-    checkpointRoot: String,
-    analyzedPlan: LogicalPlan,
-    sink: Table,
     trigger: Trigger,
     triggerClock: Clock,
-    outputMode: OutputMode,
     extraOptions: Map[String, String],
-    deleteCheckpointOnStop: Boolean)
+    plan: WriteToStream)
   extends StreamExecution(
-    sparkSession, name, checkpointRoot, analyzedPlan, sink,
-    trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
+    sparkSession, plan.name, plan.resolvedCheckpointLocation, plan.inputQuery, plan.sink, trigger,
+    triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
 
@@ -142,7 +137,10 @@ class MicroBatchExecution(
     sink match {
       case s: SupportsWrite =>
         val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
-        WriteToMicroBatchDataSource(streamingWrite, _logicalPlan)
+        val relationOpt = plan.catalogAndIdent.map {
+          case (catalog, ident) => DataSourceV2Relation.create(s, Some(catalog), Some(ident))
+        }
+        WriteToMicroBatchDataSource(relationOpt, streamingWrite, _logicalPlan)
 
       case _ => _logicalPlan
     }
@@ -212,7 +210,10 @@ class MicroBatchExecution(
           }
 
           // Record the trigger offset range for progress reporting *before* processing the batch
-          recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
+          recordTriggerOffsets(
+            from = committedOffsets,
+            to = availableOffsets,
+            latest = latestOffsets)
 
           // Remember whether the current batch has data or not. This will be required later
           // for bookkeeping after running the batch, when `isNewDataAvailable` will have changed
@@ -379,7 +380,7 @@ class MicroBatchExecution(
     if (isCurrentBatchConstructed) return true
 
     // Generate a map from each unique source to the next available offset.
-    val latestOffsets: Map[SparkDataStream, Option[OffsetV2]] = uniqueSources.map {
+    val (nextOffsets, recentOffsets) = uniqueSources.toSeq.map {
       case (s: SupportsAdmissionControl, limit) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
@@ -391,23 +392,31 @@ class MicroBatchExecution(
               startOffsetOpt.map(offset => v2.deserializeOffset(offset.json))
                 .getOrElse(v2.initialOffset())
           }
-          (s, Option(s.latestOffset(startOffset, limit)))
+          val next = s.latestOffset(startOffset, limit)
+          val latest = s.reportLatestOffset()
+          ((s, Option(next)), (s, Option(latest)))
         }
       case (s: Source, _) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("getOffset") {
-          (s, s.getOffset)
+          val offset = s.getOffset
+          ((s, offset), (s, offset))
         }
       case (s: MicroBatchStream, _) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
-          (s, Option(s.latestOffset()))
+          val latest = s.latestOffset()
+          ((s, Option(latest)), (s, Option(latest)))
         }
       case (s, _) =>
         // for some reason, the compiler is unhappy and thinks the match is not exhaustive
         throw new IllegalStateException(s"Unexpected source: $s")
-    }
-    availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)
+    }.unzip
+
+    availableOffsets ++= nextOffsets.filter { case (_, o) => o.nonEmpty }
+      .map(p => p._1 -> p._2.get).toMap
+    latestOffsets ++= recentOffsets.filter { case (_, o) => o.nonEmpty }
+      .map(p => p._1 -> p._2.get).toMap
 
     // Update the query metadata
     offsetSeqMetadata = offsetSeqMetadata.copy(

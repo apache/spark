@@ -117,6 +117,21 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test(s"SPARK-35168: ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} should respect" +
+      s" ${SQLConf.SHUFFLE_PARTITIONS.key}") {
+    spark.sessionState.conf.clear()
+    try {
+      sql(s"SET ${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key}=true")
+      sql(s"SET ${SQLConf.COALESCE_PARTITIONS_ENABLED.key}=true")
+      sql(s"SET ${SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key}=1")
+      sql(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=2")
+      checkAnswer(sql(s"SET ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}"),
+        Row(SQLConf.SHUFFLE_PARTITIONS.key, "2"))
+    } finally {
+      spark.sessionState.conf.clear()
+    }
+  }
+
   test("SPARK-31234: reset will not change static sql configs and spark core configs") {
     val conf = spark.sparkContext.getConf.getAll.toMap
     val appName = conf.get("spark.app.name")
@@ -190,7 +205,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.conf.get("spark.app.id") === appId, "Should not change spark core ones")
     // spark core conf w/ entry registered
     val e1 = intercept[AnalysisException](sql("RESET spark.executor.cores"))
-    assert(e1.getMessage === "Cannot modify the value of a Spark config: spark.executor.cores;")
+    assert(e1.getMessage === "Cannot modify the value of a Spark config: spark.executor.cores")
 
     // user defined settings
     sql("SET spark.abc=xyz")
@@ -217,7 +232,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // static sql configs
     val e2 = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}"))
     assert(e2.getMessage ===
-      s"Cannot modify the value of a static config: ${StaticSQLConf.WAREHOUSE_PATH.key};")
+      s"Cannot modify the value of a static config: ${StaticSQLConf.WAREHOUSE_PATH.key}")
 
   }
 
@@ -282,23 +297,23 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("static SQL conf comes from SparkConf") {
-    val previousValue = sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
+    val previousValue = sparkContext.conf.get(GLOBAL_TEMP_DATABASE)
     try {
-      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, 2000)
+      sparkContext.conf.set(GLOBAL_TEMP_DATABASE, "a")
       val newSession = new SparkSession(sparkContext)
-      assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 2000)
+      assert(newSession.conf.get(GLOBAL_TEMP_DATABASE) == "a")
       checkAnswer(
-        newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
-        Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
+        newSession.sql(s"SET ${GLOBAL_TEMP_DATABASE.key}"),
+        Row(GLOBAL_TEMP_DATABASE.key, "a"))
     } finally {
-      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, previousValue)
+      sparkContext.conf.set(GLOBAL_TEMP_DATABASE, previousValue)
     }
   }
 
   test("cannot set/unset static SQL conf") {
-    val e1 = intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
+    val e1 = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10"))
     assert(e1.message.contains("Cannot modify the value of a static config"))
-    val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
+    val e2 = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key))
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
 
@@ -414,12 +429,11 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Chicago")
     assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) ===
       "America/Chicago")
+    spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "GMT+8:00")
+    assert(sql(s"set ${SQLConf.SESSION_LOCAL_TIMEZONE.key}").head().getString(1) === "GMT+8:00")
 
     intercept[IllegalArgumentException] {
       spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "pst")
-    }
-    intercept[IllegalArgumentException] {
-      spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "GMT+8:00")
     }
     val e = intercept[IllegalArgumentException] {
       spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/shanghai")
@@ -450,5 +464,15 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     }
     val e2 = intercept[ParseException](sql("set time zone interval 19 hours"))
     assert(e2.getMessage contains "The interval value must be in the range of [-18, +18] hours")
+  }
+
+  test("SPARK-34454: configs from the legacy namespace should be internal") {
+    val nonInternalLegacyConfigs = spark.sessionState.conf.getAllDefinedConfs
+      .filter { case (key, _, _, _) => key.contains("spark.sql.legacy.") }
+    assert(nonInternalLegacyConfigs.isEmpty,
+      s"""
+         |Non internal legacy SQL configs:
+         |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
+         |""".stripMargin)
   }
 }

@@ -153,6 +153,7 @@ object Utils extends Logging {
   }
 
   def createTarGzFile(inFile: String, outFile: String): Unit = {
+    val oFile = new File(outFile)
     val fileToTarGz = new File(inFile)
     Utils.tryWithResource(
       new FileInputStream(fileToTarGz)
@@ -160,15 +161,19 @@ object Utils extends Logging {
       Utils.tryWithResource(
         new TarArchiveOutputStream(
           new GzipCompressorOutputStream(
-            new FileOutputStream(
-              new File(outFile))))
+            new FileOutputStream(oFile)))
       ) { tOut =>
         val tarEntry = new TarArchiveEntry(fileToTarGz, fileToTarGz.getName)
+        // Each entry does not keep the file permission from the input file.
+        // Setting permissions in the input file do not work. Just simply set
+        // to 777.
+        tarEntry.setMode(0x81ff)
         tOut.putArchiveEntry(tarEntry)
         IOUtils.copy(fis, tOut)
         tOut.closeArchiveEntry()
         tOut.finish()
       }
     }
+    oFile.deleteOnExit()
   }
 }

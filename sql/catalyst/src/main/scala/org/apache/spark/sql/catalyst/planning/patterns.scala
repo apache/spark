@@ -297,11 +297,9 @@ object PhysicalAggregation {
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
-          case agg: AggregateExpression
-            if !equivalentAggregateExpressions.addExpr(agg) => agg
-          case udf: PythonUDF
-            if PythonUDF.isGroupedAggPandasUDF(udf) &&
-              !equivalentAggregateExpressions.addExpr(udf) => udf
+          case a
+            if AggregateExpression.isAggregate(a) && !equivalentAggregateExpressions.addExpr(a) =>
+            a
         }
       }
 
@@ -333,7 +331,7 @@ object PhysicalAggregation {
           case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
             equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
               .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
-          case expression =>
+          case expression if !expression.foldable =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding
             // attributes. We do not rely on the equality check at here since attributes may

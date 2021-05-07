@@ -31,6 +31,7 @@ class GroupTests(ReusedSQLTestCase):
         self.assertEqual((0, u'99'),
                          tuple(g.agg(functions.first(df.key), functions.last(df.value)).first()))
         self.assertTrue(95 < g.agg(functions.approx_count_distinct(df.key)).first()[0])
+        # test deprecated countDistinct
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
 

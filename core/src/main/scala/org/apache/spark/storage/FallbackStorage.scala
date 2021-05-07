@@ -23,12 +23,13 @@ import java.nio.ByteBuffer
 import scala.concurrent.Future
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH
+import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
@@ -89,7 +90,7 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
   }
 }
 
-class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
+private[storage] class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
   import scala.concurrent.ExecutionContext.Implicits.global
   override def address: RpcAddress = null
   override def name: String = "fallback"
@@ -99,7 +100,7 @@ class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
   }
 }
 
-object FallbackStorage extends Logging {
+private[spark] object FallbackStorage extends Logging {
   /** We use one block manager id as a place holder. */
   val FALLBACK_BLOCK_MANAGER_ID: BlockManagerId = BlockManagerId("fallback", "remote", 7337)
 
@@ -116,6 +117,27 @@ object FallbackStorage extends Logging {
     if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
       master.registerBlockManager(
         FALLBACK_BLOCK_MANAGER_ID, Array.empty[String], 0, 0, new NoopRpcEndpointRef(conf))
+    }
+  }
+
+  /** Clean up the generated fallback location for this app. */
+  def cleanUp(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined &&
+        conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP) &&
+        conf.contains("spark.app.id")) {
+      val fallbackPath =
+        new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get, conf.getAppId)
+      val fallbackUri = fallbackPath.toUri
+      val fallbackFileSystem = FileSystem.get(fallbackUri, hadoopConf)
+      // The fallback directory for this app may not be created yet.
+      if (fallbackFileSystem.exists(fallbackPath)) {
+        if (fallbackFileSystem.delete(fallbackPath, true)) {
+          logInfo(s"Succeed to clean up: $fallbackUri")
+        } else {
+          // Clean-up can fail due to the permission issues.
+          logWarning(s"Failed to clean up: $fallbackUri")
+        }
+      }
     }
   }
 
@@ -158,7 +180,7 @@ object FallbackStorage extends Logging {
         val name = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
         val dataFile = new Path(fallbackPath, s"$appId/$shuffleId/$name")
         val f = fallbackFileSystem.open(dataFile)
-        val size = nextOffset - 1 - offset
+        val size = nextOffset - offset
         logDebug(s"To byte array $size")
         val array = new Array[Byte](size.toInt)
         val startTimeNs = System.nanoTime()
@@ -171,4 +193,3 @@ object FallbackStorage extends Logging {
     }
   }
 }
-

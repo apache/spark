@@ -23,14 +23,13 @@ import scala.util.control.NonFatal
 
 import org.json4s.JsonDSL._
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString, StringUtils}
+import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -333,9 +332,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
         if (found.length > 1) {
           val names = found.map(f => prettyFieldName(normalizedPath :+ f.name))
             .mkString("[", ", ", " ]")
-          throw new AnalysisException(
-            s"Ambiguous field name: ${prettyFieldName(normalizedPath :+ searchName)}. Found " +
-              s"multiple columns that can match: $names")
+          throw QueryCompilationErrors.ambiguousFieldNameError(
+            prettyFieldName(normalizedPath :+ searchName), names)
         } else if (found.isEmpty) {
           None
         } else {
@@ -445,10 +443,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     stringConcat.toString
   }
 
-  override def sql: String = {
-    val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
-    s"STRUCT<${fieldTypes.mkString(", ")}>"
-  }
+  override def sql: String = s"STRUCT<${fields.map(_.sql).mkString(", ")}>"
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
@@ -526,7 +521,7 @@ object StructType extends AbstractDataType {
   private[sql] def fromString(raw: String): StructType = {
     Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parseString(raw)) match {
       case t: StructType => t
-      case _ => throw new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
+      case _ => throw QueryExecutionErrors.failedParsingStructTypeError(raw)
     }
   }
 
@@ -589,8 +584,7 @@ object StructType extends AbstractDataType {
                     nullable = leftNullable || rightNullable)
                 } catch {
                   case NonFatal(e) =>
-                    throw new SparkException(s"Failed to merge fields '$leftName' and " +
-                      s"'$rightName'. " + e.getMessage)
+                    throw QueryExecutionErrors.failedMergingFieldsError(leftName, rightName, e)
                 }
               }
               .orElse {
@@ -613,14 +607,14 @@ object StructType extends AbstractDataType {
         if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
           DecimalType(leftPrecision, leftScale)
         } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
-          throw new SparkException("Failed to merge decimal types with incompatible " +
-            s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
+          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
+            leftPrecision, rightPrecision, leftScale, rightScale)
         } else if (leftPrecision != rightPrecision) {
-          throw new SparkException("Failed to merge decimal types with incompatible " +
-            s"precision $leftPrecision and $rightPrecision")
+          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionError(
+            leftPrecision, rightPrecision)
         } else {
-          throw new SparkException("Failed to merge decimal types with incompatible " +
-            s"scala $leftScale and $rightScale")
+          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatibleScaleError(
+            leftScale, rightScale)
         }
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
@@ -630,8 +624,7 @@ object StructType extends AbstractDataType {
         leftType
 
       case _ =>
-        throw new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
-          s" and ${right.catalogString}")
+        throw QueryExecutionErrors.cannotMergeIncompatibleDataTypesError(left, right)
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {

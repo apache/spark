@@ -49,11 +49,12 @@ object StreamMetadata extends Logging {
 
   /** Read the metadata from file if it exists */
   def read(metadataFile: Path, hadoopConf: Configuration): Option[StreamMetadata] = {
-    val fs = metadataFile.getFileSystem(hadoopConf)
-    if (fs.exists(metadataFile)) {
+    val fileManager = CheckpointFileManager.create(metadataFile.getParent, hadoopConf)
+
+    if (fileManager.exists(metadataFile)) {
       var input: FSDataInputStream = null
       try {
-        input = fs.open(metadataFile)
+        input = fileManager.open(metadataFile)
         val reader = new InputStreamReader(input, StandardCharsets.UTF_8)
         val metadata = Serialization.read[StreamMetadata](reader)
         Some(metadata)

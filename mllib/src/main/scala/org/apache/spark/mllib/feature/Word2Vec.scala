@@ -22,7 +22,7 @@ import java.lang.{Iterable => JavaIterable}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import com.google.common.collect.{Ordering => GuavaOrdering}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -33,11 +33,11 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.util.BoundedPriorityQueue
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -401,18 +401,18 @@ class Word2Vec extends Serializable with Logging {
                       val inner = bcVocab.value(word).point(d)
                       val l2 = inner * vectorSize
                       // Propagate hidden -> output
-                      var f = blas.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
+                      var f = BLAS.nativeBLAS.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
                       if (f > -MAX_EXP && f < MAX_EXP) {
                         val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
                         f = expTable.value(ind)
                         val g = ((1 - bcVocab.value(word).code(d) - f) * alpha).toFloat
-                        blas.saxpy(vectorSize, g, syn1, l2, 1, neu1e, 0, 1)
-                        blas.saxpy(vectorSize, g, syn0, l1, 1, syn1, l2, 1)
+                        BLAS.nativeBLAS.saxpy(vectorSize, g, syn1, l2, 1, neu1e, 0, 1)
+                        BLAS.nativeBLAS.saxpy(vectorSize, g, syn0, l1, 1, syn1, l2, 1)
                         syn1Modify(inner) += 1
                       }
                       d += 1
                     }
-                    blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
+                    BLAS.nativeBLAS.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
                     syn0Modify(lastWord) += 1
                   }
                 }
@@ -448,10 +448,10 @@ class Word2Vec extends Serializable with Logging {
           (id, (vec, 1))
         }
       }.reduceByKey { (vc1, vc2) =>
-        blas.saxpy(vectorSize, 1.0f, vc2._1, 1, vc1._1, 1)
+        BLAS.nativeBLAS.saxpy(vectorSize, 1.0f, vc2._1, 1, vc1._1, 1)
         (vc1._1, vc1._2 + vc2._2)
       }.map { case (id, (vec, count)) =>
-        blas.sscal(vectorSize, 1.0f / count, vec, 1)
+        BLAS.nativeBLAS.sscal(vectorSize, 1.0f / count, vec, 1)
         (id, vec)
       }.collect()
       var i = 0
@@ -506,11 +506,14 @@ class Word2VecModel private[spark] (
     wordIndex.toSeq.sortBy(_._2).iterator.map(_._1).toArray
   }
 
-  // wordVecNorms: Array of length numWords, each value being the Euclidean norm
-  //               of the wordVector.
-  private lazy val wordVecNorms: Array[Float] = {
+  // wordVecInvNorms: Array of length numWords, each value being the inverse of
+  //                  Euclidean norm of the wordVector.
+  private lazy val wordVecInvNorms: Array[Float] = {
     val size = vectorSize
-    Array.tabulate(numWords)(i => blas.snrm2(size, wordVectors, i * size, 1))
+    Array.tabulate(numWords) { i =>
+      val norm = BLAS.nativeBLAS.snrm2(size, wordVectors, i * size, 1)
+      if (norm != 0) 1 / norm else 0.0F
+    }
   }
 
   @Since("1.5.0")
@@ -552,7 +555,7 @@ class Word2VecModel private[spark] (
   @Since("1.1.0")
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)
-    findSynonyms(vector, num, Some(word))
+    findSynonyms(vector.toArray, num, Some(word))
   }
 
   /**
@@ -565,7 +568,7 @@ class Word2VecModel private[spark] (
    */
   @Since("1.1.0")
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
-    findSynonyms(vector, num, None)
+    findSynonyms(vector.toArray, num, None)
   }
 
   /**
@@ -576,54 +579,48 @@ class Word2VecModel private[spark] (
    * @param wordOpt optionally, a word to reject from the results list
    * @return array of (word, cosineSimilarity)
    */
-  private def findSynonyms(
-      vector: Vector,
+  private[spark] def findSynonyms(
+      vector: Array[Double],
       num: Int,
       wordOpt: Option[String]): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
+    val localVectorSize = vectorSize
 
-    val fVector = vector.toArray.map(_.toFloat)
-    val cosineVec = new Array[Float](numWords)
-    val alpha: Float = 1
-    val beta: Float = 0
-    // Normalize input vector before blas.sgemv to avoid Inf value
-    val vecNorm = blas.snrm2(vectorSize, fVector, 1)
-    if (vecNorm != 0.0f) {
-      blas.sscal(vectorSize, 1 / vecNorm, fVector, 0, 1)
-    }
-    blas.sgemv(
-      "T", vectorSize, numWords, alpha, wordVectors, vectorSize, fVector, 1, beta, cosineVec, 1)
+    val floatVec = vector.map(_.toFloat)
+    val vecNorm = BLAS.nativeBLAS.snrm2(localVectorSize, floatVec, 1)
 
-    var i = 0
-    while (i < numWords) {
-      val norm = wordVecNorms(i)
-      if (norm == 0.0f) {
-        cosineVec(i) = 0.0f
-      } else {
-        cosineVec(i) /= norm
+    val localWordList = wordList
+    val localNumWords = numWords
+    if (vecNorm == 0) {
+      Iterator.tabulate(num + 1)(i => (localWordList(i), 0.0))
+        .filterNot(t => wordOpt.contains(t._1))
+        .take(num)
+        .toArray
+    } else {
+      // Normalize input vector before BLAS.nativeBLAS.sgemv to avoid Inf value
+      BLAS.nativeBLAS.sscal(localVectorSize, 1 / vecNorm, floatVec, 0, 1)
+
+      val cosineVec = Array.ofDim[Float](localNumWords)
+      BLAS.nativeBLAS.sgemv("T", localVectorSize, localNumWords, 1.0F, wordVectors, localVectorSize,
+        floatVec, 1, 0.0F, cosineVec, 1)
+
+      val localWordVecInvNorms = wordVecInvNorms
+      var i = 0
+      while (i < cosineVec.length) { cosineVec(i) *= localWordVecInvNorms(i); i += 1 }
+
+      val idxOrd = new GuavaOrdering[Int] {
+        override def compare(left: Int, right: Int): Int = {
+          Ordering[Float].compare(cosineVec(left), cosineVec(right))
+        }
       }
-      i += 1
+
+      idxOrd.greatestOf(Iterator.range(0, localNumWords).asJava, num + 1)
+        .iterator.asScala
+        .map(i => (localWordList(i), cosineVec(i).toDouble))
+        .filterNot(t => wordOpt.contains(t._1))
+        .take(num)
+        .toArray
     }
-
-    val pq = new BoundedPriorityQueue[(String, Float)](num + 1)(Ordering.by(_._2))
-
-    var j = 0
-    while (j < numWords) {
-      pq += Tuple2(wordList(j), cosineVec(j))
-      j += 1
-    }
-
-    val scored = pq.toSeq.sortBy(-_._2)
-
-    val filtered = wordOpt match {
-      case Some(w) => scored.filter(tup => w != tup._1)
-      case None => scored
-    }
-
-    filtered
-      .take(num)
-      .map { case (word, score) => (word, score.toDouble) }
-      .toArray
   }
 
   /**

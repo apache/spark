@@ -50,7 +50,6 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
   private def updateNumCoalescedBuckets(
       join: BaseJoinExec,
       numLeftBuckets: Int,
-      numRightBucket: Int,
       numCoalescedBuckets: Int): BaseJoinExec = {
     if (numCoalescedBuckets != numLeftBuckets) {
       val leftCoalescedChild =
@@ -72,7 +71,6 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
   private def isCoalesceSHJStreamSide(
       join: ShuffledHashJoinExec,
       numLeftBuckets: Int,
-      numRightBucket: Int,
       numCoalescedBuckets: Int): Boolean = {
     if (numCoalescedBuckets == numLeftBuckets) {
       join.buildSide != BuildRight
@@ -93,12 +91,12 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
         val numCoalescedBuckets = math.min(numLeftBuckets, numRightBuckets)
         join match {
           case j: SortMergeJoinExec =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
+            updateNumCoalescedBuckets(j, numLeftBuckets, numCoalescedBuckets)
           case j: ShuffledHashJoinExec
             // Only coalesce the buckets for shuffled hash join stream side,
             // to avoid OOM for build side.
-            if isCoalesceSHJStreamSide(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets) =>
-            updateNumCoalescedBuckets(j, numLeftBuckets, numRightBuckets, numCoalescedBuckets)
+            if isCoalesceSHJStreamSide(j, numLeftBuckets, numCoalescedBuckets) =>
+            updateNumCoalescedBuckets(j, numLeftBuckets, numCoalescedBuckets)
           case other => other
         }
       case other => other

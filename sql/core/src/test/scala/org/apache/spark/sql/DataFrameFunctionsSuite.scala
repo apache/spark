@@ -24,7 +24,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
@@ -171,10 +171,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("bitwiseNOT") {
+  test("bitwise_not") {
     checkAnswer(
-      testData2.select(bitwiseNOT($"a")),
-      testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
+      testData2.select(bitwiseNOT($"a"), bitwise_not($"a")),
+      testData2.collect().toSeq.map(r => Row(~r.getInt(0), ~r.getInt(0))))
   }
 
   test("bin") {
@@ -463,7 +463,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     assert(intercept[AnalysisException] {
       df3.selectExpr("array_sort(a)").collect()
-    }.getMessage().contains("argument 1 requires array type, however, '`a`' is of string type"))
+    }.getMessage().contains("argument 1 requires array type, however, 'a' is of string type"))
   }
 
   def testSizeOfArray(sizeOfNull: Any): Unit = {
@@ -943,6 +943,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(slice(df("x"), -1, 1)), answerNegative)
     checkAnswer(df.select(slice(df("x"), lit(-1), lit(1))), answerNegative)
     checkAnswer(df.selectExpr("slice(x, -1, 1)"), answerNegative)
+
+    val answerStartExpr = Seq(Row(Seq(2)), Row(Seq(4)))
+    checkAnswer(df.select(slice(df("x"), size($"x") - 1, lit(1))), answerStartExpr)
+    checkAnswer(df.selectExpr("slice(x, size(x) - 1, 1)"), answerStartExpr)
+
+    val answerLengthExpr = Seq(Row(Seq(1, 2)), Row(Seq(4)))
+    checkAnswer(df.select(slice(df("x"), lit(1), size($"x") - 1)), answerLengthExpr)
+    checkAnswer(df.selectExpr("slice(x, 1, size(x) - 1)"), answerLengthExpr)
   }
 
   test("array_join function") {
@@ -2250,7 +2258,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("transform(a, x -> x)")
     }
-    assert(ex3.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex3.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("map_filter") {
@@ -2321,7 +2329,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("map_filter(a, (k, v) -> k > v)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("filter function - array for primitive type not containing null") {
@@ -2480,7 +2488,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("filter(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("exists function - array for primitive type not containing null") {
@@ -2612,7 +2620,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("exists(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("forall function - array for primitive type not containing null") {
@@ -2758,12 +2766,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("forall(a, x -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
 
     val ex4a = intercept[AnalysisException] {
       df.select(forall(col("a"), x => x))
     }
-    assert(ex4a.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4a.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("aggregate function - array for primitive type not containing null") {
@@ -2940,7 +2948,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex5 = intercept[AnalysisException] {
       df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
     }
-    assert(ex5.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex5.getMessage.contains("cannot resolve 'a'"))
   }
 
   test("map_zip_with function - map of primitive types") {
@@ -3493,7 +3501,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
     }
-    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+    assert(ex4.getMessage.contains("cannot resolve 'a'"))
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
@@ -3621,14 +3629,38 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(map(map_entries($"m"), lit(1))),
       Row(Map(Seq(Row(1, "a")) -> 1)))
   }
+
+  test("SPARK-34794: lambda variable name issues in nested functions") {
+    val df1 = Seq((Seq(1, 2), Seq("a", "b"))).toDF("numbers", "letters")
+
+    checkAnswer(df1.select(flatten(transform($"numbers", (number: Column) =>
+      transform($"letters", (letter: Column) =>
+        struct(number, letter))))),
+      Seq(Row(Seq(Row(1, "a"), Row(1, "b"), Row(2, "a"), Row(2, "b"))))
+    )
+    checkAnswer(df1.select(flatten(transform($"numbers", (number: Column, i: Column) =>
+      transform($"letters", (letter: Column, j: Column) =>
+        struct(number + j, concat(letter, i)))))),
+      Seq(Row(Seq(Row(1, "a0"), Row(2, "b0"), Row(2, "a1"), Row(3, "b1"))))
+    )
+
+    val df2 = Seq((Map("a" -> 1, "b" -> 2), Map("a" -> 2, "b" -> 3))).toDF("m1", "m2")
+
+    checkAnswer(df2.select(map_zip_with($"m1", $"m2", (k1: Column, ov1: Column, ov2: Column) =>
+      map_zip_with($"m1", $"m2", (k2: Column, iv1: Column, iv2: Column) =>
+        ov1 + iv1 + ov2 + iv2))),
+      Seq(Row(Map("a" -> Map("a" -> 6, "b" -> 8), "b" -> Map("a" -> 8, "b" -> 10))))
+    )
+  }
 }
 
 object DataFrameFunctionsSuite {
-  case class CodegenFallbackExpr(child: Expression) extends Expression with CodegenFallback {
-    override def children: Seq[Expression] = Seq(child)
+  case class CodegenFallbackExpr(child: Expression) extends UnaryExpression with CodegenFallback {
     override def nullable: Boolean = child.nullable
     override def dataType: DataType = child.dataType
     override lazy val resolved = true
     override def eval(input: InternalRow): Any = child.eval(input)
+    override protected def withNewChildInternal(newChild: Expression): CodegenFallbackExpr =
+      copy(child = newChild)
   }
 }

@@ -47,6 +47,8 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
   override def dataType: NullType = NullType
   override lazy val resolved = true
   override def eval(input: InternalRow): Any = null.asInstanceOf[Any]
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(optKey = if (optKey.isDefined) Some(newChildren(0)) else None)
 }
 
 case class ComplexPlan(exprs: Seq[Seq[Expression]])
@@ -59,6 +61,8 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 }
 
 case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
@@ -67,6 +71,9 @@ case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    super.legacyWithNewChildren(newChildren)
 }
 
 case class JsonTestTreeNode(arg: Any) extends LeafNode {
@@ -738,7 +745,10 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   object MalformedClassObject extends Serializable {
-    case class MalformedNameExpression(child: Expression) extends TaggingExpression
+    case class MalformedNameExpression(child: Expression) extends TaggingExpression {
+      override protected def withNewChildInternal(newChild: Expression): Expression =
+        copy(child = newChild)
+    }
   }
 
   test("SPARK-32999: TreeNode.nodeName should not throw malformed class name error") {

@@ -292,7 +292,7 @@ struct<five:string,f1:smallint,x:double>
 -- !query
 SELECT string(shiftleft(smallint(-1), 15))
 -- !query schema
-struct<CAST(shiftleft(CAST(CAST(-1 AS SMALLINT) AS INT), 15) AS STRING):string>
+struct<shiftleft(-1, 15):string>
 -- !query output
 -32768
 
@@ -300,7 +300,7 @@ struct<CAST(shiftleft(CAST(CAST(-1 AS SMALLINT) AS INT), 15) AS STRING):string>
 -- !query
 SELECT string(smallint(shiftleft(smallint(-1), 15))+1)
 -- !query schema
-struct<CAST((CAST(CAST(shiftleft(CAST(CAST(-1 AS SMALLINT) AS INT), 15) AS SMALLINT) AS INT) + 1) AS STRING):string>
+struct<(shiftleft(-1, 15) + 1):string>
 -- !query output
 -32767
 
@@ -308,7 +308,7 @@ struct<CAST((CAST(CAST(shiftleft(CAST(CAST(-1 AS SMALLINT) AS INT), 15) AS SMALL
 -- !query
 SELECT smallint(-32768) % smallint(-1)
 -- !query schema
-struct<(CAST(-32768 AS SMALLINT) % CAST(-1 AS SMALLINT)):smallint>
+struct<(-32768 % -1):smallint>
 -- !query output
 0
 

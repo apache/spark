@@ -523,7 +523,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       }.toMap
       partitionAndStoreNameToLocation.foreach { case ((partIndex, storeName), hostName) =>
         val providerId = StateStoreProviderId(stateInfo, partIndex, storeName)
-        coordinatorRef.reportActiveInstance(providerId, hostName, s"exec-$hostName")
+        coordinatorRef.reportActiveInstance(providerId, hostName, s"exec-$hostName", Seq.empty)
         require(
           coordinatorRef.getLocation(providerId) ===
             Some(ExecutorCacheTaskLocation(hostName, s"exec-$hostName").toString))

@@ -19,10 +19,12 @@ TakeOrderedAndProject [i_item_id,total_sales]
                                     BroadcastHashJoin [ss_addr_sk,ca_address_sk]
                                       Project [ss_item_sk,ss_addr_sk,ss_ext_sales_price]
                                         BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                          Filter [ss_sold_date_sk,ss_addr_sk,ss_item_sk]
+                                          Filter [ss_addr_sk,ss_item_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_addr_sk,ss_ext_sales_price]
+                                                Scan parquet default.store_sales [ss_item_sk,ss_addr_sk,ss_ext_sales_price,ss_sold_date_sk]
+                                                  SubqueryBroadcast [d_date_sk] #1
+                                                    ReusedExchange [d_date_sk] #3
                                           InputAdapter
                                             BroadcastExchange #3
                                               WholeStageCodegen (1)
@@ -67,10 +69,11 @@ TakeOrderedAndProject [i_item_id,total_sales]
                                     BroadcastHashJoin [cs_bill_addr_sk,ca_address_sk]
                                       Project [cs_bill_addr_sk,cs_item_sk,cs_ext_sales_price]
                                         BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                          Filter [cs_sold_date_sk,cs_bill_addr_sk,cs_item_sk]
+                                          Filter [cs_bill_addr_sk,cs_item_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.catalog_sales [cs_sold_date_sk,cs_bill_addr_sk,cs_item_sk,cs_ext_sales_price]
+                                                Scan parquet default.catalog_sales [cs_bill_addr_sk,cs_item_sk,cs_ext_sales_price,cs_sold_date_sk]
+                                                  ReusedSubquery [d_date_sk] #1
                                           InputAdapter
                                             ReusedExchange [d_date_sk] #3
                                       InputAdapter
@@ -89,10 +92,11 @@ TakeOrderedAndProject [i_item_id,total_sales]
                                     BroadcastHashJoin [ws_bill_addr_sk,ca_address_sk]
                                       Project [ws_item_sk,ws_bill_addr_sk,ws_ext_sales_price]
                                         BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                          Filter [ws_sold_date_sk,ws_bill_addr_sk,ws_item_sk]
+                                          Filter [ws_bill_addr_sk,ws_item_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_bill_addr_sk,ws_ext_sales_price]
+                                                Scan parquet default.web_sales [ws_item_sk,ws_bill_addr_sk,ws_ext_sales_price,ws_sold_date_sk]
+                                                  ReusedSubquery [d_date_sk] #1
                                           InputAdapter
                                             ReusedExchange [d_date_sk] #3
                                       InputAdapter

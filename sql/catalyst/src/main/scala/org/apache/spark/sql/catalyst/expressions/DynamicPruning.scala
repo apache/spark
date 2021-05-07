@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, TreePattern}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 
 trait DynamicPruning extends Predicate
 
@@ -46,9 +48,10 @@ case class DynamicPruningSubquery(
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId)
   with DynamicPruning
-  with Unevaluable {
+  with Unevaluable
+  with UnaryLike[Expression] {
 
-  override def children: Seq[Expression] = Seq(pruningKey)
+  override def child: Expression = pruningKey
 
   override def plan: LogicalPlan = buildQuery
 
@@ -67,6 +70,8 @@ case class DynamicPruningSubquery(
       pruningKey.dataType == buildKeys(broadcastKeyIndex).dataType
   }
 
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(DYNAMIC_PRUNING_SUBQUERY)
+
   override def toString: String = s"dynamicpruning#${exprId.id} $conditionString"
 
   override lazy val canonicalized: DynamicPruning = {
@@ -76,6 +81,9 @@ case class DynamicPruningSubquery(
       buildKeys = buildKeys.map(_.canonicalized),
       exprId = ExprId(0))
   }
+
+  override protected def withNewChildInternal(newChild: Expression): DynamicPruningSubquery =
+    copy(pruningKey = newChild)
 }
 
 /**
@@ -92,4 +100,7 @@ case class DynamicPruningExpression(child: Expression)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.genCode(ctx)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): DynamicPruningExpression =
+    copy(child = newChild)
 }

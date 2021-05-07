@@ -15,7 +15,7 @@ struct<>
 -- !query
 SELECT udf(a + b), b, udf(SUM(a - b)) FROM testData GROUP BY udf(a + b), b WITH CUBE
 -- !query schema
-struct<CAST(udf(cast((a + b) as string)) AS INT):int,b:int,CAST(udf(cast(sum(cast((a - b) as bigint)) as string)) AS BIGINT):bigint>
+struct<udf((a + b)):int,b:int,udf(sum((a - b))):bigint>
 -- !query output
 2	1	0
 2	NULL	0
@@ -35,7 +35,7 @@ NULL	NULL	3
 -- !query
 SELECT udf(a), udf(b), SUM(b) FROM testData GROUP BY udf(a), b WITH CUBE
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,sum(b):bigint>
+struct<udf(a):int,udf(b):int,sum(b):bigint>
 -- !query output
 1	1	1
 1	2	2
@@ -54,7 +54,7 @@ NULL	NULL	9
 -- !query
 SELECT udf(a + b), b, SUM(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP
 -- !query schema
-struct<CAST(udf(cast((a + b) as string)) AS INT):int,b:int,sum((a - b)):bigint>
+struct<udf((a + b)):int,b:int,sum((a - b)):bigint>
 -- !query output
 2	1	0
 2	NULL	0
@@ -72,7 +72,7 @@ NULL	NULL	3
 -- !query
 SELECT udf(a), b, udf(SUM(b)) FROM testData GROUP BY udf(a), b WITH ROLLUP
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS INT):int,b:int,CAST(udf(cast(sum(cast(b as bigint)) as string)) AS BIGINT):bigint>
+struct<udf(a):int,b:int,udf(sum(b)):bigint>
 -- !query output
 1	1	1
 1	2	2
@@ -129,7 +129,7 @@ dotNET	2013	48000
 -- !query
 SELECT course, udf(year), SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course, year)
 -- !query schema
-struct<course:string,CAST(udf(cast(year as string)) AS INT):int,sum(earnings):bigint>
+struct<course:string,udf(year):int,sum(earnings):bigint>
 -- !query output
 Java	NULL	50000
 NULL	2012	35000
@@ -140,7 +140,7 @@ dotNET	NULL	63000
 -- !query
 SELECT course, year, udf(SUM(earnings)) FROM courseSales GROUP BY course, year GROUPING SETS(course)
 -- !query schema
-struct<course:string,year:int,CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint>
+struct<course:string,year:int,udf(sum(earnings)):bigint>
 -- !query output
 Java	NULL	50000
 dotNET	NULL	63000
@@ -149,7 +149,7 @@ dotNET	NULL	63000
 -- !query
 SELECT udf(course), year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(year)
 -- !query schema
-struct<CAST(udf(cast(course as string)) AS STRING):string,year:int,sum(earnings):bigint>
+struct<udf(course):string,year:int,sum(earnings):bigint>
 -- !query output
 NULL	2012	35000
 NULL	2013	78000
@@ -191,7 +191,7 @@ dotNET	63000	1
 SELECT udf(course), udf(year), GROUPING(course), GROUPING(year), GROUPING_ID(course, year) FROM courseSales
 GROUP BY CUBE(course, year)
 -- !query schema
-struct<CAST(udf(cast(course as string)) AS STRING):string,CAST(udf(cast(year as string)) AS INT):int,grouping(course):tinyint,grouping(year):tinyint,grouping_id(course, year):bigint>
+struct<udf(course):string,udf(year):int,grouping(course):tinyint,grouping(year):tinyint,grouping_id(course, year):bigint>
 -- !query output
 Java	2012	0	0	0
 Java	2013	0	0	0
@@ -210,7 +210,7 @@ SELECT course, udf(year), GROUPING(course) FROM courseSales GROUP BY course, udf
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping() can only be used with GroupingSets/Cube/Rollup;
+grouping() can only be used with GroupingSets/Cube/Rollup
 
 
 -- !query
@@ -219,7 +219,7 @@ SELECT course, udf(year), GROUPING_ID(course, year) FROM courseSales GROUP BY ud
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping_id() can only be used with GroupingSets/Cube/Rollup;
+grouping_id() can only be used with GroupingSets/Cube/Rollup
 
 
 -- !query
@@ -255,7 +255,7 @@ SELECT course, udf(year) FROM courseSales GROUP BY udf(course), year HAVING GROU
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup;
+grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
 
 
 -- !query
@@ -264,13 +264,13 @@ SELECT course, udf(udf(year)) FROM courseSales GROUP BY course, year HAVING GROU
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup;
+grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
 
 
 -- !query
 SELECT udf(course), year FROM courseSales GROUP BY CUBE(course, year) HAVING grouping__id > 0
 -- !query schema
-struct<CAST(udf(cast(course as string)) AS STRING):string,year:int>
+struct<udf(course):string,year:int>
 -- !query output
 Java	NULL
 NULL	2012
@@ -319,7 +319,7 @@ SELECT course, udf(year) FROM courseSales GROUP BY course, udf(year) ORDER BY GR
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup;
+grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
 
 
 -- !query
@@ -328,7 +328,7 @@ SELECT course, udf(year) FROM courseSales GROUP BY course, udf(year) ORDER BY GR
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup;
+grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup
 
 
 -- !query
@@ -388,7 +388,7 @@ NULL	NULL	3
 -- !query
 SELECT udf(a + b), udf(udf(b)) AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)
 -- !query schema
-struct<CAST(udf(cast((a + b) as string)) AS INT):int,k:int,sum((a - b)):bigint>
+struct<udf((a + b)):int,k:int,sum((a - b)):bigint>
 -- !query output
 NULL	1	3
 NULL	2	0
