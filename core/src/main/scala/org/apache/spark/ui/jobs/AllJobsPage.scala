@@ -72,8 +72,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     jobs.filter { job =>
       job.status != JobExecutionStatus.UNKNOWN && job.submissionTime.isDefined
     }.sortBy { j =>
-      (-j.completionTime.map(_.getTime).getOrElse(now), -j.submissionTime.get.getTime)
-    }.take(MAX_TIMELINE_JOBS).map { job =>
+      (j.completionTime.map(_.getTime).getOrElse(now), j.submissionTime.get.getTime)
+    }.takeRight(MAX_TIMELINE_JOBS).map { job =>
       val jobId = job.jobId
       val status = job.status
       val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
@@ -126,8 +126,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       Seq[String] = {
     val events = ListBuffer[String]()
     executors.sortBy { e =>
-      -math.max(e.addTime.getTime, e.removeTime.map(_.getTime).getOrElse(-1L))
-    }.take(MAX_TIMELINE_EXECUTORS).foreach { e =>
+      e.removeTime.map(_.getTime).getOrElse(e.addTime.getTime)
+    }.takeRight(MAX_TIMELINE_EXECUTORS).foreach { e =>
       val addedEvent =
         s"""
            |{
@@ -205,8 +205,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         if (MAX_TIMELINE_JOBS < jobs.size) {
           <div>
             <strong>
-              This page has more than the maximum number of jobs that can be shown in the
-              visualization! Only the most recent {MAX_TIMELINE_JOBS} submitted/completed jobs
+              Only the most recent {MAX_TIMELINE_JOBS} submitted/completed jobs
               (of {jobs.size} total) are shown.
             </strong>
           </div>
@@ -218,8 +217,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         if (MAX_TIMELINE_EXECUTORS < executors.size) {
           <div>
             <strong>
-              This page has more than the maximum number of executors that can be shown in the
-              visualization! Only the most recent {MAX_TIMELINE_EXECUTORS} added/removed executors
+              Only the most recent {MAX_TIMELINE_EXECUTORS} added/removed executors
               (of {executors.size} total) are shown.
             </strong>
           </div>
