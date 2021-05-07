@@ -99,10 +99,10 @@ object IntervalUtils {
     result
   }
 
-  private val unquotedYearMonthPattern = "^([+|-])?(\\d+)-(\\d+)$".r
-  private val quotedYearMonthPattern = (s"^$unquotedYearMonthPattern$$").r
+  private val unquotedYearMonthRegex = "([+|-])?(\\d+)-(\\d+)".r
+  private val quotedYearMonthPattern = (s"^$unquotedYearMonthRegex$$").r
   private val yearMonthLiteralPattern =
-    "(?i)^INTERVAL\\s+([+|-])?'([+|-])?(\\d+)-(\\d+)'\\s+YEAR\\s+TO\\s+MONTH$".r
+    (s"(?i)^INTERVAL\\s+([+|-])?'$unquotedYearMonthRegex'\\s+YEAR\\s+TO\\s+MONTH$$").r
 
   def castStringToYMInterval(input: UTF8String): Int = {
     input.trimAll().toString match {
@@ -151,11 +151,11 @@ object IntervalUtils {
     }
   }
 
-  private val unquotedDaySecondPattern =
+  private val unquotedDaySecondRegex =
     "([+|-])?(\\d+) (\\d{1,2}):(\\d{1,2}):(\\d{1,2})(\\.\\d{1,9})?"
-  private val quotedDaySecondPattern = (s"^$unquotedDaySecondPattern$$").r
+  private val quotedDaySecondPattern = (s"^$unquotedDaySecondRegex$$").r
   private val daySecondLiteralPattern =
-    (s"(?i)^INTERVAL\\s+([+|-])?\\'$unquotedDaySecondPattern\\'\\s+DAY\\s+TO\\s+SECOND$$").r
+    (s"(?i)^INTERVAL\\s+([+|-])?\\'$unquotedDaySecondRegex\\'\\s+DAY\\s+TO\\s+SECOND$$").r
 
   def castStringToDTInterval(input: UTF8String): Long = {
     def secondAndMicro(second: String, micro: String): String = {
