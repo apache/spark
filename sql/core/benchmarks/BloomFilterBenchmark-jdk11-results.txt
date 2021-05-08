@@ -2,23 +2,45 @@
 ORC Write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Write 100M rows:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter                              19503          19621         166          5.1         195.0       1.0X
-With bloom filter                                 22472          22710         335          4.4         224.7       0.9X
+Without bloom filter                              19315          19365          70          5.2         193.2       1.0X
+With bloom filter                                 21847          22218         524          4.6         218.5       0.9X
 
 
 ================================================================================================
 ORC Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.10+9-LTS on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter                               1981           2040          82         50.5          19.8       1.0X
-With bloom filter                                  1428           1467          54         70.0          14.3       1.4X
+Without bloom filter                               1930           1942          17         51.8          19.3       1.0X
+With bloom filter                                  1218           1316         139         82.1          12.2       1.6X
 
 
+================================================================================================
+Parquet Write
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+Write 100M rows:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Without bloom filter                              19394          19418          33          5.2         193.9       1.0X
+With bloom filter                                 24675          24758         116          4.1         246.8       0.8X
+
+
+================================================================================================
+Parquet Read
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.11+9-LTS on Linux 5.4.0-1046-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Without bloom filter                               1201           1230          41         83.3          12.0       1.0X
+With bloom filter                                  1262           1301          54         79.2          12.6       1.0X
