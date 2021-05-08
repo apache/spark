@@ -59,10 +59,8 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     val expectedEscapedStrs =
       Seq("(?s)abdef", "(?s).*(b|d).*", "(?s)\\Q|\\E(b|d)*", "(?s)a(b|d)*", "(?s)((Ab)?c)+",
         "(?s)(\\w)+", "(?s)a.b", "(?s)\\Q\\\\E|(b|d)*", "(?s)\\Q^\\E(b|d)*", "(?s)(b|d)*\\Q$\\E",
-        "(?s)((Ab)?c)+d((efg)+(12))+", "(?s)a{6}.[0-9]{5}(x|y){2}",
-        "(?s)\\Q$\\E[0-9]+(\\Q.\\E[0-9][0-9])?")
+        "(?s)((Ab)?c)+d((efg)+(12))+", "(?s)\\Q$\\E[0-9]+(\\Q.\\E[0-9][0-9])?")
 
-    val expectedEscapedStrEleven = "(?s)((Ab)?c)+d((efg)+(12))+"
     assert(escapeSimilarRegex("abdef", '\\') === expectedEscapedStrs(0))
     assert(escapeSimilarRegex("abdef", '/') === expectedEscapedStrs(0))
     assert(escapeSimilarRegex("abdef", '\"') === expectedEscapedStrs(0))
@@ -98,18 +96,20 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
       expectedEscapedStrs(10))
     assert(escapeSimilarRegex("((Ab)?c)+d((efg)+(12))+", '\"') ===
       expectedEscapedStrs(10))
-    assert(escapeSimilarRegex("a{6}_[0-9]{5}(x|y){2}", '\\') ===
-      expectedEscapedStrs(11))
-    assert(escapeSimilarRegex("a{6}_[0-9]{5}(x|y){2}", '/') ===
-      expectedEscapedStrs(11))
-    assert(escapeSimilarRegex("a{6}_[0-9]{5}(x|y){2}", '\"') ===
-      expectedEscapedStrs(11))
     assert(escapeSimilarRegex("$[0-9]+(.[0-9][0-9])?", '\\') ===
-      expectedEscapedStrs(12))
+      expectedEscapedStrs(11))
     assert(escapeSimilarRegex("$[0-9]+(.[0-9][0-9])?", '/') ===
-      expectedEscapedStrs(12))
+      expectedEscapedStrs(11))
     assert(escapeSimilarRegex("$[0-9]+(.[0-9][0-9])?", '\"') ===
-      expectedEscapedStrs(12))
+      expectedEscapedStrs(11))
+    // scalastyle:off
+    assert(escapeSimilarRegex("a{6}_[0-9]{5}(x|y){2}", '\\') ===
+      "(?s)a{6}.[0-9]{5}(x|y){2}")
+    assert(escapeSimilarRegex("a{6}_[0-9]{5}(x|y){2}", '/') ===
+      "(?s)a{6}.[0-9]{5}(x|y){2}")
+    assert(escapeSimilarRegex("a{6}_[0-9]{5}(x|y){2}", '\"') ===
+      "(?s)a{6}.[0-9]{5}(x|y){2}")
+    // scalastyle:on
   }
 
   test("filter pattern") {
