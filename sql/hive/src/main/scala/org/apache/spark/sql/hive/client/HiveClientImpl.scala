@@ -258,7 +258,7 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       clientLoader.cachedHive.asInstanceOf[Hive]
     } else {
-      val c = shim.getHive(conf)
+      val c = Hive.get(conf)
       clientLoader.cachedHive = c
       c
     }
@@ -286,7 +286,7 @@ private[hive] class HiveClientImpl(
     // Set the thread local metastore client to the client associated with this HiveClientImpl.
     Hive.set(client)
     // Replace conf in the thread local Hive with current conf
-    shim.getHive(conf)
+    Hive.get(conf)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
