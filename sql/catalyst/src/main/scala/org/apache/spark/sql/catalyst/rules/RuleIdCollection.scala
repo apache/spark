@@ -89,13 +89,17 @@ object RuleIdCollection {
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineTypedFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantFolding" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateMapObjects" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateOuterJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.EliminateSerialization" ::
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.LimitPushDownThroughWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.NullPropagation" ::
+      "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeCsvJsonExprs" ::
       "org.apache.spark.sql.catalyst.optimizer.OptimizeIn" ::
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
@@ -105,6 +109,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushFoldableIntoBranches" ::
       "org.apache.spark.sql.catalyst.optimizer.PushLeftSemiLeftAntiThroughJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.ReassignLambdaVariableID" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveDispensableExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderAssociativeOperator" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" ::

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
-import org.apache.spark.sql.catalyst.trees.TreePattern.{NULL_CHECK, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -145,6 +145,34 @@ trait InvokeLike extends Expression with NonSQLExpression {
       }
     }
   }
+
+  final def findMethod(cls: Class[_], functionName: String, argClasses: Seq[Class[_]]): Method = {
+    // Looking with function name + argument classes first.
+    try {
+      cls.getMethod(functionName, argClasses: _*)
+    } catch {
+      case _: NoSuchMethodException =>
+        // For some cases, e.g. arg class is Object, `getMethod` cannot find the method.
+        // We look at function name + argument length
+        val m = cls.getMethods.filter { m =>
+          m.getName == functionName && m.getParameterCount == arguments.length
+        }
+        if (m.isEmpty) {
+          sys.error(s"Couldn't find $functionName on $cls")
+        } else if (m.length > 1) {
+          // More than one matched method signature. Exclude synthetic one, e.g. generic one.
+          val realMethods = m.filter(!_.isSynthetic)
+          if (realMethods.length > 1) {
+            // Ambiguous case, we don't know which method to choose, just fail it.
+            sys.error(s"Found ${realMethods.length} $functionName on $cls")
+          } else {
+            realMethods.head
+          }
+        } else {
+          m.head
+        }
+    }
+  }
 }
 
 /**
@@ -236,7 +264,7 @@ case class StaticInvoke(
   override def children: Seq[Expression] = arguments
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
-  @transient lazy val method = cls.getDeclaredMethod(functionName, argClasses : _*)
+  @transient lazy val method = findMethod(cls, functionName, argClasses)
 
   override def eval(input: InternalRow): Any = {
     invoke(null, method, arguments, input, dataType)
@@ -326,31 +354,7 @@ case class Invoke(
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      // Looking with function name + argument classes first.
-      try {
-        Some(cls.getMethod(encodedFunctionName, argClasses: _*))
-      } catch {
-        case _: NoSuchMethodException =>
-          // For some cases, e.g. arg class is Object, `getMethod` cannot find the method.
-          // We look at function name + argument length
-          val m = cls.getMethods.filter { m =>
-            m.getName == encodedFunctionName && m.getParameterCount == arguments.length
-          }
-          if (m.isEmpty) {
-            sys.error(s"Couldn't find $encodedFunctionName on $cls")
-          } else if (m.length > 1) {
-            // More than one matched method signature. Exclude synthetic one, e.g. generic one.
-            val realMethods = m.filter(!_.isSynthetic)
-            if (realMethods.length > 1) {
-              // Ambiguous case, we don't know which method to choose, just fail it.
-              sys.error(s"Found ${realMethods.length} $encodedFunctionName on $cls")
-            } else {
-              Some(realMethods.head)
-            }
-          } else {
-            Some(m.head)
-          }
-      }
+      Some(findMethod(cls, encodedFunctionName, argClasses))
     case _ => None
   }
 
@@ -669,6 +673,8 @@ case class LambdaVariable(
 
   private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_VARIABLE)
+
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
     assert(input.numFields == 1,
@@ -780,6 +786,8 @@ case class MapObjects private(
   override def first: Expression = loopVar
   override def second: Expression = lambdaFunction
   override def third: Expression = inputData
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MAP_OBJECTS)
 
   // The data with UserDefinedType are actually stored with the data type of its sqlType.
   // When we want to apply MapObjects on it, we have to use it.

@@ -70,6 +70,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(PROJECT)
+
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg
