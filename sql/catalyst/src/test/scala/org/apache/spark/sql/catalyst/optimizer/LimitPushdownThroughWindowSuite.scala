@@ -155,17 +155,6 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(correctAnswer.analyze))
   }
 
-  test("Should not push down if partitionSpec is not empty") {
-    val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .limit(2)
-
-    comparePlans(
-      Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(originalQuery.analyze))
-  }
-
   test("Should not push down when child's maxRows smaller than limit value") {
     val originalQuery = testRelation
       .select(a, b, c,
@@ -186,5 +175,144 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
     comparePlans(
       Optimize.execute(originalQuery.analyze),
       WithoutOptimize.execute(originalQuery.analyze))
+  }
+
+
+  test("Should push down if partitionSpec is not empty") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b, c)
+      .orderBy(a.asc, c.desc)
+      .limit(2)
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Should push down if partitionSpec is not empty and with multi partitionSpec") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b, c)
+      .orderBy(a.asc, b.asc, c.desc)
+      .limit(2)
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: b :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Push down limit through window for multiple window functions " +
+    "when all partitionSpec is not empty and same") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rk"))
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b, c)
+      .orderBy(a.asc, c.desc)
+      .limit(2)
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rk"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Push down limit through window for multiple window functions " +
+    "when partitionSpec is not empty and not same") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rk"))
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .orderBy(b.asc, c.desc)
+      .limit(2)
+      .select(a, b, c, $"rn".attr,
+        windowExpr(new Rank(), windowSpec(b :: Nil, c.desc :: Nil, windowFrame)).as("rk"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Push down limit through window respect spark.sql.execution.topKSortFallbackThreshold " +
+    "when partitionSpec is not empty") {
+    Seq(1, 100).foreach { threshold =>
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+        val originalQuery = testRelation
+          .select(a, b, c,
+            windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .limit(2)
+        val correctAnswer = if (threshold == 1) {
+          originalQuery
+        } else {
+          testRelation
+            .select(a, b, c)
+            .orderBy(a.asc, c.desc)
+            .limit(2)
+            .select(a, b, c,
+              windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        }
+
+        comparePlans(
+          Optimize.execute(originalQuery.analyze),
+          WithoutOptimize.execute(correctAnswer.analyze))
+      }
+    }
+  }
+
+  test("Push down to first window if order column is different " +
+    "when partitionSpec is not empty") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(a :: Nil, c.asc :: Nil, windowFrame)).as("rk"))
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
+      .orderBy(a.asc, c.asc)
+      .limit(2)
+      .select(a, b, c, $"rn".attr,
+        windowExpr(new Rank(), windowSpec(a :: Nil, c.asc :: Nil, windowFrame)).as("rk"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Should push down if is a Project between LocalLimit and Window " +
+    "when partitionSpec is not empty") {
+    val originalQuery = testRelation
+      .select(a, b,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
+      .select(a, $"rn".attr)
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b)
+      .orderBy(a.asc, b.desc)
+      .limit(2)
+      .select(a, windowExpr(RowNumber(), windowSpec(a :: Nil, b.desc :: Nil, windowFrame)).as("rn"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
   }
 }

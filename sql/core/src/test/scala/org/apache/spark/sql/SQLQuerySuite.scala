@@ -4100,6 +4100,49 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-34775 Push down limit through window when partitionSpec is not empty") {
+    withTable("t1", "t2") {
+      var numRows = 20
+      spark.range(numRows)
+        .selectExpr("id % 10 AS a", s"$numRows - id AS b")
+        .write
+        .saveAsTable("t1")
+
+      val df1 = spark.sql(
+        """
+          |SELECT a, b, ROW_NUMBER() OVER(PARTITION BY a ORDER BY b) AS rn,
+          |RANK() OVER(PARTITION BY a ORDER BY b) AS rk,
+          |DENSE_RANK() OVER(PARTITION BY a ORDER BY b) AS drk
+          |FROM t1 LIMIT 3
+          |""".stripMargin)
+      val pushedLocalLimits1 = df1.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: Sort) => l
+      }
+      assert(pushedLocalLimits1.length === 1)
+      checkAnswer(df1, Seq(Row(0, 10, 1, 1, 1), Row(0, 20, 2, 2, 2), Row(1, 9, 1, 1, 1)))
+
+
+      numRows = 10
+      spark.range(numRows)
+        .selectExpr("if (id % 2 = 0, null, id) AS a", s"$numRows - id AS b")
+        .write
+        .saveAsTable("t2")
+      val df2 = spark.sql(
+        """
+          |SELECT a, b, ROW_NUMBER() OVER(PARTITION BY a ORDER BY b) AS rn,
+          |RANK() OVER(PARTITION BY a ORDER BY b) AS rk,
+          |DENSE_RANK() OVER(PARTITION BY a ORDER BY b) AS drk
+          |FROM t2 LIMIT 3
+          |""".stripMargin)
+      val pushedLocalLimits2 = df2.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: Sort) => l
+      }
+      assert(pushedLocalLimits2.length === 1)
+      checkAnswer(df2,
+        Seq(Row(null, 2, 1, 1, 1), Row(null, 4, 2, 2, 2), Row(null, 6, 3, 3, 3)))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
