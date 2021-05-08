@@ -18,9 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import scala.util.Random
-
-import org.apache.parquet.hadoop.ParquetOutputFormat
-
+import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetOutputFormat}
 import org.apache.spark.benchmark.Benchmark
 
 /**
@@ -113,7 +111,8 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
           spark.read.parquet(path + "/withoutBF").where("value = 0").noop()
         }
         benchmark.addCase("With bloom filter") { _ =>
-          spark.read.parquet(path + "/withBF").where("value = 0").noop()
+          spark.read.option(ParquetInputFormat.BLOOM_FILTERING_ENABLED, true)
+            .parquet(path + "/withBF").where("value = 0").noop()
         }
         benchmark.run()
       }
