@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, Decimal, FloatType, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
