@@ -1356,7 +1356,6 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Cannot use interval type in the table schema.")
   }
 
-  <<<<<<< SPARK-35062
   def operateHiveDataSourceDirectlyError(operation: String): Throwable = {
     new AnalysisException("Hive data source can only be used with tables, you can not " +
       s"$operation files of Hive data source directly.")

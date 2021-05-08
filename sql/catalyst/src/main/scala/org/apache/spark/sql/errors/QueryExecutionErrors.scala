@@ -876,8 +876,7 @@ object QueryExecutionErrors {
   def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
     new DateTimeException(s"Cannot cast $s to $to.")
   }
-
-  <<<<<<< SPARK-35062
+  
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
     new SparkException("Exception when registering StreamingQueryListener", e)
   }
