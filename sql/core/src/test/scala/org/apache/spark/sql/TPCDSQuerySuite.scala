@@ -28,13 +28,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    for (tableName <- tableNames) {
-      createTable(spark, tableName)
-    }
-  }
-
   val sqlConfgs: Seq[(String, String)] = Nil
 
   tpcdsQueries.foreach { name =>

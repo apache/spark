@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait TPCDSBase extends SharedSparkSession with TPCDSSchema {
@@ -66,5 +67,12 @@ trait TPCDSBase extends SharedSparkSession with TPCDSSchema {
     for (tableName <- tableNames) {
       createTable(spark, tableName)
     }
+  }
+
+  override def afterAll(): Unit = {
+    tableNames.foreach { tableName =>
+      spark.sessionState.catalog.dropTable(TableIdentifier(tableName), true, true)
+    }
+    super.afterAll()
   }
 }
