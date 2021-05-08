@@ -23,10 +23,10 @@ import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
 
+import com.fasterxml.jackson.core.JsonToken
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
-
 import org.apache.spark.{Partition, SparkException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, Decimal, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, FloatType, StructType}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -874,5 +874,27 @@ object QueryExecutionErrors {
 
   def cannotCastUTF8StringToDataTypeError(s: UTF8String, to: DataType): Throwable = {
     new DateTimeException(s"Cannot cast $s to $to.")
+  }
+
+  def parseJsonArraysAsStructsError(): Throwable = {
+    new RuntimeException("Parsing JSON arrays as structs is forbidden.")
+  }
+
+  def parseStringAsDataTypeError(str: String, dataType: DataType): Throwable = {
+    new RuntimeException(s"Cannot parse $str as ${dataType.catalogString}.")
+  }
+
+  def failToParseEmptyStringForDataTypeError(dataType: DataType): Throwable = {
+    new RuntimeException(
+      s"Failed to parse an empty string for data type ${dataType.catalogString}")
+  }
+
+  def failToParseValueForDataTypeError(dataType: DataType, token: JsonToken): Throwable = {
+    new RuntimeException(
+      s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
+  }
+
+  def rootConverterReturnNullError(): Throwable = {
+    new RuntimeException("Root converter returned null")
   }
 }
