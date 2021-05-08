@@ -132,7 +132,7 @@ class KryoWriteBufferManagerTest {
 
   @Test
   def totalSizeExceedSpillSize(): Unit = {
-    val bufferSize = 1000000
+    val bufferSize = 10000
     val spillSize = 20
     val numPartitions = 10
     val bufferManager = new KyroWriteBufferManager[Any, Any](

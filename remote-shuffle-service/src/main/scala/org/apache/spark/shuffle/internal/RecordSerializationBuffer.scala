@@ -22,6 +22,8 @@ import scala.collection.mutable
 
 trait RecordSerializationBuffer[K, V] {
 
+  // Add record to the buffer, return serialized bytes if the buffer is full.
+  // The return value is a list of (Partition Id, Serialized Bytes)
   def addRecord(partitionId: Int, record: Product2[K, V]): Seq[(Int, Array[Byte])]
 
   def filledBytes: Int

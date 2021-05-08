@@ -55,7 +55,6 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
         if (result == null) {
           result = mutable.Buffer[(Int, Array[Byte])]()
         }
-        stream.flush()
         result.append((partitionId, stream.toBytes))
         stream.clear()
         totalBytes -= oldSize
@@ -74,7 +73,6 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
         if (result == null) {
           result = mutable.Buffer[(Int, Array[Byte])]()
         }
-        stream.flush()
         result.append((partitionId, stream.toBytes))
         stream.clear()
         partitionBuffers(partitionId) = stream
@@ -89,8 +87,7 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
       if (result == null) {
         result = mutable.Buffer[(Int, Array[Byte])]()
       }
-      val allData = clearData()
-      result.appendAll(allData)
+      clearData(false, result)
     }
 
     if (result == null) {
@@ -106,7 +103,6 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
     while (i < partitionBuffers.length) {
       val t = partitionBuffers(i)
       if (t != null) {
-        flushStream(t)
         sum += t.position()
       }
       i += 1
@@ -119,41 +115,29 @@ class KyroWriteBufferManager[K, V](serializerInstance: KryoSerializerInstance,
   }
 
   def clear(): Seq[(Int, Array[Byte])] = {
-    val result = clearData()
-    var i = 0
-    while (i < partitionBuffers.length) {
-      val t = partitionBuffers(i)
-      if (t != null) {
-        t.close()
-        partitionBuffers(i) = null
-      }
-      i += 1
-    }
+    val result = mutable.Buffer[(Int, Array[Byte])]()
+    clearData(true, result)
     result
   }
 
-  private def clearData(): Seq[(Int, Array[Byte])] = {
-    val result = mutable.Buffer[(Int, Array[Byte])]()
+  private def clearData(closeStream: Boolean,
+                        dataCollector: mutable.Buffer[(Int, Array[Byte])]): Unit = {
     var i = 0
     while (i < partitionBuffers.length) {
       val t = partitionBuffers(i)
       if (t != null) {
         if (t.position() > 0) {
-          t.flush()
-          result.append((i, t.toBytes))
+          dataCollector.append((i, t.toBytes))
           t.clear()
+        }
+        if (closeStream) {
+          t.close()
+          partitionBuffers(i) = null
         }
       }
       i += 1
     }
     totalBytes = 0
-    result
   }
 
-  private def flushStream(serializeStream: RssKryoSerializationStream) = {
-    val oldPosition = serializeStream.position()
-    serializeStream.flush()
-    val numBytes = serializeStream.position() - oldPosition
-    totalBytes += numBytes
-  }
 }
