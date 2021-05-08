@@ -30,9 +30,8 @@ import scala.util.{Failure, Success}
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.{NettyUtils, TransportConf}
@@ -64,6 +63,8 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
  * @param maxBlocksInFlightPerAddress max number of shuffle blocks being fetched at any given point
  *                                    for a given remote host:port.
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
+ * @param maxAttemptsOnNettyOOM The max number of a block could retry due to Netty OOM before
+ *                              throwing the fetch failure.
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
  * @param shuffleMetrics used to report shuffle metrics.
  * @param doBatchFetch fetch continuous shuffle blocks from same executor in batch if the server
@@ -80,6 +81,7 @@ final class ShuffleBlockFetcherIterator(
     maxReqsInFlight: Int,
     maxBlocksInFlightPerAddress: Int,
     val maxReqSizeShuffleToMem: Long,
+    maxAttemptsOnNettyOOM: Int,
     detectCorrupt: Boolean,
     detectCorruptUseExtraMemory: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter,
@@ -148,11 +150,6 @@ final class ShuffleBlockFetcherIterator(
 
   /** Current number of blocks in flight per host:port */
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
-
-  /**
-   * The max number of a block could retry due to Netty OOM before throwing the fetch failure.
-   */
-  private val maxAttemptsOnNettyOOM = SparkEnv.get.conf.get(SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM)
 
   /**
    * Count the retry times for the blocks due to Netty OOM. The block will stop retry if
