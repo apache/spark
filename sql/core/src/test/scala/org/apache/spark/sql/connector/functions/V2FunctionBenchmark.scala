@@ -104,10 +104,9 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       left: Expression,
       right: Expression,
       override val nullable: Boolean) extends BinaryArithmetic {
-    override protected val failOnError: Boolean = true
+    override protected val failOnError: Boolean = false
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "+"
-    override def exactMathMethod: Option[String] = Some("addExact")
 
     private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
     protected override def nullSafeEval(input1: Any, input2: Any): Any =
