@@ -55,6 +55,63 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(escapeLikeRegex("a_b", '\"') === expectedEscapedStrSeven)
   }
 
+  test("escapeSimilarRegex") {
+    val expectedEscapedStrs =
+      Seq("(?s)abdef", "(?s).*(b|d).*", "(?s)\\Q|\\E(b|d)*", "(?s)a(b|d)*", "(?s)((Ab)?c)+",
+        "(?s)(\\w)+", "(?s)a.b", "(?s)\\Q\\\\E|(b|d)*", "(?s)\\Q^\\E(b|d)*", "(?s)(b|d)*\\Q$\\E",
+        "(?s)((Ab)?c)+d((efg)+(12))+", "(?s)a{6}.[0-9]{5}(x|y){2}",
+        "(?s)\\Q$\\E[0-9]+(\\Q.\\E[0-9][0-9])?")
+
+    val expectedEscapedStrEleven = "(?s)((Ab)?c)+d((efg)+(12))+"
+    assert(escapeSimilarRegex("abdef", '\\') === expectedEscapedStrs(0))
+    assert(escapeSimilarRegex("abdef", '/') === expectedEscapedStrs(0))
+    assert(escapeSimilarRegex("abdef", '\"') === expectedEscapedStrs(0))
+    assert(escapeSimilarRegex("%(b|d)%", '\\') === expectedEscapedStrs(1))
+    assert(escapeSimilarRegex("%(b|d)%", '/') === expectedEscapedStrs(1))
+    assert(escapeSimilarRegex("%(b|d)%", '\"') === expectedEscapedStrs(1))
+    assert(escapeSimilarRegex("\\|(b|d)*", '\\') === expectedEscapedStrs(2))
+    assert(escapeSimilarRegex("/|(b|d)*", '/') === expectedEscapedStrs(2))
+    assert(escapeSimilarRegex("\"|(b|d)*", '\"') === expectedEscapedStrs(2))
+    assert(escapeSimilarRegex("a(b|d)*", '\\') === expectedEscapedStrs(3))
+    assert(escapeSimilarRegex("a(b|d)*", '/') === expectedEscapedStrs(3))
+    assert(escapeSimilarRegex("a(b|d)*", '\"') === expectedEscapedStrs(3))
+    assert(escapeSimilarRegex("((Ab)?c)+", '\\') === expectedEscapedStrs(4))
+    assert(escapeSimilarRegex("((Ab)?c)+", '/') === expectedEscapedStrs(4))
+    assert(escapeSimilarRegex("((Ab)?c)+", '\"') === expectedEscapedStrs(4))
+    assert(escapeSimilarRegex("(\\w)+", '\\') === expectedEscapedStrs(5))
+    assert(escapeSimilarRegex("(/w)+", '/') === expectedEscapedStrs(5))
+    assert(escapeSimilarRegex("(\"w)+", '\"') === expectedEscapedStrs(5))
+    assert(escapeSimilarRegex("a_b", '\\') === expectedEscapedStrs(6))
+    assert(escapeSimilarRegex("a_b", '/') === expectedEscapedStrs(6))
+    assert(escapeSimilarRegex("a_b", '\"') === expectedEscapedStrs(6))
+    assert(escapeSimilarRegex("\\|(b|d)*", '/') === expectedEscapedStrs(7))
+    assert(escapeSimilarRegex("\\|(b|d)*", '\"') === expectedEscapedStrs(7))
+    assert(escapeSimilarRegex("^(b|d)*", '\\') === expectedEscapedStrs(8))
+    assert(escapeSimilarRegex("^(b|d)*", '/') === expectedEscapedStrs(8))
+    assert(escapeSimilarRegex("^(b|d)*", '\"') === expectedEscapedStrs(8))
+    assert(escapeSimilarRegex("(b|d)*$", '\\') === expectedEscapedStrs(9))
+    assert(escapeSimilarRegex("(b|d)*$", '/') === expectedEscapedStrs(9))
+    assert(escapeSimilarRegex("(b|d)*$", '\"') === expectedEscapedStrs(9))
+    assert(escapeSimilarRegex("((Ab)?c)+d((efg)+(12))+", '\\') ===
+      expectedEscapedStrs(10))
+    assert(escapeSimilarRegex("((Ab)?c)+d((efg)+(12))+", '/') ===
+      expectedEscapedStrs(10))
+    assert(escapeSimilarRegex("((Ab)?c)+d((efg)+(12))+", '\"') ===
+      expectedEscapedStrs(10))
+    assert(escapeSimilarRegex("a{6}_[0-9]{5}(x|y){2}", '\\') ===
+      expectedEscapedStrs(11))
+    assert(escapeSimilarRegex("a{6}_[0-9]{5}(x|y){2}", '/') ===
+      expectedEscapedStrs(11))
+    assert(escapeSimilarRegex("a{6}_[0-9]{5}(x|y){2}", '\"') ===
+      expectedEscapedStrs(11))
+    assert(escapeSimilarRegex("$[0-9]+(.[0-9][0-9])?", '\\') ===
+      expectedEscapedStrs(12))
+    assert(escapeSimilarRegex("$[0-9]+(.[0-9][0-9])?", '/') ===
+      expectedEscapedStrs(12))
+    assert(escapeSimilarRegex("$[0-9]+(.[0-9][0-9])?", '\"') ===
+      expectedEscapedStrs(12))
+  }
+
   test("filter pattern") {
     val names = Seq("a1", "a2", "b2", "c3")
     assert(filterPattern(names, " * ") === Seq("a1", "a2", "b2", "c3"))
