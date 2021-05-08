@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.benchmark
 
 import scala.util.Random
+
 import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetOutputFormat}
+
 import org.apache.spark.benchmark.Benchmark
 
 /**
