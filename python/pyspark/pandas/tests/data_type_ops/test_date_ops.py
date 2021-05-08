@@ -24,10 +24,10 @@ from pyspark.sql.types import DateType
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class DateOpsTest(ReusedSQLTestCase, TestCasesUtils):
+class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def pser(self):
         return pd.Series(

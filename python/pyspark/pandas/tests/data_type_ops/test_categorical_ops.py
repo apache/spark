@@ -20,10 +20,10 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class CategoricalOpsTest(ReusedSQLTestCase, TestCasesUtils):
+class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def pser(self):
         return pd.Series([1, "x", "y"], dtype="category")

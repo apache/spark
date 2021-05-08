@@ -20,10 +20,10 @@ import numpy as np
 
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.testing.utils import ReusedSQLTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class NumOpsTest(ReusedSQLTestCase, TestCasesUtils):
+class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     """Unit tests for arithmetic operations of numeric data types.
 
     A few test cases are disabled because pandas-on-Spark returns float64 whereas pandas
