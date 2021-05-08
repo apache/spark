@@ -59,6 +59,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       f: SparkSession => Unit,
       targetPostShuffleInputSize: Int,
       minNumPostShufflePartitions: Option[Int],
+      finalStageMinPartitionNum: Option[Int] = None,
       enableIOEncryption: Boolean = false): Unit = {
     val sparkConf =
       new SparkConf(false)
@@ -79,6 +80,10 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         sparkConf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, numPartitions.toString)
       case None =>
         sparkConf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "1")
+    }
+    finalStageMinPartitionNum.foreach { numPartitions =>
+      sparkConf.set(SQLConf.COALESCE_PARTITIONS_FINAL_STAGE_MIN_PARTITION_NUM.key,
+        numPartitions.toString)
     }
 
     val spark = SparkSession.builder()
@@ -424,8 +429,26 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
     }
     Seq(true, false).foreach { enableIOEncryption =>
       // Before SPARK-34790, it will throw an exception when io encryption enabled.
-      withSparkSession(test, Int.MaxValue, None, enableIOEncryption)
+      withSparkSession(test, Int.MaxValue, None, None, enableIOEncryption)
     }
+  }
+
+  test(s"SPARK-35335: Introduce ${SQLConf.COALESCE_PARTITIONS_FINAL_STAGE_MIN_PARTITION_NUM.key}") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      val df1 = spark.range(0, 100, 1, numInputPartitions).selectExpr("id AS a", "id AS b")
+      val df2 = spark.range(0, 50, 1, numInputPartitions).selectExpr("id AS c", "id AS d")
+      val resultDf = df1.join(df2, df1("a") === df2("c")).groupBy("b").count()
+      resultDf.collect()
+
+      val finalPlan = resultDf.queryExecution.executedPlan
+        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      val coalescedNumPartitions = finalPlan.collectFirst {
+        case r @ CoalescedShuffleReader() => r.outputPartitioning.numPartitions
+      }
+      assert(coalescedNumPartitions === Some(1))
+    }
+
+    withSparkSession(test, Int.MaxValue, Some(2), Some(1))
   }
 }
 

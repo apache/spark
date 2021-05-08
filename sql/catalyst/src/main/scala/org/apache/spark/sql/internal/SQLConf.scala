@@ -504,6 +504,19 @@ object SQLConf {
       .checkValue(_ > 0, "The minimum number of partitions must be positive.")
       .createOptional
 
+  val COALESCE_PARTITIONS_FINAL_STAGE_MIN_PARTITION_NUM =
+    buildConf("spark.sql.adaptive.coalescePartitions.finalStageMinPartitionNum")
+      .doc("The suggested (not guaranteed) minimum number of shuffle partitions after " +
+        "coalescing for final stage. Usually used to reduce small files." +
+        s"If not set, the default value is ${COALESCE_PARTITIONS_MIN_PARTITION_NUM.key}. " +
+        "This configuration only has an effect when " +
+        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+        s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true.")
+      .version("3.2.0")
+      .intConf
+      .checkValue(_ > 0, "The minimum number of partitions must be positive.")
+      .createOptional
+
   val COALESCE_PARTITIONS_INITIAL_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.initialPartitionNum")
       .doc("The initial number of shuffle partitions before coalescing. If not set, it equals to " +
