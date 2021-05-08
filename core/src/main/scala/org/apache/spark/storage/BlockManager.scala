@@ -628,6 +628,7 @@ private[spark] class BlockManager(
 
   /**
    * Get block from the local block manager as serialized bytes.
+   * 从本地块管理器获取块作为序列化的字节。
    */
   def getLocalBytes(blockId: BlockId): Option[BlockData] = {
     logDebug(s"Getting local block $blockId as bytes")

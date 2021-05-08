@@ -71,7 +71,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
   private val broadcastId = BroadcastBlockId(id)
 
-  /** Total number of blocks this broadcast variable contains. */
+  /** Total number of blocks this broadcast variable contains. 此广播变量包含的块总数*/
   private val numBlocks: Int = writeBlocks(obj)
 
   /** Whether to generate checksum for blocks or not. */
@@ -105,15 +105,18 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
   /**
    * Divide the object into multiple blocks and put those blocks in the block manager.
-   *
+   * 将对象分成多个块，然后将这些块放入块管理器中。
    * @param value the object to divide
    * @return number of blocks this broadcast variable is divided into
    */
   private def writeBlocks(value: T): Int = {
     import StorageLevel._
     // Store a copy of the broadcast variable in the driver so that tasks run on the driver
+    //将广播变量的副本存储在驱动程序中，以便任务在驱动程序上运行
     // do not create a duplicate copy of the broadcast variable's value.
+    //不要创建广播变量值的重复副本。
     val blockManager = SparkEnv.get.blockManager
+
     if (!blockManager.putSingle(broadcastId, value, MEMORY_AND_DISK, tellMaster = false)) {
       throw new SparkException(s"Failed to store $broadcastId in BlockManager")
     }
@@ -135,11 +138,14 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     blocks.length
   }
 
-  /** Fetch torrent blocks from the driver and/or other executors. */
+  /** Fetch torrent blocks from the driver and/or other executors.
+   * 从驱动程序和其他执行程序中获取数据块。*/
   private def readBlocks(): Array[BlockData] = {
     // Fetch chunks of data. Note that all these chunks are stored in the BlockManager and reported
     // to the driver, so other executors can pull these chunks from this executor as well.
+    //所有的这些数据块都保存在blockmanager中并报告给driver. 其他的executor也可以获取这些数据块.
     val blocks = new Array[BlockData](numBlocks)
+    //获取blockmanager对象
     val bm = SparkEnv.get.blockManager
 
     for (pid <- Random.shuffle(Seq.range(0, numBlocks))) {
