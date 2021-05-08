@@ -264,9 +264,14 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
+def is_pinned_thread_mode():
+    from pyspark import SparkContext
+    return isinstance(SparkContext._gateway, ClientServer)
+
+
 def inheritable_thread_target(f):
     from pyspark import SparkContext
-    if isinstance(SparkContext._gateway, ClientServer):
+    if is_pinned_thread_mode():
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
         sc = SparkContext._active_spark_context
 

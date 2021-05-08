@@ -53,7 +53,7 @@ from pyspark.conf import SparkConf
 from pyspark.rdd import RDD, RDDBarrier
 from pyspark.files import SparkFiles
 from pyspark.status import StatusTracker, SparkJobInfo, SparkStageInfo
-from pyspark.util import InheritableThread, inheritable_thread
+from pyspark.util import InheritableThread, inheritable_thread_target, is_pinned_thread_mode
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast

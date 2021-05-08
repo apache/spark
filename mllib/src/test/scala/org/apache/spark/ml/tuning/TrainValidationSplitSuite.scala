@@ -28,7 +28,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
@@ -318,6 +318,79 @@ class TrainValidationSplitSuite
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.validationMetrics === tvs2.validationMetrics)
     assert(tvs.getSeed === tvs2.getSeed)
+  }
+
+  test("ML-14996: Fix: After TrainValidationSplit fit raised error," +
+    " some backgroud threads may still continue run or launch new spark jobs") {
+
+    val parallelism = 3
+    val trialStatus = new Array[String @volatile](parallelism * 2)
+    for (i <- 0 until trialStatus.length) {
+      trialStatus(i) = "unstart"
+    }
+
+    class TestingEstimator(override val uid: String) extends LogisticRegression {
+      def this() = this(Identifiable.randomUID("TestingEstimator"))
+
+      override def fit(dataset: Dataset[_]): LogisticRegressionModel = {
+        val index = this.getMaxIter
+        trialStatus(index) = "running"
+        if (index == 0) {
+          trialStatus(index) = "failed"
+          throw new RuntimeException()
+        } else {
+          try {
+            dataset.rdd.mapPartitionsWithIndex { (pid: Int, iter: Iterator[_]) =>
+              if (pid == 0) {
+                Thread.sleep(3000)
+                Iterator.single(1)
+              } else {
+                Iterator.empty
+              }
+            }.count()
+          } catch {
+            case _: Throwable =>
+              trialStatus(index) = "canceled"
+              throw new RuntimeException()
+          }
+          trialStatus(index) = "finished"
+          throw new RuntimeException()
+        }
+      }
+
+      override def copy(extra: ParamMap): TestingEstimator = {
+        val that = new TestingEstimator()
+        copyValues(that, extra)
+        that
+      }
+    }
+
+    try {
+      val lr = new TestingEstimator()
+      val lrParamMaps = new ParamGridBuilder()
+        .addGrid(lr.maxIter, Array.tabulate[Int](parallelism * 2)(x => x))
+        .build()
+      val eval = new BinaryClassificationEvaluator
+      val tvs = new TrainValidationSplit()
+        .setEstimator(lr)
+        .setEstimatorParamMaps(lrParamMaps)
+        .setEvaluator(eval)
+        .setParallelism(parallelism)
+      val tvsModel = tvs.fit(dataset)
+    } catch {
+      case _: Throwable => ()
+    }
+
+    Thread.sleep(10)
+
+    assert(trialStatus(0) === "failed")
+    for (i <- 1 until parallelism) {
+      assert(trialStatus(i) === "canceled")
+    }
+    assert(trialStatus(parallelism) == "canceled" || trialStatus(parallelism) == "unstart")
+    for (i <- (parallelism + 1) until (parallelism * 2)) {
+      assert(trialStatus(i) == "unstart")
+    }
   }
 }
 
