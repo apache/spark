@@ -117,7 +117,7 @@ statement
         SET locationSpec                                               #setNamespaceLocation
     | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
-    | informationQueries                                               #ddlQuery
+    | informationQuery                                                 #infoQuery
     | createTableHeader ('(' colTypeList ')')? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
@@ -363,7 +363,7 @@ ctes
     : WITH namedQuery (',' namedQuery)*
     ;
 
-informationQueries
+informationQuery
     : SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?              #showNamespaces
     | SHOW TABLES ((FROM | IN) multipartIdentifier)? (LIKE? pattern=STRING)?                                #showTables
     | SHOW TBLPROPERTIES table=multipartIdentifier ('(' key=tablePropertyKey ')')?                          #showTblProperties
@@ -374,7 +374,7 @@ informationQueries
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? '(' (query | informationQueries) ')'
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? '(' (query | informationQuery) ')'
     ;
 
 tableProvider

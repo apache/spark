@@ -194,7 +194,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
     val logicalPlan = Option(ctx.query).map(plan).orElse(
-      Option(ctx.informationQueries).map(plan)).get
+      Option(ctx.informationQuery).map(plan)).get
     val subQuery: LogicalPlan = logicalPlan.optionalMap(ctx.columnAliases)(
       (columnAliases, plan) =>
         UnresolvedSubqueryColumnAliases(visitIdentifierList(columnAliases), plan)
@@ -202,8 +202,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     SubqueryAlias(ctx.name.getText, subQuery)
   }
 
-  override def visitDdlQuery(ctx: DdlQueryContext): LogicalPlan = withOrigin(ctx) {
-    ctx.informationQueries match {
+  override def visitInfoQuery(ctx: InfoQueryContext): LogicalPlan = withOrigin(ctx) {
+    ctx.informationQuery match {
       case namespaces: ShowNamespacesContext => visitShowNamespaces(namespaces)
       case tables: ShowTablesContext => visitShowTables(tables)
       case tblProperties: ShowTblPropertiesContext => visitShowTblProperties(tblProperties)

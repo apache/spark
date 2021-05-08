@@ -85,6 +85,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-28620
     "postgreSQL/float4.sql",
     // SPARK-35283
+    // Because the output schema of some DDL in Hive is differing from Spark SQL, we exclude it.
+    // For example, the output schema of SHOW TABLES is (namespace, tableName, isTemporary) in Hive,
+    // but (tableName) in Spark SQL.
     "cte-ddl.sql",
     // SPARK-28636
     "decimalArithmeticOperations.sql",
