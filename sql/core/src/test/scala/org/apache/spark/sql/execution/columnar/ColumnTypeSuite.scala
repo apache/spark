@@ -41,7 +41,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
       NULL -> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
       FLOAT -> 4, DOUBLE -> 8, COMPACT_DECIMAL(15, 10) -> 8, LARGE_DECIMAL(20, 10) -> 12,
       STRING -> 8, BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 28, MAP_TYPE -> 68,
-      CALENDAR_INTERVAL -> 16, YEAR_MONTH_INTERVAL -> 4, DAY_TIME_INTERVAL ->8)
+      CALENDAR_INTERVAL -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
       assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
@@ -93,8 +93,6 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
   testNativeColumnType(DOUBLE)
   testNativeColumnType(COMPACT_DECIMAL(15, 10))
   testNativeColumnType(STRING)
-  testNativeColumnType(YEAR_MONTH_INTERVAL)
-  testNativeColumnType(DAY_TIME_INTERVAL)
 
   testColumnType(NULL)
   testColumnType(BINARY)

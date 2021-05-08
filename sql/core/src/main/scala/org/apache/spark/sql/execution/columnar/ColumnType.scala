@@ -817,14 +817,12 @@ private[columnar] object ColumnType {
       case BooleanType => BOOLEAN
       case ByteType => BYTE
       case ShortType => SHORT
-      case IntegerType | DateType => INT
-      case LongType | TimestampType => LONG
+      case IntegerType | DateType | YearMonthIntervalType => INT
+      case LongType | TimestampType | DayTimeIntervalType => LONG
       case FloatType => FLOAT
       case DoubleType => DOUBLE
       case StringType => STRING
       case BinaryType => BINARY
-      case YearMonthIntervalType => YEAR_MONTH_INTERVAL
-      case DayTimeIntervalType => DAY_TIME_INTERVAL
       case i: CalendarIntervalType => CALENDAR_INTERVAL
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => COMPACT_DECIMAL(dt)
       case dt: DecimalType => LARGE_DECIMAL(dt)

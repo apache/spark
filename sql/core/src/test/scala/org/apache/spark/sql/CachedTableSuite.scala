@@ -1189,10 +1189,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("cache supports for YearMonthIntervalType and DayTimeIntervalType") {
-    withTable("ymi_dti_interval_cache") {
+    withTempView("ymi_dti_interval_cache") {
       Seq((1, Period.ofYears(1), Duration.ofDays(1)),
         (2, Period.ofYears(2), Duration.ofDays(2)))
-        .toDF("k", "v1", "v2").write.saveAsTable("ymi_dti_interval_cache")
+        .toDF("k", "v1", "v2").createTempView("ymi_dti_interval_cache")
       sql("CACHE TABLE tmp AS SELECT k, v1, v2 FROM ymi_dti_interval_cache")
       assert(spark.catalog.isCached("tmp"))
       checkAnswer(sql("SELECT * FROM tmp WHERE k = 1"),

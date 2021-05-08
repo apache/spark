@@ -295,54 +295,6 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
     Array[Any](null, null, nullCount, count, sizeInBytes)
 }
 
-private[columnar] final class YearMonthIntervalColumnStats extends ColumnStats {
-  protected var upper = Int.MinValue
-  protected var lower = Int.MaxValue
-
-  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
-    if (!row.isNullAt(ordinal)) {
-      val value = row.getInt(ordinal)
-      gatherValueStats(value)
-    } else {
-      gatherNullStats
-    }
-  }
-
-  def gatherValueStats(value: Int): Unit = {
-    if (value > upper) upper = value
-    if (value < lower) lower = value
-    sizeInBytes += INT.defaultSize
-    count += 1
-  }
-
-  override def collectedStatistics: Array[Any] =
-    Array[Any](lower, upper, nullCount, count, sizeInBytes)
-}
-
-private[columnar] final class DayTimeIntervalColumnStats extends ColumnStats {
-  protected var upper = Long.MinValue
-  protected var lower = Long.MaxValue
-
-  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
-    if (!row.isNullAt(ordinal)) {
-      val value = row.getLong(ordinal)
-      gatherValueStats(value)
-    } else {
-      gatherNullStats
-    }
-  }
-
-  def gatherValueStats(value: Long): Unit = {
-    if (value > upper) upper = value
-    if (value < lower) lower = value
-    sizeInBytes += LONG.defaultSize
-    count += 1
-  }
-
-  override def collectedStatistics: Array[Any] =
-    Array[Any](lower, upper, nullCount, count, sizeInBytes)
-}
-
 private[columnar] final class IntervalColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {

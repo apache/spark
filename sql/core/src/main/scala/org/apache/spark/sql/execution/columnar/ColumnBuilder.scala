@@ -123,12 +123,6 @@ class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleColumnStats, DOU
 private[columnar]
 class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
-private[columnar] class YearMonthIntervalColumnBuilder
-  extends NativeColumnBuilder(new YearMonthIntervalColumnStats, YEAR_MONTH_INTERVAL)
-
-private[columnar] class DayTimeIntervalColumnBuilder
-  extends NativeColumnBuilder(new DayTimeIntervalColumnStats, DAY_TIME_INTERVAL)
-
 private[columnar]
 class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
 
@@ -180,15 +174,13 @@ private[columnar] object ColumnBuilder {
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder
       case ShortType => new ShortColumnBuilder
-      case IntegerType | DateType => new IntColumnBuilder
-      case LongType | TimestampType => new LongColumnBuilder
+      case IntegerType | DateType | YearMonthIntervalType => new IntColumnBuilder
+      case LongType | TimestampType | DayTimeIntervalType => new LongColumnBuilder
       case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
       case StringType => new StringColumnBuilder
       case BinaryType => new BinaryColumnBuilder
       case CalendarIntervalType => new IntervalColumnBuilder
-      case YearMonthIntervalType => new YearMonthIntervalColumnBuilder
-      case DayTimeIntervalType => new DayTimeIntervalColumnBuilder
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnBuilder(dt)
       case dt: DecimalType => new DecimalColumnBuilder(dt)

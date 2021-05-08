@@ -51,8 +51,6 @@ object ColumnarTestUtils {
       case DOUBLE => Random.nextDouble()
       case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
       case BINARY => randomBytes(Random.nextInt(32))
-      case YEAR_MONTH_INTERVAL => Random.nextInt()
-      case DAY_TIME_INTERVAL => Random.nextLong()
       case CALENDAR_INTERVAL =>
         new CalendarInterval(Random.nextInt(), Random.nextInt(), Random.nextLong())
       case COMPACT_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
