@@ -520,9 +520,7 @@ case class SortMergeJoinExec(
          |      }
          |    } while ($streamedRow != null);
          |  }
-         |
-         |  throw new IllegalStateException("Executed unreachable code path in findNextJoinRows");
-         |  return false;
+         |  return false; // unreachable
          |}
        """.stripMargin, inlineToOuterClass = true)
 
