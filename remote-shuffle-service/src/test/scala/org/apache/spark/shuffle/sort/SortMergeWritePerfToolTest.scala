@@ -20,6 +20,14 @@ import org.testng.annotations.Test
 class SortMergeWritePerfToolTest {
   @Test
   def testRssWriterStressTool(): Unit = {
-    SortMergeWritePerfTool.main(Array())
+    val tool = new SortMergeWritePerfTool()
+    tool.numMapRecords = 300000
+    tool.numPartitions = 3000
+    try {
+      tool.setup()
+      tool.run()
+    } finally {
+      tool.cleanup()
+    }
   }
 }
