@@ -107,7 +107,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
 
-        df.write.parquet(path + "/withoutBF")
+        df.write.option("parquet.block.size", blocksize).parquet(path + "/withoutBF")
         df.write.option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#value", true)
           .option("parquet.block.size", blocksize)
           .parquet(path + "/withBF")
