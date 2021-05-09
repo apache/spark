@@ -367,7 +367,7 @@ class SessionCatalog(
       if (!ignoreIfExists) {
         throw new TableAlreadyExistsException(db = db, table = table)
       }
-    } else if (validateLocation) {
+    } else if (!ignoreIfExists && validateLocation) {
       validateTableLocation(newTableDefinition)
     }
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)

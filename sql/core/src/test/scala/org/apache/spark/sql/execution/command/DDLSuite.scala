@@ -23,10 +23,9 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
-
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, TableFunctionRegistry, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
@@ -34,7 +33,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -221,6 +220,33 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         assert(spark.table("t").count() === 5)
         assert(catalog.getCachedTable(table) !== null, "Table relation should be cached.")
       }
+    }
+  }
+
+  test("SPARK-35356: Fix issue of the createTable when externalCatalog is InMemoryCatalog") {
+    withTempDir { path =>
+      withSparkSession(path.getAbsolutePath) { sparkSession =>
+        sparkSession.sql("create table if not exists t1 (id Int) using orc").show()
+        sparkSession.sql("insert into t1 values(1)").show()
+      }
+
+      withSparkSession(path.getAbsolutePath) { sparkSession =>
+        try {
+          sparkSession.sql("create table if not exists t1 (id Int) using orc").show()
+        } catch {
+          case Exception => fail()
+        }
+      }
+    }
+  }
+
+  def withSparkSession(path: String)(f: SparkSession => Unit): Unit = {
+    val session = SparkSession.builder().master("local[*]").appName("SPARK-35356").
+      config("spark.sql.warehouse.dir", path).getOrCreate()
+    try {
+      f(session)
+    } finally {
+      session.close()
     }
   }
 }
