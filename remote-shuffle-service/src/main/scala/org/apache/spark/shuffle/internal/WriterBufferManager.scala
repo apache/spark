@@ -15,14 +15,12 @@
 
 package org.apache.spark.shuffle.internal
 
-import com.esotericsoftware.kryo.io.Output
 import org.apache.spark.internal.Logging
 import org.apache.spark.remoteshuffle.exceptions.RssInvalidDataException
 import org.apache.spark.serializer.{SerializationStream, Serializer}
 
 import java.io.ByteArrayOutputStream
 import scala.collection.mutable
-import scala.collection.mutable.Map
 
 case class BufferManagerOptions(individualBufferSize: Int, individualBufferMax: Int,
                                 bufferSpillThreshold: Int, supportAggregate: Boolean)

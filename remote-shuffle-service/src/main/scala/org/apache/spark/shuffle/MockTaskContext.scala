@@ -17,10 +17,9 @@ package org.apache.spark.shuffle
 
 import java.util
 import java.util.Properties
-
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
@@ -70,7 +69,12 @@ class MockTaskContext(val mockStageId: Int, val mockPartitionId: Int,
   }
 
   override private[spark] def taskMemoryManager(): TaskMemoryManager = {
-    throw new UnsupportedOperationException()
+    val memoryManager = UnifiedMemoryManager(new SparkConf(false), 1)
+    new TaskMemoryManager(memoryManager, 0) {
+      override def acquireExecutionMemory(required: Long, consumer: MemoryConsumer): Long = {
+        super.acquireExecutionMemory(required, consumer)
+      }
+    }
   }
 
   override private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {}

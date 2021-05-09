@@ -13,31 +13,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.internal
+package org.apache.spark.shuffle.sort
 
 import com.google.common.primitives.Longs
 import org.apache.commons.lang3.StringUtils
-import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.remoteshuffle.clients._
+import org.apache.spark.remoteshuffle.StreamServer
 import org.apache.spark.remoteshuffle.common._
-import org.apache.spark.remoteshuffle.metadata.ServiceRegistry
-import org.apache.spark.remoteshuffle.storage.ShuffleFileStorage
-import org.apache.spark.remoteshuffle.{StreamServer, StreamServerConfig}
-import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle._
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.{MapOutputTrackerMaster, Partitioner, ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
 import java.util
 import java.util.Random
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import java.util.function.Consumer
 import scala.collection.JavaConverters._
 
-class RssWritePerfToolPartitioner(val partitions: Int) extends Partitioner {
+class SortMergeWritePerfToolPartitioner(val partitions: Int) extends Partitioner {
   override def numPartitions: Int = partitions
 
   override def getPartition(key: Any): Int = {
@@ -50,13 +43,8 @@ class RssWritePerfToolPartitioner(val partitions: Int) extends Partitioner {
 /** *
  * This is a stress tool to start multiple shuffle servers and write shuffle records.
  */
-class RssWritePerfTool extends Logging {
-  private var registryServer: StreamServer = null
-  private val servers = new util.ArrayList[StreamServer]
-  private val serverDetails = new util.ArrayList[ServerDetail]
-
+class SortMergeWritePerfTool extends Logging {
   private val random = new Random
-  private val storage = new ShuffleFileStorage()
 
   // Successfully written records (by last mapper task attempt) in shuffle files
   private val successShuffleWrittenRecords = new AtomicLong
@@ -64,9 +52,6 @@ class RssWritePerfTool extends Logging {
   // Threads for all map tasks
   private val allMapThreads = new util.ArrayList[Thread]
   private val mapThreadErrors = new AtomicLong
-
-  private var serverRootDirs = new util.ArrayList[String]
-  private var workDir = Files.createTempDirectory("rss_").toFile().getAbsolutePath()
 
   private var numServerThreads = 5
   private var appId = "app_" + System.nanoTime
@@ -81,12 +66,6 @@ class RssWritePerfTool extends Logging {
   var numMapRecords = 100
   // Number of total partitions
   var numPartitions = 100
-  // Number of splits for shuffle file
-  var numSplits = 1
-  // Writer buffer size to use
-  var writerBufferSize = RssOpts.writerBufferSize.defaultValue.get
-  // Writer buffer spill size to use
-  var writerBufferSpill = RssOpts.writerBufferSpill.defaultValue.get
 
   // This tool generates a range of map tasks to simulate uploading data.
   // This field specifies the lower bound (inclusive) of the map id.
@@ -118,18 +97,6 @@ class RssWritePerfTool extends Logging {
   def setup(): Unit = {
     this.endMapId = this.startMapId + numMaps - 1
 
-    // Start Remote Shuffle Service servers
-    registryServer = startNewServer(null)
-
-    (0 until numServers).foreach(i => {
-      logInfo(s"Starting new server $i")
-      val server = startNewServer(registryServer.getShuffleConnectionString)
-      servers.add(server)
-      serverRootDirs.add(server.getRootDir)
-      serverDetails
-        .add(new ServerDetail(server.getServerId, s"localhost:${server.getShufflePort}"))
-    })
-
     // Set up Spark environment
     sparkConf = new SparkConf().setAppName("testApp")
       .setMaster(s"local[2]")
@@ -137,15 +104,6 @@ class RssWritePerfTool extends Logging {
       .set("spark.driver.allowMultipleContexts", "true")
       .set("spark.app.id", appId)
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.shuffle.manager", "org.apache.spark.shuffle.RssShuffleManager")
-      .set("spark.shuffle.rss.dataCenter", ServiceRegistry.DEFAULT_DATA_CENTER)
-      .set("spark.shuffle.rss.cluster", ServiceRegistry.DEFAULT_TEST_CLUSTER)
-      .set("spark.shuffle.rss.serviceRegistry.type", ServiceRegistry.TYPE_STANDALONE)
-      .set("spark.shuffle.rss.serviceRegistry.server", registryServer.getShuffleConnectionString)
-      .set("spark.shuffle.rss.networkTimeout", "30000")
-      .set("spark.shuffle.rss.networkRetries", "0")
-      .set("spark.shuffle.rss.maxWaitTime", "10000")
-      .set("spark.shuffle.rss.reader.dataAvailableWaitTime", "30000")
 
     sparkContext = new SparkContext(sparkConf)
 
@@ -155,36 +113,16 @@ class RssWritePerfTool extends Logging {
     val rdd = sparkContext.parallelize(1 to numMaps, numMaps)
       .map(t => (t.toString.getBytes(StandardCharsets.UTF_8)
         -> t.toString.getBytes(StandardCharsets.UTF_8)))
-      .partitionBy(new RssWritePerfToolPartitioner(numPartitions))
+      .partitionBy(new SortMergeWritePerfToolPartitioner(numPartitions))
     shuffleDependency = new ShuffleDependency[Array[Byte], Array[Byte], Array[Byte]](
       rdd, rdd.partitioner.get)
   }
 
   def cleanup(): Unit = {
-    if (sparkContext != null) {
-      sparkContext.stop()
-    }
-
-    servers.forEach(new Consumer[StreamServer] {
-      override def accept(t: StreamServer): Unit = {
-        if (t != null) {
-          shutdownServer(t)
-        }
-      }
-    })
-
-    if (registryServer != null) {
-      shutdownServer(registryServer)
-    }
-
-    logInfo(String.format("Deleting files: %s", StringUtils.join(serverRootDirs, ", ")))
-    deleteDirectories(serverRootDirs)
-    logInfo(String.format("Deleted files: %s", StringUtils.join(serverRootDirs, ", ")))
+    sparkContext.stop()
   }
 
   def run(): Unit = {
-    logInfo(String.format("Server root dirs: %s", StringUtils.join(serverRootDirs, ':')))
-
     // Generate test values to use
     val testValues = new util.ArrayList[Array[Byte]]
     while (testValues.size < numTestValues) {
@@ -228,80 +166,23 @@ class RssWritePerfTool extends Logging {
     logInfo("Test run finished successfully")
   }
 
-  private def startNewServer(registryServer: String): StreamServer = {
-    var serverDirName = s"server_${System.nanoTime}"
-    var serverDirFullPath = Paths.get(workDir, serverDirName).toString
-    while ( {
-      storage.exists(serverDirFullPath)
-    }) {
-      serverDirName = s"server_${System.nanoTime}"
-      serverDirFullPath = Paths.get(workDir, serverDirName).toString
-    }
-    val serverConfig = new StreamServerConfig
-    serverConfig.setNettyAcceptThreads(numServerThreads)
-    serverConfig.setNettyWorkerThreads(numServerThreads)
-    serverConfig.setStorage(storage)
-    serverConfig.setShufflePort(0)
-    serverConfig.setHttpPort(0)
-    serverConfig.setRootDirectory(serverDirFullPath)
-    serverConfig.setDataCenter(ServiceRegistry.DEFAULT_DATA_CENTER)
-    serverConfig.setCluster(ServiceRegistry.DEFAULT_TEST_CLUSTER)
-    serverConfig.setAppMemoryRetentionMillis(TimeUnit.HOURS.toMillis(1))
-
-    serverConfig.setServiceRegistryType(ServiceRegistry.TYPE_STANDALONE)
-
-    if (registryServer != null) {
-      serverConfig.setRegistryServer(registryServer)
-    }
-
-    val server = new StreamServer(serverConfig)
-    server.run()
-    logInfo(s"Started server, port: ${
-      server.getShufflePort
-    }, rootDir: $serverDirFullPath, $serverConfig")
-    server
-  }
-
   private def simulateMapperTask(testValues: util.List[Array[Byte]], appMapId: AppMapId,
                                  taskAttemptId: Long): Unit = {
-    val shuffleWriteConfig = new ShuffleWriteConfig(numSplits.toShort)
-
-    var writeClient: ShuffleDataWriter = null
-    val networkTimeoutMillis = 120 * 1000
-    val maxTryingMillis = networkTimeoutMillis * 3
-    val serverReplicationGroups = ServerReplicationGroupUtil
-      .createReplicationGroups(serverDetails, numReplicas)
-    val finishUploadAck = true // TODO make this configurable
-
-    if (writeClientQueueSize == 0) {
-      val aClient = new MultiServerSyncWriteClient(serverReplicationGroups, partitionFanout,
-        networkTimeoutMillis, maxTryingMillis, finishUploadAck, useConnectionPool, "user1", appId,
-        appAttempt, shuffleWriteConfig)
-      aClient.connect()
-      writeClient = aClient
-    }
-    else {
-      val aClient = new MultiServerAsyncWriteClient(serverReplicationGroups, partitionFanout,
-        networkTimeoutMillis, maxTryingMillis, finishUploadAck, useConnectionPool,
-        writeClientQueueSize, writeClientThreads, "user1", appId, appAttempt, shuffleWriteConfig)
-      aClient.connect()
-      writeClient = aClient
-    }
-
-    val shuffleWriter = new RssShuffleWriter(
-      rssServers = new ServerList(serverDetails),
-      writeClient = writeClient,
-      mapInfo = new AppTaskAttemptId(appMapId, taskAttemptId),
-      serializer = new KryoSerializer(sparkConf),
-      bufferOptions = BufferManagerOptions(writerBufferSize,
-        256 * 1024 * 1024,
-        writerBufferSpill,
-        false),
-      shuffleDependency = shuffleDependency,
-      shuffleWriteMetrics = new ShuffleWriteMetrics()
+    val handle = new BaseShuffleHandle[Array[Byte], Array[Byte], Array[Byte]](
+      appShuffleId.getShuffleId,
+      shuffleDependency)
+    val shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(sparkConf)
+    shuffleExecutorComponents.initializeExecutor(appMapId.getAppId,
+      "1",
+      new util.HashMap[String, String]())
+    val shuffleWriter = new SortShuffleWriter(
+      handle = handle,
+      mapId = appMapId.getMapId,
+      context = new MockTaskContext(0, 0, taskAttemptId),
+      shuffleExecutorComponents = shuffleExecutorComponents
     )
 
-    logInfo(s"Map $appMapId attempt $taskAttemptId started, write client: $writeClient")
+    logInfo(s"Map $appMapId attempt $taskAttemptId started, writer: $shuffleWriter")
 
     val recordIterator = Iterator.tabulate(numMapRecords) { t =>
       val index1 = t % testValues.size()
@@ -325,45 +206,24 @@ class RssWritePerfTool extends Logging {
     server.shutdown(true)
   }
 
-  private def deleteDirectories(directories: util.List[String]): Unit = {
-    directories.stream().forEach(new Consumer[String] {
-      override def accept(t: String): Unit = {
-        logInfo("Deleting directory: " + t)
-        if (!storage.exists(t)) {
-          logInfo("Directory not exist: " + t)
-        }
-        else {
-          storage.deleteDirectory(t)
-          logInfo("Deleted directory: " + t)
-        }
-      }
-    })
-  }
 }
 
-object RssWritePerfTool extends Logging {
+object SortMergeWritePerfTool extends Logging {
 
   def main(args: Array[String]): Unit = {
     runOnce()
   }
 
   private def runOnce(): Unit = {
-    val tool = new RssWritePerfTool()
+    val tool = new SortMergeWritePerfTool()
 
     tool.numServers = 2
     tool.numMaps = 4
     tool.numMapRecords = 300000
     tool.numPartitions = 3000
-    tool.numSplits = 1
-
-    tool.writerBufferSize = RssOpts.writerBufferSize.defaultValue.get
-    tool.writerBufferSpill = RssOpts.writerBufferSpill.defaultValue.get
 
     logInfo(s"Running test, numServers: ${tool.numServers}, " +
-      s"numMaps: ${tool.numMaps}, numPartitions: ${tool.numPartitions}, numSplits: ${
-        tool.numSplits
-      }, " +
-      s"writerBufferSize: ${tool.writerBufferSize}, writerBufferSpill: ${tool.writerBufferSpill}")
+      s"numMaps: ${tool.numMaps}, numPartitions: ${tool.numPartitions}")
 
     try {
       tool.setup()
