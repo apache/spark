@@ -265,11 +265,34 @@ def _parse_memory(s):
 
 
 def is_pinned_thread_mode():
+    """
+    Return ``True`` when spark run under pinned thread mode.
+    """
     from pyspark import SparkContext
     return isinstance(SparkContext._gateway, ClientServer)
 
 
 def inheritable_thread_target(f):
+    """
+    Return thread target wrapper which is recommended to be used in PySpark when the
+    pinned thread mode is enabled. The wrapper function, before calling original
+    thread target, it inherits the inheritable properties specific
+    to JVM thread such as ``InheritableThreadLocal``.
+
+    Also, note that pinned thread mode does not close the connection from Python
+    to JVM when the thread is finished in the Python side. With this wrapper, Python
+    garbage-collects the Python thread instance and also closes the connection
+    which finishes JVM thread correctly.
+
+    When the pinned thread mode is off, it return the original ``f``.
+    :param f: the original thread target.
+
+    .. versionadded:: 3.1.0
+
+    Notes
+    -----
+    This API is experimental.
+    """
     from pyspark import SparkContext
     if is_pinned_thread_mode():
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.

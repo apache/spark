@@ -124,6 +124,7 @@ __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
     "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
-    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "InheritableThread", "inheritable_thread"
+    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo", "InheritableThread",
+    "inheritable_thread_target", "is_pinned_thread_mode",
     "__version__",
 ]
