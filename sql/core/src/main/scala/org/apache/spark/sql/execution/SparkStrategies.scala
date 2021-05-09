@@ -612,6 +612,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           case Limit(IntegerLiteral(limit), child) =>
             val query = CollectLimitExec(limit, PlanLater(child))
             DataWritingCommandExec(d, query) :: Nil
+          case Project(projectList, Limit(IntegerLiteral(limit), child)) =>
+            val query = ProjectExec(projectList, CollectLimitExec(limit, PlanLater(child)))
+            DataWritingCommandExec(d, query) :: Nil
           case _ => DataWritingCommandExec(d, planLater(d.query)) :: Nil
         }
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
