@@ -100,23 +100,29 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
   }
 
   private def readParquetBenchmark(): Unit = {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
+    val blockSizes = Seq(512 * 1024, 1024 * 1024, 2 * 1024 * 1024, 3 * 1024 * 1024,
+      4 * 1024 * 1024, 5 * 1024 * 1024, 6 * 1024 * 1024, 7 * 1024 * 1024,
+      8 * 1024 * 1024, 9 * 1024 * 1024, 10 * 1024 * 1024)
+    for (blocksize <- blockSizes) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
 
-      df.write.parquet(path + "/withoutBF")
-      df.write.option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#value", true)
-        .parquet(path + "/withBF")
+        df.write.parquet(path + "/withoutBF")
+        df.write.option(ParquetOutputFormat.BLOOM_FILTER_ENABLED + "#value", true)
+          .option("parquet.block.size", blocksize)
+          .parquet(path + "/withBF")
 
-      runBenchmark(s"Parquet Read") {
-        val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
-        benchmark.addCase("Without bloom filter") { _ =>
-          spark.read.parquet(path + "/withoutBF").where("value = 0").noop()
+        runBenchmark(s"Parquet Read") {
+          val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
+          benchmark.addCase("Without bloom filter, blocksize: " + blocksize) { _ =>
+            spark.read.parquet(path + "/withoutBF").where("value = 0").noop()
+          }
+          benchmark.addCase("With bloom filter, blocksize: " + blocksize) { _ =>
+            spark.read.option(ParquetInputFormat.BLOOM_FILTERING_ENABLED, true)
+              .parquet(path + "/withBF").where("value = 0").noop()
+          }
+          benchmark.run()
         }
-        benchmark.addCase("With bloom filter") { _ =>
-          spark.read.option(ParquetInputFormat.BLOOM_FILTERING_ENABLED, true)
-            .parquet(path + "/withBF").where("value = 0").noop()
-        }
-        benchmark.run()
       }
     }
   }
