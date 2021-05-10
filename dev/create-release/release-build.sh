@@ -162,6 +162,8 @@ git clean -d -f -x
 rm -f .gitignore
 cd ..
 
+export MAVEN_OPTS="-Xmx12g"
+
 if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
@@ -209,8 +211,6 @@ if [[ "$1" == "package" ]]; then
     # to dev0 to be closer to PEP440.
     PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -e "s/-/./" -e "s/SNAPSHOT/dev0/" -e "s/preview/dev/"`
     echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
-
-    export MAVEN_OPTS="-Xmx12000m"
 
     # Get maven home set by MVN
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
@@ -367,9 +367,6 @@ if [[ "$1" == "publish-snapshot" ]]; then
     echo "ERROR: You gave version '$SPARK_VERSION'"
     exit 1
   fi
-
-  export MAVEN_OPTS="-Xmx12000m"
-
   # Coerce the requested version
   $MVN versions:set -DnewVersion=$SPARK_VERSION
   tmp_settings="tmp-settings.xml"
@@ -395,9 +392,6 @@ if [[ "$1" == "publish-release" ]]; then
   # Publish Spark to Maven release repo
   echo "Publishing Spark checkout at '$GIT_REF' ($git_hash)"
   echo "Publish version is $SPARK_VERSION"
-
-  export MAVEN_OPTS="-Xmx12000m"
-
   # Coerce the requested version
   $MVN versions:set -DnewVersion=$SPARK_VERSION
 
