@@ -1197,7 +1197,7 @@ class DataFrameWriter(OptionUtils):
             lineSep=lineSep, encoding=encoding, ignoreNullFields=ignoreNullFields)
         self._jwrite.json(path)
 
-    def parquet(self, path, mode=None):
+    def parquet(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
         .. versionadded:: 1.4.0

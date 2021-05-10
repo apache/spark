@@ -667,7 +667,8 @@ class DataStreamReader(OptionUtils):
         else:
             raise TypeError("path can be only a single string")
 
-    def parquet(self, path):
+    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
+                datetimeRebaseMode=None, int96RebaseMode=None):
         """
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
