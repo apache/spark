@@ -1,20 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.spark.executor
 
 import java.io.{File, NotSerializableException}
@@ -47,10 +30,12 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
- *
+ * Spark执行程序，由线程池支持以运行任务。
  * This can be used with Mesos, YARN, and the standalone scheduler.
+ * 可以与Mesos，YARN和独立调度程序一起使用。
  * An internal RPC interface is used for communication with the driver,
  * except in the case of Mesos fine-grained mode.
+ * 内部RPC接口用于与驱动程序进行通信，但在Mesos细粒度模式下除外。
  */
 private[spark] class Executor(
     executorId: String,
@@ -64,7 +49,9 @@ private[spark] class Executor(
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
+  //到目前为止，我们已经在此节点上获取的应用程序依赖项（通过SparkContext添加）。
   // Each map holds the master's timestamp for the version of that file or JAR we got.
+  //每个map都保存了该文件或我们获得的JAR版本的主时间戳
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
@@ -88,6 +75,7 @@ private[spark] class Executor(
   }
 
   // Start worker thread pool
+  //创建线程池
   private val threadPool = {
     val threadFactory = new ThreadFactoryBuilder()
       .setDaemon(true)
@@ -102,8 +90,10 @@ private[spark] class Executor(
       .build()
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
+  //executorSource 保存executor监控信息
   private val executorSource = new ExecutorSource(threadPool, executorId)
   // Pool used for threads that supervise task killing / cancellation
+  //用于监视任务终止/取消的线程的池
   private val taskReaperPool = ThreadUtils.newDaemonCachedThreadPool("Task reaper")
   // For tasks which are in the process of being killed, this map holds the most recently created
   // TaskReaper. All accesses to this map should be synchronized on the map itself (this isn't
@@ -112,6 +102,7 @@ private[spark] class Executor(
   // of a separate TaskReaper for every killTask() of a given task. Instead, this map allows us to
   // track whether an existing TaskReaper fulfills the role of a TaskReaper that we would otherwise
   // create. The map key is a task id.
+  //taskReaperForTask  收割失败但还在运行的task任务
   private val taskReaperForTask: HashMap[Long, TaskReaper] = HashMap[Long, TaskReaper]()
 
   if (!isLocal) {
@@ -121,6 +112,7 @@ private[spark] class Executor(
   }
 
   // Whether to load classes in user jars before those in Spark jars
+  //是否先加载用户jar中的类，然后再加载Spark jar中的类
   private val userClassPathFirst = conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
 
   // Whether to monitor killed / interrupted tasks
@@ -169,6 +161,7 @@ private[spark] class Executor(
   private val maxResultSize = conf.get(MAX_RESULT_SIZE)
 
   // Maintains the list of running tasks.
+  //维护正在运行的任务列表。
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
   /**
@@ -208,9 +201,12 @@ private[spark] class Executor(
 
   heartbeater.start()
 
+  //正在运行的task数量
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
+  //执行task
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
+    //新建taskRunner
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
     threadPool.execute(tr)
@@ -639,25 +635,30 @@ private[spark] class Executor(
   /**
    * Supervises the killing / cancellation of a task by sending the interrupted flag, optionally
    * sending a Thread.interrupt(), and monitoring the task until it finishes.
-   *
+   * 通过发送中断标志，可选地发送Thread.interrupt（）并监视任务直到完成，来监督任务的终止/取消。
    * Spark's current task cancellation / task killing mechanism is "best effort" because some tasks
    * may not be interruptable or may not respond to their "killed" flags being set. If a significant
    * fraction of a cluster's task slots are occupied by tasks that have been marked as killed but
    * remain running then this can lead to a situation where new jobs and tasks are starved of
    * resources that are being used by these zombie tasks.
-   *
+   * Spark的当前任务取消/任务终止机制是“尽力而为”，因为某些任务可能不会被中断或可能不会响应其设置的“已终止”标志。
+   * 如果群集的任务插槽中有很大一部分被标记为已杀死但仍在运行的任务占用，则可能导致新的作业和任务缺少这些僵尸任务正在使用的资源的情况。
    * The TaskReaper was introduced in SPARK-18761 as a mechanism to monitor and clean up zombie
    * tasks. For backwards-compatibility / backportability this component is disabled by default
    * and must be explicitly enabled by setting `spark.task.reaper.enabled=true`.
-   *
+   * 为了向后兼容/向后移植，默认情况下禁用此组件，必须通过设置`spark.task.reaper.enabled = true`明确启用它。
+
    * A TaskReaper is created for a particular task when that task is killed / cancelled. Typically
    * a task will have only one TaskReaper, but it's possible for a task to have up to two reapers
    * in case kill is called twice with different values for the `interrupt` parameter.
+   * 当特定任务被杀死/取消时，将为该任务创建TaskReaper。通常一个任务只有一个TaskReaper，但是一个任务可能有最多两个收割者，
+   * 以防在两次使用不同的`interrupt`参数值调用kill的情况下。
    *
    * Once created, a TaskReaper will run until its supervised task has finished running. If the
    * TaskReaper has not been configured to kill the JVM after a timeout (i.e. if
    * `spark.task.reaper.killTimeout < 0`) then this implies that the TaskReaper may run indefinitely
    * if the supervised task never exits.
+   * 如果尚未将TaskReaper配置为在超时后杀死JVM，则这意味着如果受监管的任务永不退出，则TaskReaper可能会无限期运行。
    */
   private class TaskReaper(
       taskRunner: TaskRunner,
@@ -751,6 +752,7 @@ private[spark] class Executor(
   /**
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
+   * 创建用于任务的ClassLoader，将用户指定的任何JAR或解释器创建的任何类添加到搜索路径
    */
   private def createClassLoader(): MutableURLClassLoader = {
     // Bootstrap the list of jars with the user class path.
@@ -886,5 +888,7 @@ private[spark] object Executor {
   // This is reserved for internal use by components that need to read task properties before a
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
+  //这是保留给内部使用的组件，这些组件需要在完全反序列化任务之前读取任务属性。
+  //如果可能，应改用TaskContext.getLocalProperty调用。
   val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
 }

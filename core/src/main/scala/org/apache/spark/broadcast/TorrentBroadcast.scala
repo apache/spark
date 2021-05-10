@@ -25,17 +25,18 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  *
  * The driver divides the serialized object into small chunks and
  * stores those chunks in the BlockManager of the driver.
- *
+ * 驱动程序将序列化的对象分成小块，并将这些块存储在驱动程序的BlockManager中。
  * On each executor, the executor first attempts to fetch the object from its BlockManager. If
  * it does not exist, it then uses remote fetches to fetch the small chunks from the driver and/or
  * other executors if available. Once it gets the chunks, it puts the chunks in its own
  * BlockManager, ready for other executors to fetch from.
- *
+ *在每个执行程序上，执行程序首先尝试从其BlockManager中获取对象。如果不存在，则使用远程获取从驱动程序和/或其他执行程序（如果有）中获取小块。
+ * 一旦获取了块，便将块放入自己的BlockManager中，以备其他执行者从中获取。
  * This prevents the driver from being the bottleneck in sending out multiple copies of the
  * broadcast data (one per executor).
- *
+ * 这样可以防止驱动程序成为发送广播数据的多个副本（每个执行程序一个）的瓶颈。
  * When initialized, TorrentBroadcast objects read SparkEnv.get.conf.
- *
+ *初始化后，TorrentBroadcast对象读取SparkEnv.get.conf。
  * @param obj object to broadcast
  * @param id A unique identifier for the broadcast variable.
  */

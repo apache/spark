@@ -30,13 +30,15 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
 /**
  * Description of a task that gets passed onto executors to be executed, usually created by
  * `TaskSetManager.resourceOffer`.
- *
+ * 传递给要执行的执行器的任务的描述，通常由TaskSetManager.resourceOffer创建。
  * TaskDescriptions and the associated Task need to be serialized carefully for two reasons:
- *
+ * 需要仔细序列化TaskDescriptions和相关的Task，这有两个原因：
  *     (1) When a TaskDescription is received by an Executor, the Executor needs to first get the
  *         list of JARs and files and add these to the classpath, and set the properties, before
  *         deserializing the Task object (serializedTask). This is why the Properties are included
  *         in the TaskDescription, even though they're also in the serialized task.
+ *         当执行者收到TaskDescription时，执行者需要首先获取JAR和文件列表，并将它们添加到类路径中，然后设置属性，然后反序列化Task对象（serializedTask）。
+           这就是即使在序列化任务中也将属性包含在TaskDescription中的原因。
  *     (2) Because a TaskDescription is serialized and sent to an executor for each task, efficient
  *         serialization (both in terms of serialization time and serialized buffer size) is
  *         important. For this reason, we serialize TaskDescriptions ourselves with the

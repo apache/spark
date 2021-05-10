@@ -171,7 +171,7 @@ private[spark] class TypedConfigBuilder[T](
 
 /**
  * Basic builder for Spark configurations. Provides methods for creating type-specific builders.
- *
+ *Spark配置的基本构建器。提供用于创建特定于类型的构建器的方法。
  * @see TypedConfigBuilder
  */
 private[spark] case class ConfigBuilder(key: String) {
