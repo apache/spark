@@ -533,6 +533,7 @@ class CrossValidatorSuite
         val index = this.getMaxIter
         trialStatus(index) = "running"
         if (index == 0) {
+          Thread.sleep(1000)
           trialStatus(index) = "failed"
           throw new RuntimeException()
         } else {

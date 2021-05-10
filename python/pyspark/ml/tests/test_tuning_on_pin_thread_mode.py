@@ -52,6 +52,7 @@ class TestBackgroundSparkJobsCanceledCorrectly(unittest.TestCase):
                 trial_status[index] = "running"
 
                 if index == 0:
+                    time.sleep(1)
                     trial_status[index] = "failed"
                     raise RuntimeError()
 
