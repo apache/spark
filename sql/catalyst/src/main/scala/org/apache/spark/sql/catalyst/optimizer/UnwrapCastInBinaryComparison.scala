@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.BINARY_COMPARISON
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
 import org.apache.spark.sql.types._
 
 /**
@@ -89,10 +89,11 @@ import org.apache.spark.sql.types._
  */
 object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(BINARY_COMPARISON), ruleId) {
+    _.containsAnyPattern(BINARY_COMPARISON, IN), ruleId) {
     case l: LogicalPlan =>
-      l.transformExpressionsUpWithPruning(_.containsPattern(BINARY_COMPARISON), ruleId) {
+      l.transformExpressionsUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN), ruleId) {
         case e @ BinaryComparison(_, _) => unwrapCast(e)
+        case e @ In(_, _) => unwrapCast(e)
       }
   }
 
@@ -120,6 +121,17 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       Cast(fromExp, toType: NumericType, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) =>
       simplifyNumericComparison(be, fromExp, toType, value)
+
+    case in @ In(Cast(fromExp, toType: NumericType, _), list)
+      if list.forall(v =>
+        canImplicitlyCast(fromExp, toType, v.dataType) && v.isInstanceOf[Literal]
+      ) =>
+      val newValueList =
+        list.map(lit => unwrapCast(EqualTo(in.value, lit)))
+          .collect {
+            case EqualTo(_, lit: Literal) => lit
+          }
+      In(fromExp, newValueList)
 
     case _ => exp
   }
