@@ -383,6 +383,10 @@ class TrainValidationSplitSuite
 
     Thread.sleep(4000)
 
+    // scalastyle:off println
+    println(s"DBG: ML-14996 test: ${trialStatus.mkString(",")}")
+    // scalastyle:on println
+
     assert(trialStatus(0) === "failed")
     for (i <- 1 until parallelism) {
       assert(trialStatus(i) === "canceled")
