@@ -1069,21 +1069,26 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Returns a cloned SparkSession with all specified configurations disabled, or
-   * the original SparkSession if all configurations are already disabled.
+   * When CACHE_DISABLE_CONFIGS_ENABLED is enabled, returns a cloned SparkSession with all
+   * specified configurations disabled, or the original SparkSession if all configurations
+   * are already disabled.
    */
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
       configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
-    val configsEnabled = configurations.filter(session.sessionState.conf.getConf(_))
-    if (configsEnabled.isEmpty) {
+    if (!session.sessionState.conf.getConf(SQLConf.CACHE_DISABLE_CONFIGS_ENABLED)) {
       session
     } else {
-      val newSession = session.cloneSession()
-      configsEnabled.foreach(conf => {
-        newSession.sessionState.conf.setConf(conf, false)
-      })
-      newSession
+      val configsEnabled = configurations.filter(session.sessionState.conf.getConf(_))
+      if (configsEnabled.isEmpty) {
+        session
+      } else {
+        val newSession = session.cloneSession()
+        configsEnabled.foreach(conf => {
+          newSession.sessionState.conf.setConf(conf, false)
+        })
+        newSession
+      }
     }
   }
 

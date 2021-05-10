@@ -1090,6 +1090,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val CACHE_DISABLE_CONFIGS_ENABLED =
+    buildConf("spark.sql.cache.disableConfigs.enabled")
+      .internal()
+      .doc(s"When true, some configs are disabled during executing cache plan that is to avoid " +
+        s"performance regression if other queries hit the cached plan. Currently, the disabled " +
+        s"configs include: ${ADAPTIVE_EXECUTION_ENABLED.key} and " +
+        s"${AUTO_BUCKETED_SCAN_ENABLED.key}.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
