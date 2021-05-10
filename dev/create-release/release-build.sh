@@ -167,6 +167,8 @@ git clean -d -f -x
 rm -f .gitignore
 cd ..
 
+export MAVEN_OPTS="-Xmx12g"
+
 if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
