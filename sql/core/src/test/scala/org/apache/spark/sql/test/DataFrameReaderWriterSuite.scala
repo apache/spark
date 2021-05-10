@@ -18,7 +18,7 @@
 package org.apache.spark.sql.test
 
 import java.io.File
-import java.util.Locale
+import java.util.{Locale, Random}
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
@@ -1216,6 +1216,42 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         }.get
         assert(options("p2") == "v2")
         assert(options("p3") == "v3")
+      }
+    }
+  }
+
+  test("SPARK-26164: Allow concurrent writers for multiple partitions and buckets") {
+    withTable("t1", "t2") {
+      // Uses fixed seed to ensure reproducible test execution
+      val r = new Random(31)
+      val df = spark.range(200).map(_ => {
+        val n = r.nextInt()
+        (n, n.toString, n % 5)
+      }).toDF("k1", "k2", "part")
+      df.write.format("parquet").saveAsTable("t1")
+      spark.sql("CREATE TABLE t2(k1 int, k2 string, part int) USING parquet PARTITIONED " +
+        "BY (part) CLUSTERED BY (k1) INTO 3 BUCKETS")
+      val queryToInsertTable = "INSERT OVERWRITE TABLE t2 SELECT k1, k2, part FROM t1"
+
+      Seq(
+        // Single writer
+        0,
+        // Concurrent writers without fallback
+        200,
+        // concurrent writers with fallback
+        3
+      ).foreach { maxWriters =>
+        withSQLConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key -> maxWriters.toString) {
+          spark.sql(queryToInsertTable).collect()
+          checkAnswer(spark.table("t2").orderBy("k1"),
+            spark.table("t1").orderBy("k1"))
+
+          withSQLConf(SQLConf.MAX_RECORDS_PER_FILE.key -> "1") {
+            spark.sql(queryToInsertTable).collect()
+            checkAnswer(spark.table("t2").orderBy("k1"),
+              spark.table("t1").orderBy("k1"))
+          }
+        }
       }
     }
   }

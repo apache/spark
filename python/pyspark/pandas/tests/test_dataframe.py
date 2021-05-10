@@ -214,7 +214,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             ValueError, "cannot insert b, already exists", lambda: kdf.insert(1, "b", 10)
         )
         self.assertRaisesRegex(
-            ValueError,
+            TypeError,
             '"column" should be a scalar value or tuple that contains scalar values',
             lambda: kdf.insert(0, list("abc"), kser),
         )
@@ -2206,7 +2206,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Assert appending a Series fails
         msg = "DataFrames.append() does not support appending Series to DataFrames"
-        with self.assertRaises(ValueError, msg=msg):
+        with self.assertRaises(TypeError, msg=msg):
             kdf.append(kdf["A"])
 
         # Assert using the sort parameter raises an exception
@@ -2286,9 +2286,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Assert list-like values are not accepted for 'lower' and 'upper'
         msg = "List-like value are not supported for 'lower' and 'upper' at the moment"
-        with self.assertRaises(ValueError, msg=msg):
+        with self.assertRaises(TypeError, msg=msg):
             kdf.clip(lower=[1])
-        with self.assertRaises(ValueError, msg=msg):
+        with self.assertRaises(TypeError, msg=msg):
             kdf.clip(upper=[1])
 
         # Assert no lower or upper
@@ -2323,7 +2323,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         self.assertRaisesRegex(
-            ValueError,
+            TypeError,
             "add with a sequence is currently not supported",
             lambda: ps.range(10).add(ps.range(10).id),
         )
@@ -3060,7 +3060,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertRaises(KeyError, lambda: kdf.pivot_table(index=["c"], columns="a", values=5))
 
         msg = "index should be a None or a list of columns."
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(TypeError, msg):
             kdf.pivot_table(index="c", columns="a", values="b")
 
         msg = "pivot_table doesn't support aggfunc as dict and without index."
@@ -3068,7 +3068,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             kdf.pivot_table(columns="a", values=["b", "e"], aggfunc={"b": "mean", "e": "sum"})
 
         msg = "columns should be one column name."
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(TypeError, msg):
             kdf.pivot_table(columns=["a"], values=["b"], aggfunc={"b": "mean", "e": "sum"})
 
         msg = "Columns in aggfunc must be the same as values."
@@ -3843,7 +3843,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pdf.round({"A": 1, "D": 2}), kdf.round({"A": 1, "D": 2}))
         self.assert_eq(pdf.round(pser), kdf.round(kser))
         msg = "decimals must be an integer, a dict-like or a Series"
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(TypeError, msg):
             kdf.round(1.5)
 
         # multi-index columns
@@ -3894,7 +3894,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         self.assert_eq(pdf1, kdf.shift(periods=3, fill_value=0))
         msg = "should be an int"
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(TypeError, msg):
             kdf.shift(1.5)
 
         # multi-index columns
@@ -3916,7 +3916,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pdf.diff().sum().astype(int), kdf.diff().sum())
 
         msg = "should be an int"
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(TypeError, msg):
             kdf.diff(1.5)
         msg = 'axis should be either 0 or "index" currently.'
         with self.assertRaisesRegex(NotImplementedError, msg):
@@ -4491,11 +4491,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             NotImplementedError, 'axis should be either 0 or "index" currently.'
         ):
             kdf.quantile(0.5, axis=1)
-        with self.assertRaisesRegex(ValueError, "accuracy must be an integer; however"):
+        with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             kdf.quantile(accuracy="a")
-        with self.assertRaisesRegex(ValueError, "q must be a float or an array of floats;"):
+        with self.assertRaisesRegex(TypeError, "q must be a float or an array of floats;"):
             kdf.quantile(q="a")
-        with self.assertRaisesRegex(ValueError, "q must be a float or an array of floats;"):
+        with self.assertRaisesRegex(TypeError, "q must be a float or an array of floats;"):
             kdf.quantile(q=["a"])
 
         self.assert_eq(kdf.quantile(0.5, numeric_only=False), pdf.quantile(0.5, numeric_only=False))
@@ -4541,13 +4541,13 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_where(self):
         kdf = ps.from_pandas(self.pdf)
 
-        with self.assertRaisesRegex(ValueError, "type of cond must be a DataFrame or Series"):
+        with self.assertRaisesRegex(TypeError, "type of cond must be a DataFrame or Series"):
             kdf.where(1)
 
     def test_mask(self):
         kdf = ps.from_pandas(self.pdf)
 
-        with self.assertRaisesRegex(ValueError, "type of cond must be a DataFrame or Series"):
+        with self.assertRaisesRegex(TypeError, "type of cond must be a DataFrame or Series"):
             kdf.mask(1)
 
     def test_query(self):
@@ -4575,7 +4575,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         invalid_exprs = (1, 1.0, (exprs[0],), [exprs[0]])
         for expr in invalid_exprs:
             with self.assertRaisesRegex(
-                ValueError,
+                TypeError,
                 "expr must be a string to be evaluated, {} given".format(type(expr).__name__),
             ):
                 kdf.query(expr)
@@ -4584,7 +4584,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         invalid_inplaces = (1, 0, "True", "False")
         for inplace in invalid_inplaces:
             with self.assertRaisesRegex(
-                ValueError,
+                TypeError,
                 'For argument "inplace" expected type bool, received type {}.'.format(
                     type(inplace).__name__
                 ),
@@ -4594,7 +4594,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         # doesn't support for MultiIndex columns
         columns = pd.MultiIndex.from_tuples([("A", "Z"), ("B", "X"), ("C", "C")])
         kdf.columns = columns
-        with self.assertRaisesRegex(ValueError, "Doesn't support for MultiIndex columns"):
+        with self.assertRaisesRegex(TypeError, "Doesn't support for MultiIndex columns"):
             kdf.query("('A', 'Z') > ('B', 'X')")
 
     def test_take(self):
@@ -4683,10 +4683,10 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         # Checking the type of indices.
-        self.assertRaises(ValueError, lambda: kdf.take(1))
-        self.assertRaises(ValueError, lambda: kdf.take("1"))
-        self.assertRaises(ValueError, lambda: kdf.take({1, 2}))
-        self.assertRaises(ValueError, lambda: kdf.take({1: None, 2: None}))
+        self.assertRaises(TypeError, lambda: kdf.take(1))
+        self.assertRaises(TypeError, lambda: kdf.take("1"))
+        self.assertRaises(TypeError, lambda: kdf.take({1, 2}))
+        self.assertRaises(TypeError, lambda: kdf.take({1: None, 2: None}))
 
     def test_axes(self):
         pdf = self.pdf
@@ -4739,7 +4739,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         # doesn't support for multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "a"), ("y", "b"), ("z", "c")])
         kdf.columns = columns
-        self.assertRaises(ValueError, lambda: kdf.eval("x.a + y.b"))
+        self.assertRaises(TypeError, lambda: kdf.eval("x.a + y.b"))
 
     @unittest.skipIf(not have_tabulate, tabulate_requirement_message)
     def test_to_markdown(self):
@@ -4972,7 +4972,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(kdf.explode("A").index.name, expected_result1.index.name)
         self.assert_eq(kdf.explode("A").columns.name, expected_result1.columns.name)
 
-        self.assertRaises(ValueError, lambda: kdf.explode(["A", "B"]))
+        self.assertRaises(TypeError, lambda: kdf.explode(["A", "B"]))
 
         # MultiIndex
         midx = pd.MultiIndex.from_tuples(
@@ -4997,7 +4997,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(kdf.explode("A").index.names, expected_result1.index.names)
         self.assert_eq(kdf.explode("A").columns.name, expected_result1.columns.name)
 
-        self.assertRaises(ValueError, lambda: kdf.explode(["A", "B"]))
+        self.assertRaises(TypeError, lambda: kdf.explode(["A", "B"]))
 
         # MultiIndex columns
         columns = pd.MultiIndex.from_tuples([("A", "Z"), ("B", "X")], names=["column1", "column2"])
@@ -5022,7 +5022,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(kdf.A.explode("Z"), expected_result3, almost=True)
 
-        self.assertRaises(ValueError, lambda: kdf.explode(["A", "B"]))
+        self.assertRaises(TypeError, lambda: kdf.explode(["A", "B"]))
         self.assertRaises(ValueError, lambda: kdf.explode("A"))
 
     def test_spark_schema(self):

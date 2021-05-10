@@ -44,7 +44,7 @@ abstract class TypeCoercionBase {
    * with primitive types, because in that case the precision and scale of the result depends on
    * the operation. Those rules are implemented in [[DecimalPrecision]].
    */
-  def findTightestCommonType(type1: DataType, type2: DataType): Option[DataType]
+  val findTightestCommonType: (DataType, DataType) => Option[DataType]
 
   /**
    * Looking for a widened data type of two given data types with some acceptable loss of precision.
@@ -845,8 +845,7 @@ object TypeCoercion extends TypeCoercionBase {
       FloatType,
       DoubleType)
 
-  override def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
-    (t1, t2) match {
+  override val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
       case (t1, t2) if t1 == t2 => Some(t1)
       case (NullType, t1) => Some(t1)
       case (t1, NullType) => Some(t1)
@@ -866,7 +865,6 @@ object TypeCoercion extends TypeCoercionBase {
         Some(TimestampType)
 
       case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
-    }
   }
 
   /** Promotes all the way to StringType. */

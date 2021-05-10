@@ -2378,15 +2378,15 @@ object DatePart {
       Literal(null, DoubleType)
     } else {
       val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
-      val analysisException = QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(
-        fieldStr, source)
-      if (source.dataType == CalendarIntervalType) {
-        ExtractIntervalPart.parseExtractField(
-          fieldStr,
-          source,
-          throw analysisException)
-      } else {
-        DatePart.parseExtractField(fieldStr, source, throw analysisException)
+
+      def analysisException =
+        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(fieldStr, source)
+
+      source.dataType match {
+        case YearMonthIntervalType | DayTimeIntervalType | CalendarIntervalType =>
+          ExtractIntervalPart.parseExtractField(fieldStr, source, analysisException)
+        case _ =>
+          DatePart.parseExtractField(fieldStr, source, analysisException)
       }
     }
   }
@@ -2414,6 +2414,10 @@ object DatePart {
        5
       > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
+      > SELECT _FUNC_('MONTH', INTERVAL '2021-11' YEAR TO MONTH);
+       11
+      > SELECT _FUNC_('MINUTE', INTERVAL '123 23:55:59.002001' DAY TO SECOND);
+       55
   """,
   note = """
     The _FUNC_ function is equivalent to the SQL-standard function `EXTRACT(field FROM source)`
@@ -2479,6 +2483,10 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
        5
       > SELECT _FUNC_(seconds FROM interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
+      > SELECT _FUNC_(MONTH FROM INTERVAL '2021-11' YEAR TO MONTH);
+       11
+      > SELECT _FUNC_(MINUTE FROM INTERVAL '123 23:55:59.002001' DAY TO SECOND);
+       55
   """,
   note = """
     The _FUNC_ function is equivalent to `date_part(field, source)`.

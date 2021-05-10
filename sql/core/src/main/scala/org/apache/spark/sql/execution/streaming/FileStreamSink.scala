@@ -43,12 +43,20 @@ object FileStreamSink extends Logging {
     path match {
       case Seq(singlePath) =>
         val hdfsPath = new Path(singlePath)
-        val fs = hdfsPath.getFileSystem(hadoopConf)
-        if (fs.isDirectory(hdfsPath)) {
-          val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
-          fs.exists(metadataPath)
-        } else {
-          false
+        try {
+          val fs = hdfsPath.getFileSystem(hadoopConf)
+          if (fs.isDirectory(hdfsPath)) {
+            val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
+            fs.exists(metadataPath)
+          } else {
+            false
+          }
+        } catch {
+          case e: SparkException => throw e
+          case NonFatal(e) =>
+            logWarning(s"Assume no metadata directory. Error while looking for " +
+              s"metadata directory in the path: $singlePath.", e)
+            false
         }
       case _ => false
     }

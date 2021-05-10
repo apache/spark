@@ -81,7 +81,7 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
 
   override protected def setAuthentication(keytabFile: String, principal: String): Unit = {
     val config = new SecureConnectionProvider.JDBCConfiguration(
-      Configuration.getConfiguration, "JaasClient", keytabFile, principal)
+      Configuration.getConfiguration, "JaasClient", keytabFile, principal, true)
     Configuration.setConfiguration(config)
   }
 

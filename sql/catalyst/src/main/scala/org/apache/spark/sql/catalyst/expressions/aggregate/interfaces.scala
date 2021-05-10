@@ -80,6 +80,14 @@ object AggregateExpression {
       filter,
       NamedExpression.newExprId)
   }
+
+  def containsAggregate(expr: Expression): Boolean = {
+    expr.find(isAggregate).isDefined
+  }
+
+  def isAggregate(expr: Expression): Boolean = {
+    expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
+  }
 }
 
 /**

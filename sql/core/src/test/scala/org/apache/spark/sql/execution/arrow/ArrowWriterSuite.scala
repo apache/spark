@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import org.apache.arrow.vector.IntervalDayVector
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util._
@@ -54,6 +56,8 @@ class ArrowWriterSuite extends SparkFunSuite {
             case BinaryType => reader.getBinary(rowId)
             case DateType => reader.getInt(rowId)
             case TimestampType => reader.getLong(rowId)
+            case YearMonthIntervalType => reader.getInt(rowId)
+            case DayTimeIntervalType => reader.getLong(rowId)
           }
           assert(value === datum)
       }
@@ -73,6 +77,33 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DateType, Seq(0, 1, 2, null, 4))
     check(TimestampType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong), "America/Los_Angeles")
     check(NullType, Seq(null, null, null))
+    check(YearMonthIntervalType, Seq(null, 0, 1, -1, Int.MaxValue, Int.MinValue))
+    check(DayTimeIntervalType, Seq(null, 0L, 1000L, -1000L, (Long.MaxValue - 807L),
+      (Long.MinValue + 808L)))
+  }
+
+  test("long overflow for DayTimeIntervalType")
+  {
+    val schema = new StructType().add("value", DayTimeIntervalType, nullable = true)
+    val writer = ArrowWriter.create(schema, null)
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+    val valueVector = writer.root.getFieldVectors().get(0).asInstanceOf[IntervalDayVector]
+
+    valueVector.set(0, 106751992, 0)
+    valueVector.set(1, 106751991, Int.MaxValue)
+
+    // first long overflow for test Math.multiplyExact()
+    val msg = intercept[java.lang.ArithmeticException] {
+      reader.getLong(0)
+    }.getMessage
+    assert(msg.equals("long overflow"))
+
+    // second long overflow for test Math.addExact()
+    val msg1 = intercept[java.lang.ArithmeticException] {
+      reader.getLong(1)
+    }.getMessage
+    assert(msg1.equals("long overflow"))
+    writer.root.close()
   }
 
   test("get multiple") {
@@ -97,6 +128,8 @@ class ArrowWriterSuite extends SparkFunSuite {
         case DoubleType => reader.getDoubles(0, data.size)
         case DateType => reader.getInts(0, data.size)
         case TimestampType => reader.getLongs(0, data.size)
+        case YearMonthIntervalType => reader.getInts(0, data.size)
+        case DayTimeIntervalType => reader.getLongs(0, data.size)
       }
       assert(values === data)
 
@@ -111,6 +144,8 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DoubleType, (0 until 10).map(_.toDouble))
     check(DateType, (0 until 10))
     check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), "America/Los_Angeles")
+    check(YearMonthIntervalType, (0 until 10))
+    check(DayTimeIntervalType, (-10 until 10).map(_ * 1000.toLong))
   }
 
   test("array") {
